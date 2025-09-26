@@ -1,15 +1,19 @@
 import asyncio
 from fastmcp import Client
+import os
 
-# In-memory server (ideal for testing)
-#server = FastMCP("CodeScene")
-#client = Client(server)
+def include_cs_pat_token():
+    """ The CS CLI tool requires a PAT token. Since we invoke the CLI from a 
+    subprocess, we need to propage that env variable: the MCP server runs 
+    in isolated environments -- a security feature.
 
-# HTTP server
-#client = Client("https://example.com/mcp")
+    (See https://codescene.io/docs/cli/index.html for instructions on the PAT.)
+    """
+    return {"CS_ACCESS_TOKEN": os.getenv("CS_ACCESS_TOKEN")}
 
 # Local Python script
 client = Client("./cs_mcp_server.py")
+client.transport.env = include_cs_pat_token() # Is this really the way? The docs seem outdated...
 
 async def main():
     async with client:

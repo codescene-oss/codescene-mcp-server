@@ -1,18 +1,8 @@
 import subprocess
 from fastmcp import FastMCP
-import os
 import json
 
 mcp = FastMCP("CodeScene")
-
-def include_cs_pat_token():
-    """ The CS CLI tool requires a PAT token. Since we invoke the CLI from a 
-    subprocess, we need to propage that env variable. 
-    (See https://codescene.io/docs/cli/index.html for instructions.)
-    """
-    env = os.environ.copy()
-    env["CS_ACCESS_TOKEN"] = os.getenv("CS_ACCESS_TOKEN")
-    return env
 
 class CodeSceneCliError(Exception):
     """Raised when the CLI tool fails to calculate Code Health for a given file.
@@ -30,8 +20,7 @@ def run_local_tool(command: list, cwd: str = None):
     Returns:
         str: Combined stdout and stderr output
     """
-    with_pat = include_cs_pat_token()
-    result = subprocess.run(command, capture_output=True, text=True, cwd=cwd, env=with_pat)
+    result = subprocess.run(command, capture_output=True, text=True, cwd=cwd)
     if result.returncode != 0:
         raise CodeSceneCliError(f"CLI command failed: {result.stderr}")
     return result.stdout
