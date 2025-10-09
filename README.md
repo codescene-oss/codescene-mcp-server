@@ -1,6 +1,6 @@
 # CodeScene MCP Server
 
-The **CodeScene MCP Server** exposes CodeScene’s Code Health analysis as local AI-friendly tools.
+The **CodeScene MCP Server** exposes CodeScene’s [Code Health](https://codescene.com/product/code-health) analysis as local AI-friendly tools.
 
 This server is designed to run in your local environment and lets AI assistants (like GitHub Copilot, Cursor, Claude code, etc.) request meaningful Code Health insights directly from your codebase. 
 The Code Health insights augment the AI prompts with rich content around code quality issues, maintainability problems, and technical debt in general.
