@@ -1,0 +1,19 @@
+Copyright CodeScene AB
+
+This extension ("MCP Server") includes both Open-Source and Closed-Source software components.
+
+Usage of the MCP Server requires acceptance of the CodeScene Plugin Terms, and is governed by those terms. The Plugin Terms are available at https://codescene.com/policies
+
+Subject to your compliance with the Plugin Terms and payment of any applicable fees, CodeScene grants rights to this MCP Server as follows:
+
+Open-Source Components
+
+The Open-Source Components relate to the user interface and are published in a public, open-source git repository, located at https://github.com/codescene-oss/codescene-mcp-server/
+CodeScene grants a GNU Lesser General Public License ('LGPL') to these software components, based on the license to be found at https://www.gnu.org/licenses/lgpl-3.0.en.html
+
+Closed-Source Components
+
+The Closed-Source Components relate to extension libraries, analysis libraries and other services, and are held in a private git repository.
+CodeScene grants a non-exclusive, non-transferable, non-sub-licensable, limited license to use the Closed-Source Components in object code format as described in the Plugin Terms.
+
+The Closed-Source Components shall under no circumstances be considered as sold and, other than any license granted pursuant to the Plugin Terms, CodeScene reserves all rights to the software components not expressly granted herein.
