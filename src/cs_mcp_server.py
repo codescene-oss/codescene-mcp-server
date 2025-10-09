@@ -79,7 +79,7 @@ def code_health_review(file_path: str) -> str:
     def review_code_health_of(local_file: str) -> float:
         return run_local_tool(cs_cli_review_command_for(local_file))
     
-    return run_cs_cli(lambda: f"Code Health score: {review_code_health_of(file_path)}")
+    return run_cs_cli(lambda: review_code_health_of(file_path))
     
 if __name__ == "__main__":
     mcp.run()
