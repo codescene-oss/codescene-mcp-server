@@ -22,3 +22,27 @@ The Code Health tools solve this by giving AI assistants precise insight into de
 ### Understand Existing Code Before Acting
 Use Code Health reviews to inform AI-driven summaries, diagnostics, or code transformations based on **real-world cognitive and design challenges**, not just syntax.
 
+## Running the docker instance
+
+You can run the dockerized CodeScene MCP server by first cloning the repo and then building the Docker image:
+
+```sh
+docker build -t codescene-mcp .
+```
+
+And then configuring the MCP in your editor, for example in VS Code:
+
+```json
+"codescene-mcp": {
+    "type": "stdio",
+    "command": "docker",
+    "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "CS_ACCESS_TOKEN",
+        "codescene-mcp"
+    ]
+}
+```
