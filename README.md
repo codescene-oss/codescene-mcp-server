@@ -46,3 +46,29 @@ And then configuring the MCP in your editor, for example in VS Code:
     ]
 }
 ```
+
+This configuration will automatically pick up the `CS_ACCESS_TOKEN` environment variable, but if you can't create a system-wide one then you can manually specify it like this:
+
+```json
+"codescene-mcp": {
+    "type": "stdio",
+    "command": "docker",
+    "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "CS_ACCESS_TOKEN",
+        "codescene-mcp"
+    ],
+    "env": {
+		"CS_ACCESS_TOKEN": "token-goes-here",
+    }
+}
+```
+
+Or when running it from the CLI, like this:
+
+```sh
+docker run -i --rm -e CS_ACCESS_TOKEN=token-goes-here codescene-mcp
+```
