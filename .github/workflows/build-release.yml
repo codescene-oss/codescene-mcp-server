@@ -16,7 +16,7 @@ env:
   DOCKERHUB_CACHE_REPO: codescene/codescene-unstable
   
 jobs:
-build-docker:
+  build-docker:
     strategy:
       matrix:
         runner: [ubuntu-24.04-4core, arm64-ubuntu-24.04-4core]
