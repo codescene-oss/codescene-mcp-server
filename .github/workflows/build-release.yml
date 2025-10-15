@@ -1,0 +1,53 @@
+name: Build and Publish Release
+
+on: 
+  push:
+    tags:
+      - 'MCP-[0-9]+.[0-9]+.[0-9]+'
+      - 'MCP-[0-9]+.[0-9]+.[0-9]+-*'
+
+# permissions needed for assuming the IAM role below: https://github.com/aws-actions/configure-aws-credentials/issues/271#issuecomment-931012696
+permissions:
+  contents: read # This is required for actions/checkout
+  id-token: write # This is required for requesting the JWT
+
+env:
+  DOCKERHUB_REPO: codescene/codescene
+  DOCKERHUB_CACHE_REPO: codescene/codescene-unstable
+  
+jobs:
+build-docker:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04-4core, arm64-ubuntu-24.04-4core]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      # Checkout source code and setup
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Docker setup
+        uses: ./.github/actions/docker-setup
+        with:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+      # Build steps
+      - name: Prepare
+        run: |
+          if [ "aarch64" == $(uname -m) ]; then
+            platform=linux/arm64
+          else
+            platform=linux/amd64
+          fi
+          echo "PLATFORM=${platform}" >> $GITHUB_ENV
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
+
+      - name: Build and push by digest
+        id: docker-build
+        uses: docker/build-push-action@v6
+        with:
+          context: codescene-mcp
+          platforms: ${{ env.PLATFORM }}
+          cache-from: type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-${{ env.PLATFORM_PAIR }}
+          outputs: type=image,"name=${{ env.DOCKERHUB_REPO }}",push-by-digest=true,name-canonical=true,push=true
