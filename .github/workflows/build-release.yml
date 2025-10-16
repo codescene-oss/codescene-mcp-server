@@ -46,6 +46,6 @@ jobs:
         id: docker-build
         uses: docker/build-push-action@v6
         with:
-          context: codescene-mcp
+          context: .
           platforms: ${{ env.PLATFORM }}
           outputs: type=image,"name=${{ env.DOCKERHUB_REPO }}",push-by-digest=true,name-canonical=true,push=true
