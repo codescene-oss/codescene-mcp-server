@@ -8,8 +8,8 @@ Subject to your compliance with the Plugin Terms and payment of any applicable f
 
 Open-Source Components
 
-The Open-Source Components relate to the user interface and are published in a public, open-source git repository, located at https://github.com/codescene-oss/codescene-mcp-server/
-CodeScene grants a GNU Lesser General Public License ('LGPL') to these software components, based on the license to be found at https://www.gnu.org/licenses/lgpl-3.0.en.html
+The Open-Source Components relate to the MCP Server implementation and are published in a public, open-source git repository, located at https://github.com/codescene-oss/codescene-mcp-server/
+CodeScene grants an Apache License to these software components, based on the license to be found at https://www.apache.org/licenses/LICENSE-2.0.txt
 
 Closed-Source Components
 
