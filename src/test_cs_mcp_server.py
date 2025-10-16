@@ -27,6 +27,10 @@ class TestCodeSceneMCP(unittest.IsolatedAsyncioTestCase):
     def setUpClass(cls):
         cls.file_to_review = "./src/test_data/OrderProcessor.java"
 
+        with open(cls.file_to_review, 'r') as f:
+            cls.file_content = f.read()
+            cls.file_ext = '.java'
+
     async def test_ping(self):
         async with mcp_client() as c:
             ponged = await c.ping()
@@ -41,7 +45,8 @@ class TestCodeSceneMCP(unittest.IsolatedAsyncioTestCase):
     async def test_code_health_score(self):
         async with mcp_client() as c:
             result = await c.call_tool("code_health_score", {
-                "file_path": self.file_to_review
+                "file_content": self.file_content,
+                "file_ext": self.file_ext
             })
             code_health_response = result.data
             self.assertIn('Code Health score: 8.65', code_health_response)
@@ -49,7 +54,8 @@ class TestCodeSceneMCP(unittest.IsolatedAsyncioTestCase):
     async def test_code_health_review(self):
         async with mcp_client() as c:
             result = await c.call_tool("code_health_review", {
-                "file_path": self.file_to_review
+                "file_content": self.file_content,
+                "file_ext": self.file_ext
             })
             review = json.loads(result.data)
             
