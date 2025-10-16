@@ -13,13 +13,12 @@ permissions:
 
 env:
   DOCKERHUB_REPO: codescene/codescene
-  DOCKERHUB_CACHE_REPO: codescene/codescene-unstable
   
 jobs:
   build-docker:
     strategy:
       matrix:
-        runner: [ubuntu-24.04-4core, arm64-ubuntu-24.04-4core]
+        runner: [ubuntu-24.04, arm64-ubuntu-24.04]
     runs-on: ${{ matrix.runner }}
     steps:
       # Checkout source code and setup
@@ -49,5 +48,4 @@ jobs:
         with:
           context: codescene-mcp
           platforms: ${{ env.PLATFORM }}
-          cache-from: type=registry,ref=${{ env.DOCKERHUB_CACHE_REPO }}:cache-${{ env.PLATFORM_PAIR }}
           outputs: type=image,"name=${{ env.DOCKERHUB_REPO }}",push-by-digest=true,name-canonical=true,push=true
