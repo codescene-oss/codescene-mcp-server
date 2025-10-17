@@ -22,7 +22,8 @@ def run_local_tool(command: list, cwd: str = None):
     Returns:
         str: Combined stdout and stderr output
     """
-    result = subprocess.run(command, capture_output=True, text=True, cwd=cwd)
+    env = {'CS_CONTEXT': 'mcp-server'}
+    result = subprocess.run(command, capture_output=True, text=True, cwd=cwd, env=env)
     if result.returncode != 0:
         raise CodeSceneCliError(f"CLI command failed: {result.stderr}")
     return result.stdout
