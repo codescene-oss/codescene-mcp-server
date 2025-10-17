@@ -18,7 +18,7 @@ jobs:
   build-docker:
     strategy:
       matrix:
-        runner: [ubuntu-24.04, arm64-ubuntu-24.04]
+        runner: [ubuntu-24.04, arm64-ubuntu-24.04-2core]
     runs-on: ${{ matrix.runner }}
     steps:
       # Checkout source code and setup
