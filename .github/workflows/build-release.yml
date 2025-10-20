@@ -6,13 +6,8 @@ on:
       - 'MCP-[0-9]+.[0-9]+.[0-9]+'
       - 'MCP-[0-9]+.[0-9]+.[0-9]+-*'
 
-# permissions needed for assuming the IAM role below: https://github.com/aws-actions/configure-aws-credentials/issues/271#issuecomment-931012696
-permissions:
-  contents: read # This is required for actions/checkout
-  id-token: write # This is required for requesting the JWT
-
 env:
-  DOCKERHUB_REPO: codescene/codescene
+  DOCKERHUB_REPO: codescene/codescene-mcp
   
 jobs:
   build-docker:
