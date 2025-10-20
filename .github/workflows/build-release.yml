@@ -11,10 +11,7 @@ env:
   
 jobs:
   build-docker:
-    strategy:
-      matrix:
-        runner: [ubuntu-24.04, arm64-ubuntu-24.04-2core]
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-24.04
     steps:
       # Checkout source code and setup
       - uses: actions/checkout@v4
@@ -26,23 +23,12 @@ jobs:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Build steps
-      - name: Prepare
-        run: |
-          if [ "aarch64" == $(uname -m) ]; then
-            platform=linux/arm64
-          else
-            platform=linux/amd64
-          fi
-          echo "PLATFORM=${platform}" >> $GITHUB_ENV
-          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
-
       - name: Build and push by digest
         id: docker-build
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: ${{ env.PLATFORM }}
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ${{ env.DOCKERHUB_REPO }}:${{  github.ref_name }}
