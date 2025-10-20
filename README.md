@@ -8,6 +8,35 @@ The Code Health insights augment the AI prompts with rich content around code qu
 > [!NOTE]
 > The server is under development. Expect to get a proper packaged installation + more tools soon. Real soon.
 
+## Quick set-up
+
+<details>
+
+**<summary>VS Code</summary>**
+
+Add the following to either your global `mcp.json` or your local `.vscode/mcp.json` file:
+
+```json
+{
+	"servers": {
+		"codescene-mcp": {
+			"type": "stdio",
+			"command": "docker",
+			"args": [
+				"run",
+				"-i",
+				"--rm",
+				"-e",
+				"CS_ACCESS_TOKEN",
+				"codescene/codescene-mcp"
+			]
+		}
+	}
+}
+```
+
+</details>
+
 ## Use Cases
 
 With the CodeScene MCP Server in place, your AI tools can:
@@ -22,9 +51,9 @@ The Code Health tools solve this by giving AI assistants precise insight into de
 ### Understand Existing Code Before Acting
 Use Code Health reviews to inform AI-driven summaries, diagnostics, or code transformations based on **real-world cognitive and design challenges**, not just syntax.
 
-## Running the docker instance
+## Building the docker instance locally
 
-You can run the dockerized CodeScene MCP server by first cloning the repo and then building the Docker image:
+You can build and run the dockerized CodeScene MCP server by first cloning the repo and then building the Docker image:
 
 ```sh
 docker build -t codescene-mcp .
