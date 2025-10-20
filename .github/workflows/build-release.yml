@@ -47,4 +47,3 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_REPO }}:${{  github.ref_name }}
             ${{ env.DOCKERHUB_REPO }}:latest
-          outputs: type=image,"name=${{ env.DOCKERHUB_REPO }}",push-by-digest=true,name-canonical=true,push=true
