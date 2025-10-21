@@ -10,7 +10,7 @@
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "docker.io/codescene-mcp-server:1.0.0",
+      "identifier": "docker.io/codescene/codescene-mcp",
       "transport": {
         "type": "stdio"
       },
