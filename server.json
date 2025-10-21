@@ -1,0 +1,28 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+  "name": "io.github.codescene-oss/codescene-mcp-server",
+  "description": "An MCP server that provides CodeScene Code Health analysis tools.",
+  "repository": {
+    "url": "https://github.com/codescene-oss/codescene-mcp-server",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "docker.io/codescene/codescene-mcp:latest",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "description": "CodeScene Access Token",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true,
+          "name": "CS_ACCESS_TOKEN"
+        }
+      ]
+    }
+  ]
+}
