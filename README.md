@@ -136,6 +136,9 @@ Create a `.kiro/settings/mcp.json` file in your workspace directory (or edit if 
 
 ## Use Cases
 
+> [!TIP]
+> Watch the [demo video of the CodeScene MCP](https://www.youtube.com/watch?v=AycLVxKmVSY).
+
 With the CodeScene MCP Server in place, your AI tools can:
 
 ### Safeguard AI-Generated Code
