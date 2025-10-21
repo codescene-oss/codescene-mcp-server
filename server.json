@@ -16,7 +16,7 @@
       },
       "environmentVariables": [
         {
-          "description": "CodeScene Access Token",
+          "description": "CodeScene API Token",
           "isRequired": true,
           "format": "string",
           "isSecret": true,
