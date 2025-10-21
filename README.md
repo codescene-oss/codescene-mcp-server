@@ -18,7 +18,7 @@ The Code Health insights augment the AI prompts with rich content around code qu
 
 **<summary>Claude Code</summary>**
 
-To connect with CodeScene Cloud:
+To connect with CodeScene:
 
 ```sh
 claude mcp add codescene --env CS_ACCESS_TOKEN=<token> -- docker run -i --rm -e CS_ACCESS_TOKEN codescene/codescene-mcp
@@ -30,7 +30,7 @@ claude mcp add codescene --env CS_ACCESS_TOKEN=<token> -- docker run -i --rm -e 
 
 **<summary>Codex CLI</summary>**
 
-To connect with CodeScene Cloud, add the following configuration to `~/.codex/config.toml`:
+To connect with CodeScene, add the following configuration to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.codescene]
@@ -130,7 +130,7 @@ Create a `.kiro/settings/mcp.json` file in your workspace directory (or edit if 
 
 **<summary>VS Code</summary>**
 
-[![Install for CodeScene Cloud](https://img.shields.io/badge/VS_Code-Install_for_CodeScene_Cloud-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[{%22id%22:%22CS_ACCESS_TOKEN%22,%22type%22:%22promptString%22,%22description%22:%22CodeScene%20Access%20Token%22,%22password%22:true}]&config={%22command%22:%22docker%22,%22args%22:[%22run%22,%22-i%22,%22--rm%22,%22-e%22,%22CS_ACCESS_TOKEN%22,%22codescene/codescene-mcp%22],%22env%22:{%22CS_ACCESS_TOKEN%22:%22${input:CS_ACCESS_TOKEN}%22}})
+[![Install CodeScene MCP](https://img.shields.io/badge/VS_Code-Install_CodeScene_MCP-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[{%22id%22:%22CS_ACCESS_TOKEN%22,%22type%22:%22promptString%22,%22description%22:%22CodeScene%20Access%20Token%22,%22password%22:true}]&config={%22command%22:%22docker%22,%22args%22:[%22run%22,%22-i%22,%22--rm%22,%22-e%22,%22CS_ACCESS_TOKEN%22,%22codescene/codescene-mcp%22],%22env%22:{%22CS_ACCESS_TOKEN%22:%22${input:CS_ACCESS_TOKEN}%22}})
 
 </details>
 
