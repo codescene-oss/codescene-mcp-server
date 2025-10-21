@@ -18,26 +18,7 @@ The Code Health insights augment the AI prompts with rich content around code qu
 
 **<summary>VS Code</summary>**
 
-Add the following to either your global `mcp.json` or your local `.vscode/mcp.json` file:
-
-```json
-{
-	"servers": {
-		"codescene-mcp": {
-			"type": "stdio",
-			"command": "docker",
-			"args": [
-				"run",
-				"-i",
-				"--rm",
-				"-e",
-				"CS_ACCESS_TOKEN",
-				"codescene/codescene-mcp"
-			]
-		}
-	}
-}
-```
+[![Install for CodeScene Cloud](https://img.shields.io/badge/VS_Code-Install_for_CodeScene_Cloud-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[{%22id%22:%22CS_ACCESS_TOKEN%22,%22type%22:%22promptString%22,%22description%22:%22CodeScene%20Access%20Token%22,%22password%22:true}]&config={%22command%22:%22docker%22,%22args%22:[%22run%22,%22-i%22,%22--rm%22,%22-e%22,%22CS_ACCESS_TOKEN%22,%22codescene/codescene-mcp%22],%22env%22:{%22CS_ACCESS_TOKEN%22:%22${input:CS_ACCESS_TOKEN}%22}})
 
 </details>
 
