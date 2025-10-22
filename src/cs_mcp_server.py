@@ -22,7 +22,7 @@ def run_local_tool(command: list, cwd: str = None):
     Returns:
         str: Combined stdout and stderr output
     """
-    env = {'CS_CONTEXT': 'mcp-server'}
+    env = {'CS_CONTEXT': 'mcp-server', 'CS_ACCESS_TOKEN': os.getenv("CS_ACCESS_TOKEN", "")}
     result = subprocess.run(command, capture_output=True, text=True, cwd=cwd, env=env)
     if result.returncode != 0:
         raise CodeSceneCliError(f"CLI command failed: {result.stderr}")
@@ -47,7 +47,7 @@ def analyze_code(file_content: str, file_ext: str) -> str:
             os.remove(local_file)
 
 def cs_cli_review_command_for(local_file: str):
-    cs_cli = 'cs' # needs to be installed locally
+    cs_cli = '/root/.local/bin/cs'
     return [cs_cli, "review", local_file, "--output-format=json"]
 
 def run_cs_cli(cli_fn) -> str:
