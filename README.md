@@ -18,10 +18,16 @@ The Code Health insights augment the AI prompts with rich content around code qu
 
 **<summary>Claude Code</summary>**
 
-To connect with CodeScene:
+To connect with CodeScene Cloud:
 
 ```sh
 claude mcp add codescene --env CS_ACCESS_TOKEN=<token> -- docker run -i --rm -e CS_ACCESS_TOKEN codescene/codescene-mcp
+```
+
+To connect with CodeScene On-prem:
+
+```sh
+claude mcp add codescene --env CS_ACCESS_TOKEN=<token> --env CS_ONPREM_URL=<url> -- docker run -i --rm -e CS_ACCESS_TOKEN -e CS_ONPREM_URL codescene/codescene-mcp
 ```
 
 </details>
@@ -30,13 +36,24 @@ claude mcp add codescene --env CS_ACCESS_TOKEN=<token> -- docker run -i --rm -e 
 
 **<summary>Codex CLI</summary>**
 
-To connect with CodeScene, add the following configuration to `~/.codex/config.toml`:
+Configure `~/.codex/config.toml` depending on whether or not you use Cloud or On-prem.
+
+CodeScene Cloud:
 
 ```toml
 [mcp_servers.codescene]
 command = "docker"
 args = ["run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "codescene/codescene-mcp"]
 env = { "CS_ACCESS_TOKEN" = "<YOUR_ACCESS_TOKEN>" }
+```
+
+CodeScene On-prem:
+
+```toml
+[mcp_servers.codescene]
+command = "docker"
+args = ["run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "-e", "CS_ONPREM_URL", "codescene/codescene-mcp"]
+env = { "CS_ACCESS_TOKEN" = "<YOUR_ACCESS_TOKEN>", "CS_ONPREM_URL" = "<URL>" }
 ```
 
 </details>
@@ -51,12 +68,21 @@ After starting Copilot CLI, run the following command to add the CodeScene MCP s
 /mcp add
 ```
 
-You will then need to provide information about the MCP server:
+You will then need to provide information about the MCP server.
+
+CodeScene Cloud:
 
 - Server Name: `codescene`
 - Server Type: `Local (Press 1)`
 - Command: `docker`
 - Arguments: `run, --rm, -i, -e, CS_ACCESS_TOKEN, codescene/codescene-mcp`
+
+CodeScene On-prem:
+
+- Server Name: `codescene`
+- Server Type: `Local (Press 1)`
+- Command: `docker`
+- Arguments: `run, --rm, -i, -e, CS_ACCESS_TOKEN, -e, CS_ONPREM_URL, codescene/codescene-mcp`
 
 </details>
 
@@ -68,7 +94,9 @@ GitHub Copilot coding agent can leverage the CodeScene MCP server directly in yo
 
 To add the secrets to your Copilot environment, follow the Copilot [documentation](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/extend-coding-agent-with-mcp#setting-up-a-copilot-environment-for-copilot-coding-agent). Only secrets with names prefixed with `COPILOT_MCP_` will be available to your MCP configuration.
 
-In your GitHub repository, navigate under Settings -> Code & automation -> Copilot -> Coding agent, and add the following configuration in the MCP configuration section:
+In your GitHub repository, navigate under Settings -> Code & automation -> Copilot -> Coding agent, and add the following configuration in the MCP configuration section.
+
+CodeScene Cloud:
 
 ```json
 {
@@ -93,13 +121,43 @@ In your GitHub repository, navigate under Settings -> Code & automation -> Copil
 }
 ```
 
+CodeScene On-prem:
+
+```json
+{
+  "mcpServers": {
+    "codescene": {
+      "type": "local",
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-e",
+        "CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN",
+        "-e",
+        "CS_ONPREM_URL=$CS_ONPREM_URL",
+        "codescene/codescene-mcp"
+      ],
+      "env": {
+        "CS_ACCESS_TOKEN": "COPILOT_MCP_CS_ACCESS_TOKEN",
+        "CS_ONPREM_URL": "COPILOT_MCP_CS_ONPREM_URL"
+      },
+      "tools": ["*"]
+    }
+  }
+}
+```
+
 </details>
 
 <details>
 
 **<summary>Kiro</summary>**
 
-Create a `.kiro/settings/mcp.json` file in your workspace directory (or edit if it already exists), add the following configuration:
+Create a `.kiro/settings/mcp.json` file in your workspace directory (or edit if it already exists), add the following configuration.
+
+CodeScene Cloud:
 
 ```json
 {
@@ -124,17 +182,47 @@ Create a `.kiro/settings/mcp.json` file in your workspace directory (or edit if 
 }
 ```
 
+CodeScene On-prem:
+
+```json
+{
+  "mcpServers": {
+    "sonarqube": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e", 
+        "CS_ACCESS_TOKEN",
+        "-e",
+        "CS_ONPREM_URL",
+        "codescene/codescene-mcp"
+      ],
+      "env": {
+        "CS_ACCESS_TOKEEN": "<YOUR_TOKEN>",
+        "CS_ONPREM_URL": "<URL>"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
+```
+
 </details>
 
 <details>
 
 **<summary>VS Code</summary>**
 
-[![Install CodeScene MCP](https://img.shields.io/badge/VS_Code-Install_CodeScene_MCP-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[{%22id%22:%22CS_ACCESS_TOKEN%22,%22type%22:%22promptString%22,%22description%22:%22CodeScene%20Access%20Token%22,%22password%22:true}]&config={%22command%22:%22docker%22,%22args%22:[%22run%22,%22-i%22,%22--rm%22,%22-e%22,%22CS_ACCESS_TOKEN%22,%22codescene/codescene-mcp%22],%22env%22:{%22CS_ACCESS_TOKEN%22:%22${input:CS_ACCESS_TOKEN}%22}})
+[![Install CodeScene MCP for Cloud](https://img.shields.io/badge/VS_Code-Install_CodeScene_MCP_for_Cloud-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[{%22id%22:%22CS_ACCESS_TOKEN%22,%22type%22:%22promptString%22,%22description%22:%22CodeScene%20Access%20Token%22,%22password%22:true}]&config={%22command%22:%22docker%22,%22args%22:[%22run%22,%22-i%22,%22--rm%22,%22-e%22,%22CS_ACCESS_TOKEN%22,%22codescene/codescene-mcp%22],%22env%22:{%22CS_ACCESS_TOKEN%22:%22${input:CS_ACCESS_TOKEN}%22}})
+
+[![Install CodeScene MCP for On-prem](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[{%22id%22:%22CS_ACCESS_TOKEN%22,%22type%22:%22promptString%22,%22description%22:%22CodeScene%20Access%20Token%22,%22password%22:true},%20{%22id%22:%22CS_ONPREM_URL%22,%22type%22:%22promptString%22,%22description%22:%22CodeScene%20On-prem%20URL%22,%22password%22:false}]&config={%22command%22:%22docker%22,%22args%22:[%22run%22,%22-i%22,%22--rm%22,%22-e%22,%22CS_ACCESS_TOKEN%22,%20%22-e%22,%20%22CS_ONPREM_URL%22,%22codescene/codescene-mcp%22],%22env%22:{%22CS_ACCESS_TOKEN%22:%22${input:CS_ACCESS_TOKEN}%22,%20%22CS_ONPREM_URL%22:%22${input:CS_ONPREM_URL}%22}})
 
 </details>
 
-### Get a CS_ACCESS_TOKEN for the MCP Server
+### Get a `CS_ACCESS_TOKEN` for the MCP Server
 
 The MCP server configuration requires a `CS_ACCESS_TOKEN` which you get via your CodeScene instance. (The token grants access to the code health analysis capability).
 * For CodeScene Cloud you create the token [here](https://codescene.io/users/me/pat).
