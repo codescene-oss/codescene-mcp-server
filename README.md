@@ -134,6 +134,12 @@ Create a `.kiro/settings/mcp.json` file in your workspace directory (or edit if 
 
 </details>
 
+### Get a CS_ACCESS_TOKEN for the MCP Server
+
+The MCP server configuration requires a `CS_ACCESS_TOKEN` which you get via your CodeScene instance. (The token grants access to the code health analysis capability).
+* For CodeScene Cloud you create the token [here](https://codescene.io/users/me/pat).
+* In CodeScene on-prem, you get the token via `https://<your-cs-host><:port>/configuration/user/token`.
+
 ## Use Cases
 
 > [!TIP]
