@@ -295,3 +295,5 @@ Or when running it from the CLI, like this:
 ```sh
 docker run -i --rm -e CS_ACCESS_TOKEN=token-goes-here codescene-mcp
 ```
+
+**Note:** if you want to use CodeScene On-prem, you need to additionally pass the `CS_ONPREM_URL` environment variable to it.
