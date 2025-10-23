@@ -37,6 +37,10 @@ def run_local_tool(command: list, cwd: str = None):
 
 def code_health_from(cli_output) -> float:
     r = json.loads(cli_output)
+
+    if 'score' not in r:
+        raise CodeSceneCliError("CLI output does not contain a 'score' field: {}".format(cli_output))
+
     return r['score']
 
 def analyze_code(file_content: str, file_ext: str) -> str:
