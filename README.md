@@ -334,7 +334,7 @@ Previously we had the MCP client pass the entire file contents to us in a JSON o
 
 While this might work for small files and code snippets, we want to provide a solution that works on any file, no matter the size, and we achieve this by having the MCP client return a file path to us which we then read ourselves, thus bypassing the AI token limit issue entirely.
 
-To make this safe, we have you, the user, specify which path our MCP server should have access to. In addition, all the configuration examples provided in this README feature a mounting command that only gives read-only access to the mounted path, so we can't do anything to those files other than read them.
+To make this safe, we have you, the user, specify which path our MCP server should have access to. In addition, all the configuration examples provided in this README feature a mounting command that gives only read-only access to the mounted path, so we can't do anything to those files other than read them.
 
 In addition this now saves your AI budget by not spending precious tokens on file reading, which can add up pretty quickly.
 
@@ -346,6 +346,6 @@ In addition this now saves your AI budget by not spending precious tokens on fil
 
 Due to the limitation of not knowing the relative path to the file from within Docker, in order to read the correct file we need to know the full absolute path to your mounted directory, so that we could deduce a relative path to the internally mounted file by simply taking the absolute path to the file, the absolute path to the mounted directory, and replacing the mounted directory part with our internal mounted directory. 
 
-We pass the absolute path to the mounted directory to us via a environment variable `-e CS_MOUNT_PATH=<PATH>` so that we would know the absolute path, jand then we need to pass that path again the second time via `--mount type=bind,src=<PATH>,dst=/mount/,ro` which then instructs Docker to actually mount `<PATH>` to our internal `/mount/` directory.
+We pass the absolute path to the mounted directory to us via a environment variable `-e CS_MOUNT_PATH=<PATH>` so that we would know the absolute path, and then we need to pass that path again the second time via `--mount type=bind,src=<PATH>,dst=/mount/,ro` which then instructs Docker to actually mount `<PATH>` to our internal `/mount/` directory.
 
 </details>
