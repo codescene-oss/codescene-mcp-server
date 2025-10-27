@@ -43,23 +43,19 @@ def code_health_from(cli_output) -> float:
 
     return r['score']
 
-def analyze_code(file_content: str, file_ext: str) -> str:
-    local_file = None
+def analyze_code(file_path: str) -> str:
+    return run_local_tool(cs_cli_review_command_for(file_path))
 
-    try:
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=file_ext, encoding='utf-8') as tmp:
-            tmp.write(file_content)
-            local_file = tmp.name
-
-        return run_local_tool(cs_cli_review_command_for(local_file))
-    
-    finally:
-        if local_file and os.path.exists(local_file):
-            os.remove(local_file)
-
-def cs_cli_review_command_for(local_file: str):
+def cs_cli_review_command_for(file_path: str):
     cs_cli = '/root/.local/bin/cs'
-    return [cs_cli, "review", local_file, "--output-format=json"]
+
+    if not os.getenv("CS_MOUNT_PATH"):
+        raise CodeSceneCliError("CS_MOUNT_PATH not defined.")
+
+    mount_dir = os.getenv('CS_MOUNT_PATH').removesuffix('/')
+    mount_file_path = file_path.replace(mount_dir, '/mount')
+
+    return [cs_cli, "review", mount_file_path, "--output-format=json"]
 
 def run_cs_cli(cli_fn) -> str:
     """
@@ -76,40 +72,39 @@ def run_cs_cli(cli_fn) -> str:
         return f"Error: {e}"
 
 @mcp.tool()
-def code_health_score(file_content: str, file_ext: str) -> str:
+def code_health_score(file_path: str) -> str:
     """
     Calculates the code quality of the given file using the Code Health metric.
     Returns a score from 10.0 (best) down to 1.0 (worst).
     Args:
-        file_content: The content of the source code file to be analyzed.
-        file_ext: The file extension of the source code file to be reviewed (e.g. .py, .java).
+        file_path: The absolute path to the source code file to be analyzed.
     Returns:
         A string representing the Code Health score, 10.0->1.0
     """
-    def calculate_code_health_of(file_content: str, file_ext: str) -> float:
-        result = analyze_code(file_content, file_ext)
+    def calculate_code_health_of(file_path: str) -> float:
+        result = analyze_code(file_path)
         return code_health_from(result)
     
-    return run_cs_cli(lambda: f"Code Health score: {calculate_code_health_of(file_content, file_ext)}")
+    return run_cs_cli(lambda: f"Code Health score: {calculate_code_health_of(file_path)}")
 
 @mcp.tool()
-def code_health_review(file_content: str, file_ext: str) -> str:
+def code_health_review(file_path: str) -> str:
     """
     Performs a Code Health review of the given file_path and returns 
     a JSON object specifying all potential code smells that contribute 
     to a lower Code Health.
     Args:
-        file_content: The content of the source code file to be analyzed.
+        file_content: The content of the source code file to be analyzed as a base64 encoded string.
         file_ext: The file extension of the source code file to be reviewed (e.g. .py, .java).
     Returns:
         A JSON object containing score and review:
          - score: this is the Code Health score. 10.0 is best, 1.0 is worst health.
          - review: an array of category and description for each code smell.
     """
-    def review_code_health_of(file_content: str, file_ext: str) -> float:
-        return analyze_code(file_content, file_ext)
-    
-    return run_cs_cli(lambda: review_code_health_of(file_content, file_ext))
-    
+    def review_code_health_of(file_path: str) -> float:
+        return analyze_code(file_path)
+
+    return run_cs_cli(lambda: review_code_health_of(file_path))
+
 if __name__ == "__main__":
     mcp.run()
