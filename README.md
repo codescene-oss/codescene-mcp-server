@@ -189,7 +189,7 @@ CodeScene Cloud:
         "-e",
         "CS_MOUNT_PATH=<PATH_TO_CODE>",
         "--mount",
-				"type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro",
+        "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro",
         "codescene/codescene-mcp"
       ],
       "env": {
@@ -220,7 +220,7 @@ CodeScene On-prem:
         "-e",
         "CS_MOUNT_PATH=<PATH_TO_CODE>",
         "--mount",
-				"type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro",
+        "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro",
         "codescene/codescene-mcp"
       ],
       "env": {
