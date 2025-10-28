@@ -332,6 +332,8 @@ docker run -i --rm -e CS_ACCESS_TOKEN=token-goes-here codescene-mcp
 
 Since you have to provide a mount path for Docker, you can either have a MCP configuration per project (in VS Code that would be a `.vscode/mcp.json` file per project, for example) or you can mount a root directory within which all your projects are and then just use that one configuration instead.
 
+</details>
+
 <details>
 
 **<summary>Why are we mounting a directory in the Docker?</summary>**
