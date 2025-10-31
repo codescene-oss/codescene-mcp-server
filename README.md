@@ -24,16 +24,20 @@ To connect with CodeScene Cloud:
 export CS_ACCESS_TOKEN="<your token here>"
 export PATH_TO_CODE="<your project dir here>"
 
-claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN -- docker run -i --rm -e CS_ACCESS_TOKEN -e CS_MOUNT_PATH=<PATH_TO_CODE> --mount type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro codescene/codescene-mcp
+claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN -- docker run -i --rm -e CS_ACCESS_TOKEN -e CS_MOUNT_PATH=$PATH_TO_CODE --mount type=bind,src=$PATH_TO_CODE,dst=/mount/,ro codescene/codescene-mcp
 ```
 
 To connect with CodeScene On-prem:
 
 ```sh
-claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN --env CS_ONPREM_URL=<url> -- docker run -i --rm -e CS_ACCESS_TOKEN -e CS_ONPREM_URL -e CS_MOUNT_PATH=<PATH_TO_CODE> --mount type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro codescene/codescene-mcp
+export CS_ACCESS_TOKEN="<your token here>"
+export CS_ONPREM_URL="<your onprem url>"
+export PATH_TO_CODE="<your project dir here>"
+
+claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN --env CS_ONPREM_URL=$CS_ONPREM_URL -- docker run -i --rm -e CS_ACCESS_TOKEN -e CS_ONPREM_URL -e CS_MOUNT_PATH=$PATH_TO_CODE --mount type=bind,src=$PATH_TO_CODE,dst=/mount/,ro codescene/codescene-mcp
 ```
 
-Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
+Make sure to replace the `PATH_TO_CODE` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
 
 ℹ️ You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
 
@@ -260,6 +264,48 @@ Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the director
 [![Install CodeScene MCP for On-prem](https://img.shields.io/badge/VS_Code-Install_CodeScene_MCP_for_Onprem-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[%7B%22id%22%3A%22CS_MOUNT_PATH%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22Path%20of%20the%20directory%20that%20CodeScene%20should%20be%20able%20to%20see.%22%2C%22password%22%3Afalse%7D%2C%7B%22id%22%3A%22CS_ACCESS_TOKEN%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20Access%20Token%22%2C%22password%22%3Atrue%7D%2C%7B%22id%22%3A%22CS_ONPREM_URL%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20On-prem%20URL%22%2C%22password%22%3Afalse%7D]&config={%22command%22%3A%22docker%22%2C%22args%22%3A[%22run%22%2C%22-i%22%2C%22--rm%22%2C%22-e%22%2C%22CS_ACCESS_TOKEN%22%2C%22-e%22%2C%22CS_ONPREM_URL%22%2C%22-e%22%2C%22CS_MOUNT_PATH%3D%24%7Binput%3ACS_MOUNT_PATH%7D%22%2C%22--mount%22%2C%22type%3Dbind%2Csrc%3D%24%7Binput%3ACS_MOUNT_PATH%7D%2Cdst%3D/mount/%2Cro%22%2C%22codescene/codescene-mcp%22]%2C%22env%22%3A%7B%22CS_ACCESS_TOKEN%22%3A%22%24%7Binput%3ACS_ACCESS_TOKEN%7D%22%2C%22CS_ONPREM_URL%22%3A%22%24%7Binput%3ACS_ONPREM_URL%7D%22%7D%2C%22type%22%3A%22stdio%22})
 
 **Note:** when installing the MCP server with the one-click install buttons, VS Code will install this configuration globally, available to every project you work on with VS Code. This means that when specifying the `CS_MOUNT_PATH` ([what is `CS_MOUNT_PATH`?](#frequently-asked-questions)) you should either specify a more global path so that the MCP server can see files globally, or move the installed configuration to a per-project basis by making a `.vscode/mcp.json` file in your project and specifying the `CS_MOUNT_PATH` there to be just for said project.
+
+</details>
+
+<details>
+
+**<summary>Amazon Q CLI</summary>**
+
+To configure the Amazon Q CLI to have the CodeScene Cloud MCP server:
+
+
+```sh
+q mcp add --name codescene-mcp --command cmd --args '["docker", "run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "-e", "CS_MOUNT_PATH=<PATH_TO_CODE>", "--mount", "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", "codescene/codescene-mcp"]'
+```
+
+To configure the Amazon Q CLI to have the CodeScene On-prem MCP server:
+
+
+```sh
+q mcp add --name codescene-mcp --command cmd --args '["docker", "run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "-e", "CS_ONPREM_URL", "-e", "CS_MOUNT_PATH=<PATH_TO_CODE>", "--mount", "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", "codescene/codescene-mcp"]'
+```
+
+Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have. In addition, make sure to have the `CS_ACCESS_TOKEN` (and `CS_ONPREM_URL` if you are using the on-prem variant) in your environment PATH, or specify them manually in the command.
+
+ℹ️ You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
+
+</details>
+
+<details>
+
+**<summary>Amazon Q IDE</summary>**
+
+1. [Access the MCP configuration UI](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/mcp-ide.html#mcp-ide-configuration-access-ui)
+2. Choose the plus (+) symbol
+3. Select the scope: do you want the MCP server to be available globally or locally?
+4. In the `Name` field, enter `CodeSceneMCPServer`
+5. Select `stdio` as the transport protocol
+6. In the `Command` field, enter `docker`
+7. In the `Arguments` field, enter:
+  * **CodeScene Cloud:** `run, --rm, -i, -e, CS_ACCESS_TOKEN, -e, CS_MOUNT_PATH=<PATH_TO_CODE>, --mount, "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", codescene/codescene-mcp`
+  * **CodeScene On-prem:** `run, --rm, -i, -e, CS_ACCESS_TOKEN, -e, CS_ONPREM_URL, -e, CS_MOUNT_PATH=<PATH_TO_CODE>, --mount, "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", codescene/codescene-mcp`
+8. Fill in environment variables like `CS_ACCESS_TOKEN` ([?](#get-a-cs_access_token-for-the-mcp-server)) (and `CS_ONPREM_URL` if you are using On-prem). Make sure to replace `CS_MOUNT_PATH` with the absolute path to your code. You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section
+9. Choose "Save"
 
 </details>
 
