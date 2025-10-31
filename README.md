@@ -275,14 +275,14 @@ To configure the Amazon Q CLI to have the CodeScene Cloud MCP server:
 
 
 ```sh
-q mcp add --name codescene-mcp --command cmd --args '["docker", "run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "-e", "CS_MOUNT_PATH=<PATH_TO_CODE>", "--mount", "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", "codescene/codescene-mcp"]'
+q mcp add --name codescene-mcp --command docker --args '["run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "-e", "CS_MOUNT_PATH=<PATH_TO_CODE>", "--mount", "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", "codescene/codescene-mcp"]'
 ```
 
 To configure the Amazon Q CLI to have the CodeScene On-prem MCP server:
 
 
 ```sh
-q mcp add --name codescene-mcp --command cmd --args '["docker", "run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "-e", "CS_ONPREM_URL", "-e", "CS_MOUNT_PATH=<PATH_TO_CODE>", "--mount", "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", "codescene/codescene-mcp"]'
+q mcp add --name codescene-mcp --command docker --args '["run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "-e", "CS_ONPREM_URL", "-e", "CS_MOUNT_PATH=<PATH_TO_CODE>", "--mount", "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", "codescene/codescene-mcp"]'
 ```
 
 Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have. In addition, make sure to have the `CS_ACCESS_TOKEN` (and `CS_ONPREM_URL` if you are using the on-prem variant) in your environment PATH, or specify them manually in the command.
@@ -302,10 +302,34 @@ Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the director
 5. Select `stdio` as the transport protocol
 6. In the `Command` field, enter `docker`
 7. In the `Arguments` field, enter:
-  * **CodeScene Cloud:** `run, --rm, -i, -e, CS_ACCESS_TOKEN, -e, CS_MOUNT_PATH=<PATH_TO_CODE>, --mount, "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", codescene/codescene-mcp`
-  * **CodeScene On-prem:** `run, --rm, -i, -e, CS_ACCESS_TOKEN, -e, CS_ONPREM_URL, -e, CS_MOUNT_PATH=<PATH_TO_CODE>, --mount, "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", codescene/codescene-mcp`
-8. Fill in environment variables like `CS_ACCESS_TOKEN` ([?](#get-a-cs_access_token-for-the-mcp-server)) (and `CS_ONPREM_URL` if you are using On-prem). Make sure to replace `CS_MOUNT_PATH` with the absolute path to your code. You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section
+  * **CodeScene Cloud:** 
+    1. `run`
+    2. `--rm`
+    3. `-i`
+    4. `-e`
+    5. `CS_ACCESS_TOKEN`
+    6. `-e`
+    7. `CS_MOUNT_PATH=<PATH_TO_CODE>`
+    8. `--mount`
+    9. `type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro`
+    10. `codescene/codescene-mcp`
+  * **CodeScene On-prem:** 
+    1. `run`
+    2. `--rm`
+    3. `-i`
+    4. `-e`
+    5. `CS_ACCESS_TOKEN`
+    6. `-e`
+    7. `CS_ONPREM_URL`
+    8. `-e`
+    9. `CS_MOUNT_PATH=<PATH_TO_CODE>`
+    10. `--mount`
+    11. `type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro`
+    12. `codescene/codescene-mcp`
+8. Fill in environment variables like `CS_ACCESS_TOKEN` ([?](#get-a-cs_access_token-for-the-mcp-server)) (and `CS_ONPREM_URL` if you are using On-prem). Make sure to replace `<PATH_TO_CODE>` with the absolute path to your code. You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section
 9. Choose "Save"
+
+**Note:** Amazon Q can only use the MCP server tools when used in the agentic mode.
 
 </details>
 
@@ -333,6 +357,50 @@ The Code Health tools solve this by giving AI assistants precise insight into de
 
 ### Understand Existing Code Before Acting
 Use Code Health reviews to inform AI-driven summaries, diagnostics, or code transformations based on **real-world cognitive and design challenges**, not just syntax.
+
+## Frequently Asked Questions
+
+<details>
+
+**<summary>I have multiple repos — how do I configure the MCP?</summary>**
+
+Since you have to provide a mount path for Docker, you can either have a MCP configuration per project (in VS Code that would be a `.vscode/mcp.json` file per project, for example) or you can mount a root directory within which all your projects are and then just use that one configuration instead.
+
+</details>
+
+<details>
+
+**<summary>Why are we mounting a directory in the Docker?</summary>**
+
+Previously we had the MCP client pass the entire file contents to us in a JSON object, but with this we ran into a problem where if the file contents exceed your AI model's input or output token limit, we'd either get no data or incorrect data. 
+
+While this might work for small files and code snippets, we want to provide a solution that works on any file, no matter the size, and we achieve this by having the MCP client return a file path to us which we then read ourselves, thus bypassing the AI token limit issue entirely.
+
+To make this safe, we have you, the user, specify which path our MCP server should have access to. In addition, all the configuration examples provided in this README feature a mounting command that gives only read-only access to the mounted path, so we can't do anything to those files other than read them.
+
+In addition this now saves your AI budget by not spending precious tokens on file reading, which can add up pretty quickly.
+
+</details>
+
+<details>
+
+**<summary>What is `CS_MOUNT_PATH`?</summary>**
+
+The `CS_MOUNT_PATH` should be an absolute path to the directory whose code you want to analyse with CodeScene. It can be either just a singular project, say at `/home/john/Projects/MyProject`, in which case the MCP server only sees and is able to reason about the files in that particular project, or it could be a more global path like `/home/john/Projects`, in which case the MCP server sees all of your projects.
+
+The difference here really comes down to your preference. Do you want to give it more global access, but as such configure it just once, or do you want to give it more granular access, but then configure for each project / directory again each time.
+
+</details>
+
+<details>
+
+**<summary>Why do we specify `CS_MOUNT_PATH` twice?</summary>**
+
+Due to the limitation of not knowing the relative path to the file from within Docker, in order to read the correct file we need to know the full absolute path to your mounted directory, so that we could deduce a relative path to the internally mounted file by simply taking the absolute path to the file, the absolute path to the mounted directory, and replacing the mounted directory part with our internal mounted directory. 
+
+We pass the absolute path to the mounted directory to us via a environment variable `-e CS_MOUNT_PATH=<PATH>` so that we would know the absolute path, and then we need to pass that path again the second time via `--mount type=bind,src=<PATH>,dst=/mount/,ro` which then instructs Docker to actually mount `<PATH>` to our internal `/mount/` directory.
+
+</details>
 
 ## Building the docker instance locally
 
@@ -394,47 +462,3 @@ docker run -i --rm -e CS_ACCESS_TOKEN=token-goes-here codescene-mcp
 ```
 
 **Note:** if you want to use CodeScene On-prem, you need to additionally pass the `CS_ONPREM_URL` environment variable to it.
-
-## Frequently Asked Questions
-
-<details>
-
-**<summary>I have multiple repos — how do I configure the MCP?</summary>**
-
-Since you have to provide a mount path for Docker, you can either have a MCP configuration per project (in VS Code that would be a `.vscode/mcp.json` file per project, for example) or you can mount a root directory within which all your projects are and then just use that one configuration instead.
-
-</details>
-
-<details>
-
-**<summary>Why are we mounting a directory in the Docker?</summary>**
-
-Previously we had the MCP client pass the entire file contents to us in a JSON object, but with this we ran into a problem where if the file contents exceed your AI model's input or output token limit, we'd either get no data or incorrect data. 
-
-While this might work for small files and code snippets, we want to provide a solution that works on any file, no matter the size, and we achieve this by having the MCP client return a file path to us which we then read ourselves, thus bypassing the AI token limit issue entirely.
-
-To make this safe, we have you, the user, specify which path our MCP server should have access to. In addition, all the configuration examples provided in this README feature a mounting command that gives only read-only access to the mounted path, so we can't do anything to those files other than read them.
-
-In addition this now saves your AI budget by not spending precious tokens on file reading, which can add up pretty quickly.
-
-</details>
-
-<details>
-
-**<summary>What is `CS_MOUNT_PATH`?</summary>**
-
-The `CS_MOUNT_PATH` should be an absolute path to the directory whose code you want to analyse with CodeScene. It can be either just a singular project, say at `/home/john/Projects/MyProject`, in which case the MCP server only sees and is able to reason about the files in that particular project, or it could be a more global path like `/home/john/Projects`, in which case the MCP server sees all of your projects.
-
-The difference here really comes down to your preference. Do you want to give it more global access, but as such configure it just once, or do you want to give it more granular access, but then configure for each project / directory again each time.
-
-</details>
-
-<details>
-
-**<summary>Why do we specify `CS_MOUNT_PATH` twice?</summary>**
-
-Due to the limitation of not knowing the relative path to the file from within Docker, in order to read the correct file we need to know the full absolute path to your mounted directory, so that we could deduce a relative path to the internally mounted file by simply taking the absolute path to the file, the absolute path to the mounted directory, and replacing the mounted directory part with our internal mounted directory. 
-
-We pass the absolute path to the mounted directory to us via a environment variable `-e CS_MOUNT_PATH=<PATH>` so that we would know the absolute path, and then we need to pass that path again the second time via `--mount type=bind,src=<PATH>,dst=/mount/,ro` which then instructs Docker to actually mount `<PATH>` to our internal `/mount/` directory.
-
-</details>
