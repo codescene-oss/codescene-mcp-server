@@ -35,7 +35,7 @@ claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN --env CS_ONPREM_
 
 Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
 
-You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
+ℹ️ You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
 
 </details>
 
@@ -65,7 +65,7 @@ env = { "CS_ACCESS_TOKEN" = "<YOUR_ACCESS_TOKEN>", "CS_ONPREM_URL" = "<URL>" }
 
 Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
 
-You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
+ℹ️ You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
 
 </details>
 
@@ -97,7 +97,7 @@ CodeScene On-prem:
 
 Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
 
-You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
+ℹ️ You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
 
 </details>
 
@@ -174,7 +174,7 @@ CodeScene On-prem:
 }
 ```
 
-You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
+ℹ️ You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
 
 </details>
 
@@ -247,7 +247,7 @@ CodeScene On-prem:
 
 Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have. 
 
-You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
+ℹ️ You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
 
 </details>
 
