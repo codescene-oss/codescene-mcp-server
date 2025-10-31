@@ -21,16 +21,25 @@ The Code Health insights augment the AI prompts with rich content around code qu
 To connect with CodeScene Cloud:
 
 ```sh
-claude mcp add codescene --env CS_ACCESS_TOKEN=<token> -- docker run -i --rm -e CS_ACCESS_TOKEN -e CS_MOUNT_PATH=<PATH_TO_CODE> --mount type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro codescene/codescene-mcp
+export CS_ACCESS_TOKEN="<your token here>"
+export PATH_TO_CODE="<your project dir here>"
+
+claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN -- docker run -i --rm -e CS_ACCESS_TOKEN -e CS_MOUNT_PATH=$PATH_TO_CODE --mount type=bind,src=$PATH_TO_CODE,dst=/mount/,ro codescene/codescene-mcp
 ```
 
 To connect with CodeScene On-prem:
 
 ```sh
-claude mcp add codescene --env CS_ACCESS_TOKEN=<token> --env CS_ONPREM_URL=<url> -- docker run -i --rm -e CS_ACCESS_TOKEN -e CS_ONPREM_URL -e CS_MOUNT_PATH=<PATH_TO_CODE> --mount type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro codescene/codescene-mcp
+export CS_ACCESS_TOKEN="<your token here>"
+export CS_ONPREM_URL="<your onprem url>"
+export PATH_TO_CODE="<your project dir here>"
+
+claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN --env CS_ONPREM_URL=$CS_ONPREM_URL -- docker run -i --rm -e CS_ACCESS_TOKEN -e CS_ONPREM_URL -e CS_MOUNT_PATH=$PATH_TO_CODE --mount type=bind,src=$PATH_TO_CODE,dst=/mount/,ro codescene/codescene-mcp
 ```
 
-Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
+Make sure to replace the `PATH_TO_CODE` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
+
+ℹ️ You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
 
 </details>
 
@@ -59,6 +68,8 @@ env = { "CS_ACCESS_TOKEN" = "<YOUR_ACCESS_TOKEN>", "CS_ONPREM_URL" = "<URL>" }
 ```
 
 Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
+
+ℹ️ You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
 
 </details>
 
@@ -89,6 +100,8 @@ CodeScene On-prem:
 - Arguments: `run, --rm, -i, -e, CS_ACCESS_TOKEN, -e, CS_ONPREM_URL, -e, CS_MOUNT_PATH=<PATH_TO_CODE>, --mount, "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", codescene/codescene-mcp`
 
 Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
+
+ℹ️ You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
 
 </details>
 
@@ -165,6 +178,8 @@ CodeScene On-prem:
 }
 ```
 
+ℹ️ You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
+
 </details>
 
 <details>
@@ -234,7 +249,9 @@ CodeScene On-prem:
 }
 ```
 
-Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
+Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have. 
+
+ℹ️ You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
 
 </details>
 
@@ -246,7 +263,77 @@ Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the director
 
 [![Install CodeScene MCP for On-prem](https://img.shields.io/badge/VS_Code-Install_CodeScene_MCP_for_Onprem-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[%7B%22id%22%3A%22CS_MOUNT_PATH%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22Path%20of%20the%20directory%20that%20CodeScene%20should%20be%20able%20to%20see.%22%2C%22password%22%3Afalse%7D%2C%7B%22id%22%3A%22CS_ACCESS_TOKEN%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20Access%20Token%22%2C%22password%22%3Atrue%7D%2C%7B%22id%22%3A%22CS_ONPREM_URL%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20On-prem%20URL%22%2C%22password%22%3Afalse%7D]&config={%22command%22%3A%22docker%22%2C%22args%22%3A[%22run%22%2C%22-i%22%2C%22--rm%22%2C%22-e%22%2C%22CS_ACCESS_TOKEN%22%2C%22-e%22%2C%22CS_ONPREM_URL%22%2C%22-e%22%2C%22CS_MOUNT_PATH%3D%24%7Binput%3ACS_MOUNT_PATH%7D%22%2C%22--mount%22%2C%22type%3Dbind%2Csrc%3D%24%7Binput%3ACS_MOUNT_PATH%7D%2Cdst%3D/mount/%2Cro%22%2C%22codescene/codescene-mcp%22]%2C%22env%22%3A%7B%22CS_ACCESS_TOKEN%22%3A%22%24%7Binput%3ACS_ACCESS_TOKEN%7D%22%2C%22CS_ONPREM_URL%22%3A%22%24%7Binput%3ACS_ONPREM_URL%7D%22%7D%2C%22type%22%3A%22stdio%22})
 
+**Note:** when installing the MCP server with the one-click install buttons, VS Code will install this configuration globally, available to every project you work on with VS Code. This means that when specifying the `CS_MOUNT_PATH` ([what is `CS_MOUNT_PATH`?](#frequently-asked-questions)) you should either specify a more global path so that the MCP server can see files globally, or move the installed configuration to a per-project basis by making a `.vscode/mcp.json` file in your project and specifying the `CS_MOUNT_PATH` there to be just for said project.
+
 </details>
+
+<details>
+
+**<summary>Amazon Q CLI</summary>**
+
+To configure the Amazon Q CLI to have the CodeScene Cloud MCP server:
+
+
+```sh
+q mcp add --name codescene-mcp --command docker --args '["run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "-e", "CS_MOUNT_PATH=<PATH_TO_CODE>", "--mount", "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", "codescene/codescene-mcp"]'
+```
+
+To configure the Amazon Q CLI to have the CodeScene On-prem MCP server:
+
+
+```sh
+q mcp add --name codescene-mcp --command docker --args '["run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "-e", "CS_ONPREM_URL", "-e", "CS_MOUNT_PATH=<PATH_TO_CODE>", "--mount", "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", "codescene/codescene-mcp"]'
+```
+
+Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have. In addition, make sure to have the `CS_ACCESS_TOKEN` (and `CS_ONPREM_URL` if you are using the on-prem variant) in your environment PATH, or specify them manually in the command.
+
+ℹ️ You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
+
+</details>
+
+<details>
+
+**<summary>Amazon Q IDE</summary>**
+
+1. [Access the MCP configuration UI](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/mcp-ide.html#mcp-ide-configuration-access-ui)
+2. Choose the plus (+) symbol
+3. Select the scope: do you want the MCP server to be available globally or locally?
+4. In the `Name` field, enter `CodeSceneMCPServer`
+5. Select `stdio` as the transport protocol
+6. In the `Command` field, enter `docker`
+7. In the `Arguments` field, enter:
+  * **CodeScene Cloud:** 
+    1. `run`
+    2. `--rm`
+    3. `-i`
+    4. `-e`
+    5. `CS_ACCESS_TOKEN`
+    6. `-e`
+    7. `CS_MOUNT_PATH=<PATH_TO_CODE>`
+    8. `--mount`
+    9. `type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro`
+    10. `codescene/codescene-mcp`
+  * **CodeScene On-prem:** 
+    1. `run`
+    2. `--rm`
+    3. `-i`
+    4. `-e`
+    5. `CS_ACCESS_TOKEN`
+    6. `-e`
+    7. `CS_ONPREM_URL`
+    8. `-e`
+    9. `CS_MOUNT_PATH=<PATH_TO_CODE>`
+    10. `--mount`
+    11. `type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro`
+    12. `codescene/codescene-mcp`
+8. Fill in environment variables like `CS_ACCESS_TOKEN` ([?](#get-a-cs_access_token-for-the-mcp-server)) (and `CS_ONPREM_URL` if you are using On-prem). Make sure to replace `<PATH_TO_CODE>` with the absolute path to your code. You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section
+9. Choose "Save"
+
+**Note:** Amazon Q can only use the MCP server tools when used in the agentic mode.
+
+</details>
+
+---
 
 ### Get a `CS_ACCESS_TOKEN` for the MCP Server
 
@@ -270,59 +357,6 @@ The Code Health tools solve this by giving AI assistants precise insight into de
 
 ### Understand Existing Code Before Acting
 Use Code Health reviews to inform AI-driven summaries, diagnostics, or code transformations based on **real-world cognitive and design challenges**, not just syntax.
-
-## Building the docker instance locally
-
-You can build and run the dockerized CodeScene MCP server by first cloning the repo and then building the Docker image:
-
-```sh
-docker build -t codescene-mcp .
-```
-
-And then configuring the MCP in your editor, for example in VS Code:
-
-```json
-"codescene-mcp": {
-    "type": "stdio",
-    "command": "docker",
-    "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "CS_ACCESS_TOKEN",
-        "codescene-mcp"
-    ]
-}
-```
-
-This configuration will automatically pick up the `CS_ACCESS_TOKEN` environment variable, but if you can't create a system-wide one then you can manually specify it like this:
-
-```json
-"codescene-mcp": {
-    "type": "stdio",
-    "command": "docker",
-    "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "CS_ACCESS_TOKEN",
-        "codescene-mcp"
-    ],
-    "env": {
-		"CS_ACCESS_TOKEN": "token-goes-here",
-    }
-}
-```
-
-Or when running it from the CLI, like this:
-
-```sh
-docker run -i --rm -e CS_ACCESS_TOKEN=token-goes-here codescene-mcp
-```
-
-**Note:** if you want to use CodeScene On-prem, you need to additionally pass the `CS_ONPREM_URL` environment variable to it.
 
 ## Frequently Asked Questions
 
@@ -350,6 +384,16 @@ In addition this now saves your AI budget by not spending precious tokens on fil
 
 <details>
 
+**<summary>What is `CS_MOUNT_PATH`?</summary>**
+
+The `CS_MOUNT_PATH` should be an absolute path to the directory whose code you want to analyse with CodeScene. It can be either just a singular project, say at `/home/john/Projects/MyProject`, in which case the MCP server only sees and is able to reason about the files in that particular project, or it could be a more global path like `/home/john/Projects`, in which case the MCP server sees all of your projects.
+
+The difference here really comes down to your preference. Do you want to give it more global access, but as such configure it just once, or do you want to give it more granular access, but then configure for each project / directory again each time.
+
+</details>
+
+<details>
+
 **<summary>Why do we specify `CS_MOUNT_PATH` twice?</summary>**
 
 Due to the limitation of not knowing the relative path to the file from within Docker, in order to read the correct file we need to know the full absolute path to your mounted directory, so that we could deduce a relative path to the internally mounted file by simply taking the absolute path to the file, the absolute path to the mounted directory, and replacing the mounted directory part with our internal mounted directory. 
@@ -357,3 +401,64 @@ Due to the limitation of not knowing the relative path to the file from within D
 We pass the absolute path to the mounted directory to us via a environment variable `-e CS_MOUNT_PATH=<PATH>` so that we would know the absolute path, and then we need to pass that path again the second time via `--mount type=bind,src=<PATH>,dst=/mount/,ro` which then instructs Docker to actually mount `<PATH>` to our internal `/mount/` directory.
 
 </details>
+
+## Building the docker instance locally
+
+You can build and run the dockerized CodeScene MCP server by first cloning the repo and then building the Docker image:
+
+```sh
+docker build -t codescene-mcp .
+```
+
+And then configuring the MCP in your editor, for example in VS Code:
+
+```json
+"codescene-mcp": {
+    "type": "stdio",
+    "command": "docker",
+    "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "CS_ACCESS_TOKEN",
+        "-e",
+        "CS_MOUNT_PATH=<PATH_TO_CODE>",
+        "--mount",
+        "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro",
+        "codescene-mcp"
+    ]
+}
+```
+
+This configuration will automatically pick up the `CS_ACCESS_TOKEN` environment variable, but if you can't create a system-wide one then you can manually specify it like this:
+
+```json
+"codescene-mcp": {
+    "type": "stdio",
+    "command": "docker",
+    "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "CS_ACCESS_TOKEN",
+        "-e",
+        "CS_MOUNT_PATH=<PATH_TO_CODE>",
+        "--mount",
+        "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro",
+        "codescene-mcp"
+    ],
+    "env": {
+		"CS_ACCESS_TOKEN": "token-goes-here",
+    }
+}
+```
+
+Or when running it from the CLI, like this:
+
+```sh
+docker run -i --rm -e CS_ACCESS_TOKEN=token-goes-here codescene-mcp
+```
+
+**Note:** if you want to use CodeScene On-prem, you need to additionally pass the `CS_ONPREM_URL` environment variable to it.
