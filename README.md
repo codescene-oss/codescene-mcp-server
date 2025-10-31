@@ -35,6 +35,8 @@ claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN --env CS_ONPREM_
 
 Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
 
+You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
+
 </details>
 
 <details>
@@ -62,6 +64,8 @@ env = { "CS_ACCESS_TOKEN" = "<YOUR_ACCESS_TOKEN>", "CS_ONPREM_URL" = "<URL>" }
 ```
 
 Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
+
+You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
 
 </details>
 
@@ -92,6 +96,8 @@ CodeScene On-prem:
 - Arguments: `run, --rm, -i, -e, CS_ACCESS_TOKEN, -e, CS_ONPREM_URL, -e, CS_MOUNT_PATH=<PATH_TO_CODE>, --mount, "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", codescene/codescene-mcp`
 
 Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
+
+You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
 
 </details>
 
@@ -168,6 +174,8 @@ CodeScene On-prem:
 }
 ```
 
+You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
+
 </details>
 
 <details>
@@ -237,7 +245,9 @@ CodeScene On-prem:
 }
 ```
 
-Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
+Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have. 
+
+You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
 
 </details>
 
@@ -249,9 +259,11 @@ Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the director
 
 [![Install CodeScene MCP for On-prem](https://img.shields.io/badge/VS_Code-Install_CodeScene_MCP_for_Onprem-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[%7B%22id%22%3A%22CS_MOUNT_PATH%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22Path%20of%20the%20directory%20that%20CodeScene%20should%20be%20able%20to%20see.%22%2C%22password%22%3Afalse%7D%2C%7B%22id%22%3A%22CS_ACCESS_TOKEN%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20Access%20Token%22%2C%22password%22%3Atrue%7D%2C%7B%22id%22%3A%22CS_ONPREM_URL%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20On-prem%20URL%22%2C%22password%22%3Afalse%7D]&config={%22command%22%3A%22docker%22%2C%22args%22%3A[%22run%22%2C%22-i%22%2C%22--rm%22%2C%22-e%22%2C%22CS_ACCESS_TOKEN%22%2C%22-e%22%2C%22CS_ONPREM_URL%22%2C%22-e%22%2C%22CS_MOUNT_PATH%3D%24%7Binput%3ACS_MOUNT_PATH%7D%22%2C%22--mount%22%2C%22type%3Dbind%2Csrc%3D%24%7Binput%3ACS_MOUNT_PATH%7D%2Cdst%3D/mount/%2Cro%22%2C%22codescene/codescene-mcp%22]%2C%22env%22%3A%7B%22CS_ACCESS_TOKEN%22%3A%22%24%7Binput%3ACS_ACCESS_TOKEN%7D%22%2C%22CS_ONPREM_URL%22%3A%22%24%7Binput%3ACS_ONPREM_URL%7D%22%7D%2C%22type%22%3A%22stdio%22})
 
-**Note:** when installing the MCP server with the one-click install buttons, VS Code will install this configuration globally, available to every project you work on with VS Code. This means that when specifying the `CS_MOUNT_PATH` ([what is `CS_MOUNT_PATH`?](#what-is-cs_mount_path)) you should either specify a more global path so that the MCP server can see files globally, or move the installed configuration to a per-project basis by making a `.vscode/mcp.json` file in your project and specifying the `CS_MOUNT_PATH` there to be just for said project.
+**Note:** when installing the MCP server with the one-click install buttons, VS Code will install this configuration globally, available to every project you work on with VS Code. This means that when specifying the `CS_MOUNT_PATH` ([what is `CS_MOUNT_PATH`?](#frequently-asked-questions)) you should either specify a more global path so that the MCP server can see files globally, or move the installed configuration to a per-project basis by making a `.vscode/mcp.json` file in your project and specifying the `CS_MOUNT_PATH` there to be just for said project.
 
 </details>
+
+---
 
 ### Get a `CS_ACCESS_TOKEN` for the MCP Server
 
@@ -341,7 +353,7 @@ docker run -i --rm -e CS_ACCESS_TOKEN=token-goes-here codescene-mcp
 
 <details>
 
-#### summary>I have multiple repos — how do I configure the MCP?</summary>
+**<summary>I have multiple repos — how do I configure the MCP?</summary>**
 
 Since you have to provide a mount path for Docker, you can either have a MCP configuration per project (in VS Code that would be a `.vscode/mcp.json` file per project, for example) or you can mount a root directory within which all your projects are and then just use that one configuration instead.
 
@@ -349,7 +361,7 @@ Since you have to provide a mount path for Docker, you can either have a MCP con
 
 <details>
 
-#### <summary>Why are we mounting a directory in the Docker?</summary>
+**<summary>Why are we mounting a directory in the Docker?</summary>**
 
 Previously we had the MCP client pass the entire file contents to us in a JSON object, but with this we ran into a problem where if the file contents exceed your AI model's input or output token limit, we'd either get no data or incorrect data. 
 
@@ -363,7 +375,7 @@ In addition this now saves your AI budget by not spending precious tokens on fil
 
 <details>
 
-#### <summary>What is `CS_MOUNT_PATH`?</summary>
+**<summary>What is `CS_MOUNT_PATH`?</summary>**
 
 The `CS_MOUNT_PATH` should be an absolute path to the directory whose code you want to analyse with CodeScene. It can be either just a singular project, say at `/home/john/Projects/MyProject`, in which case the MCP server only sees and is able to reason about the files in that particular project, or it could be a more global path like `/home/john/Projects`, in which case the MCP server sees all of your projects.
 
@@ -373,7 +385,7 @@ The difference here really comes down to your preference. Do you want to give it
 
 <details>
 
-#### <summary>Why do we specify `CS_MOUNT_PATH` twice?</summary>
+**<summary>Why do we specify `CS_MOUNT_PATH` twice?</summary>**
 
 Due to the limitation of not knowing the relative path to the file from within Docker, in order to read the correct file we need to know the full absolute path to your mounted directory, so that we could deduce a relative path to the internally mounted file by simply taking the absolute path to the file, the absolute path to the mounted directory, and replacing the mounted directory part with our internal mounted directory. 
 
