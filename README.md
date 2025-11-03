@@ -362,6 +362,15 @@ Use Code Health reviews to inform AI-driven summaries, diagnostics, or code tran
 
 <details>
 
+**<summary>Do I need a CodeScene account to use the MCP?</summary>**
+
+Yes, the MCP Server requires a [CodeScene subscription](https://codescene.com/pricing). Use your CodeScene instance to create the `CS_ACCESS_TOKEN` which activates the MCP. 
+The MCP supports both CodeScene Cloud and CodeScene on-prem.
+
+</details>
+
+<details>
+
 **<summary>I have multiple repos — how do I configure the MCP?</summary>**
 
 Since you have to provide a mount path for Docker, you can either have a MCP configuration per project (in VS Code that would be a `.vscode/mcp.json` file per project, for example) or you can mount a root directory within which all your projects are and then just use that one configuration instead.
