@@ -14,6 +14,22 @@
       "transport": {
         "type": "stdio"
       },
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "description": "Mount the path to code to be analysed by CodeScene",
+          "name": "--mount",
+          "value": "type=bind,src={source_path},dst=/mount/,ro",
+          "isRequired": true,
+          "variables": {
+            "source_path": {
+              "description": "Path to code to be analysed by CodeScene",
+              "format": "filepath",
+              "isRequired": true
+            }
+          }
+        }
+      ],
       "environmentVariables": [
         {
           "description": "CodeScene API Token",
@@ -21,6 +37,13 @@
           "format": "string",
           "isSecret": true,
           "name": "CS_ACCESS_TOKEN"
+        },
+        {
+          "description": "CodeScene Path to code",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true,
+          "name": "CS_MOUNT_PATH"
         }
       ]
     }
