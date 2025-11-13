@@ -53,7 +53,6 @@ class TestCodeSceneMCP(unittest.IsolatedAsyncioTestCase):
             result = await c.call_tool("code_health_review", {
                 "file_path": self.file_to_review
                 })
-            print(result)
             review = json.loads(result.data)
             
             self.assertEqual(8.65, review['score'])
