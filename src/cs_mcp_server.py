@@ -43,19 +43,37 @@ def code_health_from(cli_output) -> float:
 
     return r['score']
 
-def analyze_code(file_path: str) -> str:
-    return run_local_tool(cs_cli_review_command_for(file_path))
-
-def cs_cli_review_command_for(file_path: str):
-    cs_cli = '/root/.local/bin/cs'
-
+def adapt_mounted_file_path_inside_docker(file_path):
     if not os.getenv("CS_MOUNT_PATH"):
         raise CodeSceneCliError("CS_MOUNT_PATH not defined.")
 
     mount_dir = os.getenv('CS_MOUNT_PATH').removesuffix('/')
     mount_file_path = file_path.replace(mount_dir, '/mount')
 
+    return mount_file_path
+
+def context_aware_path_to(file_path: str):
+    """
+    The MCP server executes in two contexts: docker (default distro for the MCP), and 
+    as an executable Python file used during our e2e tests. (In the future, we do 
+    want the e2e tests to go via the Docker distro).
+    When running tests, we don't have a mount path -> shortcut that via the env.
+    """
+    if os.getenv("CS_MCP_RUNS_TEST_CONTEXT"):
+        return file_path
+    
+    return adapt_mounted_file_path_inside_docker(file_path)
+
+def cs_cli_review_command_for(file_path: str):
+    cs_cli_location_in_docker = '/root/.local/bin/cs'
+    cs_cli = os.getenv("CS_CLI_PATH", default=cs_cli_location_in_docker)
+
+    mount_file_path = context_aware_path_to(file_path)
+
     return [cs_cli, "review", mount_file_path, "--output-format=json"]
+
+def analyze_code(file_path: str) -> str:
+    return run_local_tool(cs_cli_review_command_for(file_path))
 
 def run_cs_cli(cli_fn) -> str:
     """
