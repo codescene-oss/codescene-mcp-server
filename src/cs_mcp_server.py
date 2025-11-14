@@ -129,9 +129,10 @@ def code_health_review(file_path: str) -> str:
 # Expose that knowledge via MCP Resources.
 
 def create_mcp_docs_resources():
-    doc_path = Path("./src/docs/code-health/how-it-works.md").resolve()
+    sub_path_for_docs = "code-health/how-it-works.md"
+    doc_path = Path(f"./src/docs/{sub_path_for_docs}").resolve()
     doc_resource = FileResource(
-        uri=f"file://{doc_path.as_posix()}",
+        uri=f"file://codescene-docs/{sub_path_for_docs}",
         path=doc_path,
         name="Code Health: how it works",
         description="Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI.",

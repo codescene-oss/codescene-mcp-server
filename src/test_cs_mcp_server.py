@@ -67,6 +67,11 @@ class TestCodeSceneMCP(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(resources, "At least one resource")
             
             code_health_resource = resources[0]
+            self.assertTrue(
+                str(code_health_resource.uri).startswith("file://codescene-docs/code-health/"),
+                f"URI for the docs should be synthetic -- we don't want an absolute path inside our packaging. Got: {code_health_resource.uri}"    
+            )
+            
             await self.assert_code_health_content(c, code_health_resource)
     
     async def assert_code_health_content(self, connected_client, code_health_resource):
@@ -74,7 +79,7 @@ class TestCodeSceneMCP(unittest.IsolatedAsyncioTestCase):
         
         self.assertTrue(
             content[0].text.startswith("# Code Health: how it works"),
-            f"Text did not start with expected header. Got: {content[:50]!r}"
+            f"Code Health doc did not start with expected header. Got: {content[:50]!r}"
         )
 
 if __name__ == "__main__":
