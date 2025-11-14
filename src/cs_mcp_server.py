@@ -1,7 +1,8 @@
 import subprocess
 from fastmcp import FastMCP
+from fastmcp.resources import FileResource
+from pathlib import Path
 import json
-import tempfile
 import os
 
 mcp = FastMCP("CodeScene")
@@ -124,5 +125,21 @@ def code_health_review(file_path: str) -> str:
 
     return run_cs_cli(lambda: review_code_health_of(file_path))
 
+# We want the MCP Server to explain its key concepts like Code Health.
+# Expose that knowledge via MCP Resources.
+
+def create_mcp_docs_resources():
+    doc_path = Path("./src/docs/code-health/how-it-works.md").resolve()
+    doc_resource = FileResource(
+        uri=f"file://{doc_path.as_posix()}",
+        path=doc_path,
+        name="Code Health: how it works",
+        description="Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI.",
+        mime_type="text/markdown",
+        tags={"documentation"}
+    )
+    mcp.add_resource(doc_resource)
+
 if __name__ == "__main__":
+    create_mcp_docs_resources()
     mcp.run()
