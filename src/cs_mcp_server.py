@@ -137,19 +137,58 @@ def resource_title_from_md_heading_in(path: Path) -> str:
         first_line = f.readline()
         return first_line.lstrip("#").strip()
 
-def create_mcp_docs_resources():
-    sub_path_for_docs = "code-health/how-it-works.md"
-    doc_path = Path(f"./src/docs/{sub_path_for_docs}").resolve()
+def doc_to_file_resources(doc):
+    doc_path = Path(f"./src/docs/code-health/{doc['doc-path']}").resolve()
     doc_resource = FileResource(
-        uri=f"file://codescene-docs/{sub_path_for_docs}",
+        uri=f"file://codescene-docs/code-health/{doc['doc-path']}",
         path=doc_path,
         name=resource_title_from_md_heading_in(doc_path),
-        description="Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI.",
+        description=doc['description'],
         mime_type="text/markdown",
         tags={"documentation"}
-    )
-    mcp.add_resource(doc_resource)
+        )
+    return doc_resource
+
+def add_as_mcp_resources(docs_to_expose):
+    """
+    Expose our static docs as MCP resources.
+    Use a table-driven approach for the implementation so that it is 
+    simple to add more docs. (We expect this list to grow).
+    """
+    for doc in docs_to_expose:
+        doc_resource = doc_to_file_resources(doc)
+        mcp.add_resource(doc_resource)
+
+def all_doc_resources_as_uris(docs_to_expose):
+    """
+    Resources tend to be passive; they're only referenced via an URI. 
+    Some clients might call resources/list, but not all -> introduce a 
+    tool that helps the client discover our documentation resources.
+    """
+    def to_uri(doc):
+        return f"file://codescene-docs/code-health/{doc['doc-path']}"
+    
+    return [to_uri(doc) for doc in docs_to_expose]
+
+DOCS_TO_EXPOSE = [
+        {'doc-path': "how-it-works.md",
+         'description': "Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI."},
+        {'doc-path': "algorithm.md",
+         'description': "Explains how CodeScene's Code Health metric algorithm works."}
+    ]
+
+@mcp.tool()
+def code_health_docs_index() -> str:
+    """
+    Open the CodeScene docs index, containing rich and detailed information 
+    on how the Code Health metric works. Using the linked resources, the 
+    AI gets detailed information on the Code Health algorithm, how it works, as 
+    well as supporting evidence explaining why Code Health is the only  
+    code quality metric with a proven business impact.
+    """
+    all_uris = all_doc_resources_as_uris(DOCS_TO_EXPOSE)
+    return "\n".join(all_uris)
 
 if __name__ == "__main__":
-    create_mcp_docs_resources()
+    add_as_mcp_resources(DOCS_TO_EXPOSE)
     mcp.run()
