@@ -128,13 +128,22 @@ def code_health_review(file_path: str) -> str:
 # We want the MCP Server to explain its key concepts like Code Health.
 # Expose that knowledge via MCP Resources.
 
+def resource_title_from_md_heading_in(path: Path) -> str:
+    """
+    Return the first line of a markdown file, stripped of leading '#' and whitespace.
+    We use that initial line as the MCP Resource name.
+    """
+    with path.open(encoding="utf-8") as f:
+        first_line = f.readline()
+        return first_line.lstrip("#").strip()
+
 def create_mcp_docs_resources():
     sub_path_for_docs = "code-health/how-it-works.md"
     doc_path = Path(f"./src/docs/{sub_path_for_docs}").resolve()
     doc_resource = FileResource(
         uri=f"file://codescene-docs/{sub_path_for_docs}",
         path=doc_path,
-        name="Code Health: how it works",
+        name=resource_title_from_md_heading_in(doc_path),
         description="Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI.",
         mime_type="text/markdown",
         tags={"documentation"}
