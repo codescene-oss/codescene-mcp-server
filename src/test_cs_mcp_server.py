@@ -61,12 +61,12 @@ class TestCodeSceneMCP(unittest.IsolatedAsyncioTestCase):
             a_review_finding = review["review"][0]
             self.assertEqual(a_review_finding["category"], 'Bumpy Road Ahead')
 
-    async def test_code_health_documentation_index_exposed_via_tool(self):
+    async def test_code_health_how_it_works(self):
         async with mcp_client() as c:
-            result = await c.call_tool("code_health_docs_index")
+            result = await c.call_tool("explain_how_code_health_works")
             self.assertTrue(
-                result.data.startswith("file://codescene-docs/code-health/"),
-                f"URI for the docs is exposed via a tool. Got: {result.data}"
+                result.data.startswith("# Code Health: how it works"),
+                f"URI for the docs is exposed via a tool. Got: {result.data[:50]!r}"
             )
 
     async def test_code_health_documentation_resources(self):

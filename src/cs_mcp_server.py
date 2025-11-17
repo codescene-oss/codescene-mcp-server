@@ -126,7 +126,16 @@ def code_health_review(file_path: str) -> str:
     return run_cs_cli(lambda: review_code_health_of(file_path))
 
 # We want the MCP Server to explain its key concepts like Code Health.
-# Expose that knowledge via MCP Resources.
+
+def read_documentation_content_for(md_doc_name):
+    return Path(f"./src/docs/code-health/{md_doc_name}").read_text(encoding="utf-8")
+
+@mcp.tool()
+def explain_how_code_health_works(context: str | None = None) -> str:
+    """
+    Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI.
+    """
+    return read_documentation_content_for('how-it-works.md')
 
 def resource_title_from_md_heading_in(path: Path) -> str:
     """
@@ -170,25 +179,12 @@ def all_doc_resources_as_uris(docs_to_expose):
     
     return [to_uri(doc) for doc in docs_to_expose]
 
-DOCS_TO_EXPOSE = [
+if __name__ == "__main__":
+    docs_to_expose = [
         {'doc-path': "how-it-works.md",
          'description': "Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI."},
         {'doc-path': "algorithm.md",
          'description': "Explains how CodeScene's Code Health metric algorithm works."}
     ]
-
-@mcp.tool()
-def code_health_docs_index() -> str:
-    """
-    Open the CodeScene docs index, containing rich and detailed information 
-    on how the Code Health metric works. Using the linked resources, the 
-    AI gets detailed information on the Code Health algorithm, how it works, as 
-    well as supporting evidence explaining why Code Health is the only  
-    code quality metric with a proven business impact.
-    """
-    all_uris = all_doc_resources_as_uris(DOCS_TO_EXPOSE)
-    return "\n".join(all_uris)
-
-if __name__ == "__main__":
-    add_as_mcp_resources(DOCS_TO_EXPOSE)
+    add_as_mcp_resources(docs_to_expose)
     mcp.run()
