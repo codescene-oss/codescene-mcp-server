@@ -137,6 +137,15 @@ def explain_how_code_health_works(context: str | None = None) -> str:
     """
     return read_documentation_content_for('how-it-works.md')
 
+@mcp.tool()
+def make_the_business_case_for_code_health(context: str | None = None) -> str:
+    """
+    Describes how to build a business case for Code Health improvements. 
+    Covers empirical data on how healthy code lets you ship faster with 
+    fewer defects.
+    """
+    return read_documentation_content_for('business-case.md')
+
 def resource_title_from_md_heading_in(path: Path) -> str:
     """
     Return the first line of a markdown file, stripped of leading '#' and whitespace.
@@ -183,8 +192,8 @@ if __name__ == "__main__":
     docs_to_expose = [
         {'doc-path': "how-it-works.md",
          'description': "Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI."},
-        {'doc-path': "algorithm.md",
-         'description': "Explains how CodeScene's Code Health metric algorithm works."}
+        {'doc-path': "business-case.md",
+         'description': "Describes how to build a business case for Code Health improvements."}
     ]
     add_as_mcp_resources(docs_to_expose)
     mcp.run()
