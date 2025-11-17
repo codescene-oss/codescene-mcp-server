@@ -61,5 +61,34 @@ class TestCodeSceneMCP(unittest.IsolatedAsyncioTestCase):
             a_review_finding = review["review"][0]
             self.assertEqual(a_review_finding["category"], 'Bumpy Road Ahead')
 
+    async def test_code_health_how_it_works(self):
+        async with mcp_client() as c:
+            result = await c.call_tool("explain_how_code_health_works")
+            self.assertTrue(
+                result.data.startswith("# Code Health: how it works"),
+                f"URI for the docs is exposed via a tool. Got: {result.data[:50]!r}"
+            )
+
+    async def test_code_health_documentation_resources(self):
+        async with mcp_client() as c:
+            resources = await c.list_resources()
+            self.assertTrue(resources, "At least one resource")
+            
+            code_health_resource = resources[0]
+            self.assertTrue(
+                str(code_health_resource.uri).startswith("file://codescene-docs/code-health/"),
+                f"URI for the docs should be synthetic -- we don't want an absolute path inside our packaging. Got: {code_health_resource.uri}"    
+            )
+            
+            await self.assert_code_health_content(c, code_health_resource)
+    
+    async def assert_code_health_content(self, connected_client, code_health_resource):
+        content = await connected_client.read_resource(code_health_resource.uri)
+        
+        self.assertTrue(
+            content[0].text.startswith("# Code Health: how it works"),
+            f"Code Health doc did not start with expected header. Got: {content[:50]!r}"
+        )
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,8 @@
 import subprocess
 from fastmcp import FastMCP
+from fastmcp.resources import FileResource
+from pathlib import Path
 import json
-import tempfile
 import os
 
 mcp = FastMCP("CodeScene")
@@ -124,5 +125,75 @@ def code_health_review(file_path: str) -> str:
 
     return run_cs_cli(lambda: review_code_health_of(file_path))
 
+# We want the MCP Server to explain its key concepts like Code Health.
+
+def read_documentation_content_for(md_doc_name):
+    return Path(f"./src/docs/code-health/{md_doc_name}").read_text(encoding="utf-8")
+
+@mcp.tool()
+def explain_how_code_health_works(context: str | None = None) -> str:
+    """
+    Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI.
+    """
+    return read_documentation_content_for('how-it-works.md')
+
+@mcp.tool()
+def make_the_business_case_for_code_health(context: str | None = None) -> str:
+    """
+    Describes how to build a business case for Code Health improvements. 
+    Covers empirical data on how healthy code lets you ship faster with 
+    fewer defects.
+    """
+    return read_documentation_content_for('business-case.md')
+
+def resource_title_from_md_heading_in(path: Path) -> str:
+    """
+    Return the first line of a markdown file, stripped of leading '#' and whitespace.
+    We use that initial line as the MCP Resource name.
+    """
+    with path.open(encoding="utf-8") as f:
+        first_line = f.readline()
+        return first_line.lstrip("#").strip()
+
+def doc_to_file_resources(doc):
+    doc_path = Path(f"./src/docs/code-health/{doc['doc-path']}").resolve()
+    doc_resource = FileResource(
+        uri=f"file://codescene-docs/code-health/{doc['doc-path']}",
+        path=doc_path,
+        name=resource_title_from_md_heading_in(doc_path),
+        description=doc['description'],
+        mime_type="text/markdown",
+        tags={"documentation"}
+        )
+    return doc_resource
+
+def add_as_mcp_resources(docs_to_expose):
+    """
+    Expose our static docs as MCP resources.
+    Use a table-driven approach for the implementation so that it is 
+    simple to add more docs. (We expect this list to grow).
+    """
+    for doc in docs_to_expose:
+        doc_resource = doc_to_file_resources(doc)
+        mcp.add_resource(doc_resource)
+
+def all_doc_resources_as_uris(docs_to_expose):
+    """
+    Resources tend to be passive; they're only referenced via an URI. 
+    Some clients might call resources/list, but not all -> introduce a 
+    tool that helps the client discover our documentation resources.
+    """
+    def to_uri(doc):
+        return f"file://codescene-docs/code-health/{doc['doc-path']}"
+    
+    return [to_uri(doc) for doc in docs_to_expose]
+
 if __name__ == "__main__":
+    docs_to_expose = [
+        {'doc-path': "how-it-works.md",
+         'description': "Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI."},
+        {'doc-path': "business-case.md",
+         'description': "Describes how to build a business case for Code Health improvements."}
+    ]
+    add_as_mcp_resources(docs_to_expose)
     mcp.run()
