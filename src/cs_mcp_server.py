@@ -1,6 +1,7 @@
 import subprocess
 from fastmcp import FastMCP
 from fastmcp.resources import FileResource
+import requests
 from pathlib import Path
 import json
 import os
@@ -68,7 +69,6 @@ def context_aware_path_to(file_path: str):
 def cs_cli_review_command_for(file_path: str):
     cs_cli_location_in_docker = '/root/.local/bin/cs'
     cs_cli = os.getenv("CS_CLI_PATH", default=cs_cli_location_in_docker)
-
     mount_file_path = context_aware_path_to(file_path)
 
     return [cs_cli, "review", mount_file_path, "--output-format=json"]
@@ -124,6 +124,71 @@ def code_health_review(file_path: str) -> str:
         return analyze_code(file_path)
 
     return run_cs_cli(lambda: review_code_health_of(file_path))
+
+def get_api_url() -> str:
+    url = os.getenv("CS_ONPREM_URL")
+    return f"{url}/api" if url else "https://api.codescene.io"
+
+def get_api_request_headers() -> dict:
+    return {
+        'Authorization': f"Bearer {os.getenv('CS_ACCESS_TOKEN')}"
+    }
+
+@mcp.tool()
+def select_project() -> str:
+    """
+    Lists all projects for an organization for selection by the user.
+    The user can select the desired project by either its name or ID.
+    
+    Returns:
+        A JSON object with the project name and ID, formatted in a Markdown table 
+        with the columns "Project Name" and "Project ID".
+    """
+    try:
+        url = f"{get_api_url()}/v2/projects"
+        response = requests.get(url, headers=get_api_request_headers())
+        data = response.json()
+
+        return json.dumps(data)
+    except Exception as e:
+        return f"Error: {e}"
+
+@mcp.tool()
+def list_goals_for_project(project_id: int) -> str:
+    """
+    Lists goals for a project. Do not attempt to fetch projects yourself, 
+    instead instruct the user to use the `select_project` tool first, and 
+    have the user select a project from its output before calling this tool.
+
+    Args:
+        project_id: The Project ID selected by the user.
+    Returns:
+        A JSON array containing the path of a file and its goals, or a string error message if no project was selected.
+        Show the goals for each file in a structured format that is easy to read.
+    """
+    def get_files_and_goals(page: int = 1):
+        url = f"{get_api_url()}/v2/projects/{project_id}/analyses/latest/files"
+        params = {'page_size': 200, 'page': page}
+        response = requests.get(url, params, headers=get_api_request_headers())
+        data = response.json()
+        files_and_goals = []
+
+        for file_info in data.get('files', []):
+            files_and_goals.append({
+                'path': file_info.get('path'),
+                'goals': file_info.get('goals', [])
+            })
+
+        if data.get('max_pages') < page:
+            files_and_goals.extend(get_files_and_goals(page + 1))
+
+        return files_and_goals
+
+    try:
+        files_and_goals = get_files_and_goals()
+        return json.dumps(files_and_goals)
+    except Exception as e:
+        return f"Error: {e}"
 
 # We want the MCP Server to explain its key concepts like Code Health.
 
