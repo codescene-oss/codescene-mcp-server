@@ -40,6 +40,9 @@ def _build_business_case_for(scenario, current_code_health):
     (defect_optimistic, defect_pessimistic) = estimated_outcomes['defects']
     (time_optimistic, time_pessimistic) = estimated_outcomes['time']
 
+    def to_presentable(v):
+        return abs(int(round(v)))
+
     estimate = {'title': 'Business case to motivate refactoring for improved Code Health',
                 'data_description': '''
                 The business case models two scenario: optimistic and pessimistic.
@@ -47,10 +50,10 @@ def _build_business_case_for(scenario, current_code_health):
                 actual measured outcome falls in this range.
                 ''',
                 'current_code_health': current_code_health,
-                'optimistic_outcome': {'defect_reduction':              abs(defect_optimistic),
-                                       'development_speed_improvement': abs(time_optimistic)},
-                'pessimistic_outcome': {'defect_reduction':              abs(defect_pessimistic),
-                                       'development_speed_improvement':  abs(time_pessimistic)}}
+                'optimistic_outcome': {'defect_reduction':              to_presentable(defect_optimistic),
+                                       'development_speed_improvement': to_presentable(time_optimistic)},
+                'pessimistic_outcome': {'defect_reduction':             to_presentable(defect_pessimistic),
+                                       'development_speed_improvement': to_presentable(time_pessimistic)}}
 
     return estimate | scenario
 
