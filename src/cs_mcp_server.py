@@ -186,7 +186,7 @@ def list_technical_debt_goals_for_project(project_id: int) -> str:
         return f"Error: {e}"
     
 @mcp.tool()
-def list_technical_debt_goals_for_file(project_id: int, file_path: str) -> str:
+def list_technical_debt_goals_for_project_file(project_id: int, file_path: str) -> str:
     """
     Lists the technical debt goals for a specific file in a project.
 
