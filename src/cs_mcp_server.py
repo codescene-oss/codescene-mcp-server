@@ -5,6 +5,7 @@ import requests
 from pathlib import Path
 import json
 import os
+from code_health_tools.business_case import make_business_case_for
 
 mcp = FastMCP("CodeScene")
 
@@ -12,6 +13,15 @@ class CodeSceneCliError(Exception):
     """Raised when the CLI tool fails to calculate Code Health for a given file.
     """
     pass
+
+def get_api_url() -> str:
+    url = os.getenv("CS_ONPREM_URL")
+    return f"{url}/api" if url else "https://api.codescene.io"
+
+def get_api_request_headers() -> dict:
+    return {
+        'Authorization': f"Bearer {os.getenv('CS_ACCESS_TOKEN')}"
+    }
 
 def run_local_tool(command: list, cwd: str = None):
     """
@@ -90,6 +100,13 @@ def run_cs_cli(cli_fn) -> str:
     except Exception as e:
         return f"Error: {e}"
 
+def _calculate_code_health_score_for(file_path: str) -> str:
+    def calculate_code_health_of(file_path: str) -> float:
+        result = analyze_code(file_path)
+        return code_health_from(result)
+    
+    return run_cs_cli(lambda: calculate_code_health_of(file_path))
+
 @mcp.tool()
 def code_health_score(file_path: str) -> str:
     """
@@ -100,11 +117,7 @@ def code_health_score(file_path: str) -> str:
     Returns:
         A string representing the Code Health score, 10.0->1.0
     """
-    def calculate_code_health_of(file_path: str) -> float:
-        result = analyze_code(file_path)
-        return code_health_from(result)
-    
-    return run_cs_cli(lambda: f"Code Health score: {calculate_code_health_of(file_path)}")
+    return f"Code Health score: {_calculate_code_health_score_for(file_path)}"
 
 @mcp.tool()
 def code_health_review(file_path: str) -> str:
@@ -124,15 +137,6 @@ def code_health_review(file_path: str) -> str:
         return analyze_code(file_path)
 
     return run_cs_cli(lambda: review_code_health_of(file_path))
-
-def get_api_url() -> str:
-    url = os.getenv("CS_ONPREM_URL")
-    return f"{url}/api" if url else "https://api.codescene.io"
-
-def get_api_request_headers() -> dict:
-    return {
-        'Authorization': f"Bearer {os.getenv('CS_ACCESS_TOKEN')}"
-    }
 
 @mcp.tool()
 def select_project() -> str:
@@ -208,6 +212,31 @@ def list_technical_debt_goals_for_project_file(project_id: int, file_path: str) 
         return json.dumps(goals)
     except Exception as e:
         return f"Error: {e}"
+    
+@mcp.tool()
+def code_health_refactoring_business_case(file_path: str) -> dict:
+    """
+    Generate a data-driven business case for refactoring a source file.
+
+    This tool analyzes the file's current Code Health and estimates the
+    business impact of improving it. The result includes quantified
+    predictions for development speed and defect reduction based on
+    CodeScene's empirical research.
+
+    Args:
+        file_path: Absolute path to the source code file to analyze.
+
+    Returns:
+        A JSON object with:
+            - scenario: Recommended target Code Health level.
+            - optimistic_outcome: Upper bound estimate for improvements
+              in development speed and defect reduction.
+            - pessimistic_outcome: Lower bound estimate for improvements.
+            - confidence_interval: The optimistic → pessimistic range,
+              representing a 90% confidence interval for the expected impact.
+    """
+    current_code_health = _calculate_code_health_score_for(file_path)
+    return make_business_case_for(current_code_health)
 
 # We want the MCP Server to explain its key concepts like Code Health.
 
@@ -222,7 +251,7 @@ def explain_how_code_health_works(context: str | None = None) -> str:
     return read_documentation_content_for('how-it-works.md')
 
 @mcp.tool()
-def make_the_business_case_for_code_health(context: str | None = None) -> str:
+def explain_how_code_health_is_relevant_for_productivity_and_business(context: str | None = None) -> str:
     """
     Describes how to build a business case for Code Health improvements. 
     Covers empirical data on how healthy code lets you ship faster with 

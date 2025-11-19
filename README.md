@@ -346,6 +346,9 @@ The MCP server configuration requires a `CS_ACCESS_TOKEN` which you get via your
 > [!TIP]
 > Watch the [demo video of the CodeScene MCP](https://www.youtube.com/watch?v=AycLVxKmVSY).
 
+> [!NOTE]
+> CodeScene MCP comes with a set of [example prompts](.github/prompts) that capture the key use cases.
+
 With the CodeScene MCP Server in place, your AI tools can:
 
 ### Safeguard AI-Generated Code
