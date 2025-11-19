@@ -154,7 +154,7 @@ def select_project() -> str:
         return f"Error: {e}"
 
 @mcp.tool()
-def list_goals_for_project(project_id: int) -> str:
+def list_technical_debt_goals_for_project(project_id: int) -> str:
     """
     Lists goals for a project. Do not attempt to fetch projects yourself, 
     instead instruct the user to use the `select_project` tool first, and 
@@ -164,29 +164,48 @@ def list_goals_for_project(project_id: int) -> str:
         project_id: The Project ID selected by the user.
     Returns:
         A JSON array containing the path of a file and its goals, or a string error message if no project was selected.
-        Show the goals for each file in a structured format that is easy to read.
+        Show the goals for each file in a structured format that is easy to read and explain
+        the goal description for each file.
     """
     def get_files_and_goals(page: int = 1):
         url = f"{get_api_url()}/v2/projects/{project_id}/analyses/latest/files"
-        params = {'page_size': 200, 'page': page}
+        params = {'page_size': 200, 'page': page, 'filter': 'goals^not-empty', 'fields': 'path,goals'}
         response = requests.get(url, params, headers=get_api_request_headers())
         data = response.json()
-        files_and_goals = []
-
-        for file_info in data.get('files', []):
-            files_and_goals.append({
-                'path': file_info.get('path'),
-                'goals': file_info.get('goals', [])
-            })
+        files = data.get('files', [])
 
         if data.get('max_pages') < page:
-            files_and_goals.extend(get_files_and_goals(page + 1))
+            files.extend(get_files_and_goals(page + 1))
 
-        return files_and_goals
+        return files
 
     try:
         files_and_goals = get_files_and_goals()
         return json.dumps(files_and_goals)
+    except Exception as e:
+        return f"Error: {e}"
+    
+@mcp.tool()
+def list_technical_debt_goals_for_file(project_id: int, file_path: str) -> str:
+    """
+    Lists the technical debt goals for a specific file in a project.
+
+    Args:
+        project_id: The Project ID selected by the user.
+        file_path: The path of the file within the project.
+    Returns:
+        A JSON array containing the goals for the specified file, or a string error message if no project was selected.
+        Show the goals in a structured format that is easy to read and explain
+        the goal description.
+    """
+    try:
+        url = f"{get_api_url()}/v2/projects/{project_id}/analyses/latest/files"
+        params = {'filter': f"path~{file_path}", 'fields': 'goals'}
+        response = requests.get(url, params, headers=get_api_request_headers())
+        data = response.json()
+        goals = data.get('files', [])[0].get('goals', []) if data.get('files') else []
+
+        return json.dumps(goals)
     except Exception as e:
         return f"Error: {e}"
 
