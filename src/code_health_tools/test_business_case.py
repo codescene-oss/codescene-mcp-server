@@ -15,6 +15,8 @@ class TestMakeBusinessCaseFor(unittest.TestCase):
             res = make_business_case_for(current)
             self.assertIn("outcome", res, name)
 
+    # @CodeScene(disable:"Code Duplication") -- the duplication is test outcome and 
+    # I want the tests to be expressive, so allow it.
     def test_outcome_for_unhealthy_code(self):
         the_case = self._outcome_for(current_code_health=3.9)
 
@@ -30,6 +32,7 @@ class TestMakeBusinessCaseFor(unittest.TestCase):
              'scenario': 'Improve Code Health to the industry average.', 'target_code_health': 5.15},
              the_case)
     
+    # @CodeScene(disable:"Code Duplication")
     def test_problematic_code_above_industry_baseline(self):
         the_case = self._outcome_for(current_code_health=5.2)
         
@@ -45,7 +48,8 @@ class TestMakeBusinessCaseFor(unittest.TestCase):
             'scenario': 'Improve Code Health to the level of top 5% performers.', 
             'target_code_health': 9.1},
              the_case)
-    
+
+    # @CodeScene(disable:"Code Duplication")    
     def test_healthy_top_performers_code(self):
         the_case = self._outcome_for(current_code_health=9.3)
         

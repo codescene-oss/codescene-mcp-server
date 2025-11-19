@@ -130,7 +130,7 @@ def code_health_review(file_path: str) -> str:
     return run_cs_cli(lambda: review_code_health_of(file_path))
 
 @mcp.tool()
-def code_health_refactoring_business_case(file_path: str) -> str:
+def code_health_refactoring_business_case(file_path: str) -> dict:
     """
     Generate a data-driven business case for refactoring a source file.
 
