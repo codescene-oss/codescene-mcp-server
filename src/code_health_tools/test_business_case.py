@@ -24,11 +24,11 @@ class TestMakeBusinessCaseFor(unittest.TestCase):
              'title': 'Business case to motivate refactoring for improved Code Health', 
              'current_code_health': 3.9, 
              'optimistic_outcome': {
-                  'defect_reduction': 27.33, 
-                  'development_speed_improvement': 11.89}, 
+                  'defect_reduction': 27, 
+                  'development_speed_improvement': 12}, 
              'pessimistic_outcome': {
-                  'defect_reduction': 10.66, 
-                  'development_speed_improvement': 1.91}, 
+                  'defect_reduction': 11, 
+                  'development_speed_improvement': 2}, 
              'scenario': 'Improve Code Health to the industry average.', 'target_code_health': 5.15},
              the_case)
     
@@ -40,11 +40,11 @@ class TestMakeBusinessCaseFor(unittest.TestCase):
             'title': 'Business case to motivate refactoring for improved Code Health', 
             'current_code_health': 5.2, 
             'optimistic_outcome': {
-                'defect_reduction': 49.41, 
-                'development_speed_improvement': 42.78}, 
+                'defect_reduction': 49, 
+                'development_speed_improvement': 43}, 
             'pessimistic_outcome': {
-                'defect_reduction': 31.63, 
-                'development_speed_improvement': 26.81}, 
+                'defect_reduction': 32, 
+                'development_speed_improvement': 27}, 
             'scenario': 'Improve Code Health to the level of top 5% performers.', 
             'target_code_health': 9.1},
              the_case)
@@ -57,11 +57,11 @@ class TestMakeBusinessCaseFor(unittest.TestCase):
             'title': 'Business case to motivate refactoring for improved Code Health', 
             'current_code_health': 9.3, 
             'optimistic_outcome': {
-                'defect_reduction': 58.91, 
-                'development_speed_improvement': 26.9}, 
+                'defect_reduction': 59, 
+                'development_speed_improvement': 27}, 
             'pessimistic_outcome': {
-                'defect_reduction': 47.94, 
-                'development_speed_improvement': 12.73}, 
+                'defect_reduction': 48, 
+                'development_speed_improvement': 13}, 
             'scenario': 'Maximize your speed and quality with a perfect Code Health score.', 
             'target_code_health': 10.0},
              the_case)
