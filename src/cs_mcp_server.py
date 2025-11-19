@@ -4,6 +4,7 @@ from fastmcp.resources import FileResource
 from pathlib import Path
 import json
 import os
+from code_health_tools.business_case import make_business_case_for
 
 mcp = FastMCP("CodeScene")
 
@@ -90,6 +91,13 @@ def run_cs_cli(cli_fn) -> str:
     except Exception as e:
         return f"Error: {e}"
 
+def _calculate_code_health_score_for(file_path: str) -> str:
+    def calculate_code_health_of(file_path: str) -> float:
+        result = analyze_code(file_path)
+        return code_health_from(result)
+    
+    return run_cs_cli(lambda: calculate_code_health_of(file_path))
+
 @mcp.tool()
 def code_health_score(file_path: str) -> str:
     """
@@ -100,11 +108,7 @@ def code_health_score(file_path: str) -> str:
     Returns:
         A string representing the Code Health score, 10.0->1.0
     """
-    def calculate_code_health_of(file_path: str) -> float:
-        result = analyze_code(file_path)
-        return code_health_from(result)
-    
-    return run_cs_cli(lambda: f"Code Health score: {calculate_code_health_of(file_path)}")
+    return f"Code Health score: {_calculate_code_health_score_for(file_path)}"
 
 @mcp.tool()
 def code_health_review(file_path: str) -> str:
@@ -125,6 +129,31 @@ def code_health_review(file_path: str) -> str:
 
     return run_cs_cli(lambda: review_code_health_of(file_path))
 
+@mcp.tool()
+def code_health_refactoring_business_case(file_path: str) -> str:
+    """
+    Generate a data-driven business case for refactoring a source file.
+
+    This tool analyzes the file's current Code Health and estimates the
+    business impact of improving it. The result includes quantified
+    predictions for development speed and defect reduction based on
+    CodeScene's empirical research.
+
+    Args:
+        file_path: Absolute path to the source code file to analyze.
+
+    Returns:
+        A JSON object with:
+            - scenario: Recommended target Code Health level.
+            - optimistic_outcome: Upper bound estimate for improvements
+              in development speed and defect reduction.
+            - pessimistic_outcome: Lower bound estimate for improvements.
+            - confidence_interval: The optimistic → pessimistic range,
+              representing a 90% confidence interval for the expected impact.
+    """
+    current_code_health = _calculate_code_health_score_for(file_path)
+    return make_business_case_for(current_code_health)
+
 # We want the MCP Server to explain its key concepts like Code Health.
 
 def read_documentation_content_for(md_doc_name):
@@ -138,7 +167,7 @@ def explain_how_code_health_works(context: str | None = None) -> str:
     return read_documentation_content_for('how-it-works.md')
 
 @mcp.tool()
-def make_the_business_case_for_code_health(context: str | None = None) -> str:
+def explain_how_code_health_is_relevant_for_productivity_and_business(context: str | None = None) -> str:
     """
     Describes how to build a business case for Code Health improvements. 
     Covers empirical data on how healthy code lets you ship faster with 

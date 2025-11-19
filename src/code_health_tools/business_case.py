@@ -17,12 +17,20 @@ TARGET_SCENARIOS = [
 ]
 
 def _outcome_of_refactoring_from(current_code_health):
-    """Estimates the refactoring outcome in terms of development speed and defect reduction."""
-    for scenario in TARGET_SCENARIOS:
-        scenario_models_improvement = current_code_health < scenario['target_code_health']
+    """
+    Estimates the refactoring outcome in terms of development speed and defect reduction.
 
-        if scenario_models_improvement:
-            return _build_business_case_for(scenario, current_code_health)
+    We do this by finding the closest scenario based on the current_code_health. That is, 
+    if you're below the industry average, then elevating your Code Healt to that level 
+    should be the next step. Once there, you should aim for the top performers, etc. 
+    """
+    cloest_scenario = next(
+        (s for s in TARGET_SCENARIOS if current_code_health < s["target_code_health"]),
+        None
+    )
+
+    if cloest_scenario:
+        return _build_business_case_for(cloest_scenario, current_code_health)
         
     return f'Your Code Health of {current_code_health} is already perfect. Keep up the good!'
 
