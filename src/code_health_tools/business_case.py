@@ -1,8 +1,50 @@
 from code_health_tools.s_curve import metrics
 
+# This module estimates the outcome of improving Code Health in terms of 
+# faster development time and fewer defects.
+#
+# The theoretical background and research is 
+# summarized here: https://codescene.com/blog/benchmarking-code-health-refactoring-roi
+#
+# We model three different scenarios:
+TARGET_SCENARIOS = [
+    {'scenario': 'Improve Code Health to the industry average.',
+     'target_code_health': 5.15},
+     {'scenario': 'Improve Code Health to the level of top 5% performers.',
+      'target_code_health': 9.1},
+    {'scenario': 'Maximize your speed and quality with a perfect Code Health score.',
+     'target_code_health': 10.0}
+]
+
 def _outcome_of_refactoring_from(current_code_health):
     """Estimates the refactoring outcome in terms of development speed and defect reduction."""
-    return 'improved'
+    for scenario in TARGET_SCENARIOS:
+        scenario_models_improvement = current_code_health < scenario['target_code_health']
+
+        if scenario_models_improvement:
+            return _build_business_case_for(scenario, current_code_health)
+        
+    return f'Your Code Health of {current_code_health} is already perfect. Keep up the good!'
+
+def _build_business_case_for(scenario, current_code_health):
+    estimated_outcomes = metrics.collect(code_health_baseline=current_code_health, code_health_target=scenario['target_code_health'])
+
+    (defect_optimistic, defect_pessimistic) = estimated_outcomes['defects']
+    (time_optimistic, time_pessimistic) = estimated_outcomes['time']
+
+    estimate = {'title': 'Business case to motivate refactoring for improved Code Health',
+                'data_description': '''
+                The business case models two scenario: optimistic and pessimistic.
+                CodeScene's model predicts that there's a 90 percent chance that the
+                actual measured outcome falls in this range.
+                ''',
+                'current_code_health': current_code_health,
+                'optimistic_outcome': {'defect_reduction':              abs(defect_optimistic),
+                                       'development_speed_improvement': abs(time_optimistic)},
+                'pessimistic_outcome': {'defect_reduction':              abs(defect_pessimistic),
+                                       'development_speed_improvement':  abs(time_pessimistic)}}
+
+    return estimate | scenario
 
 ## Basic input validation
 
@@ -26,6 +68,4 @@ def make_business_case_for(current_code_health):
     """
     _validate_code_health_score("current_code_health", current_code_health)
 
-    return {
-        "outcome": _outcome_of_refactoring_from(current_code_health),
-    }
+    return {'outcome': _outcome_of_refactoring_from(current_code_health)}
