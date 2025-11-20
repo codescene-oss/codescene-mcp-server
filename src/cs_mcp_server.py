@@ -76,12 +76,19 @@ def context_aware_path_to(file_path: str):
     
     return adapt_mounted_file_path_inside_docker(file_path)
 
-def cs_cli_review_command_for(file_path: str):
+def cs_cli_path():
     cs_cli_location_in_docker = '/root/.local/bin/cs'
-    cs_cli = os.getenv("CS_CLI_PATH", default=cs_cli_location_in_docker)
+    return os.getenv("CS_CLI_PATH", default=cs_cli_location_in_docker)
+
+def make_cs_cli_review_command_for(cli_command: str, file_path: str):
+    cs_cli = cs_cli_path()
+
     mount_file_path = context_aware_path_to(file_path)
 
-    return [cs_cli, "review", mount_file_path, "--output-format=json"]
+    return [cs_cli, cli_command, mount_file_path, "--output-format=json"]
+
+def cs_cli_review_command_for(file_path: str):
+    return make_cs_cli_review_command_for("review", file_path)
 
 def analyze_code(file_path: str) -> str:
     return run_local_tool(cs_cli_review_command_for(file_path))
@@ -126,8 +133,7 @@ def code_health_review(file_path: str) -> str:
     a JSON object specifying all potential code smells that contribute 
     to a lower Code Health.
     Args:
-        file_content: The content of the source code file to be analyzed as a base64 encoded string.
-        file_ext: The file extension of the source code file to be reviewed (e.g. .py, .java).
+        file_path: The absolute path to the source code file to be analyzed.
     Returns:
         A JSON object containing score and review:
          - score: this is the Code Health score. 10.0 is best, 1.0 is worst health.
@@ -231,6 +237,27 @@ def list_technical_debt_goals_for_project_file(file_path: str, project_id: int) 
     except Exception as e:
         return f"Error: {e}"
     
+def pre_commit_code_health_safeguard(git_repository_path: str) -> str:
+    """
+    Performs a Code Health review on all modified and staged files in 
+    the given git_repository_path, and returns a JSON object specifying 
+    the code smells that will degrade the Code Health, should this code be committed.
+    This tool is ideal as a pre-commit safeguard for healthy code.
+    Args:
+        git_repository_path: The absolute path to the Git repository for the current code base.
+    Returns:
+        A JSON object containing an array of name and findings for each file:
+         - name: this is the name of the file who's Code Health is impacted (positively or negatively).
+         - findings: an array of describing improvements/degradation for each code smell.
+    """
+    cli_command = [cs_cli_path(), "delta", "--output-format=json"]
+
+    def safeguard_code_on(git_repository_path: str) -> str:
+        docker_path = context_aware_path_to(git_repository_path)
+        return run_local_tool(cli_command, cwd=docker_path)
+
+    return run_cs_cli(lambda: safeguard_code_on(git_repository_path))
+
 @mcp.tool()
 def code_health_refactoring_business_case(file_path: str) -> dict:
     """
