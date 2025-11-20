@@ -172,6 +172,40 @@ def review_code_health(context: str | None = None) -> str:
         "For each code smell, briefly explain why it matters and how it impacts maintainability, defects, or development speed."
     )
 
+
+@mcp.prompt
+def plan_code_health_refactoring(context: str | None = None) -> str:
+    """
+    Plan a prioritized, low-risk refactoring to remediate detected Code Health issues.
+    """
+    return (
+        "```prompt\n"
+        "---\n"
+        "tools:\n"
+        "  - code_health_review\n"
+        "  - code_health_refactoring_business_case\n"
+        "---\n\n"
+        "Your task is to produce a practical, developer-friendly refactoring plan based on a CodeScene Code Health Review.\n\n"
+        "Follow these steps:\n\n"
+        "1. Run the `code_health_review` tool on the selected files or code changes to detect code smells.\n"
+        "2. Focus the plan exclusively on the **functions/methods with the most severe and highest-impact code smells**.\n"
+        "3. For each selected function/method, propose a **specific, concise remediation action**, explaining *what to change* and *why it improves readability and maintainability*.\n"
+        "4. Motivate each action with the **expected impact on Code Health** and its **business value** (e.g., reduced defects, faster development, lower cognitive load).\n"
+        "5. Include a **one-sentence justification of the effort–risk tradeoff** for every proposed action.\n\n"
+        "**Deliverable format:**\n"
+        "- **Short summary** (1–2 sentences) describing the overall refactoring plan and its expected outcome.\n"
+        "- **Prioritized list of remediation tasks**. For each task, include:\n"
+        "  - Function/method name  \n"
+        "  - Detected code smells  \n"
+        "  - Proposed remediation action  \n"
+        "  - 1-line business/Code Health motivation  \n"
+        "  - 1-sentence effort–risk justification\n\n"
+        "Guidelines:\n"
+        "- Keep the plan **pragmatic and low-risk**, emphasizing high-impact improvements first.\n"
+        "- If details are missing, make **reasonable assumptions** and briefly state them.\n\n"
+        "```"
+    )
+
 # We want the MCP Server to explain its key concepts like Code Health.
 
 def read_documentation_content_for(md_doc_name):
