@@ -154,6 +154,58 @@ def code_health_refactoring_business_case(file_path: str) -> dict:
     current_code_health = _calculate_code_health_score_for(file_path)
     return make_business_case_for(current_code_health)
 
+# Offer prompts that capture the key use cases. These prompts are more than a 
+# convenience; they also enable feature discoverability and guide users.
+
+@mcp.prompt
+def review_code_health(context: str | None = None) -> str:
+    """
+    Review Code Health and assess code quality for the current open file. 
+    The file path needs to be sent to the code_health_review MCP tool when using this prompt.
+    """
+    return (
+        "Review the Code Health of the current file using the CodeScene MCP Server and the code_health_review MCP tool.\n\n"
+        "Present the Code Health review as a simple summary suitable for an experienced developer. "
+        "Highlight and interpret the Code Health score.\n"
+        "Keep the review brief (max two paragraphs) and format it for readability.\n"
+        "List the main code smells and issues that contribute to a lower Code Health score.\n"
+        "For each code smell, briefly explain why it matters and how it impacts maintainability, defects, or development speed."
+    )
+
+
+@mcp.prompt
+def plan_code_health_refactoring(context: str | None = None) -> str:
+    """
+    Plan a prioritized, low-risk refactoring to remediate detected Code Health issues.
+    """
+    return (
+        "```prompt\n"
+        "---\n"
+        "tools:\n"
+        "  - code_health_review\n"
+        "  - code_health_refactoring_business_case\n"
+        "---\n\n"
+        "Your task is to produce a practical, developer-friendly refactoring plan based on a CodeScene Code Health Review.\n\n"
+        "Follow these steps:\n\n"
+        "1. Run the `code_health_review` tool on the selected files or code changes to detect code smells.\n"
+        "2. Focus the plan exclusively on the **functions/methods with the most severe and highest-impact code smells**.\n"
+        "3. For each selected function/method, propose a **specific, concise remediation action**, explaining *what to change* and *why it improves readability and maintainability*.\n"
+        "4. Motivate each action with the **expected impact on Code Health** and its **business value** (e.g., reduced defects, faster development, lower cognitive load).\n"
+        "5. Include a **one-sentence justification of the effort–risk tradeoff** for every proposed action.\n\n"
+        "**Deliverable format:**\n"
+        "- **Short summary** (1–2 sentences) describing the overall refactoring plan and its expected outcome.\n"
+        "- **Prioritized list of remediation tasks**. For each task, include:\n"
+        "  - Function/method name  \n"
+        "  - Detected code smells  \n"
+        "  - Proposed remediation action  \n"
+        "  - 1-line business/Code Health motivation  \n"
+        "  - 1-sentence effort–risk justification\n\n"
+        "Guidelines:\n"
+        "- Keep the plan **pragmatic and low-risk**, emphasizing high-impact improvements first.\n"
+        "- If details are missing, make **reasonable assumptions** and briefly state them.\n\n"
+        "```"
+    )
+
 # We want the MCP Server to explain its key concepts like Code Health.
 
 def read_documentation_content_for(md_doc_name):
