@@ -146,8 +146,17 @@ def select_project() -> str:
     
     Returns:
         A JSON object with the project name and ID, formatted in a Markdown table 
-        with the columns "Project Name" and "Project ID".
+        with the columns "Project Name" and "Project ID". If the output contains a 
+        `description` field, it indicates that a default project is being used from
+        the `CS_DEFAULT_PROJECT_ID` environment variable, and the user cannot select a different project.
+        Explain this to the user.
     """
+    if os.getenv("CS_DEFAULT_PROJECT_ID"):
+        return json.dumps({
+            'id': int(os.getenv("CS_DEFAULT_PROJECT_ID")),
+            'name': 'Default Project (from CS_DEFAULT_PROJECT_ID env var)',
+            'description': 'Using default project from CS_DEFAULT_PROJECT_ID environment variable. If you want to be able to select a different project, unset this variable.'
+        })
     try:
         url = f"{get_api_url()}/v2/projects"
         response = requests.get(url, headers=get_api_request_headers())
@@ -160,16 +169,14 @@ def select_project() -> str:
 @mcp.tool()
 def list_technical_debt_goals_for_project(project_id: int) -> str:
     """
-    Lists goals for a project. Do not attempt to fetch projects yourself, 
-    instead instruct the user to use the `select_project` tool first, and 
-    have the user select a project from its output before calling this tool.
+    Lists the technical debt goals for a project.
 
     Args:
         project_id: The Project ID selected by the user.
     Returns:
         A JSON array containing the path of a file and its goals, or a string error message if no project was selected.
         Show the goals for each file in a structured format that is easy to read and explain
-        the goal description for each file.
+        the goal description for each file. It also includes a description, please include that in your output.
     """
     def get_files_and_goals(page: int = 1):
         url = f"{get_api_url()}/v2/projects/{project_id}/analyses/latest/files"
@@ -178,6 +185,9 @@ def list_technical_debt_goals_for_project(project_id: int) -> str:
         data = response.json()
         files = data.get('files', [])
 
+        if data.get('max_pages') == 0:
+            return files
+
         if data.get('max_pages') < page:
             files.extend(get_files_and_goals(page + 1))
 
@@ -185,31 +195,39 @@ def list_technical_debt_goals_for_project(project_id: int) -> str:
 
     try:
         files_and_goals = get_files_and_goals()
-        return json.dumps(files_and_goals)
+        return json.dumps({
+            'files': files_and_goals,
+            'description': f"Found {len(files_and_goals)} files with technical debt goals for project ID {project_id}."
+        })
     except Exception as e:
         return f"Error: {e}"
     
 @mcp.tool()
-def list_technical_debt_goals_for_project_file(project_id: int, file_path: str) -> str:
+def list_technical_debt_goals_for_project_file(file_path: str, project_id: int) -> str:
     """
     Lists the technical debt goals for a specific file in a project.
 
     Args:
+        file_path: The absolute path to the source code file.
         project_id: The Project ID selected by the user.
-        file_path: The path of the file within the project.
     Returns:
         A JSON array containing the goals for the specified file, or a string error message if no project was selected.
         Show the goals in a structured format that is easy to read and explain
-        the goal description.
+        the goal description. It also includes a description, please include that in your output.
     """
     try:
+        mount_dir = os.getenv('CS_MOUNT_PATH').removesuffix('/')
+        relative_file_path = file_path.replace(mount_dir, '')
         url = f"{get_api_url()}/v2/projects/{project_id}/analyses/latest/files"
-        params = {'filter': f"path~{file_path}", 'fields': 'goals'}
+        params = {'filter': f"path~{relative_file_path}", 'fields': 'goals'}
         response = requests.get(url, params, headers=get_api_request_headers())
         data = response.json()
         goals = data.get('files', [])[0].get('goals', []) if data.get('files') else []
 
-        return json.dumps(goals)
+        return json.dumps({
+            'goals': goals,
+            'description': f"Found {len(goals)} technical debt goals for file {relative_file_path} in project ID {project_id}."
+        })
     except Exception as e:
         return f"Error: {e}"
     
