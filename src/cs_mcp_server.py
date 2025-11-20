@@ -154,6 +154,24 @@ def code_health_refactoring_business_case(file_path: str) -> dict:
     current_code_health = _calculate_code_health_score_for(file_path)
     return make_business_case_for(current_code_health)
 
+# Offer prompts that capture the key use cases. These prompts are more than a 
+# convenience; they also enable feature discoverability and guide users.
+
+@mcp.prompt
+def review_code_health(context: str | None = None) -> str:
+    """
+    Review Code Health and assess code quality for the current open file. 
+    The file path needs to be sent to the code_health_review MCP tool when using this prompt.
+    """
+    return (
+        "Review the Code Health of the current file using the CodeScene MCP Server and the code_health_review MCP tool.\n\n"
+        "Present the Code Health review as a simple summary suitable for an experienced developer. "
+        "Highlight and interpret the Code Health score.\n"
+        "Keep the review brief (max two paragraphs) and format it for readability.\n"
+        "List the main code smells and issues that contribute to a lower Code Health score.\n"
+        "For each code smell, briefly explain why it matters and how it impacts maintainability, defects, or development speed."
+    )
+
 # We want the MCP Server to explain its key concepts like Code Health.
 
 def read_documentation_content_for(md_doc_name):
