@@ -55,26 +55,36 @@ def code_health_from(cli_output) -> float:
 
     return r['score']
 
-def adapt_mounted_file_path_inside_docker(file_path):
-    if not os.getenv("CS_MOUNT_PATH"):
+def adapt_mounted_file_path_inside_docker(file_path: str) -> str:
+    """
+    Convert a host-mounted absolute file path into the path the container sees.
+
+    - Requires the environment variable `CS_MOUNT_PATH` to be set.
+    - `file_path` must be absolute and located under `CS_MOUNT_PATH`.
+    - Returns a POSIX-style path rooted at '/mount' (e.g. '/mount/src/foo.py').
+    """
+    mount = os.getenv("CS_MOUNT_PATH")
+    if not mount:
         raise CodeSceneCliError("CS_MOUNT_PATH not defined.")
 
-    mount_dir = os.getenv('CS_MOUNT_PATH').removesuffix('/')
-    mount_file_path = file_path.replace(mount_dir, '/mount')
+    p = Path(file_path)
+    if not p.is_absolute():
+        raise CodeSceneCliError(f"file_path must be absolute: {file_path!r}")
 
-    return mount_file_path
+    def relative_path_under_mount(file_path: Path, mount_path: Path) -> Path:
+        try:
+            return file_path.relative_to(mount_path)
+        except ValueError:
+            raise CodeSceneCliError(f"file_path is not under CS_MOUNT_PATH: {str(file_path)!r}")
 
-def context_aware_path_to(file_path: str):
-    """
-    The MCP server executes in two contexts: docker (default distro for the MCP), and 
-    as an executable Python file used during our e2e tests. (In the future, we do 
-    want the e2e tests to go via the Docker distro).
-    When running tests, we don't have a mount path -> shortcut that via the env.
-    """
-    if os.getenv("CS_MCP_RUNS_TEST_CONTEXT"):
-        return file_path
+    relative = relative_path_under_mount(p, Path(mount))
+
+    # If the file points to the mount root, relative_to yields '.'
+    if relative == Path("."):
+        return "/mount"
     
-    return adapt_mounted_file_path_inside_docker(file_path)
+    mount_posix_style = "/mount/" + relative.as_posix()
+    return mount_posix_style
 
 def cs_cli_path():
     cs_cli_location_in_docker = '/root/.local/bin/cs'
@@ -83,7 +93,7 @@ def cs_cli_path():
 def make_cs_cli_review_command_for(cli_command: str, file_path: str):
     cs_cli = cs_cli_path()
 
-    mount_file_path = context_aware_path_to(file_path)
+    mount_file_path = adapt_mounted_file_path_inside_docker(file_path)
 
     return [cs_cli, cli_command, mount_file_path, "--output-format=json"]
 
@@ -253,7 +263,7 @@ def pre_commit_code_health_safeguard(git_repository_path: str) -> str:
     cli_command = [cs_cli_path(), "delta", "--output-format=json"]
 
     def safeguard_code_on(git_repository_path: str) -> str:
-        docker_path = context_aware_path_to(git_repository_path)
+        docker_path = adapt_mounted_file_path_inside_docker(git_repository_path)
         return run_local_tool(cli_command, cwd=docker_path)
 
     return run_cs_cli(lambda: safeguard_code_on(git_repository_path))
