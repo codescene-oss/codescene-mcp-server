@@ -232,6 +232,72 @@ def list_technical_debt_goals_for_project_file(file_path: str, project_id: int) 
         return f"Error: {e}"
     
 @mcp.tool()
+def list_technical_debt_hotspots_for_project(project_id: int) -> str:
+    """
+    Lists the technical debt hotspots for a project.
+
+    Args:
+        project_id: The Project ID selected by the user.
+    Returns:
+        A JSON array containing the path of a file, code health score, revisions count and lines of code count.
+        Describe the hotspots for each file in a structured format that is easy to read and explain.
+        It also includes a description, please include that in your output.
+    """
+    def get_hotspots(page: int = 1):
+        url = f"{get_api_url()}/v2/projects/{project_id}/analyses/latest/technical-debt-hotspots"
+        params = {'page_size': 200, 'page': page}
+        response = requests.get(url, params, headers=get_api_request_headers())
+        data = response.json()
+        hotspots = data.get('hotspots', [])
+
+        if data.get('max_pages') == 0:
+            return hotspots
+
+        if data.get('max_pages') < page:
+            hotspots.extend(get_hotspots(page + 1))
+
+        return hotspots
+
+    try:
+        hotspots = get_hotspots()
+        
+        return json.dumps({
+            'hotspots': hotspots,
+            'description': f"Found {len(hotspots)} files with technical debt hotspots for project ID {project_id}."
+        })
+    except Exception as e:
+        return f"Error: {e}"
+    
+@mcp.tool()
+def list_technical_debt_hotspots_for_project_file(file_path: str, project_id: int) -> str:
+    """
+    Lists the technical debt hotspots for a specific file in a project.
+    Args:
+        file_path: The absolute path to the source code file.
+        project_id: The Project ID selected by the user.
+    Returns:
+        A JSON array containing the code health score, revisions count and lines of code count for the specified file,
+        or a string error message if no project was selected.
+        Describe the hotspot in a structured format that is easy to read and explain.
+        It also includes a description, please include that in your output.
+    """
+    try:
+        mount_dir = os.getenv('CS_MOUNT_PATH').removesuffix('/')
+        relative_file_path = file_path.replace(mount_dir, '')
+        url = f"{get_api_url()}/v2/projects/{project_id}/analyses/latest/technical-debt-hotspots"
+        params = {'filter': f"file_name~{relative_file_path}"}
+        response = requests.get(url, params, headers=get_api_request_headers())
+        data = response.json()
+        hotspot = data.get('hotspots', [])[0] if data.get('hotspots') else {}
+
+        return json.dumps({
+            'hotspot': hotspot,
+            'description': f"Found technical debt hotspot for file {relative_file_path} in project ID {project_id}."
+        })
+    except Exception as e:
+        return f"Error: {e}"
+    
+@mcp.tool()
 def code_health_refactoring_business_case(file_path: str) -> dict:
     """
     Generate a data-driven business case for refactoring a source file.
