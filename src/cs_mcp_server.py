@@ -165,6 +165,21 @@ def select_project() -> str:
         return json.dumps(data)
     except Exception as e:
         return f"Error: {e}"
+    
+def query_api_list(endpoint, params: dict, key: str) -> list:
+    url = f"{get_api_url()}/{endpoint}"
+    response = requests.get(url, params=params, headers=get_api_request_headers())
+    data = response.json()
+    items = data.get(key, [])
+
+    if data.get('max_pages') == 0:
+        return items
+    
+    if data.get('max_pages') < params.get('page', 1):
+        params['page'] = params.get('page', 1) + 1
+        items.extend(query_api_list(endpoint, params, key))
+        
+    return items
 
 @mcp.tool()
 def list_technical_debt_goals_for_project(project_id: int) -> str:
@@ -178,26 +193,14 @@ def list_technical_debt_goals_for_project(project_id: int) -> str:
         Show the goals for each file in a structured format that is easy to read and explain
         the goal description for each file. It also includes a description, please include that in your output.
     """
-    def get_files_and_goals(page: int = 1):
-        url = f"{get_api_url()}/v2/projects/{project_id}/analyses/latest/files"
-        params = {'page_size': 200, 'page': page, 'filter': 'goals^not-empty', 'fields': 'path,goals'}
-        response = requests.get(url, params, headers=get_api_request_headers())
-        data = response.json()
-        files = data.get('files', [])
-
-        if data.get('max_pages') == 0:
-            return files
-
-        if data.get('max_pages') < page:
-            files.extend(get_files_and_goals(page + 1))
-
-        return files
-
     try:
-        files_and_goals = get_files_and_goals()
+        endpoint = f"v2/projects/{project_id}/analyses/latest/files"
+        params = {'page_size': 200, 'page': 1, 'filter': 'goals^not-empty', 'fields': 'path,goals'}
+        files = query_api_list(endpoint, params, 'files')
+
         return json.dumps({
-            'files': files_and_goals,
-            'description': f"Found {len(files_and_goals)} files with technical debt goals for project ID {project_id}."
+            'files': files,
+            'description': f"Found {len(files)} files with technical debt goals for project ID {project_id}."
         })
     except Exception as e:
         return f"Error: {e}"
@@ -216,13 +219,11 @@ def list_technical_debt_goals_for_project_file(file_path: str, project_id: int) 
         the goal description. It also includes a description, please include that in your output.
     """
     try:
-        mount_dir = os.getenv('CS_MOUNT_PATH').removesuffix('/')
-        relative_file_path = file_path.replace(mount_dir, '')
-        url = f"{get_api_url()}/v2/projects/{project_id}/analyses/latest/files"
+        endpoint = f"v2/projects/{project_id}/analyses/latest/files"
+        relative_file_path = adapt_mounted_file_path_inside_docker(file_path)
         params = {'filter': f"path~{relative_file_path}", 'fields': 'goals'}
-        response = requests.get(url, params, headers=get_api_request_headers())
-        data = response.json()
-        goals = data.get('files', [])[0].get('goals', []) if data.get('files') else []
+        files = query_api_list(endpoint, params, 'files')
+        goals = files[0].get('goals', []) if files else []
 
         return json.dumps({
             'goals': goals,
@@ -243,24 +244,11 @@ def list_technical_debt_hotspots_for_project(project_id: int) -> str:
         Describe the hotspots for each file in a structured format that is easy to read and explain.
         It also includes a description, please include that in your output.
     """
-    def get_hotspots(page: int = 1):
-        url = f"{get_api_url()}/v2/projects/{project_id}/analyses/latest/technical-debt-hotspots"
-        params = {'page_size': 200, 'page': page}
-        response = requests.get(url, params, headers=get_api_request_headers())
-        data = response.json()
-        hotspots = data.get('hotspots', [])
-
-        if data.get('max_pages') == 0:
-            return hotspots
-
-        if data.get('max_pages') < page:
-            hotspots.extend(get_hotspots(page + 1))
-
-        return hotspots
-
     try:
-        hotspots = get_hotspots()
-        
+        endpoint = f"v2/projects/{project_id}/analyses/latest/technical-debt-hotspots"
+        params = {'page_size': 200, 'page': 1}
+        hotspots = query_api_list(endpoint, params, 'hotspots')
+
         return json.dumps({
             'hotspots': hotspots,
             'description': f"Found {len(hotspots)} files with technical debt hotspots for project ID {project_id}."
@@ -282,13 +270,11 @@ def list_technical_debt_hotspots_for_project_file(file_path: str, project_id: in
         It also includes a description, please include that in your output.
     """
     try:
-        mount_dir = os.getenv('CS_MOUNT_PATH').removesuffix('/')
-        relative_file_path = file_path.replace(mount_dir, '')
-        url = f"{get_api_url()}/v2/projects/{project_id}/analyses/latest/technical-debt-hotspots"
+        relative_file_path = adapt_mounted_file_path_inside_docker(file_path)
+        endpoint = f"/v2/projects/{project_id}/analyses/latest/technical-debt-hotspots"
         params = {'filter': f"file_name~{relative_file_path}"}
-        response = requests.get(url, params, headers=get_api_request_headers())
-        data = response.json()
-        hotspot = data.get('hotspots', [])[0] if data.get('hotspots') else {}
+        hotspots = query_api_list(endpoint, params, 'hotspots')
+        hotspot = hotspots[0] if hotspots else {}
 
         return json.dumps({
             'hotspot': hotspot,
