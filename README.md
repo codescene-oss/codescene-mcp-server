@@ -379,6 +379,8 @@ The MCP supports both CodeScene Cloud and CodeScene on-prem.
 The CodeScene MCP Server runs fully locally. All analysis — including Code Health scoring, delta reviews, and business-case calculations — is performed on your machine, against your local repository.
 No source code or analysis data is sent to cloud providers, LLM vendors, or any external service.
 
+Analysis results (e.g. hotspots and technical debt goals) are fetched via REST from your own CodeScene account using a secure token.
+
 For complete details, please see CodeScene’s full [privacy and security documentation](https://codescene.com/policies).
 
 </details>
