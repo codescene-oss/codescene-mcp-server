@@ -6,6 +6,7 @@ from pathlib import Path
 import json
 import os
 from code_health_tools.business_case import make_business_case_for
+from code_health_tools.delta_analysis import analyze_delta_output, DeltaAnalysisError
 
 mcp = FastMCP("CodeScene")
 
@@ -55,33 +56,50 @@ def code_health_from(cli_output) -> float:
 
     return r['score']
 
-def adapt_mounted_file_path_inside_docker(file_path):
-    if not os.getenv("CS_MOUNT_PATH"):
+def adapt_mounted_file_path_inside_docker(file_path: str) -> str:
+    """
+    Convert a host-mounted absolute file path into the path the container sees.
+
+    - Requires the environment variable `CS_MOUNT_PATH` to be set.
+    - `file_path` must be absolute and located under `CS_MOUNT_PATH`.
+    - Returns a POSIX-style path rooted at '/mount' (e.g. '/mount/src/foo.py').
+    """
+    mount = os.getenv("CS_MOUNT_PATH")
+    if not mount:
         raise CodeSceneCliError("CS_MOUNT_PATH not defined.")
 
-    mount_dir = os.getenv('CS_MOUNT_PATH').removesuffix('/')
-    mount_file_path = file_path.replace(mount_dir, '/mount')
+    p = Path(file_path)
+    if not p.is_absolute():
+        raise CodeSceneCliError(f"file_path must be absolute: {file_path!r}")
 
-    return mount_file_path
+    def relative_path_under_mount(file_path: Path, mount_path: Path) -> Path:
+        try:
+            return file_path.relative_to(mount_path)
+        except ValueError:
+            raise CodeSceneCliError(f"file_path is not under CS_MOUNT_PATH: {str(file_path)!r}")
 
-def context_aware_path_to(file_path: str):
-    """
-    The MCP server executes in two contexts: docker (default distro for the MCP), and 
-    as an executable Python file used during our e2e tests. (In the future, we do 
-    want the e2e tests to go via the Docker distro).
-    When running tests, we don't have a mount path -> shortcut that via the env.
-    """
-    if os.getenv("CS_MCP_RUNS_TEST_CONTEXT"):
-        return file_path
+    relative = relative_path_under_mount(p, Path(mount))
+
+    # If the file points to the mount root, relative_to yields '.'
+    if relative == Path("."):
+        return "/mount"
     
-    return adapt_mounted_file_path_inside_docker(file_path)
+    mount_posix_style = "/mount/" + relative.as_posix()
+    return mount_posix_style
+
+def cs_cli_path():
+    cs_cli_location_in_docker = '/root/.local/bin/cs'
+    return os.getenv("CS_CLI_PATH", default=cs_cli_location_in_docker)
+
+def make_cs_cli_review_command_for(cli_command: str, file_path: str):
+    cs_cli = cs_cli_path()
+
+    mount_file_path = adapt_mounted_file_path_inside_docker(file_path)
+
+    return [cs_cli, cli_command, mount_file_path, "--output-format=json"]
 
 def cs_cli_review_command_for(file_path: str):
-    cs_cli_location_in_docker = '/root/.local/bin/cs'
-    cs_cli = os.getenv("CS_CLI_PATH", default=cs_cli_location_in_docker)
-    mount_file_path = context_aware_path_to(file_path)
-
-    return [cs_cli, "review", mount_file_path, "--output-format=json"]
+    return make_cs_cli_review_command_for("review", file_path)
 
 def analyze_code(file_path: str) -> str:
     return run_local_tool(cs_cli_review_command_for(file_path))
@@ -126,8 +144,7 @@ def code_health_review(file_path: str) -> str:
     a JSON object specifying all potential code smells that contribute 
     to a lower Code Health.
     Args:
-        file_content: The content of the source code file to be analyzed as a base64 encoded string.
-        file_ext: The file extension of the source code file to be reviewed (e.g. .py, .java).
+        file_path: The absolute path to the source code file to be analyzed.
     Returns:
         A JSON object containing score and review:
          - score: this is the Code Health score. 10.0 is best, 1.0 is worst health.
@@ -230,7 +247,35 @@ def list_technical_debt_goals_for_project_file(file_path: str, project_id: int) 
         })
     except Exception as e:
         return f"Error: {e}"
-    
+
+@mcp.tool()
+def pre_commit_code_health_safeguard(git_repository_path: str) -> str:
+    """
+    Performs a Code Health review on all modified and staged files in 
+    the given git_repository_path, and returns a JSON object specifying 
+    the code smells that will degrade the Code Health, should this code be committed.
+    This tool is ideal as a pre-commit safeguard for healthy code.
+
+    Args:
+        git_repository_path: The absolute path to the Git repository for the current code base.
+
+    Returns:
+        A JSON object containing:
+         - quality_gates: the central outcome, summarizing whether the commit passes or fails Code Health thresholds for each file.
+         - files: an array of objects for each file with:
+             - name: the name of the file whose Code Health is impacted (positively or negatively).
+             - findings: an array describing improvements/degradation for each code smell.
+         - Each quality gate indicates if the file meets the required Code Health standards, helping teams enforce healthy code before commit.
+    """
+    cli_command = [cs_cli_path(), "delta", "--output-format=json"]
+
+    def safeguard_code_on(git_repository_path: str) -> str:
+        docker_path = adapt_mounted_file_path_inside_docker(git_repository_path)
+        output = run_local_tool(cli_command, cwd=docker_path)
+        return json.dumps(analyze_delta_output(output))
+
+    return run_cs_cli(lambda: safeguard_code_on(git_repository_path))
+
 @mcp.tool()
 def code_health_refactoring_business_case(file_path: str) -> dict:
     """
