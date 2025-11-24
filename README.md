@@ -374,6 +374,17 @@ The MCP supports both CodeScene Cloud and CodeScene on-prem.
 
 <details>
 
+**<summary>How does the MCP Server keep my code private and secure?</summary>**
+
+The CodeScene MCP Server runs fully locally. All analysis — including Code Health scoring, delta reviews, and business-case calculations — is performed on your machine, against your local repository.
+No source code or analysis data is sent to cloud providers, LLM vendors, or any external service.
+
+For complete details, please see CodeScene’s full [privacy and security documentation](https://codescene.com/policies).
+
+</details>
+
+<details>
+
 **<summary>I have multiple repos — how do I configure the MCP?</summary>**
 
 Since you have to provide a mount path for Docker, you can either have a MCP configuration per project (in VS Code that would be a `.vscode/mcp.json` file per project, for example) or you can mount a root directory within which all your projects are and then just use that one configuration instead.
