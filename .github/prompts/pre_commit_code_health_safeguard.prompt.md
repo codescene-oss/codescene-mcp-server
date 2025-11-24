@@ -11,7 +11,7 @@ Run a pre-commit Code Health safeguard on the current Git repository path. Use *
 
 After running the tool:
 
-1. Summarize the JSON output in clear, actionable language.
+1. Summarize the JSON output in clear, actionable language. Focus on the overall result indicated in the `quality_gates` field of the JSON result.
 2. Highlight any code smells or degradation that would reduce Code Health if committed.
 3. Prioritize the findings by severity and likelihood of increasing long-term maintenance cost.
 4. Provide practical recommendations for improvements prior to committing.
