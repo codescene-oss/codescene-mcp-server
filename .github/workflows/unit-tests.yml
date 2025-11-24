@@ -48,6 +48,6 @@ jobs:
         if: always()
         with:
           access-token: ${{ secrets.CODESCENE_CODE_COVERAGE_API_TOKEN }}
-          project-url: "https://api.codescene.io/v2/projects/72308"
+          project-url: "https://api.codescene.io/v2/projects/72556"
           # Include coverage files from all the artifacts (jobs)
           coverage-files: "**/coverage.xml"
