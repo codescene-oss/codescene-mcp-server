@@ -50,8 +50,8 @@ class TestDeltaAnalysis(unittest.TestCase):
             {"name": "file2.cpp", "old_score": 8.0, "new_score": 7.0}
         )
         result = analyze_delta_output(output)
-        self.assertCodeHealthImproved(result, idx=0)
-        self.assertCodeHealthDegraded(result, idx=1)
+        self.assertCodeHealthImproved(result, filename="file1.cpp")
+        self.assertCodeHealthDegraded(result, filename="file2.cpp")
         self.assertQualityGatesFail(result)
 
     def test_code_health_unknown(self):
@@ -73,23 +73,34 @@ class TestDeltaAnalysis(unittest.TestCase):
 
     # Clarify the intent via custom assertions:
     #
-    def assertCodeHealthImproved(self, result, idx=0):
-        self.assertEqual(result["results"][idx]["verdict"], "improved")
+    def assertCodeHealthImproved(self, result, filename=None):
+        entry = self._result_matching(filename, result)
+        self.assertIsNotNone(entry, f"No result entry found for filename: {filename}")
+        self.assertEqual(entry["verdict"], "improved")
 
-    def assertCodeHealthDegraded(self, result, idx=0):
-        self.assertEqual(result["results"][idx]["verdict"], "degraded")
+    def assertCodeHealthDegraded(self, result, filename=None):
+        entry = self._result_matching(filename, result)
+        self.assertIsNotNone(entry, f"No result entry found for filename: {filename}")
+        self.assertEqual(entry["verdict"], "degraded")
 
-    def assertCodeHealthStable(self, result, idx=0):
-        self.assertEqual(result["results"][idx]["verdict"], "stable")
+    def assertCodeHealthStable(self, result, filename=None):
+        entry = self._result_matching(filename, result)
+        self.assertIsNotNone(entry, f"No result entry found for filename: {filename}")
+        self.assertEqual(entry["verdict"], "stable")
 
-    def assertCodeHealthUnknown(self, result, idx=0):
-        self.assertEqual(result["results"][idx]["verdict"], "unknown")
+    def assertCodeHealthUnknown(self, result, filename=None):
+        entry = self._result_matching(filename, result)
+        self.assertIsNotNone(entry, f"No result entry found for filename: {filename}")
+        self.assertEqual(entry["verdict"], "unknown")
 
     def assertQualityGatesPass(self, result):
         self.assertEqual(result["quality_gates"], "passed")
 
     def assertQualityGatesFail(self, result):
         self.assertEqual(result["quality_gates"], "failed")
+
+    def _result_matching(self, filename, result):
+        return next((e for e in result["results"] if filename is None or e.get("name") == filename), None)
 
 if __name__ == "__main__":
     unittest.main()
