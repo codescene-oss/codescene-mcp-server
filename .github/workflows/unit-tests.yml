@@ -19,6 +19,35 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r src/requirements.txt
+          pip install coverage
       - name: Run unit tests
         run: |
-          python -m unittest discover src
+          coverage run -m unittest discover src
+          coverage xml -o coverage.xml
+          coverage html -d htmlcov
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  cs-coverage-check:
+    runs-on: ubuntu-24.04
+    needs: [test]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # fetch everything so that `cs-coverage check` can find merge-base
+          fetch-depth: 0
+      - name: download coverage
+        uses: actions/download-artifact@v3
+        with:
+          path: coverage/
+      - uses: ./.github/actions/check-coverage
+        if: always()
+        with:
+          access-token: ${{ secrets.CODESCENE_CODE_COVERAGE_API_TOKEN }}
+          project-url: "https://api.codescene.io/v2/projects/72308"
+          # Include coverage files from all the artifacts (jobs)
+          coverage-files: "**/coverage.xml"

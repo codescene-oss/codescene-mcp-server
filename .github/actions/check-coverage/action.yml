@@ -1,0 +1,27 @@
+name: 'Check Coverage'
+description: 'Used to check coverage data during build'
+inputs:
+  access-token:
+    required: true
+  project-url:
+    required: true
+  coverage-files:
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Download cs-coverage binary, unzip it and make it executable
+      run: |
+        curl -s -o "$(pwd)/cs-coverage.zip" https://downloads.codescene.io/enterprise/cli/cs-coverage-linux-amd64-latest.zip
+        unzip -oq "$(pwd)/cs-coverage.zip"
+        chmod +x "$(pwd)/cs-coverage"
+      shell: bash
+    - name: CodeScene Code Coverage Check
+      run: |
+        echo "Using environment: ${{ inputs.environment }}"
+        test -d $(pwd)/coverage/ && ls -alR $(pwd)/coverage/
+        $(pwd)/cs-coverage check --verbose --coverage-files "${{ inputs.coverage-files }}"
+      env:
+        CS_PROJECT_URL: ${{ inputs.project-url }}
+        CS_ACCESS_TOKEN: ${{ inputs.access-token }}
+      shell: bash
