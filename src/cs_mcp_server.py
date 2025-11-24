@@ -246,7 +246,8 @@ def list_technical_debt_goals_for_project_file(file_path: str, project_id: int) 
         })
     except Exception as e:
         return f"Error: {e}"
-    
+
+@mcp.tool()
 def pre_commit_code_health_safeguard(git_repository_path: str) -> str:
     """
     Performs a Code Health review on all modified and staged files in 
