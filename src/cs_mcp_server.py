@@ -7,6 +7,8 @@ import json
 import os
 from code_health_tools.business_case import make_business_case_for
 from code_health_tools.delta_analysis import analyze_delta_output, DeltaAnalysisError
+from technical_debt_hotspots import TechnicalDebtHotspots
+from utils import query_api_list, get_api_request_headers, get_api_url
 
 mcp = FastMCP("CodeScene")
 
@@ -14,15 +16,6 @@ class CodeSceneCliError(Exception):
     """Raised when the CLI tool fails to calculate Code Health for a given file.
     """
     pass
-
-def get_api_url() -> str:
-    url = os.getenv("CS_ONPREM_URL")
-    return f"{url}/api" if url else "https://api.codescene.io"
-
-def get_api_request_headers() -> dict:
-    return {
-        'Authorization': f"Bearer {os.getenv('CS_ACCESS_TOKEN')}"
-    }
 
 def run_local_tool(command: list, cwd: str = None):
     """
@@ -182,21 +175,6 @@ def select_project() -> str:
         return json.dumps(data)
     except Exception as e:
         return f"Error: {e}"
-    
-def query_api_list(endpoint, params: dict, key: str) -> list:
-    url = f"{get_api_url()}/{endpoint}"
-    response = requests.get(url, params=params, headers=get_api_request_headers())
-    data = response.json()
-    items = data.get(key, [])
-
-    if data.get('max_pages') == 0:
-        return items
-    
-    if data.get('max_pages') < params.get('page', 1):
-        params['page'] = params.get('page', 1) + 1
-        items.extend(query_api_list(endpoint, params, key))
-        
-    return items
 
 @mcp.tool()
 def list_technical_debt_goals_for_project(project_id: int) -> str:
@@ -276,57 +254,6 @@ def pre_commit_code_health_safeguard(git_repository_path: str) -> str:
         return json.dumps(analyze_delta_output(output))
 
     return run_cs_cli(lambda: safeguard_code_on(git_repository_path))
-
-@mcp.tool()
-def list_technical_debt_hotspots_for_project(project_id: int) -> str:
-    """
-    Lists the technical debt hotspots for a project.
-
-    Args:
-        project_id: The Project ID selected by the user.
-    Returns:
-        A JSON array containing the path of a file, code health score, revisions count and lines of code count.
-        Describe the hotspots for each file in a structured format that is easy to read and explain.
-        It also includes a description, please include that in your output.
-    """
-    try:
-        endpoint = f"v2/projects/{project_id}/analyses/latest/technical-debt-hotspots"
-        params = {'page_size': 200, 'page': 1}
-        hotspots = query_api_list(endpoint, params, 'hotspots')
-
-        return json.dumps({
-            'hotspots': hotspots,
-            'description': f"Found {len(hotspots)} files with technical debt hotspots for project ID {project_id}."
-        })
-    except Exception as e:
-        return f"Error: {e}"
-    
-@mcp.tool()
-def list_technical_debt_hotspots_for_project_file(file_path: str, project_id: int) -> str:
-    """
-    Lists the technical debt hotspots for a specific file in a project.
-    Args:
-        file_path: The absolute path to the source code file.
-        project_id: The Project ID selected by the user.
-    Returns:
-        A JSON array containing the code health score, revisions count and lines of code count for the specified file,
-        or a string error message if no project was selected.
-        Describe the hotspot in a structured format that is easy to read and explain.
-        It also includes a description, please include that in your output.
-    """
-    try:
-        relative_file_path = adapt_mounted_file_path_inside_docker(file_path)
-        endpoint = f"/v2/projects/{project_id}/analyses/latest/technical-debt-hotspots"
-        params = {'filter': f"file_name~{relative_file_path}"}
-        hotspots = query_api_list(endpoint, params, 'hotspots')
-        hotspot = hotspots[0] if hotspots else {}
-
-        return json.dumps({
-            'hotspot': hotspot,
-            'description': f"Found technical debt hotspot for file {relative_file_path} in project ID {project_id}."
-        })
-    except Exception as e:
-        return f"Error: {e}"
     
 @mcp.tool()
 def code_health_refactoring_business_case(file_path: str) -> dict:
@@ -476,4 +403,9 @@ if __name__ == "__main__":
          'description': "Describes how to build a business case for Code Health improvements."}
     ]
     add_as_mcp_resources(docs_to_expose)
+
+    TechnicalDebtHotspots(mcp, {
+        'query_api_list_fn': query_api_list
+    })
+
     mcp.run()
