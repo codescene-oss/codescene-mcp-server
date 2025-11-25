@@ -272,6 +272,7 @@ def pre_commit_code_health_safeguard(git_repository_path: str) -> str:
 
     def safeguard_code_on(git_repository_path: str) -> str:
         docker_path = adapt_mounted_file_path_inside_docker(git_repository_path)
+        run_local_tool(["git", "config", "--system", "--add", "safe.directory", docker_path])
         output = run_local_tool(cli_command, cwd=docker_path)
         return json.dumps(analyze_delta_output(output))
 
