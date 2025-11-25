@@ -1,8 +1,7 @@
 ---
-name: pre-commit-code-health
+name: pre_commit_code_health_safeguard
 description: Run a Code Health safeguard on modified and staged files before committing.
 argument-hint: Path to the Git repository to analyze
-agent: ask
 tools:
   - pre_commit_code_health_safeguard
 ---
