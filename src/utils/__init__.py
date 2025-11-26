@@ -47,10 +47,14 @@ def get_api_request_headers() -> dict:
         'Authorization': f"Bearer {os.getenv('CS_ACCESS_TOKEN')}"
     }
 
-def query_api_list(endpoint, params: dict, key: str) -> list:
+def query_api(endpoint, params: dict) -> dict:
     url = f"{get_api_url()}/{endpoint}"
     response = requests.get(url, params=params, headers=get_api_request_headers())
-    data = response.json()
+
+    return response.json()
+
+def query_api_list(endpoint, params: dict, key: str) -> list:
+    data = query_api(endpoint, params)
     items = data.get(key, [])
 
     if data.get('max_pages') == 0 or data.get('max_pages') is None:

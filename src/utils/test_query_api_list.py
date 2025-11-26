@@ -10,9 +10,6 @@ def mocked_requests_get(*args, **kwargs):
             self.json_data = json_data
             self.status_code = status_code
 
-        def get(self, k):
-            return self.json_data[k]
-
         def json(self):
             return json.loads(self.json_data)
 
@@ -43,7 +40,7 @@ def mocked_requests_get(*args, **kwargs):
         }
         return MockResponse(json.dumps(response), 200)
 
-    return MockResponse(None, 404)
+    return MockResponse(json.dumps({}), 404)
 
 class TestQueryApiList(unittest.TestCase):
     @mock.patch('requests.get', side_effect=mocked_requests_get)
@@ -65,3 +62,8 @@ class TestQueryApiList(unittest.TestCase):
     def test_query_api_list_multiple_pages(self, _):
         result = query_api_list("multiple-pages", {}, "items")
         self.assertEqual([{'name': 'test'}, {'name': 'test'}], result)
+
+    @mock.patch('requests.get', side_effect=mocked_requests_get)
+    def test_query_api_list_not_found(self, _):
+        result = query_api_list("not-found", {}, "items")
+        self.assertEqual([], result)

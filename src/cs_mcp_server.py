@@ -8,6 +8,8 @@ import os
 from code_health_tools.business_case import make_business_case_for
 from code_health_tools.delta_analysis import analyze_delta_output, DeltaAnalysisError
 from errors import CodeSceneCliError
+from select_project import SelectProject
+from technical_debt_goals import TechnicalDebtGoals
 from technical_debt_hotspots import TechnicalDebtHotspots
 from utils import query_api_list, get_api_request_headers, get_api_url, adapt_mounted_file_path_inside_docker
 
@@ -112,85 +114,6 @@ def code_health_review(file_path: str) -> str:
         return analyze_code(file_path)
 
     return run_cs_cli(lambda: review_code_health_of(file_path))
-
-@mcp.tool()
-def select_project() -> str:
-    """
-    Lists all projects for an organization for selection by the user.
-    The user can select the desired project by either its name or ID.
-    
-    Returns:
-        A JSON object with the project name and ID, formatted in a Markdown table 
-        with the columns "Project Name" and "Project ID". If the output contains a 
-        `description` field, it indicates that a default project is being used from
-        the `CS_DEFAULT_PROJECT_ID` environment variable, and the user cannot select a different project.
-        Explain this to the user.
-    """
-    if os.getenv("CS_DEFAULT_PROJECT_ID"):
-        return json.dumps({
-            'id': int(os.getenv("CS_DEFAULT_PROJECT_ID")),
-            'name': 'Default Project (from CS_DEFAULT_PROJECT_ID env var)',
-            'description': 'Using default project from CS_DEFAULT_PROJECT_ID environment variable. If you want to be able to select a different project, unset this variable.'
-        })
-    try:
-        url = f"{get_api_url()}/v2/projects"
-        response = requests.get(url, headers=get_api_request_headers())
-        data = response.json()
-
-        return json.dumps(data)
-    except Exception as e:
-        return f"Error: {e}"
-
-@mcp.tool()
-def list_technical_debt_goals_for_project(project_id: int) -> str:
-    """
-    Lists the technical debt goals for a project.
-
-    Args:
-        project_id: The Project ID selected by the user.
-    Returns:
-        A JSON array containing the path of a file and its goals, or a string error message if no project was selected.
-        Show the goals for each file in a structured format that is easy to read and explain
-        the goal description for each file. It also includes a description, please include that in your output.
-    """
-    try:
-        endpoint = f"v2/projects/{project_id}/analyses/latest/files"
-        params = {'page_size': 200, 'page': 1, 'filter': 'goals^not-empty', 'fields': 'path,goals'}
-        files = query_api_list(endpoint, params, 'files')
-
-        return json.dumps({
-            'files': files,
-            'description': f"Found {len(files)} files with technical debt goals for project ID {project_id}."
-        })
-    except Exception as e:
-        return f"Error: {e}"
-    
-@mcp.tool()
-def list_technical_debt_goals_for_project_file(file_path: str, project_id: int) -> str:
-    """
-    Lists the technical debt goals for a specific file in a project.
-
-    Args:
-        file_path: The absolute path to the source code file.
-        project_id: The Project ID selected by the user.
-    Returns:
-        A JSON array containing the goals for the specified file, or a string error message if no project was selected.
-        Show the goals in a structured format that is easy to read and explain
-        the goal description. It also includes a description, please include that in your output.
-    """
-    try:
-        endpoint = f"v2/projects/{project_id}/analyses/latest/files"
-        relative_file_path = adapt_mounted_file_path_inside_docker(file_path)
-        params = {'filter': f"path~{relative_file_path}", 'fields': 'goals'}
-        files = query_api_list(endpoint, params, 'files')
-        goals = files[0].get('goals', []) if files else []
-
-        return json.dumps({
-            'goals': goals,
-            'description': f"Found {len(goals)} technical debt goals for file {relative_file_path} in project ID {project_id}."
-        })
-    except Exception as e:
-        return f"Error: {e}"
 
 @mcp.tool()
 def pre_commit_code_health_safeguard(git_repository_path: str) -> str:
@@ -368,6 +291,14 @@ if __name__ == "__main__":
          'description': "Describes how to build a business case for Code Health improvements."}
     ]
     add_as_mcp_resources(docs_to_expose)
+
+    SelectProject(mcp, {
+        'query_api_list_fn': query_api_list
+    })
+
+    TechnicalDebtGoals(mcp, {
+        'query_api_list_fn': query_api_list
+    })
 
     TechnicalDebtHotspots(mcp, {
         'query_api_list_fn': query_api_list
