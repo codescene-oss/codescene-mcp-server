@@ -1,6 +1,8 @@
 from fastmcp import FastMCP
 from fastmcp.resources import FileResource
 from pathlib import Path
+
+from code_health_refactoring_business_case import CodeHealthRefactoringBusinessCase
 from code_health_review import CodeHealthReview
 from code_health_score import CodeHealthScore
 from code_health_tools.business_case import make_business_case_for
@@ -11,31 +13,6 @@ from technical_debt_hotspots import TechnicalDebtHotspots
 from utils import query_api_list, analyze_code, run_local_tool, code_health_from_cli_output
 
 mcp = FastMCP("CodeScene")
-    
-@mcp.tool()
-def code_health_refactoring_business_case(file_path: str) -> dict:
-    """
-    Generate a data-driven business case for refactoring a source file.
-
-    This tool analyzes the file's current Code Health and estimates the
-    business impact of improving it. The result includes quantified
-    predictions for development speed and defect reduction based on
-    CodeScene's empirical research.
-
-    Args:
-        file_path: Absolute path to the source code file to analyze.
-
-    Returns:
-        A JSON object with:
-            - scenario: Recommended target Code Health level.
-            - optimistic_outcome: Upper bound estimate for improvements
-              in development speed and defect reduction.
-            - pessimistic_outcome: Lower bound estimate for improvements.
-            - confidence_interval: The optimistic → pessimistic range,
-              representing a 90% confidence interval for the expected impact.
-    """
-    current_code_health = code_health_from_cli_output(analyze_code(file_path))
-    return make_business_case_for(current_code_health)
 
 # Offer prompts that capture the key use cases. These prompts are more than a 
 # convenience; they also enable feature discoverability and guide users.
@@ -163,6 +140,10 @@ if __name__ == "__main__":
 
     PreCommitCodeHealthSafeguard(mcp, {
         'run_local_tool_fn': run_local_tool
+    })
+
+    CodeHealthRefactoringBusinessCase(mcp, {
+        'analyze_code_fn': analyze_code
     })
 
     CodeHealthScore(mcp, {
