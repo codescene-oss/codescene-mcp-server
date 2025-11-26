@@ -1,6 +1,10 @@
 import os
 import unittest
-from cs_mcp_server import adapt_mounted_file_path_inside_docker, CodeSceneCliError
+from unittest import mock
+
+from errors import CodeSceneCliError
+from . import adapt_mounted_file_path_inside_docker
+
 
 class TestAdaptMountedFilePathInsideDocker(unittest.TestCase):
     def setUp(self):
@@ -36,10 +40,7 @@ class TestAdaptMountedFilePathInsideDocker(unittest.TestCase):
         with self.assertRaises(CodeSceneCliError):
             adapt_mounted_file_path_inside_docker("/mnt/project/src/foo.py")
 
+    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/mnt/project"})
     def test_relative_path_raises(self):
-        os.environ["CS_MOUNT_PATH"] = "/mnt/project"
         with self.assertRaises(CodeSceneCliError):
             adapt_mounted_file_path_inside_docker("src/foo.py")
-
-if __name__ == "__main__":
-    unittest.main()
