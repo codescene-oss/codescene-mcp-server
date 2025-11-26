@@ -1,49 +1,16 @@
-import subprocess
 from fastmcp import FastMCP
 from fastmcp.resources import FileResource
 from pathlib import Path
-import json
-
 from code_health_review import CodeHealthReview
 from code_health_score import CodeHealthScore
 from code_health_tools.business_case import make_business_case_for
-from code_health_tools.delta_analysis import analyze_delta_output
+from pre_commit_code_health_safeguard import PreCommitCodeHealthSafeguard
 from select_project import SelectProject
 from technical_debt_goals import TechnicalDebtGoals
 from technical_debt_hotspots import TechnicalDebtHotspots
-from utils import query_api_list, adapt_mounted_file_path_inside_docker, \
-    analyze_code, run_cs_cli, cs_cli_path, run_local_tool
-
+from utils import query_api_list, analyze_code, run_local_tool, code_health_from_cli_output
 
 mcp = FastMCP("CodeScene")
-
-@mcp.tool()
-def pre_commit_code_health_safeguard(git_repository_path: str) -> str:
-    """
-    Performs a Code Health review on all modified and staged files in 
-    the given git_repository_path, and returns a JSON object specifying 
-    the code smells that will degrade the Code Health, should this code be committed.
-    This tool is ideal as a pre-commit safeguard for healthy code.
-
-    Args:
-        git_repository_path: The absolute path to the Git repository for the current code base.
-
-    Returns:
-        A JSON object containing:
-         - quality_gates: the central outcome, summarizing whether the commit passes or fails Code Health thresholds for each file.
-         - files: an array of objects for each file with:
-             - name: the name of the file whose Code Health is impacted (positively or negatively).
-             - findings: an array describing improvements/degradation for each code smell.
-         - Each quality gate indicates if the file meets the required Code Health standards, helping teams enforce healthy code before commit.
-    """
-    cli_command = [cs_cli_path(), "delta", "--output-format=json"]
-
-    def safeguard_code_on() -> str:
-        docker_path = adapt_mounted_file_path_inside_docker(git_repository_path)
-        output = run_local_tool(cli_command, cwd=docker_path)
-        return json.dumps(analyze_delta_output(output))
-
-    return run_cs_cli(lambda: safeguard_code_on())
     
 @mcp.tool()
 def code_health_refactoring_business_case(file_path: str) -> dict:
@@ -67,7 +34,7 @@ def code_health_refactoring_business_case(file_path: str) -> dict:
             - confidence_interval: The optimistic → pessimistic range,
               representing a 90% confidence interval for the expected impact.
     """
-    current_code_health = _calculate_code_health_score_for(file_path)
+    current_code_health = code_health_from_cli_output(analyze_code(file_path))
     return make_business_case_for(current_code_health)
 
 # Offer prompts that capture the key use cases. These prompts are more than a 
@@ -193,6 +160,10 @@ if __name__ == "__main__":
          'description': "Describes how to build a business case for Code Health improvements."}
     ]
     add_as_mcp_resources(docs_to_expose)
+
+    PreCommitCodeHealthSafeguard(mcp, {
+        'run_local_tool_fn': run_local_tool
+    })
 
     CodeHealthScore(mcp, {
         'analyze_code_fn': analyze_code
