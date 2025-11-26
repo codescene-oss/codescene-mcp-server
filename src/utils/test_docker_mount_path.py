@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest import mock
 
-from cs_mcp_server import CodeSceneCliError
+from errors import CodeSceneCliError
 from . import adapt_mounted_file_path_inside_docker
 
 
