@@ -5,12 +5,11 @@ from pathlib import Path
 from code_health_refactoring_business_case import CodeHealthRefactoringBusinessCase
 from code_health_review import CodeHealthReview
 from code_health_score import CodeHealthScore
-from code_health_tools.business_case import make_business_case_for
 from pre_commit_code_health_safeguard import PreCommitCodeHealthSafeguard
 from select_project import SelectProject
 from technical_debt_goals import TechnicalDebtGoals
 from technical_debt_hotspots import TechnicalDebtHotspots
-from utils import query_api_list, analyze_code, run_local_tool, code_health_from_cli_output
+from utils import query_api_list, analyze_code, run_local_tool
 
 mcp = FastMCP("CodeScene")
 
