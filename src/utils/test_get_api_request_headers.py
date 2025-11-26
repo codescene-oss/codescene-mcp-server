@@ -12,7 +12,3 @@ class TestGetApiRequestHeaders(unittest.TestCase):
     @mock.patch.dict(os.environ, {}, clear=True)
     def test_get_api_request_headers_no_token(self):
         self.assertEqual({}, get_api_request_headers())
-
-
-if __name__ == '__main__':
-    unittest.main()

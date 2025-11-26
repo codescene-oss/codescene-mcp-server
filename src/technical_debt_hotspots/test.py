@@ -5,7 +5,7 @@ from unittest import mock
 
 from fastmcp import FastMCP
 
-from technical_debt_hotspots import TechnicalDebtHotspots
+from . import TechnicalDebtHotspots
 
 
 class TestTechnicalDebtHotspots(unittest.TestCase):
@@ -60,7 +60,7 @@ class TestTechnicalDebtHotspots(unittest.TestCase):
 
         self.assertEqual(expected, result)
 
-    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "some-path"})
+    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path"})
     def test_list_technical_debt_hotspots_for_project_file_none_found(self):
         def mocked_query_api_list(*kwargs):
             return []
@@ -74,11 +74,11 @@ class TestTechnicalDebtHotspots(unittest.TestCase):
             "description": "Found no technical debt hotspot for file some_file.tsx in project ID 3."
         }
 
-        result = self.instance.list_technical_debt_hotspots_for_project_file("some_file.tsx", 3)
+        result = self.instance.list_technical_debt_hotspots_for_project_file("/some-path/some_file.tsx", 3)
 
         self.assertEqual(expected, json.loads(result))
 
-    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "some-path"})
+    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path"})
     def test_list_technical_debt_hotspots_for_project_file_some_found(self):
         def mocked_query_api_list(*kwargs):
             return [{
@@ -98,11 +98,11 @@ class TestTechnicalDebtHotspots(unittest.TestCase):
             "description": "Found technical debt hotspot for file some_file.tsx in project ID 3."
         }
 
-        result = self.instance.list_technical_debt_hotspots_for_project_file("some_file.tsx", 3)
+        result = self.instance.list_technical_debt_hotspots_for_project_file("/some-path/some_file.tsx", 3)
 
         self.assertEqual(expected, json.loads(result))
 
-    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "some-path"})
+    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path"})
     def test_list_technical_debt_hotspots_for_project_file_throws(self):
         def mocked_query_api_list(*kwargs):
             raise Exception("Some error")
@@ -112,10 +112,6 @@ class TestTechnicalDebtHotspots(unittest.TestCase):
         })
 
         expected = "Error: Some error"
-        result = self.instance.list_technical_debt_hotspots_for_project_file("some_file.tsx", 3)
+        result = self.instance.list_technical_debt_hotspots_for_project_file("/some-path/some_file.tsx", 3)
 
         self.assertEqual(expected, result)
-
-
-if __name__ == '__main__':
-    unittest.main()

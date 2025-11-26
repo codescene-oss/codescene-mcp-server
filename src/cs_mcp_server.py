@@ -7,15 +7,11 @@ import json
 import os
 from code_health_tools.business_case import make_business_case_for
 from code_health_tools.delta_analysis import analyze_delta_output, DeltaAnalysisError
+from errors import CodeSceneCliError
 from technical_debt_hotspots import TechnicalDebtHotspots
-from utils import query_api_list, get_api_request_headers, get_api_url
+from utils import query_api_list, get_api_request_headers, get_api_url, adapt_mounted_file_path_inside_docker
 
 mcp = FastMCP("CodeScene")
-
-class CodeSceneCliError(Exception):
-    """Raised when the CLI tool fails to calculate Code Health for a given file.
-    """
-    pass
 
 def run_local_tool(command: list, cwd: str = None):
     """
@@ -48,37 +44,6 @@ def code_health_from(cli_output) -> float:
         raise CodeSceneCliError("CLI output does not contain a 'score' field: {}".format(cli_output))
 
     return r['score']
-
-def adapt_mounted_file_path_inside_docker(file_path: str) -> str:
-    """
-    Convert a host-mounted absolute file path into the path the container sees.
-
-    - Requires the environment variable `CS_MOUNT_PATH` to be set.
-    - `file_path` must be absolute and located under `CS_MOUNT_PATH`.
-    - Returns a POSIX-style path rooted at '/mount' (e.g. '/mount/src/foo.py').
-    """
-    mount = os.getenv("CS_MOUNT_PATH")
-    if not mount:
-        raise CodeSceneCliError("CS_MOUNT_PATH not defined.")
-
-    p = Path(file_path)
-    if not p.is_absolute():
-        raise CodeSceneCliError(f"file_path must be absolute: {file_path!r}")
-
-    def relative_path_under_mount(file_path: Path, mount_path: Path) -> Path:
-        try:
-            return file_path.relative_to(mount_path)
-        except ValueError:
-            raise CodeSceneCliError(f"file_path is not under CS_MOUNT_PATH: {str(file_path)!r}")
-
-    relative = relative_path_under_mount(p, Path(mount))
-
-    # If the file points to the mount root, relative_to yields '.'
-    if relative == Path("."):
-        return "/mount"
-    
-    mount_posix_style = "/mount/" + relative.as_posix()
-    return mount_posix_style
 
 def cs_cli_path():
     cs_cli_location_in_docker = '/root/.local/bin/cs'

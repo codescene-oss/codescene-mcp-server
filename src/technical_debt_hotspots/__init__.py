@@ -1,6 +1,7 @@
 import json
-from utils import adapt_mounted_file_path_inside_docker
 from typing import Callable, TypedDict
+
+from utils import adapt_mounted_file_path_inside_docker
 
 
 class TechnicalDebtHotspotsDeps(TypedDict):
@@ -49,7 +50,8 @@ class TechnicalDebtHotspots:
             It also includes a description, please include that in your output.
         """
         try:
-            relative_file_path = adapt_mounted_file_path_inside_docker(file_path)
+            mounted_file_path = adapt_mounted_file_path_inside_docker(file_path)
+            relative_file_path = mounted_file_path.lstrip("/mount/")
             endpoint = f"/v2/projects/{project_id}/analyses/latest/technical-debt-hotspots"
             params = {'filter': f"file_name~{relative_file_path}"}
             hotspots = self.deps["query_api_list_fn"](endpoint, params, 'hotspots')

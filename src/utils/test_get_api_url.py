@@ -11,7 +11,3 @@ class TestGetApiUrl(unittest.TestCase):
 
     def test_get_api_url_cloud(self):
         self.assertEqual("https://api.codescene.io", get_api_url())
-
-
-if __name__ == '__main__':
-    unittest.main()
