@@ -10,7 +10,7 @@ This server is designed to run in your local environment and lets AI assistants 
 The Code Health insights augment the AI prompts with rich content around code quality issues, maintainability problems, and technical debt in general.
 
 > [!NOTE]
-> The server is under development. Expect to get a proper packaged installation + more tools soon. Real soon.
+> See [AGENTS.md](AGENTS.md) for guidance on how to use the CodeScene MCP server to safeguard AI and improve Code Health. [Copy the file](AGENTS.md) to your own repository to guide your AI agents.
 
 ## Quick set-up
 
@@ -347,7 +347,7 @@ The MCP server configuration requires a `CS_ACCESS_TOKEN` which you get via your
 > Watch the [demo video of the CodeScene MCP](https://www.youtube.com/watch?v=AycLVxKmVSY).
 
 > [!NOTE]
-> CodeScene MCP comes with a set of [example prompts](.github/prompts) that capture the key use cases.
+> CodeScene MCP comes with a set of [example prompts](.github/prompts) and an [AGENTS.md](AGENTS.md) file to capture the key use cases and guide your AI agents. Copy the `AGENTS.md` file to your own repository.
 
 With the CodeScene MCP Server in place, your AI tools can:
 
