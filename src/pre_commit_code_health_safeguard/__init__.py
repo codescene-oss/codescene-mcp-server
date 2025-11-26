@@ -6,7 +6,7 @@ from utils import cs_cli_path, adapt_mounted_file_path_inside_docker, run_cs_cli
 
 
 class PreCommitCodeHealthSafeguardDeps(TypedDict):
-    run_local_tool_fn: Callable[[list, Optional[str | None]], str]
+    run_local_tool_fn: Callable[[list, Optional[str]], str]
 
 
 class PreCommitCodeHealthSafeguard:
@@ -17,6 +17,7 @@ class PreCommitCodeHealthSafeguard:
 
     def _safeguard_code_on(self, cli_command: list, git_repository_path: str) -> str:
         docker_path = adapt_mounted_file_path_inside_docker(git_repository_path)
+        self.deps["run_local_tool_fn"](["git", "config", "--system", "--add", "safe.directory", docker_path], None)
         output = self.deps["run_local_tool_fn"](cli_command, docker_path)
         return json.dumps(analyze_delta_output(output))
 
