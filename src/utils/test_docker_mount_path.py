@@ -3,7 +3,7 @@ import unittest
 from unittest import mock
 
 from errors import CodeSceneCliError
-from . import adapt_mounted_file_path_inside_docker
+from .docker_path_adapter import adapt_mounted_file_path_inside_docker
 
 
 class TestAdaptMountedFilePathInsideDocker(unittest.TestCase):

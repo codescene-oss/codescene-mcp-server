@@ -3,7 +3,7 @@ import unittest
 from fastmcp import FastMCP
 
 from errors import CodeSceneCliError
-from . import CodeHealthRefactoringBusinessCase
+from .business_impact_analyzer import CodeHealthRefactoringBusinessCase
 
 class TestCodeHealthRefactoringBusinessCase(unittest.TestCase):
     def test_code_health_refactoring_business_case(self):

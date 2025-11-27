@@ -2,7 +2,7 @@ import json
 import os
 import unittest
 from unittest import mock
-from utils import get_api_url, query_api_list
+from .codescene_api_client import get_api_url, query_api_list
 
 def mocked_requests_get(*args, **kwargs):
     class MockResponse:
