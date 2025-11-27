@@ -28,7 +28,7 @@ class SelectProject:
             Codescene projects page where the user can find more detailed information about each project.
             Make sure to include this link in the output, and explain its purpose clearly.
         """
-        link = f"{os.getenv("CS_ONPREM_URL")}" if os.getenv("CS_ONPREM_URL") else "https://codescene.io/projects"
+        link = f"{os.getenv('CS_ONPREM_URL')}" if os.getenv("CS_ONPREM_URL") else "https://codescene.io/projects"
         
         if os.getenv("CS_DEFAULT_PROJECT_ID"):
             return json.dumps({
