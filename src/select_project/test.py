@@ -39,6 +39,28 @@ class TestSelectProject(unittest.TestCase):
 
         self.assertEqual(expected, json.loads(result))
 
+    @mock.patch.dict(os.environ, {"CS_ONPREM_URL": "http://onprem.codescene.local"})
+    def test_select_project_some_found_onprem(self):
+        def mocked_query_api_list_fn(*kwargs):
+            return [{'name':'some project'}]
+
+        self.instance = SelectProject(FastMCP("Test"), {
+            'query_api_list_fn': mocked_query_api_list_fn
+        })
+
+        expected = {
+            'projects': [
+                {
+                    'name':'some project'
+                }
+            ],
+            'link': 'http://onprem.codescene.local'
+        }
+
+        result = self.instance.select_project()
+
+        self.assertEqual(expected, json.loads(result))
+
     def test_select_project_throws(self):
         def mocked_query_api_list_fn(*kwargs):
             raise Exception("Some error")
