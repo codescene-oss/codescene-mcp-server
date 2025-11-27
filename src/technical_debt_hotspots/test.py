@@ -19,7 +19,8 @@ class TestTechnicalDebtHotspots(unittest.TestCase):
 
         expected = {
             "hotspots": [],
-            "description": "Found 0 files with technical debt hotspots for project ID 3."
+            "description": "Found 0 files with technical debt hotspots for project ID 3.",
+            "link": "https://codescene.io/projects/3/analyses/latest/code/technical-debt/system-map#hotspots"
         }
 
         result = self.instance.list_technical_debt_hotspots_for_project(3)
@@ -40,7 +41,31 @@ class TestTechnicalDebtHotspots(unittest.TestCase):
             "hotspots": [{
                 'path': 'some_path'
             }],
-            "description": "Found 1 files with technical debt hotspots for project ID 3."
+            "description": "Found 1 files with technical debt hotspots for project ID 3.",
+            "link": "https://codescene.io/projects/3/analyses/latest/code/technical-debt/system-map#hotspots"
+        }
+
+        result = self.instance.list_technical_debt_hotspots_for_project(3)
+
+        self.assertEqual(expected, json.loads(result))
+
+    @mock.patch.dict(os.environ, {"CS_ONPREM_URL": "https://onprem-codescene.io"})
+    def test_list_technical_debt_hotspots_for_project_some_found_onprem(self):
+        def mocked_query_api_list(*kwargs):
+            return [{
+                'path': 'some_path'
+            }]
+
+        self.instance = TechnicalDebtHotspots(FastMCP("Test"), {
+            'query_api_list_fn': mocked_query_api_list
+        })
+
+        expected = {
+            "hotspots": [{
+                'path': 'some_path'
+            }],
+            "description": "Found 1 files with technical debt hotspots for project ID 3.",
+            "link": "https://onprem-codescene.io/3/analyses/latest/code/technical-debt/system-map#hotspots"
         }
 
         result = self.instance.list_technical_debt_hotspots_for_project(3)
@@ -71,7 +96,8 @@ class TestTechnicalDebtHotspots(unittest.TestCase):
 
         expected = {
             "hotspot": {},
-            "description": "Found no technical debt hotspot for file some_file.tsx in project ID 3."
+            "description": "Found no technical debt hotspot for file some_file.tsx in project ID 3.",
+            "link": "https://codescene.io/projects/3/analyses/latest/code/technical-debt/system-map#hotspots"
         }
 
         result = self.instance.list_technical_debt_hotspots_for_project_file("/some-path/some_file.tsx", 3)
@@ -95,7 +121,8 @@ class TestTechnicalDebtHotspots(unittest.TestCase):
                 'path': 'some_file.tsx',
                 'revisions': 55
             },
-            "description": "Found technical debt hotspot for file some_file.tsx in project ID 3."
+            "description": "Found technical debt hotspot for file some_file.tsx in project ID 3.",
+            "link": "https://codescene.io/projects/3/analyses/latest/code/technical-debt/system-map#hotspots"
         }
 
         result = self.instance.list_technical_debt_hotspots_for_project_file("/some-path/some_file.tsx", 3)
