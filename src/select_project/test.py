@@ -16,7 +16,7 @@ class TestSelectProject(unittest.TestCase):
 
         result = self.instance.select_project()
 
-        self.assertEqual([], json.loads(result))
+        self.assertEqual({'projects': [], 'link': 'https://codescene.io/projects'}, json.loads(result))
 
     def test_select_project_some_found(self):
         def mocked_query_api_list_fn(*kwargs):
@@ -26,9 +26,18 @@ class TestSelectProject(unittest.TestCase):
             'query_api_list_fn': mocked_query_api_list_fn
         })
 
+        expected = {
+            'projects': [
+                {
+                    'name':'some project'
+                }
+            ],
+            'link': 'https://codescene.io/projects'
+        }
+
         result = self.instance.select_project()
 
-        self.assertEqual([{'name':'some project'}], json.loads(result))
+        self.assertEqual(expected, json.loads(result))
 
     def test_select_project_throws(self):
         def mocked_query_api_list_fn(*kwargs):
@@ -54,8 +63,9 @@ class TestSelectProject(unittest.TestCase):
         expected = {
             'description': 'Using default project from CS_DEFAULT_PROJECT_ID environment variable. If you want to be able to select a different project, unset this variable.',
             'id': 1,
-            'name': 'Default Project (from CS_DEFAULT_PROJECT_ID env var)'
-        }
+            'name': 'Default Project (from CS_DEFAULT_PROJECT_ID env var)',
+            'link': 'https://codescene.io/projects'
+        } 
 
         result = self.instance.select_project()
 
