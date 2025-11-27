@@ -2,40 +2,9 @@ import json
 import os
 import subprocess
 from pathlib import Path
-import requests
 from errors import CodeSceneCliError
 from .docker_path_adapter import adapt_mounted_file_path_inside_docker
-
-def get_api_url() -> str:
-    url = os.getenv("CS_ONPREM_URL")
-    return f"{url}/api" if url else "https://api.codescene.io"
-
-def get_api_request_headers() -> dict:
-    if os.getenv("CS_ACCESS_TOKEN") is None:
-        return {}
-
-    return {
-        'Authorization': f"Bearer {os.getenv('CS_ACCESS_TOKEN')}"
-    }
-
-def query_api(endpoint, params: dict) -> dict:
-    url = f"{get_api_url()}/{endpoint}"
-    response = requests.get(url, params=params, headers=get_api_request_headers())
-
-    return response.json()
-
-def query_api_list(endpoint, params: dict, key: str) -> list:
-    data = query_api(endpoint, params)
-    items = data.get(key, [])
-
-    if data.get('max_pages') == 0 or data.get('max_pages') is None:
-        return items
-
-    if data.get('max_pages') > data.get('page', 1):
-        params['page'] = data.get('page', 1) + 1
-        items.extend(query_api_list(endpoint, params, key))
-
-    return items
+from .codescene_api_client import get_api_url, get_api_request_headers, query_api, query_api_list
 
 def run_local_tool(command: list, cwd: str = None):
     """

@@ -1,7 +1,7 @@
 import os
 import unittest
 from unittest import mock
-from utils import get_api_request_headers
+from .codescene_api_client import get_api_request_headers
 
 
 class TestGetApiRequestHeaders(unittest.TestCase):
