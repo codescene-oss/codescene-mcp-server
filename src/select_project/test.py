@@ -2,9 +2,7 @@ import json
 import os
 import unittest
 from unittest import mock
-
 from fastmcp import FastMCP
-
 from . import SelectProject
 
 class TestSelectProject(unittest.TestCase):
