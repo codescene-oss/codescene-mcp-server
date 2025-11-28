@@ -28,6 +28,13 @@ class TestCodeOwnership(unittest.TestCase):
             return [{
                 'owner': 'some_owner',
                 'path': '/some-path/some_file.tsx'
+            }, {
+                'owner': 'some_owner',
+                'path': '/some-path/some_file2.tsx'
+            },
+            {
+                'owner': 'some_owner2',
+                'path': '/some-path/some_file3.tsx'
             }]
 
         self.instance = CodeOwnership(FastMCP("Test"), {
@@ -36,8 +43,12 @@ class TestCodeOwnership(unittest.TestCase):
 
         expected = [{
             "owner": "some_owner",
-            "path": "/some-path/some_file.tsx",
+            "paths": ["/some-path/some_file.tsx", "/some-path/some_file2.tsx"],
             "link": "https://codescene.io/projects/3/analyses/latest/social/individuals/system-map?author=author:some_owner"
+        }, {
+            "owner": "some_owner2",
+            "paths": ["/some-path/some_file3.tsx"],
+            "link": "https://codescene.io/projects/3/analyses/latest/social/individuals/system-map?author=author:some_owner2"
         }]
 
         result = self.instance.code_ownership_for_path(3, "/some-path/some_file.tsx")
@@ -58,7 +69,7 @@ class TestCodeOwnership(unittest.TestCase):
 
         expected = [{
             "owner": "some_owner",
-            "path": "/some-path/some_file.tsx",
+            "paths": ["/some-path/some_file.tsx"],
             "link": "https://onprem-codescene.io/3/analyses/latest/social/individuals/system-map?author=author:some_owner"
         }]
 
