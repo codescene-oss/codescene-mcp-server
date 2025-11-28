@@ -12,6 +12,10 @@ The Code Health insights augment the AI prompts with rich content around code qu
 > [!NOTE]
 > See [AGENTS.md](AGENTS.md) for guidance on how to use the CodeScene MCP server to safeguard AI and improve Code Health. [Copy the file](AGENTS.md) to your own repository to guide your AI agents.
 
+## Requirements
+
+The CodeScene MCP server is packaged as a docker image, which means that in order to run it with your chosen MCP client, you need to have [Docker installed](https://docs.docker.com/get-started/get-docker/).
+
 ## Quick set-up
 
 <details>
