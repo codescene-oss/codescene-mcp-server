@@ -9,6 +9,7 @@ from pre_commit_code_health_safeguard import PreCommitCodeHealthSafeguard
 from select_project import SelectProject
 from technical_debt_goals import TechnicalDebtGoals
 from technical_debt_hotspots import TechnicalDebtHotspots
+from code_ownership import CodeOwnership
 from utils import query_api_list, analyze_code, run_local_tool
 
 mcp = FastMCP("CodeScene")
@@ -162,6 +163,10 @@ if __name__ == "__main__":
     })
 
     TechnicalDebtHotspots(mcp, {
+        'query_api_list_fn': query_api_list
+    })
+
+    CodeOwnership(mcp, {
         'query_api_list_fn': query_api_list
     })
 
