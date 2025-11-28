@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -30,6 +34,35 @@ jobs:
         with:
           name: coverage-report
           path: coverage.xml
+      - name: Upload HTML coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: htmlcov-report
+          path: htmlcov/
+          retention-days: 30
+
+      - name: Extract coverage percentage
+        if: github.event_name == 'pull_request'
+        id: coverage
+        run: |
+          COVERAGE=$(python3 -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); root = tree.getroot(); rate = root.attrib.get('line-rate'); print(f'{float(rate) * 100:.1f}' if rate else '0.0')")
+          echo "percentage=$COVERAGE" >> $GITHUB_OUTPUT
+
+      - name: Comment with Coverage HTML report
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: coverage-html
+          message: |
+            ## 📊 Code Coverage Report
+            
+            **Overall Coverage: ${{ steps.coverage.outputs.percentage }}%**
+            
+            The full HTML coverage report is available as a downloadable artifact.
+            
+            📥 [Download htmlcov-report](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            
+            _Note: Coverage excludes `__init__.py` and test files as configured in `.coveragerc`_
 
   cs-coverage-check:
     runs-on: ubuntu-24.04
