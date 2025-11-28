@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -25,7 +29,6 @@ jobs:
           coverage run -m unittest discover src
           coverage xml -o coverage.xml
           coverage html -d htmlcov
-          ls -la .coverage  # Debug: verify file exists
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
@@ -37,12 +40,18 @@ jobs:
           name: htmlcov-report
           path: htmlcov/
           retention-days: 30
-      - name: Upload coverage data
-        uses: actions/upload-artifact@v4
+
+      - name: Comment with Coverage HTML report
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
         with:
-          name: coverage-data
-          path: .coverage
-          retention-days: 1
+          header: coverage-html
+          message: |
+            ## 📘 Code Coverage HTML Report
+
+            The full HTML coverage report has been uploaded as the artifact "htmlcov-report" for this workflow run.
+
+            - View and download it here: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts
 
   cs-coverage-check:
     runs-on: ubuntu-24.04
@@ -56,45 +65,12 @@ jobs:
       - name: download coverage
         uses: actions/download-artifact@v5
         with:
-          path: coverage/
-      - uses: ./.github/actions/check-coverage
-        if: always()
-        with:
-          access-token: ${{ secrets.CODESCENE_CODE_COVERAGE_API_TOKEN }}
-          project-url: "https://api.codescene.io/v2/projects/72556"
-          # Include coverage files from all the artifacts (jobs)
-          coverage-files: "**/coverage.xml"
-
-  coverage-report:
-    runs-on: ubuntu-latest
-    needs: test
-    if: always()
-    
-    steps:
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      
-      - name: Install coverage tools
-        run: pip install coverage[toml]
-      
-      - name: Download coverage data
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-data
-      
-      - name: Generate reports
-        run: |
-          coverage report --omit="*/__init__.py,*/test*.py"
-          coverage html --omit="*/__init__.py,*/test*.py"
-          coverage json --omit="*/__init__.py,*/test*.py"
-      
-      - name: Generate markdown summary
-        run: |
-          echo "## 📊 Code Coverage Summary" > coverage-report.md
-          echo "" >> coverage-report.md
-          coverage report --omit="*/__init__.py,*/test*.py" --format=markdown >> coverage-report.md
+          with open('coverage-report.md', 'w', encoding='utf-8') as f:
+              f.write('## 📊 Code Coverage Summary\n\n')
+              f.write(f'**Total Coverage:** {pct:.1f}%\n\n')
+              f.write('Download the full HTML report from the workflow artifacts (htmlcov-report).\n')
+          print(f'Total coverage: {pct:.1f}%')
+          PY
       
       - name: Comment on PR
         uses: marocchino/sticky-pull-request-comment@v2
@@ -106,5 +82,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-html-report
-          path: htmlcov/
+          path: coverage_artifacts/html/
           retention-days: 30
