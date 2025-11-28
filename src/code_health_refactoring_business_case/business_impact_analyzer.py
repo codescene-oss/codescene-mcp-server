@@ -1,6 +1,6 @@
 from typing import Callable, TypedDict
 
-from code_health_tools.business_case import make_business_case_for
+from .business_case import make_business_case_for
 from utils import code_health_from_cli_output
 
 

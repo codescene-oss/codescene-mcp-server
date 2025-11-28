@@ -1,4 +1,4 @@
-from code_health_tools.s_curve import metrics
+from .s_curve import metrics
 
 # This module estimates the outcome of improving Code Health in terms of 
 # faster development time and fewer defects.
