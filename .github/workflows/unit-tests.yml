@@ -65,22 +65,11 @@ jobs:
       - name: download coverage
         uses: actions/download-artifact@v5
         with:
-          with open('coverage-report.md', 'w', encoding='utf-8') as f:
-              f.write('## 📊 Code Coverage Summary\n\n')
-              f.write(f'**Total Coverage:** {pct:.1f}%\n\n')
-              f.write('Download the full HTML report from the workflow artifacts (htmlcov-report).\n')
-          print(f'Total coverage: {pct:.1f}%')
-          PY
-      
-      - name: Comment on PR
-        uses: marocchino/sticky-pull-request-comment@v2
+          path: coverage/
+      - uses: ./.github/actions/check-coverage
+        if: always()
         with:
-          header: coverage
-          path: coverage-report.md
-      
-      - name: Upload HTML report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-html-report
-          path: coverage_artifacts/html/
-          retention-days: 30
+          access-token: ${{ secrets.CODESCENE_CODE_COVERAGE_API_TOKEN }}
+          project-url: "https://api.codescene.io/v2/projects/72556"
+          # Include coverage files from all the artifacts (jobs)
+          coverage-files: "**/coverage.xml"
