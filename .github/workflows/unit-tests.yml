@@ -30,6 +30,12 @@ jobs:
         with:
           name: coverage-report
           path: coverage.xml
+      - name: Upload HTML coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: htmlcov-report
+          path: htmlcov/
+          retention-days: 30
 
   cs-coverage-check:
     runs-on: ubuntu-24.04
@@ -51,3 +57,47 @@ jobs:
           project-url: "https://api.codescene.io/v2/projects/72556"
           # Include coverage files from all the artifacts (jobs)
           coverage-files: "**/coverage.xml"
+
+  coverage-report:
+    runs-on: ubuntu-latest
+    needs: test
+    if: always()
+    
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install coverage tools
+        run: pip install coverage[toml]
+      
+      - name: Download coverage data
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-data
+      
+      - name: Generate reports
+        run: |
+          coverage report --omit="*/__init__.py,*/test*.py"
+          coverage html --omit="*/__init__.py,*/test*.py"
+          coverage json --omit="*/__init__.py,*/test*.py"
+      
+      - name: Generate markdown summary
+        run: |
+          echo "## 📊 Code Coverage Summary" > coverage-report.md
+          echo "" >> coverage-report.md
+          coverage report --omit="*/__init__.py,*/test*.py" --format=markdown >> coverage-report.md
+      
+      - name: Comment on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: coverage
+          path: coverage-report.md
+      
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html-report
+          path: htmlcov/
+          retention-days: 30
