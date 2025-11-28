@@ -14,6 +14,7 @@ class TestAdaptMountedFilePathInsideDocker(unittest.TestCase):
         os.environ.clear()
         os.environ.update(self._env)
 
+    # Just add a comment for testing.
     def assert_maps(self, mount, user_input, expected):
         os.environ["CS_MOUNT_PATH"] = mount
         self.assertEqual(adapt_mounted_file_path_inside_docker(user_input), expected)
