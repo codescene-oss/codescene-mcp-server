@@ -1,6 +1,6 @@
 import unittest
 
-from code_health_tools.business_case import make_business_case_for
+from .business_case import make_business_case_for
 
 class TestMakeBusinessCaseFor(unittest.TestCase):
 	

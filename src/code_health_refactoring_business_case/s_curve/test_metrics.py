@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 
-from code_health_tools.s_curve import metrics
+from . import metrics
 
 
 class TestScurveCalculation(unittest.TestCase):
