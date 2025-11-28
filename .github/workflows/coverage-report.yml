@@ -33,18 +33,15 @@ jobs:
       - name: Run tests with coverage
         run: |
           cd src
-          pytest --cov=. --cov-report=term --cov-report=html --cov-report=json --cov-report=xml -v
+          pytest --cov=. --cov-report=term --cov-report=html --cov-report=json --cov-report=xml --omit="*/__init__.py,*/test*.py" -v
       
       - name: Generate coverage summary
         run: |
           cd src
-          coverage report --format=markdown > coverage-summary.md
           echo "## Code Coverage Summary" > coverage-report.md
           echo "" >> coverage-report.md
           coverage report --format=markdown >> coverage-report.md
           echo "" >> coverage-report.md
-          echo "### Coverage by File" >> coverage-report.md
-          coverage report --show-missing >> coverage-report.md
       
       - name: Add coverage comment to PR
         if: github.event_name == 'pull_request'
@@ -70,14 +67,9 @@ jobs:
             src/.coverage
           retention-days: 30
       
-      - name: Generate coverage badge
-        run: |
-          COVERAGE=$(python -c "import json; print(json.load(open('src/coverage.json'))['totals']['percent_covered_display'])")
-          echo "Total coverage: ${COVERAGE}%"
-          echo "COVERAGE=${COVERAGE}" >> $GITHUB_ENV
-      
       - name: Create coverage summary for workflow
         run: |
+          COVERAGE=$(python -c "import json; print(json.load(open('src/coverage.json'))['totals']['percent_covered_display'])")
           echo "### 📊 Code Coverage Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Total Coverage:** ${COVERAGE}%" >> $GITHUB_STEP_SUMMARY
