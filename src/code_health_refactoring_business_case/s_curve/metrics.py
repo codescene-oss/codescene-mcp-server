@@ -1,7 +1,7 @@
 from typing import Any
 import numpy as np
 from pathlib import Path
-from .regression import load_coefficients
+import polars as pl
 from .polynomial import vectorized_polynomial
 
 def _relative_change(baseline: Any, target: Any) -> Any:
@@ -14,6 +14,9 @@ def _path_to(coefficients_file):
     # Get the directory where this file is located, then navigate to regression/
     current_dir = Path(__file__).parent
     return f"{current_dir}/regression/{coefficients_file}"
+
+def load_coefficients(path: str) -> list[Any]:
+    return pl.read_ndjson(path)['coeffs'].to_list()
 
 def collect(code_health_baseline: float, code_health_target: float) -> dict[str, list[float]]:
     """Returns all measures for a pair of code health values and an initial unplanned work.
