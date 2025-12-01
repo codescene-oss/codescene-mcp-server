@@ -48,6 +48,29 @@ class TestTechnicalDebtGoals(unittest.TestCase):
 
         self.assertEqual(expected, json.loads(result))
 
+    @mock.patch.dict(os.environ, {"CS_ONPREM_URL": "https://onprem-codescene.io"})
+    def test_list_technical_debt_goals_for_project_some_found_onprem(self):
+        def mocked_query_api_list(*kwargs):
+            return [{
+                'path': 'some_path'
+            }]
+
+        self.instance = TechnicalDebtGoals(FastMCP("Test"), {
+            'query_api_list_fn': mocked_query_api_list
+        })
+
+        expected = {
+            "files": [{
+                'path': 'some_path'
+            }],
+            "description": "Found 1 files with technical debt goals for project ID 3.",
+            "link": "https://onprem-codescene.io/3/analyses/latest/code/biomarkers"
+        }
+
+        result = self.instance.list_technical_debt_goals_for_project(3)
+
+        self.assertEqual(expected, json.loads(result))
+
     def test_list_technical_debt_goals_for_project_throws(self):
         def mocked_query_api_list(*kwargs):
             raise Exception("Some error")
