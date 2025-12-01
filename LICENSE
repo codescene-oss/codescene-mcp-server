@@ -1,19 +1,13 @@
-Copyright CodeScene AB
+Copyright CodeScene AB ("CodeScene")
 
-This extension ("MCP Server") includes both Open-Source and Closed-Source software components.
+This Model Context Protocol Server ("MCP Server") includes both open-source and closed-source software components. The Open-Source Components, are published in a public, open-source git repository. The Closed-Source Components are held in a private git repository.
 
-Usage of the MCP Server requires acceptance of the CodeScene Plugin Terms, and is governed by those terms. The Plugin Terms are available at https://codescene.com/policies
-
-Subject to your compliance with the Plugin Terms and payment of any applicable fees, CodeScene grants rights to this MCP Server as follows:
+By using the MCP Server you, the "Customer", are agreeing to the terms & conditions available at https://codescene.com/policies (the "Terms & Conditions"). Subject to your compliance with the Terms & Conditions, CodeScene grants rights to this MCP Server as follows:
 
 Open-Source Components
 
-The Open-Source Components relate to the MCP Server implementation and are published in a public, open-source git repository, located at https://github.com/codescene-oss/codescene-mcp-server/
-CodeScene grants an Apache License to these software components, based on the license to be found at https://www.apache.org/licenses/LICENSE-2.0.txt
+CodeScene grants an Apache License to use the Open-Source Components, based on the license to be found at https://www.apache.org/licenses/LICENSE-2.0.txt
 
 Closed-Source Components
 
-The Closed-Source Components relate to extension libraries, analysis libraries and other services, and are held in a private git repository.
-CodeScene grants a non-exclusive, non-transferable, non-sub-licensable, limited license to use the Closed-Source Components in object code format as described in the Plugin Terms.
-
-The Closed-Source Components shall under no circumstances be considered as sold and, other than any license granted pursuant to the Plugin Terms, CodeScene reserves all rights to the software components not expressly granted herein.
+CodeScene grants a non-exclusive, non-transferable, non-sub-licensable, limited license to use the Closed-Source Components in object code format as set out in the Terms & Conditions. Other than any license granted pursuant to the Terms & Conditions, CodeScene reserves all rights to the Closed Source Components not expressly granted herein, and they shall under no circumstances be considered as sold to the Customer.
