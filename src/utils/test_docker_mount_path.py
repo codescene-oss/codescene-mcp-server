@@ -1,7 +1,6 @@
 import os
 import unittest
 from unittest import mock
-
 from errors import CodeSceneCliError
 from .docker_path_adapter import adapt_mounted_file_path_inside_docker
 
@@ -25,6 +24,8 @@ class TestAdaptMountedFilePathInsideDocker(unittest.TestCase):
             ("/mnt/project", "/mnt/project", "/mount"),
             ("/mnt/project", "/mnt/project/", "/mount"),
             ("/", "/src/foo.py", "/mount/src/foo.py"),
+            ("C:\\code\\project", "C:\\code\\project\\src\\foo.py", "/mount/src/foo.py"),
+            ("c:\\code\\ööproject", "c:\\code\\ööproject\\src\\föö.py", "/mount/src/föö.py"),
         ]
         for mount, user_input, expected in cases:
             with self.subTest(mount=mount, user_input=user_input):
