@@ -2,7 +2,7 @@ import json
 import os
 from typing import TypedDict, Callable
 
-from utils import adapt_mounted_file_path_inside_docker
+from utils import adapt_mounted_file_path_inside_docker, normalize_onprem_url
 
 
 class TechnicalDebtGoalsDeps(TypedDict):
@@ -35,7 +35,8 @@ class TechnicalDebtGoals:
             files = self.deps["query_api_list_fn"](endpoint, params, 'files')
 
             if os.getenv("CS_ONPREM_URL"):
-                link = f"{os.getenv('CS_ONPREM_URL')}/{project_id}/analyses/latest/code/biomarkers"
+                onprem_url = normalize_onprem_url(os.getenv("CS_ONPREM_URL"))
+                link = f"{onprem_url}/{project_id}/analyses/latest/code/biomarkers"
             else:
                 link = f"https://codescene.io/projects/{project_id}/analyses/latest/code/biomarkers"
         
@@ -71,7 +72,8 @@ class TechnicalDebtGoals:
             goals = files[0].get('goals', []) if files else []
 
             if os.getenv("CS_ONPREM_URL"):
-                link = f"{os.getenv('CS_ONPREM_URL')}/{project_id}/analyses/latest/code/biomarkers?name={relative_file_path}"
+                onprem_url = normalize_onprem_url(os.getenv("CS_ONPREM_URL"))
+                link = f"{onprem_url}/{project_id}/analyses/latest/code/biomarkers?name={relative_file_path}"
             else:
                 link = f"https://codescene.io/projects/{project_id}/analyses/latest/code/biomarkers?name={relative_file_path}"
 

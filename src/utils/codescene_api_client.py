@@ -1,9 +1,14 @@
 import os
 import requests
 
+def normalize_onprem_url(url: str) -> str:
+    if url.endswith('/'):
+        url = url[:-1]
+
+    return url
 
 def get_api_url() -> str:
-    url = os.getenv("CS_ONPREM_URL")
+    url = normalize_onprem_url(os.getenv("CS_ONPREM_URL") or "")
     return f"{url}/api" if url else "https://api.codescene.io"
 
 
