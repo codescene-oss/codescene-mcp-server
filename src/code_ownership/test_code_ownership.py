@@ -77,6 +77,28 @@ class TestCodeOwnership(unittest.TestCase):
 
         self.assertEqual(expected, json.loads(result))
 
+    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path", "CS_ONPREM_URL": "https://onprem-codescene.io/"})
+    def test_code_ownership_some_found_onprem(self):
+        def mocked_query_api_list(*kwargs):
+            return [{
+                'owner': 'some_owner',
+                'path': '/some-path/some_file.tsx'
+            }]
+
+        self.instance = CodeOwnership(FastMCP("Test"), {
+            'query_api_list_fn': mocked_query_api_list
+        })
+
+        expected = [{
+            "owner": "some_owner",
+            "paths": ["/some-path/some_file.tsx"],
+            "link": "https://onprem-codescene.io/3/analyses/latest/social/individuals/system-map?author=author:some_owner"
+        }]
+
+        result = self.instance.code_ownership_for_path(3, "/some-path/some_file.tsx")
+
+        self.assertEqual(expected, json.loads(result))
+
     @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path"})
     def test_code_ownership_throws(self):
         def mocked_query_api_list(*kwargs):

@@ -2,7 +2,7 @@ import json
 import os
 from typing import Callable, TypedDict
 
-from utils import adapt_mounted_file_path_inside_docker
+from utils import adapt_mounted_file_path_inside_docker, normalize_onprem_url
 
 
 class TechnicalDebtHotspotsDeps(TypedDict):
@@ -36,7 +36,8 @@ class TechnicalDebtHotspots:
             hotspots = self.deps["query_api_list_fn"](endpoint, params, 'hotspots')
 
             if os.getenv("CS_ONPREM_URL"):
-                link = f"{os.getenv('CS_ONPREM_URL')}/{project_id}/analyses/latest/code/technical-debt/system-map#hotspots"
+                onprem_url = normalize_onprem_url(os.getenv("CS_ONPREM_URL"))
+                link = f"{onprem_url}/{project_id}/analyses/latest/code/technical-debt/system-map#hotspots"
             else:
                 link = f"https://codescene.io/projects/{project_id}/analyses/latest/code/technical-debt/system-map#hotspots"
                 
@@ -73,7 +74,8 @@ class TechnicalDebtHotspots:
             hotspot = hotspots[0] if hotspots else None
 
             if os.getenv("CS_ONPREM_URL"):
-                link = f"{os.getenv('CS_ONPREM_URL')}/{project_id}/analyses/latest/code/technical-debt/system-map#hotspots"
+                onprem_url = normalize_onprem_url(os.getenv("CS_ONPREM_URL"))
+                link = f"{onprem_url}/{project_id}/analyses/latest/code/technical-debt/system-map#hotspots"
             else:
                 link = f"https://codescene.io/projects/{project_id}/analyses/latest/code/technical-debt/system-map#hotspots"
                 

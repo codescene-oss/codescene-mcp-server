@@ -2,7 +2,7 @@ from itertools import groupby
 import json
 import os
 from typing import TypedDict, Callable
-from utils import adapt_mounted_file_path_inside_docker
+from utils import adapt_mounted_file_path_inside_docker, normalize_onprem_url
 
 
 class CodeOwnershipDeps(TypedDict):
@@ -37,12 +37,12 @@ class CodeOwnership:
                 return json.dumps([])
 
             result = []
-
             sorted_files = sorted(files, key=lambda x: x['owner'])
             
             for k, g in groupby(sorted_files, key=lambda x: x['owner']):
                 if os.getenv("CS_ONPREM_URL"):
-                    link = f"{os.getenv('CS_ONPREM_URL')}/{project_id}/analyses/latest/social/individuals/system-map?author=author:{k}"
+                    onprem_url = normalize_onprem_url(os.getenv("CS_ONPREM_URL"))
+                    link = f"{onprem_url}/{project_id}/analyses/latest/social/individuals/system-map?author=author:{k}"
                 else:
                     link = f"https://codescene.io/projects/{project_id}/analyses/latest/social/individuals/system-map?author=author:{k}"
 
