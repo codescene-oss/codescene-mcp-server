@@ -431,6 +431,16 @@ We pass the absolute path to the mounted directory to us via a environment varia
 
 </details>
 
+<details>
+
+**<summary>Why does IntelliJ give a wrong path to the MCP server?</summary>**
+
+In our testing we've seen that IntelliJ's AI Assistant sometimes gives a wrong path to the CodeScene MCP server. 
+From what we can tell, it seems to have nothing to do with the MCP server itself, but rather with IntelliJ's AI Assistant, which 
+seems to hallucinate parts of the path some of the time. We're still investigating this issue and will update this section once we have more information.
+
+</details>
+
 ## Building the docker instance locally
 
 You can build and run the dockerized CodeScene MCP server by first cloning the repo and then building the Docker image:
