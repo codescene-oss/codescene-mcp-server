@@ -32,7 +32,7 @@ class TechnicalDebtHotspots:
         """
         try:
             endpoint = f"v2/projects/{project_id}/analyses/latest/technical-debt"
-            params = {'page_size': 200, 'page': 1}
+            params = {'page_size': 200, 'page': 1, 'refactoring_targets': "true"}
             hotspots = self.deps["query_api_list_fn"](endpoint, params, 'result')
 
             if os.getenv("CS_ONPREM_URL"):
@@ -69,7 +69,7 @@ class TechnicalDebtHotspots:
             mounted_file_path = adapt_mounted_file_path_inside_docker(file_path)
             relative_file_path = mounted_file_path.lstrip("/mount/")
             endpoint = f"/v2/projects/{project_id}/analyses/latest/technical-debt"
-            params = {'filter': f"file_name~{relative_file_path}"}
+            params = {'filter': f"file_name~{relative_file_path}", 'refactoring_targets': "true"}
             hotspots = self.deps["query_api_list_fn"](endpoint, params, 'result')
             hotspot = hotspots[0] if hotspots else None
 
