@@ -107,6 +107,30 @@ class TestAdaptMountedFilePathInsideDocker(unittest.TestCase):
                 "user_input": "/mnt/project",
                 "expected_msg": "Path mismatch at segment 3: '<none>' (input) vs 'src' (mount)."
             },
+            # User path is root, mount path is a subpath (negative)
+            {
+                "mount": "/foo.py",
+                "user_input": "/",
+                "expected_msg": "Path mismatch at segment 1: '<none>' (input) vs 'foo.py' (mount)."
+            },
+            # Mount path is a prefix, but not a true parent (negative)
+            {
+                "mount": "/mnt/pro",
+                "user_input": "/mnt/project/foo.py",
+                "expected_msg": "Path mismatch at segment 2: 'project' (input) vs 'pro' (mount)."
+            },
+            # Negative unicode/typo case
+            {
+                "mount": "c:\\code\\ööproject",
+                "user_input": "c:\\code\\ööprojeckt\\src\\föö.py",
+                "expected_msg": "Path mismatch at segment 3: 'ööprojeckt' (input) vs 'ööproject' (mount)."
+            },
+            # Extra segments in the middle (negative)
+            {
+                "mount": "/mnt/project/foo.py",
+                "user_input": "/mnt/project/bar.py/baz.py",
+                "expected_msg": "Path mismatch at segment 3: 'bar.py' (input) vs 'foo.py' (mount)."
+            },
         ]
         for case in cases:
             with self.subTest(mount=case["mount"], user_input=case["user_input"]):
