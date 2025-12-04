@@ -31,9 +31,9 @@ class TechnicalDebtHotspots:
             Make sure to include this link in the output, and explain its purpose clearly.
         """
         try:
-            endpoint = f"v2/projects/{project_id}/analyses/latest/technical-debt-hotspots"
+            endpoint = f"v2/projects/{project_id}/analyses/latest/technical-debt"
             params = {'page_size': 200, 'page': 1}
-            hotspots = self.deps["query_api_list_fn"](endpoint, params, 'hotspots')
+            hotspots = self.deps["query_api_list_fn"](endpoint, params, 'result')
 
             if os.getenv("CS_ONPREM_URL"):
                 onprem_url = normalize_onprem_url(os.getenv("CS_ONPREM_URL"))
@@ -68,9 +68,9 @@ class TechnicalDebtHotspots:
         try:
             mounted_file_path = adapt_mounted_file_path_inside_docker(file_path)
             relative_file_path = mounted_file_path.lstrip("/mount/")
-            endpoint = f"/v2/projects/{project_id}/analyses/latest/technical-debt-hotspots"
+            endpoint = f"/v2/projects/{project_id}/analyses/latest/technical-debt"
             params = {'filter': f"file_name~{relative_file_path}"}
-            hotspots = self.deps["query_api_list_fn"](endpoint, params, 'hotspots')
+            hotspots = self.deps["query_api_list_fn"](endpoint, params, 'result')
             hotspot = hotspots[0] if hotspots else None
 
             if os.getenv("CS_ONPREM_URL"):
