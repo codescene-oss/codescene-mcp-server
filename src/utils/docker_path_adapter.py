@@ -20,19 +20,26 @@ def normalize_path(path: str) -> Path:
 
 def find_first_mismatch(a: tuple, b: tuple) -> int | None:
     """
-    Returns the index of the first mismatched segment, or None if all match.
+    Returns the index of the first mismatched segment, or None if all segments match.
+    Example: a = ('/', 'C', 'foo'), b = ('/', 'D', 'foo') -> returns 1
     """
-    for i, (seg_a, seg_b) in enumerate(zip(a, b)):
-        if seg_a != seg_b:
-            return i
+    for index, (left, right) in enumerate(zip(a, b)):
+        if left != right:
+            return index
+
+    has_extra_segments = len(a) != len(b)
+    if has_extra_segments:
+        # the first extra segment is the point of divergence:
+        first_extra_segment_index = min(len(a), len(b))
+        return first_extra_segment_index
     return None
 
 def path_mismatch_error(file_path: Path, mount_path: Path) -> CodeSceneCliError:
     file_parts, mount_parts = file_path.parts, mount_path.parts
     idx = find_first_mismatch(file_parts, mount_parts)
     if idx is not None:
-        user_segment = file_parts[idx]
-        mount_segment = mount_parts[idx]
+        user_segment = file_parts[idx] if idx < len(file_parts) else '<none>'
+        mount_segment = mount_parts[idx] if idx < len(mount_parts) else '<none>'
         suggestion = (
             f"Path mismatch at segment {idx}: "
             f"'{user_segment}' (input) vs '{mount_segment}' (mount). "

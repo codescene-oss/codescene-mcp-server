@@ -27,6 +27,8 @@ class TestAdaptMountedFilePathInsideDocker(unittest.TestCase):
             ("/",                   "/src/foo.py",                      "/mount/src/foo.py"),
             ("C:\\code\\project",   "C:\\code\\project\\src\\foo.py",   "/mount/src/foo.py"),
             ("c:\\code\\ööproject", "c:\\code\\ööproject\\src\\föö.py", "/mount/src/föö.py"),
+            # User path longer than mount path (positive case)
+            ("/mnt/project",        "/mnt/project/src/foo.py/bar.py",   "/mount/src/foo.py/bar.py"),
         ]
         for mount, user_input, expected in cases:
             with self.subTest(mount=mount, user_input=user_input):
@@ -77,8 +79,8 @@ class TestAdaptMountedFilePathInsideDocker(unittest.TestCase):
         cases = [
             # Case sensitivity mismatch
             {
-                "mount": "c:\\git\\myproject",
-                "user_input": "c:\\Git\\myproject",
+                "mount": "c:\git\myproject",
+                "user_input": "c:\Git\myproject",
                 "expected_msg": "Path mismatch at segment 2: 'Git' (input) vs 'git' (mount)."
             },
             # Path not under mount at all
@@ -98,6 +100,12 @@ class TestAdaptMountedFilePathInsideDocker(unittest.TestCase):
                 "mount": "C:\\code\\project",
                 "user_input": "D:\\code\\project\\src\\foo.py",
                 "expected_msg": "Path mismatch at segment 1: 'D' (input) vs 'C' (mount)."
+            },
+            # Mount path longer than user path (negative case)
+            {
+                "mount": "/mnt/project/src/foo.py/bar.py",
+                "user_input": "/mnt/project",
+                "expected_msg": "Path mismatch at segment 3: '<none>' (input) vs 'src' (mount)."
             },
         ]
         for case in cases:
