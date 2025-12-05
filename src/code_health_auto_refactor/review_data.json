@@ -1,0 +1,756 @@
+{
+  "score": 1.51,
+  "review": [
+    {
+      "category": "Number of Functions in a Single Module",
+      "description": "This module has a total of 135 functions, which put it at risk of evolving into a Brain Class. Brain Classes are problematic since changes become more complex over time, harder to test, and challenging to refactor. Act now to prevent future maintenance issues.",
+      "indication": 2
+    },
+    {
+      "category": "Bumpy Road Ahead",
+      "functions": [
+        {
+          "title": "Document::recompute",
+          "details": "bumps = 11",
+          "start-line": 2606,
+          "end-line": 2804,
+          "url": ""
+        },
+        {
+          "title": "Document::readObjects",
+          "details": "bumps = 8",
+          "start-line": 1395,
+          "end-line": 1586,
+          "url": ""
+        },
+        {
+          "title": "Document::getLinksTo",
+          "details": "bumps = 6",
+          "start-line": 2239,
+          "end-line": 2308,
+          "url": ""
+        },
+        {
+          "title": "Document::writeObjects",
+          "details": "bumps = 4",
+          "start-line": 1263,
+          "end-line": 1353,
+          "url": ""
+        },
+        {
+          "title": "Document::getDependencyList",
+          "details": "bumps = 4",
+          "start-line": 2411,
+          "end-line": 2496,
+          "url": ""
+        },
+        {
+          "title": "DocumentP::partialTopologicalSort",
+          "details": "bumps = 4",
+          "start-line": 2814,
+          "end-line": 2917,
+          "url": ""
+        },
+        {
+          "title": "Document::undo",
+          "details": "bumps = 3",
+          "start-line": 157,
+          "end-line": 210,
+          "url": ""
+        },
+        {
+          "title": "Document::_checkTransaction",
+          "details": "bumps = 3",
+          "start-line": 416,
+          "end-line": 459,
+          "url": ""
+        },
+        {
+          "title": "Document::onChanged",
+          "details": "bumps = 3",
+          "start-line": 741,
+          "end-line": 801,
+          "url": ""
+        },
+        {
+          "title": "Document::afterRestore",
+          "details": "bumps = 3",
+          "start-line": 2035,
+          "end-line": 2143,
+          "url": ""
+        },
+        {
+          "title": "buildDependencyList",
+          "details": "bumps = 3",
+          "start-line": 2348,
+          "end-line": 2409,
+          "url": ""
+        },
+        {
+          "title": "Document::getDependentDocuments",
+          "details": "bumps = 3",
+          "start-line": 2503,
+          "end-line": 2566,
+          "url": ""
+        },
+        {
+          "title": "Document::redo",
+          "details": "bumps = 2",
+          "start-line": 212,
+          "end-line": 272,
+          "url": ""
+        },
+        {
+          "title": "Document::_openTransaction",
+          "details": "bumps = 2",
+          "start-line": 353,
+          "end-line": 401,
+          "url": ""
+        },
+        {
+          "title": "Document::_commitTransaction",
+          "details": "bumps = 2",
+          "start-line": 489,
+          "end-line": 521,
+          "url": ""
+        },
+        {
+          "title": "Document::getAvailableUndos",
+          "details": "bumps = 2",
+          "start-line": 655,
+          "end-line": 680,
+          "url": ""
+        },
+        {
+          "title": "Document::Restore",
+          "details": "bumps = 2",
+          "start-line": 1025,
+          "end-line": 1116,
+          "url": ""
+        },
+        {
+          "title": "Document::importObjects",
+          "details": "bumps = 2",
+          "start-line": 1597,
+          "end-line": 1660,
+          "url": ""
+        },
+        {
+          "title": "DocumentP::topologicalSort",
+          "details": "bumps = 2",
+          "start-line": 2919,
+          "end-line": 2978,
+          "url": ""
+        },
+        {
+          "title": "Document::_removeObject",
+          "details": "bumps = 2",
+          "start-line": 3246,
+          "end-line": 3342,
+          "url": ""
+        },
+        {
+          "title": "Document::importLinks",
+          "details": "bumps = 2",
+          "start-line": 3423,
+          "end-line": 3493,
+          "url": ""
+        },
+        {
+          "title": "Document::getPathsByOutList",
+          "details": "bumps = 2",
+          "start-line": 3789,
+          "end-line": 3834,
+          "url": ""
+        }
+      ],
+      "description": "A Bumpy Road is a function that contains multiple chunks of nested conditional logic inside the same function. The deeper the nesting and the more bumps, the lower the code health.\n\nA bumpy code road represents a lack of encapsulation which becomes an obstacle to comprehension. In imperative languages there’s also an increased risk for feature entanglement, which leads to complex state management. CodeScene considers the following rules for the code health impact: 1) The deeper the nested conditional logic of each bump, the higher the tax on our working memory. 2) The more bumps inside a function, the more expensive it is to refactor as each bump represents a missing abstraction. 3) The larger each bump – that is, the more lines of code it spans – the harder it is to build up a mental model of the function. The nesting depth for what is considered a bump is 2 levels of conditionals.",
+      "indication": 3
+    },
+    {
+      "category": "Deep, Nested Complexity",
+      "functions": [
+        {
+          "title": "Document::_checkTransaction",
+          "details": "Nesting depth = 6 conditionals",
+          "start-line": 416,
+          "end-line": 459,
+          "url": ""
+        },
+        {
+          "title": "Document::afterRestore",
+          "details": "Nesting depth = 6 conditionals",
+          "start-line": 2035,
+          "end-line": 2143,
+          "url": ""
+        },
+        {
+          "title": "Document::getLinksTo",
+          "details": "Nesting depth = 5 conditionals",
+          "start-line": 2239,
+          "end-line": 2308,
+          "url": ""
+        },
+        {
+          "title": "Document::getDependencyList",
+          "details": "Nesting depth = 5 conditionals",
+          "start-line": 2411,
+          "end-line": 2496,
+          "url": ""
+        },
+        {
+          "title": "Document::recompute",
+          "details": "Nesting depth = 5 conditionals",
+          "start-line": 2606,
+          "end-line": 2804,
+          "url": ""
+        },
+        {
+          "title": "Document::undo",
+          "details": "Nesting depth = 4 conditionals",
+          "start-line": 157,
+          "end-line": 210,
+          "url": ""
+        },
+        {
+          "title": "Document::onChanged",
+          "details": "Nesting depth = 4 conditionals",
+          "start-line": 741,
+          "end-line": 801,
+          "url": ""
+        },
+        {
+          "title": "Document::exportObjects",
+          "details": "Nesting depth = 4 conditionals",
+          "start-line": 1209,
+          "end-line": 1254,
+          "url": ""
+        },
+        {
+          "title": "Document::readObjects",
+          "details": "Nesting depth = 4 conditionals",
+          "start-line": 1395,
+          "end-line": 1586,
+          "url": ""
+        },
+        {
+          "title": "Document::importObjects",
+          "details": "Nesting depth = 4 conditionals",
+          "start-line": 1597,
+          "end-line": 1660,
+          "url": ""
+        },
+        {
+          "title": "buildDependencyList",
+          "details": "Nesting depth = 4 conditionals",
+          "start-line": 2348,
+          "end-line": 2409,
+          "url": ""
+        },
+        {
+          "title": "Document::getDependentDocuments",
+          "details": "Nesting depth = 4 conditionals",
+          "start-line": 2503,
+          "end-line": 2566,
+          "url": ""
+        },
+        {
+          "title": "DocumentP::partialTopologicalSort",
+          "details": "Nesting depth = 4 conditionals",
+          "start-line": 2814,
+          "end-line": 2917,
+          "url": ""
+        },
+        {
+          "title": "Document::importLinks",
+          "details": "Nesting depth = 4 conditionals",
+          "start-line": 3423,
+          "end-line": 3493,
+          "url": ""
+        }
+      ],
+      "description": "Deep nested logic means that you have control structures like if-statements or loops inside other control structures. Deep nested logic increases the cognitive load on the programmer reading the code. The human working memory has a maximum capacity of 3-4 items; beyond that threshold, we struggle with keeping things in our head. Consequently, deep nested logic has a strong correlation to defects and accounts for roughly 20% of all programming mistakes.\n\nCodeScene measures the maximum nesting depth inside each function. The deeper the nesting, the lower the code health. The threshold for the C++ language is 4 levels of nesting.",
+      "indication": 3
+    },
+    {
+      "category": "Overall Code Complexity",
+      "description": "Overall Code Complexity is measured by the mean cyclomatic complexity across all functions in the file. The lower the number, the better.\n\nCyclomatic complexity is a function level metric that measures the number of logical branches (if-else, loops, etc.). Cyclomatic complexity is a rough complexity measure, but useful as a way of estimating the minimum number of unit tests you would need. As such, prefer functions with low cyclomatic complexity (2-3 branches).",
+      "indication": 2
+    },
+    {
+      "category": "Complex Method",
+      "functions": [
+        {
+          "title": "Document::recompute",
+          "details": "cc = 46",
+          "start-line": 2606,
+          "end-line": 2804,
+          "url": ""
+        },
+        {
+          "title": "Document::readObjects",
+          "details": "cc = 41",
+          "start-line": 1395,
+          "end-line": 1586,
+          "url": ""
+        },
+        {
+          "title": "Document::_removeObject",
+          "details": "cc = 30",
+          "start-line": 3246,
+          "end-line": 3342,
+          "url": ""
+        },
+        {
+          "title": "Document::afterRestore",
+          "details": "cc = 29",
+          "start-line": 2035,
+          "end-line": 2143,
+          "url": ""
+        },
+        {
+          "title": "Document::getLinksTo",
+          "details": "cc = 28",
+          "start-line": 2239,
+          "end-line": 2308,
+          "url": ""
+        },
+        {
+          "title": "buildDependencyList",
+          "details": "cc = 23",
+          "start-line": 2348,
+          "end-line": 2409,
+          "url": ""
+        },
+        {
+          "title": "Document::getDependencyList",
+          "details": "cc = 18",
+          "start-line": 2411,
+          "end-line": 2496,
+          "url": ""
+        },
+        {
+          "title": "Document::_checkTransaction",
+          "details": "cc = 18",
+          "start-line": 416,
+          "end-line": 459,
+          "url": ""
+        },
+        {
+          "title": "Document::_addObject",
+          "details": "cc = 17",
+          "start-line": 3152,
+          "end-line": 3221,
+          "url": ""
+        },
+        {
+          "title": "Document::writeObjects",
+          "details": "cc = 17",
+          "start-line": 1263,
+          "end-line": 1353,
+          "url": ""
+        },
+        {
+          "title": "Document::moveObject",
+          "details": "cc = 15",
+          "start-line": 3495,
+          "end-line": 3550,
+          "url": ""
+        },
+        {
+          "title": "DocumentP::partialTopologicalSort",
+          "details": "cc = 15",
+          "start-line": 2814,
+          "end-line": 2917,
+          "url": ""
+        },
+        {
+          "title": "Document::getDependentDocuments",
+          "details": "cc = 15",
+          "start-line": 2503,
+          "end-line": 2566,
+          "url": ""
+        },
+        {
+          "title": "Document::importLinks",
+          "details": "cc = 14",
+          "start-line": 3423,
+          "end-line": 3493,
+          "url": ""
+        },
+        {
+          "title": "Document::_openTransaction",
+          "details": "cc = 14",
+          "start-line": 353,
+          "end-line": 401,
+          "url": ""
+        },
+        {
+          "title": "Document::copyObject",
+          "details": "cc = 13",
+          "start-line": 3350,
+          "end-line": 3421,
+          "url": ""
+        },
+        {
+          "title": "Document::restore",
+          "details": "cc = 13",
+          "start-line": 1930,
+          "end-line": 2020,
+          "url": ""
+        },
+        {
+          "title": "Document::onChanged",
+          "details": "cc = 13",
+          "start-line": 741,
+          "end-line": 801,
+          "url": ""
+        },
+        {
+          "title": "Document::changePropertyOfObject",
+          "details": "cc = 13",
+          "start-line": 274,
+          "end-line": 293,
+          "url": ""
+        },
+        {
+          "title": "Document::redo",
+          "details": "cc = 13",
+          "start-line": 212,
+          "end-line": 272,
+          "url": ""
+        },
+        {
+          "title": "Document::importObjects",
+          "details": "cc = 12",
+          "start-line": 1597,
+          "end-line": 1660,
+          "url": ""
+        },
+        {
+          "title": "Document::saveToFile",
+          "details": "cc = 11",
+          "start-line": 1761,
+          "end-line": 1894,
+          "url": ""
+        },
+        {
+          "title": "Document::undo",
+          "details": "cc = 11",
+          "start-line": 157,
+          "end-line": 210,
+          "url": ""
+        },
+        {
+          "title": "Document::findObjects",
+          "details": "cc = 10",
+          "start-line": 3672,
+          "end-line": 3707,
+          "url": ""
+        },
+        {
+          "title": "Document::Restore",
+          "details": "cc = 10",
+          "start-line": 1025,
+          "end-line": 1116,
+          "url": ""
+        },
+        {
+          "title": "Document::_recomputeFeature",
+          "details": "cc = 9",
+          "start-line": 2991,
+          "end-line": 3046,
+          "url": ""
+        },
+        {
+          "title": "loadDeps",
+          "details": "cc = 9",
+          "start-line": 1361,
+          "end-line": 1393,
+          "url": ""
+        }
+      ],
+      "description": "A Complex Method has a high cyclomatic complexity. The recommended threshold for the C++ language is a cyclomatic complexity lower than 9.\n\nSeverity: Brain Method - Complex Method - Long Method.",
+      "indication": 2
+    },
+    {
+      "category": "Complex Conditional",
+      "functions": [
+        {
+          "title": "Document::_removeObject:3317",
+          "details": "4 complex conditional expressions",
+          "start-line": 3317,
+          "end-line": 3318,
+          "url": ""
+        },
+        {
+          "title": "Document::_removeObject:3262",
+          "details": "3 complex conditional expressions",
+          "start-line": 3262,
+          "end-line": 3263,
+          "url": ""
+        },
+        {
+          "title": "Document::moveObject:3507",
+          "details": "3 complex conditional expressions",
+          "start-line": 3507,
+          "end-line": 3507,
+          "url": ""
+        },
+        {
+          "title": "Document::changePropertyOfObject:278",
+          "details": "2 complex conditional expressions",
+          "start-line": 278,
+          "end-line": 278,
+          "url": ""
+        },
+        {
+          "title": "Document::changePropertyOfObject:281",
+          "details": "2 complex conditional expressions",
+          "start-line": 281,
+          "end-line": 281,
+          "url": ""
+        },
+        {
+          "title": "Document::_openTransaction:392",
+          "details": "2 complex conditional expressions",
+          "start-line": 392,
+          "end-line": 392,
+          "url": ""
+        },
+        {
+          "title": "Document::renameTransaction:405",
+          "details": "2 complex conditional expressions",
+          "start-line": 405,
+          "end-line": 405,
+          "url": ""
+        },
+        {
+          "title": "Document::isExporting:1194",
+          "details": "2 complex conditional expressions",
+          "start-line": 1194,
+          "end-line": 1195,
+          "url": ""
+        },
+        {
+          "title": "Document::_removeObject:3279",
+          "details": "2 complex conditional expressions",
+          "start-line": 3279,
+          "end-line": 3279,
+          "url": ""
+        },
+        {
+          "title": "Document::copyObject:3361",
+          "details": "2 complex conditional expressions",
+          "start-line": 3361,
+          "end-line": 3361,
+          "url": ""
+        },
+        {
+          "title": "Document::importLinks:3474",
+          "details": "2 complex conditional expressions",
+          "start-line": 3474,
+          "end-line": 3474,
+          "url": ""
+        }
+      ],
+      "description": "A complex conditional is an expression inside a branch such as an <code>if</code>-statmeent which consists of multiple, logical operations. Example: <code>if (x.started() && y.running())</code>.Complex conditionals make the code even harder to read, and contribute to the Complex Method code smell. Encapsulate them.",
+      "indication": 2
+    },
+    {
+      "category": "Code Duplication",
+      "functions": [
+        {
+          "title": "Document::undo",
+          "details": null,
+          "start-line": 157,
+          "end-line": 210,
+          "url": ""
+        },
+        {
+          "title": "Document::redo",
+          "details": null,
+          "start-line": 212,
+          "end-line": 272,
+          "url": ""
+        },
+        {
+          "title": "Document::commitTransaction",
+          "details": null,
+          "start-line": 475,
+          "end-line": 487,
+          "url": ""
+        },
+        {
+          "title": "Document::abortTransaction",
+          "details": null,
+          "start-line": 523,
+          "end-line": 534,
+          "url": ""
+        },
+        {
+          "title": "Document::getTouched",
+          "details": null,
+          "start-line": 2211,
+          "end-line": 2222,
+          "url": ""
+        },
+        {
+          "title": "Document::getRootObjects",
+          "details": null,
+          "start-line": 3727,
+          "end-line": 3738,
+          "url": ""
+        }
+      ],
+      "function-groups": [
+        [
+          {
+            "title": "Document::getRootObjects",
+            "details": null,
+            "start-line": 3727,
+            "end-line": 3738,
+            "url": ""
+          },
+          {
+            "title": "Document::getTouched",
+            "details": null,
+            "start-line": 2211,
+            "end-line": 2222,
+            "url": ""
+          }
+        ],
+        [
+          {
+            "title": "Document::commitTransaction",
+            "details": null,
+            "start-line": 475,
+            "end-line": 487,
+            "url": ""
+          },
+          {
+            "title": "Document::abortTransaction",
+            "details": null,
+            "start-line": 523,
+            "end-line": 534,
+            "url": ""
+          }
+        ],
+        [
+          {
+            "title": "Document::redo",
+            "details": null,
+            "start-line": 212,
+            "end-line": 272,
+            "url": ""
+          },
+          {
+            "title": "Document::undo",
+            "details": null,
+            "start-line": 157,
+            "end-line": 210,
+            "url": ""
+          }
+        ]
+      ],
+      "description": "Duplicated code often leads to code that's harder to change since the same logical change has to be done in multiple functions. More duplication gives lower code health.",
+      "indication": 2
+    },
+    {
+      "category": "Large Method",
+      "functions": [
+        {
+          "title": "Document::readObjects",
+          "details": "LoC = 158 lines",
+          "start-line": 1395,
+          "end-line": 1586,
+          "url": ""
+        },
+        {
+          "title": "Document::recompute",
+          "details": "LoC = 148 lines",
+          "start-line": 2606,
+          "end-line": 2804,
+          "url": ""
+        },
+        {
+          "title": "Document::saveToFile",
+          "details": "LoC = 104 lines",
+          "start-line": 1761,
+          "end-line": 1894,
+          "url": ""
+        },
+        {
+          "title": "Document::afterRestore",
+          "details": "LoC = 94 lines",
+          "start-line": 2035,
+          "end-line": 2143,
+          "url": ""
+        },
+        {
+          "title": "Document::Document",
+          "details": "LoC = 90 lines",
+          "start-line": 829,
+          "end-line": 933,
+          "url": ""
+        },
+        {
+          "title": "Document::writeObjects",
+          "details": "LoC = 77 lines",
+          "start-line": 1263,
+          "end-line": 1353,
+          "url": ""
+        },
+        {
+          "title": "DocumentP::partialTopologicalSort",
+          "details": "LoC = 77 lines",
+          "start-line": 2814,
+          "end-line": 2917,
+          "url": ""
+        },
+        {
+          "title": "Document::getDependencyList",
+          "details": "LoC = 73 lines",
+          "start-line": 2411,
+          "end-line": 2496,
+          "url": ""
+        },
+        {
+          "title": "Document::restore",
+          "details": "LoC = 72 lines",
+          "start-line": 1930,
+          "end-line": 2020,
+          "url": ""
+        }
+      ],
+      "description": "Overly long functions make the code harder to read. The recommended maximum function length for the C++ language is 70 lines of code. Severity: Brain Method - Complex Method - Long Method.",
+      "indication": 2
+    },
+    {
+      "category": "Excess Number of Function Arguments",
+      "functions": [
+        {
+          "title": "buildDependencyList",
+          "details": "Arguments = 6",
+          "start-line": 2348,
+          "end-line": 2409,
+          "url": ""
+        },
+        {
+          "title": "Document::addObject",
+          "details": "Arguments = 5",
+          "start-line": 3068,
+          "end-line": 3100,
+          "url": ""
+        }
+      ],
+      "description": "Functions with many arguments indicate either a) low cohesion where the function has too many responsibilities, or b) a missing abstraction that encapsulates those arguments.\n\nThe threshold for the C++ language is 4 function arguments.",
+      "indication": 2
+    },
+    {
+      "category": "Primitive Obsession",
+      "description": "Code that uses a high degree of built-in, primitives such as integers, strings, floats, lacks a domain language that encapsulates the validation and semantics of function arguments. Primitive Obsession has several consequences: 1) In a statically typed language, the compiler will detect less erroneous assignments. 2) Security impact since the possible value range of a variable/argument isn't retricted.\n\nIn this module, 48 % of all functions have primitive types as arguments.",
+      "indication": 2
+    }
+  ]
+}
