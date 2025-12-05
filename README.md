@@ -9,12 +9,15 @@ The **CodeScene MCP Server** exposes CodeScene’s [Code Health](https://codesce
 This server is designed to run in your local environment and lets AI assistants (like GitHub Copilot, Cursor, Claude code, etc.) request meaningful Code Health insights directly from your codebase. 
 The Code Health insights augment the AI prompts with rich content around code quality issues, maintainability problems, and technical debt in general.
 
-> [!NOTE]
-> See [AGENTS.md](AGENTS.md) for guidance on how to use the CodeScene MCP server to safeguard AI and improve Code Health. [Copy the file](AGENTS.md) to your own repository to guide your AI agents.
+## Getting Started with CodeScene MCP
 
-## Requirements
-
-The CodeScene MCP server is packaged as a docker image, which means that in order to run it with your chosen MCP client, you need to have [Docker installed](https://docs.docker.com/get-started/get-docker/).
+1. Install [Docker](https://docs.docker.com/get-started/get-docker/). The CodeScene MCP server is packaged as a self-contained docker image.
+2. Copy the file [AGENTS.md](AGENTS.md) to your repository. This file guides AI agents on how to use the MCP, e.g. rules to safeguard AI coding.
+   * ℹ️ If you use Amazon Q, then you want to copy our [.amazonq/rules](.amazonq/rules) to your repository instead.
+4. Get a `CS_ACCESS_TOKEN` for the MCP Server via your CodeScene instance. (The token grants access to the code health analysis capability).
+   * For CodeScene Cloud you create the token [here](https://codescene.io/users/me/pat).
+   * In CodeScene on-prem, you get the token via `https://<your-cs-host><:port>/configuration/user/token`.
+5. Follow the steps in [Quick set-up](#quick-set-up) for your AI environment.
 
 ## Quick set-up
 
@@ -338,12 +341,6 @@ Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the director
 </details>
 
 ---
-
-### Get a `CS_ACCESS_TOKEN` for the MCP Server
-
-The MCP server configuration requires a `CS_ACCESS_TOKEN` which you get via your CodeScene instance. (The token grants access to the code health analysis capability).
-* For CodeScene Cloud you create the token [here](https://codescene.io/users/me/pat).
-* In CodeScene on-prem, you get the token via `https://<your-cs-host><:port>/configuration/user/token`.
 
 ## Use Cases
 
