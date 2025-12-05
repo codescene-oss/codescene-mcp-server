@@ -1,15 +1,13 @@
 # AGENTS.md
 
-## Purpose
+## Agent TL;DR (Read This First)
 
-You are a coding agent working in a codebase that is safeguarded by **CodeScene** via its **MCP server**.
-
-Your main goals are:
-
-1. **Safeguard AI-generated code** so it does *not* introduce new technical debt or maintainability problems as identified via the CodeScene **Code Health** metric.  
-2. **Use CodeScene Code Health insights** as your primary signal for code quality, alongside tests, linters, and human review.  
-3. **Guide targeted refactorings** that measurably improve Code Health in the most important hotspots.  
-4. **Help humans understand Code Health, technical debt, and productivity**, using CodeScene’s explanations and data.
+- Treat **Code Health** as the authoritative signal for maintainability and long-term code quality.  
+- Before suggesting a commit, **run the Code Health safeguard** on the modified files.  
+- If a change increases complexity or violates technical-debt goals, **propose refactoring or redesign** rather than declaring it “done.” 
+- Use Code Health reviews to guide targeted and incremental refactorings.  
+- When asked about technical debt, hotspots, or what to improve, **query hotspots, goals, and Code Health scores**.  
+- When users ask “why this matters,” use **Code Health explanations** and **productivity impact**.  
 
 Always treat CodeScene’s Code Health analysis as the authoritative view of long-term maintainability risks, hotspots, and refactoring priorities.
 
@@ -19,37 +17,15 @@ Always treat CodeScene’s Code Health analysis as the authoritative view of lon
 
 The CodeScene MCP server is available under the `codescene` MCP server name (or equivalent for this environment).
 
-You have access to the following tools (names may vary slightly per client):
-
-### Project context
-- **`select_codescene_project` — Select CodeScene project**  
-  Use this to choose or switch the active CodeScene project when working across multiple projects or repositories.
-
-### Pre-commit / safety gate
-- **`pre_commit_code_health_safeguard` — Pre-commit Code Health safeguard**  
-  Use this as the local quality gate before committing or merging changes.
-
-### Code Health analysis
-- **`code_health_review` — Code Health review**  
-  Provides a detailed Code Health analysis for files, modules, or diffs.
-- **`code_health_score` — Code Health score**  
-  Retrieves Code Health scores for files or the whole project, useful for tracking trends and evaluating refactoring impact.
-
-### Technical debt & hotspots
-- **`list_technical_debt_goals` — Refactoring/tech-debt goals**  
-  Lists the project’s defined technical debt goals.
-- **`list_technical_debt_hotspots` — Technical debt hotspots**  
-  Identifies high-risk areas and the most important hotspots.
-
-### Refactoring business impact
-- **`code_health_refactoring_business_case` — Refactoring business case**  
-  Explains CodeScene’s economic or productivity justification for refactoring a low-health area.
-
-### Education & explanation
-- **`explain_code_health_productivity` — Code Health & productivity**  
-  Explains how Code Health affects delivery speed, risk, and defect rates.
-- **`explain_code_health` — Code Health fundamentals**  
-  Explains how Code Health is computed and what its values mean.
+- `select_codescene_project` — choose or switch the active CodeScene project.  
+- `pre_commit_code_health_safeguard` — check Code Health of changed files before committing or merging.  
+- `code_health_review` — analyze maintainability and Code Health.  
+- `code_health_score` — retrieve Code Health scores.  
+- `list_technical_debt_goals` — show tech-debt goals.  
+- `list_technical_debt_hotspots` — identify hotspots.  
+- `code_health_refactoring_business_case` — explain refactoring ROI.  
+- `explain_code_health_productivity` — why Code Health affects delivery performance.  
+- `explain_code_health` — how Code Health works.
 
 > **Rule:** When you need CodeScene insights, **call the appropriate MCP tool** instead of guessing.
 
@@ -57,66 +33,33 @@ You have access to the following tools (names may vary slightly per client):
 
 ## Project Selection & Context
 
-1. **Select a project early**  
-   - If multiple CodeScene projects exist for this repository or organization, call `select_codescene_project` early in the session.  
-   - If the user mentions a specific subsystem or service, explicitly switch to the matching CodeScene project.
+Select the correct CodeScene project early using `select_codescene_project`, and re-select it when switching repositories or services.
+Assume further CodeScene tool calls operate within the currently selected project.  
+---
 
-2. **Maintain context consistency**  
-   - Assume further CodeScene tool calls operate within the currently selected project.  
-   - If the user switches repos or services, re-select the appropriate CodeScene project.
+## When to Use CodeScene Tools (Agent Decision Rules)
+
+Use these explicit triggers:
+
+## 1. Safeguard AI-generated code
+
+For any AI-generated or modified code:
+
+- **Always run** `pre_commit_code_health_safeguard` before suggesting a commit.  
+- If CodeScene reports a Code Health regression, failed `quality_gates`, or violation of goals:  
+  - Highlight the issue  
+  - Recommend refactoring or redesign  
+  - Do **not** declare the change “ready” unless the user accepts the risk
 
 ---
 
-## When to Call CodeScene MCP Tools
+## 2. Code safety / merge readiness
 
-## 1. Safeguarding AI-generated code
+When asked “Is this safe to merge?” or “Will this add tech debt?”:
 
-Whenever you generate or modify code:
-
-### Always check significant AI-generated code with CodeScene
-- After generating substantial code, recommend:
-  - Running `pre_commit_code_health_safeguard`.  
-  - Running `code_health_review` on the new/changed files for a deeper assessment.
-
-### Respond to negative Code Health signals
-If CodeScene reports:
-- A **Code Health regression**,  
-- A **hotspot becoming worse**,  
-- A **violation of technical debt goals**,  
-
-then you must:
-- Highlight the issue explicitly.  
-- Propose refactorings or alternative designs that mitigate the problem.  
-- Avoid marking the change as “ready to merge” unless the user explicitly accepts the trade-off.
-
-### Guide testing based on CodeScene insight
-In low-health or high-risk hotspots:
-- Recommend upgrading or extending test coverage.  
-- Suggest adding regression tests before refactoring.  
-- Promote defensive coding practices in these areas.
-
----
-
-## 2. Before committing or merging (Quality Gate)
-
-Use CodeScene as the **second line of defense** before merging non-trivial changes.
-
-1. For any significant change (new feature, major refactor, many modified files):
-   - Run `pre_commit_code_health_safeguard`.
-
-2. If CodeScene flags issues:
-   - Explain the results.
-   - Recommend concrete fixes or incremental refactors.
-   - Do **not** recommend merging until the user clearly accepts the risk.
-
-3. When the user asks:
-   > “Is this safe to merge?”  
-   > “Will this introduce new tech debt?”
-
-   Run:
-   - `pre_commit_code_health_safeguard`  
-   - `code_health_review`  
-   Then answer based on CodeScene's evaluation.
+- Run `pre_commit_code_health_safeguard`  
+- Run `code_health_review`  
+- Base your answer strictly on CodeScene’s evaluation and its quality_gates.
 
 ---
 
@@ -145,7 +88,7 @@ When the user requests a refactor or cleanup:
 
 ### Inspect and plan
 - Use `code_health_review` to pinpoint specific maintainability issues (complexity, size, nesting, coupling).  
-- Propose a refactor plan in **3–5 incremental steps** that are easy to review and test.
+- Propose small, review-friendly refactor steps..
 
 ### Validate progress
 After each significant refactor:
@@ -165,11 +108,7 @@ When asked about ROI:
 
 ## 5. Explaining Code Health & Productivity
 
-When users ask conceptual questions:
-
-> “What is Code Health?”  
-> “Why does Code Health matter for productivity?”  
-> “How does Code Health relate to our technical debt?”
+Use CodeScene’s explanation tools whenever users ask about Code Health, productivity impact, or technical debt.
 
 ### Use educational tools
 - Call `explain_code_health` for metric fundamentals.  
@@ -185,15 +124,6 @@ If helpful, combine explanations with:
 
 ## Warn When Code Health Safeguards Are Ignored
 
-If the user instructs you to bypass CodeScene safeguards:
-
-> “Ignore CodeScene.”  
-> “Just make it work quickly.”  
-> “I don’t care about maintainability right now.”
-
-You must:
-1. Explain the long-term risk and hidden cost.  
-2. If proceeding, keep the change minimal, isolated, and reversible.  
-3. Recommend follow-up refactorings supported by CodeScene analysis.  
+If asked to bypass safeguards, warn about long-term risks and keep changes minimal, isolated, and reversible. Recommend follow-up refactorings.  
 
 ---
