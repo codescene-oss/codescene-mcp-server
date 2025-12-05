@@ -43,6 +43,16 @@ project_none_found = {
     "onprem": False,
     "method": "project"
 }
+
+# New scenario: project-level error handling
+project_error = {
+    "name": "project_error",
+    "mock_return": Exception("Simulated API error"),
+    "expected": "Error: Simulated API error",
+    "onprem": False,
+    "method": "project",
+    "is_error": True
+}
 project_single_hotspot_found = {
     "name": "project_some_found",
     "mock_return": [{"path": "some_path"}],
@@ -100,6 +110,17 @@ file_single_hotspot_found_onprem = {
     "onprem": True,
     "method": "file"
 }
+
+# New scenario: file-level error handling
+file_error = {
+    "name": "file_error",
+    "mock_return": Exception("Simulated file API error"),
+    "expected": "Error: Simulated file API error",
+    "onprem": False,
+    "method": "file",
+    "is_error": True
+}
+
 class TestTechnicalDebtHotspots(unittest.TestCase):
     def setUp(self):
         self.project_id = PROJECT_ID
@@ -122,6 +143,8 @@ class TestTechnicalDebtHotspots(unittest.TestCase):
 
     def _make_mocked_instance(self, scenario):
         def mocked_query_api_list(*args, **kwargs):
+            if scenario.get("is_error"):
+                raise scenario["mock_return"]
             return scenario["mock_return"]
         return TechnicalDebtHotspots(FastMCP("Test"), {'query_api_list_fn': mocked_query_api_list})
 
@@ -130,15 +153,21 @@ class TestTechnicalDebtHotspots(unittest.TestCase):
             instance = self._make_mocked_instance(scenario)
             if scenario["method"] == "project":
                 return instance.list_technical_debt_hotspots_for_project(self.project_id)
-          
             return instance.list_technical_debt_hotspots_for_project_file(self.file_path, self.project_id)
 
     def _assert_scenario(self, scenario):
         result = self._execute_scenario(scenario)
-        self.assert_json_result(result, scenario["expected"])
+        if scenario.get("is_error"):
+            self.assertEqual(scenario["expected"], result)
+        else:
+            self.assert_json_result(result, scenario["expected"])
 
     def test_td_hotspots_api_scenarios(self):
-        """A table-driven test that executes all technical debt hotspot scenarios."""
+        """
+        Table-driven test for technical debt hotspot API scenarios.
+        Includes a scenario that simulates an API error for project-level queries
+        to ensure error handling code is covered and intent is clear.
+        """
         all_scenarios = [
             project_none_found,
             project_single_hotspot_found,
@@ -146,6 +175,8 @@ class TestTechnicalDebtHotspots(unittest.TestCase):
             file_none_found,
             file_single_hotspot_found,
             file_single_hotspot_found_onprem,
+            project_error,  # Ensures error handling for project-level API is tested
+            file_error,     # Ensures error handling for file-level API is tested
         ]
         for scenario in all_scenarios:
             with self.subTest(scenario=scenario["name"]):
