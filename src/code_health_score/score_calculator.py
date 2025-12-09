@@ -22,7 +22,14 @@ class CodeHealthScore:
     def code_health_score(self, file_path: str) -> str:
         """
         Calculates the code quality of the given file using the Code Health metric.
-        Returns a score from 10.0 (best) down to 1.0 (worst).
+        Returns a score from 10.0 (optimal) down to 1.0 (worst).
+
+        The Code Health scores are interpreted as:
+          * Optimal Code: a Code Health 10.0 is optimized for both human and AI comprehension
+          * Green Code: high quality with a score of 9-9.9
+          * Yellow Code: problematic techncial debt with a score of 4-8.9
+          * Red Code: severe techncial debt, maintainability issues, and expensive onboarding with a score of 1.0-3.9
+
         Args:
             file_path: The absolute path to the source code file to be analyzed.
         Returns:

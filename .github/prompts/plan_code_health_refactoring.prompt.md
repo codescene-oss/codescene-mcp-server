@@ -13,7 +13,8 @@ Follow these steps:
 2. Focus the plan exclusively on the **functions/methods with the most severe and highest-impact code smells**.
 3. For each selected function/method, propose a **specific, concise remediation action**, explaining *what to change* and *why it improves readability and maintainability*.
 4. Motivate each action with the **expected impact on Code Health** and its **business value** (e.g., reduced defects, faster development, lower cognitive load).
-5. Include a **one-sentence justification of the effort–risk tradeoff** for every proposed action.
+5. If the code is already healthy, then aim for an optimal Code Health of 10.0. Such code is optimized for both human and AI comprehension.
+6. Include a **one-sentence justification of the effort–risk tradeoff** for every proposed action.
 
 **Deliverable format:**
 - **Short summary** (1–2 sentences) describing the overall refactoring plan and its expected outcome.
