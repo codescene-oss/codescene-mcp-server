@@ -40,7 +40,7 @@ class AutoRefactor:
         return self._parse_json_output(output)
 
     def _get_function(self, functions: list[dict], function_name: str) -> dict:
-        return next((f for f in functions if f["name"] == function_name), False) or AutoRefactorError(f"Couldn't find function: {function_name}")
+        return next((f for f in functions if f["name"] == function_name), False)
 
     def _get_code_smells(self, review: dict, function: dict) -> dict:
       return [
@@ -83,6 +83,11 @@ class AutoRefactor:
             functions = self._parse_fns(file_path)
             review = self._review(file_path)
             function = self._get_function(functions, function_name)
+            if not function:
+                return f"Error: Couldn't find function: {function_name}"
+            code_smells = self._get_code_smells(review, function)
+            if not code_smells:
+                return f"Error: No code smells were found in {function_name}"
             _, ext = os.path.splitext(file_path)
             payload = {
               'api-version': 'v2',
@@ -91,7 +96,7 @@ class AutoRefactor:
                 'body': function['body'],
                 'function-type': function.get('function-type', None)
               },
-              'review': self._get_code_smells(review, function)
+              'review': code_smells
             }
             response = self.deps['post_refactor_fn'](payload)
 
@@ -102,5 +107,4 @@ class AutoRefactor:
               'reasons': [x['summary'] for x in response.get('reasons', [])]
             })
         except Exception as e:
-            raise e
-            #return f"Error: {e}"
+            return f"Error: {e}"
