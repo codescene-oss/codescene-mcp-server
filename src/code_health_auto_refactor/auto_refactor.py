@@ -57,9 +57,21 @@ class AutoRefactor:
     def code_health_auto_refactor(self, file_path: str, function_name: str) -> str:
         """
         Refactor a single function to fix the code health problem of highest priority.
+        This tool is supported for these languages:
+            - JavaScript/TypeScript
+            - Java
+            - C#
+            - C++
+        and for these code smells:
+            - Complex Conditional
+            - Bumpy Road Ahead
+            - Complex Method
+            - Deep, Nested Complexity
+            - Large Method
+
         Args:
             file_path: The absolute path to the source code file containing the function to refactor.
-            function_name: The name of the function to refactor
+            function_name: The name of the function to refactor. If there is a class scope prefix, it needs to be included.
         Returns:
             A JSON object describing the refactoring, with these properties
               - code: The refactored code, possibly containing multiple functions.
