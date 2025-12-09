@@ -14,5 +14,6 @@ After running the tool:
 2. Highlight any code smells or degradation that would reduce Code Health if committed.
 3. Prioritize the findings by severity and likelihood of increasing long-term maintenance cost.
 4. Provide practical recommendations for improvements prior to committing.
+5. Remember that that Code Health 10.0 is optimal and optimized for both human and AI comprehension. Do not allow regressions below 10.0, not even minor ones.
 
 Use concise language suitable for a pre-commit review. Avoid rewriting the code unless explicitly asked.

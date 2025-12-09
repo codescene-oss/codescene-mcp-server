@@ -10,6 +10,7 @@ CodeScene also aggregates the file scores into composite scores for architectura
 as into high-level KPIs for the whole codebase.
 
 The Code Health scores are categorized and interpreted as:
-* Green Code: high quality with a score of 9-10
+* Optimal Code: a Code Health 10.0 is optimized for both human and AI comprehension
+* Green Code: high quality with a score of 9-9.9
 * Yellow Code: problematic techncial debt with a score of 4-8.9
 * Red Code: severe techncial debt, maintainability issues, and expensive onboarding with a score of 1.0-3.9

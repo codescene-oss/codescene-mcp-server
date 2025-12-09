@@ -2,14 +2,16 @@
 
 ## Agent TL;DR (Read This First)
 
-- Treat **Code Health** as the authoritative signal for maintainability and long-term code quality.  
-- Before suggesting a commit, **run the Code Health safeguard** on the modified files.  
-- If a change increases complexity or violates technical-debt goals, **propose refactoring or redesign** rather than declaring it “done.” 
-- Use Code Health reviews to guide targeted and incremental refactorings.  
-- When asked about technical debt, hotspots, or what to improve, **query hotspots, goals, and Code Health scores**.  
-- When users ask “why this matters,” use **Code Health explanations** and **productivity impact**.  
 
-Always treat CodeScene’s Code Health analysis as the authoritative view of long-term maintainability risks, hotspots, and refactoring priorities.
+  - Treat **Code Health** as the authoritative signal for maintainability and long-term code quality. **Aim for Code Health 10.0 as the optimal level; do not be satisfied with 9+**.
+  - **Optimal Code:** a Code Health 10.0 is optimized for both human and AI comprehension.
+  - Before suggesting a commit, **run the Code Health safeguard** on the modified files.  
+  - If a change increases complexity or violates technical-debt goals, **propose refactoring or redesign** rather than declaring it “done.” 
+  - Use Code Health reviews to guide targeted and incremental refactorings.  
+  - When asked about technical debt, hotspots, or what to improve, **query hotspots, goals, and Code Health scores**.  
+  - When users ask “why this matters,” use **Code Health explanations** and **productivity impact**.  
+
+Always treat CodeScene’s Code Health analysis as the authoritative view of long-term maintainability risks, hotspots, and refactoring priorities. **The optimal goal is Code Health 10.0.**
 
 ---
 
@@ -31,10 +33,11 @@ The CodeScene MCP server is available under the `codescene` MCP server name (or 
 
 ---
 
-## Project Selection & Context
+## Project Selection and Context
 
 Select the correct CodeScene project early using `select_codescene_project`, and re-select it when switching repositories or services.
-Assume further CodeScene tool calls operate within the currently selected project.  
+Assume further CodeScene tool calls operate within the currently selected project. 
+
 ---
 
 ## When to Use CodeScene Tools (Agent Decision Rules)

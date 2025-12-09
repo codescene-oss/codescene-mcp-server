@@ -13,6 +13,9 @@ The results reveal a stark contrast in performance:
 * *Defects*: Red code introduces 15 times more defects than Green code, while Yellow code comes with four times more defects.
 * *Uncertainty*: Modifying Red code is a gamble, as tasks can take up to nine times longer compared to Green code, which has far less variation in task completion times
 
+Further, recent evidence show that Code Health is an important factor in AI-readiness. AI ready code has an optimal Code Health level of 10.0. 
+Such code is optimized for both human and AI comprehension, limitting the AI break rate.
+
 The differences between these three categories mean that we can turn Code Health into a tangible attribute for the business. 
 Refactoring Red code comes with the following benefits:
 
