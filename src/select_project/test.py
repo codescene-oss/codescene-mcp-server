@@ -3,10 +3,12 @@ import os
 import unittest
 from unittest import mock
 from fastmcp import FastMCP
+from test_utils import mocked_requests_post
 from . import SelectProject
 
 class TestSelectProject(unittest.TestCase):
-    def test_select_project_none_found(self):
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_select_project_none_found(self, mock_post):
         def mocked_query_api_list_fn(*kwargs):
             return []
 
@@ -18,7 +20,8 @@ class TestSelectProject(unittest.TestCase):
 
         self.assertEqual({'projects': [], 'link': 'https://codescene.io/projects'}, json.loads(result))
 
-    def test_select_project_some_found(self):
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_select_project_some_found(self, mock_post):
         def mocked_query_api_list_fn(*kwargs):
             return [{'name':'some project'}]
 
@@ -40,7 +43,8 @@ class TestSelectProject(unittest.TestCase):
         self.assertEqual(expected, json.loads(result))
 
     @mock.patch.dict(os.environ, {"CS_ONPREM_URL": "http://onprem.codescene.local"})
-    def test_select_project_some_found_onprem(self):
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_select_project_some_found_onprem(self, mock_post):
         def mocked_query_api_list_fn(*kwargs):
             return [{'name':'some project'}]
 
@@ -61,7 +65,8 @@ class TestSelectProject(unittest.TestCase):
 
         self.assertEqual(expected, json.loads(result))
 
-    def test_select_project_throws(self):
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_select_project_throws(self, mock_post):
         def mocked_query_api_list_fn(*kwargs):
             raise Exception("Some error")
 
@@ -74,7 +79,8 @@ class TestSelectProject(unittest.TestCase):
         self.assertEqual("Error: Some error", result)
 
     @mock.patch.dict(os.environ, {"CS_DEFAULT_PROJECT_ID": "1"})
-    def test_env_overwrites_project_id(self):
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_env_overwrites_project_id(self, mock_post):
         def mocked_query_api_list_fn(*kwargs):
             return []
 
