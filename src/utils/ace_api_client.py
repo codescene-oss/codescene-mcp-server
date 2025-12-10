@@ -1,7 +1,7 @@
 import os
 import requests
 
-class BadRequest(Exception):
+class HttpClientError(Exception):
     pass
 
 def get_api_url() -> str:
@@ -15,17 +15,20 @@ def get_api_request_headers() -> dict:
         'Authorization': f"Bearer {os.getenv('CS_ACE_ACCESS_TOKEN')}"
     }
 
-def query_api(endpoint, params: dict) -> dict:
+def query_api(endpoint: str, params: dict) -> dict:
     url = f"{get_api_url()}/{endpoint}"
     response = requests.get(url, params=params, headers=get_api_request_headers())
 
     return response.json()
 
-def post(endpoint, json_payload: dict) -> dict:
+def post(endpoint: str, json_payload: dict) -> dict:
     url = f"{get_api_url()}/{endpoint}"
     return requests.post(url, json=json_payload, headers=get_api_request_headers())
 
-def retrying_post(n, endpoint, json_payload: dict) -> dict:
+def _is_json(response: requests.Response) -> bool:
+   return response.headers.get('content-type').find('application/json') >= 0
+
+def retrying_post(n: int, endpoint: str, json_payload: dict) -> dict:
   r = post(endpoint, json_payload)
   if r.ok:
     return r.json()
@@ -33,9 +36,10 @@ def retrying_post(n, endpoint, json_payload: dict) -> dict:
     print("Retry post...")
     return retrying_post(n - 1, endpoint, json_payload)
   
-  if r.status_code == 400:
-    # ACE provides error details as json on bad requests
-    raise BadRequest(f"Bad request: {r.json()}")
+  # devtools-portal and ACE provides error details as json on bad requests
+  if r.status_code >= 400 and r.status_code < 500 and _is_json(r):
+    error = r.json()['error']
+    raise HttpClientError(f"HttpClientError {r.status_code}: {error}")
   
   r.raise_for_status()
 
