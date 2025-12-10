@@ -39,6 +39,13 @@
           "name": "CS_ACCESS_TOKEN"
         },
         {
+          "description": "CodeScene ACE API Token",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true,
+          "name": "CS_ACE_ACCESS_TOKEN"
+        },
+        {
           "description": "CodeScene Path to code",
           "isRequired": true,
           "format": "string",
