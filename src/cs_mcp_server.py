@@ -11,7 +11,7 @@ from select_project import SelectProject
 from technical_debt_goals import TechnicalDebtGoals
 from technical_debt_hotspots import TechnicalDebtHotspots
 from code_ownership import CodeOwnership
-from utils import adapt_mounted_file_path_inside_docker, query_api_list, analyze_code, run_local_tool, post_refactor
+from utils import query_api_list, analyze_code, run_local_tool, post_refactor
 
 mcp = FastMCP("CodeScene")
 
@@ -174,7 +174,6 @@ if __name__ == "__main__":
     })
 
     AutoRefactor(mcp, {
-        'adapt_file_path_fn': adapt_mounted_file_path_inside_docker,
         'post_refactor_fn': post_refactor,
         'run_local_tool_fn': run_local_tool
     })
