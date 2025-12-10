@@ -2,7 +2,7 @@ from itertools import groupby
 import json
 import os
 from typing import TypedDict, Callable
-from utils import adapt_mounted_file_path_inside_docker, normalize_onprem_url
+from utils import adapt_mounted_file_path_inside_docker, normalize_onprem_url, track
 
 
 class CodeOwnershipDeps(TypedDict):
@@ -14,6 +14,7 @@ class CodeOwnership:
 
         mcp_instance.tool(self.code_ownership_for_path)
 
+    @track("code-ownership-for-path")
     def code_ownership_for_path(self, project_id: int, path: str) -> str:
         """
         Find the owner or owners of a specific path in a project.
