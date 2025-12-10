@@ -33,16 +33,30 @@ class AutoRefactor:
         return next((f for f in functions if f["name"] == function_name), False)
 
     def _get_code_smells(self, review: dict, function: dict) -> dict:
-      return [
-          {
+        return [
+            {
             'category': code_smell['category'],
+            # Make start-line relative to the function start-line
             'start-line': f['start-line'] - function['start-line'] + 1
-          }
-          for code_smell in review['review']
-          for f in code_smell.get('functions',[])
-          # For Complex Conditional, the title has ':[line-nbr]' appended
-          if re.fullmatch(rf'{function['name']}(:\d+)?', f['title'])
-      ]
+            }
+            for code_smell in review['review']
+            for f in code_smell.get('functions',[])
+            # For Complex Conditional, the title has ':[line-nbr]' appended
+            if re.fullmatch(rf'{function['name']}(:\d+)?', f['title'])
+        ]
+    
+    def _post_refactor(self, file_path: str, function: dict, code_smells: list[dict]):
+        _, ext = os.path.splitext(file_path)
+        payload = {
+            'api-version': 'v2',
+            'source-snippet': {
+            'file-type': ext[1:],
+            'body': function['body'],
+            'function-type': function.get('function-type', 'Unknown')
+            },
+            'review': code_smells
+        }
+        return self.deps['post_refactor_fn'](payload)
 
     def code_health_auto_refactor(self, file_path: str, function_name: str) -> str:
         """
@@ -70,25 +84,21 @@ class AutoRefactor:
               - reasons: A list of strings describing the reasons for the assigned confidence level.
         """
         try:
+            if os.getenv("CS_ACE_ACCESS_TOKEN") is None:
+                return f"Error: This tool needs a token valid for CodeScene ACE in CS_ACE_ACCESS_TOKEN"
+            
             functions = self._parse_fns(file_path)
             review = self._review(file_path)
+
             function = self._get_function(functions, function_name)
             if not function:
                 return f"Error: Couldn't find function: {function_name}"
+            
             code_smells = self._get_code_smells(review, function)
             if not code_smells:
                 return f"Error: No code smells were found in {function_name}"
-            _, ext = os.path.splitext(file_path)
-            payload = {
-              'api-version': 'v2',
-              'source-snippet': {
-                'file-type': ext[1:],
-                'body': function['body'],
-                'function-type': function.get('function-type', 'Unknown')
-              },
-              'review': code_smells
-            }
-            response = self.deps['post_refactor_fn'](payload)
+            
+            response = self._post_refactor(file_path, function, code_smells)
 
             return json.dumps({
               'code': response['code'],
