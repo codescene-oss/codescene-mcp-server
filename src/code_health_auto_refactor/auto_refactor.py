@@ -2,13 +2,12 @@ import json
 import os
 import re
 from typing import Callable, TypedDict, Optional
-from utils import cs_cli_path, cs_cli_review_command_for, normalize_onprem_url, run_cs_cli
+from utils import adapt_mounted_file_path_inside_docker, cs_cli_path
 
 class AutoRefactorError(Exception):
     pass
 
 class AutoRefactorDeps(TypedDict):
-    adapt_file_path_fn: Callable[[str], str]
     post_refactor_fn: Callable[[dict], dict]
     run_local_tool_fn: Callable[[list, Optional[str]], str]
 
@@ -17,27 +16,18 @@ class AutoRefactor:
         self.deps = deps
 
         mcp_instance.tool(self.code_health_auto_refactor)
-    
-    def _parse_json_output(self, output: str):
-        try:
-            return json.loads(output)
-        except Exception as e:
-            raise AutoRefactorError(
-                f"Invalid JSON input: {e}\nInput: {output[:500]}"
-            )
 
-    def _adapt_file_path(self, file_path: str) -> str:
-        return self.deps["adapt_file_path_fn"](file_path)
-
+    def _run_cs_cli(self, args: list[str]):
+        output = self.deps["run_local_tool_fn"]([cs_cli_path()] + args)
+        return json.loads(output)
+        
     def _parse_fns(self, file_path: str) -> list[dict]:
-        cli_command = [cs_cli_path(), "parse-fns", "--path", self._adapt_file_path(file_path)]
-        output = run_cs_cli(lambda: self.deps["run_local_tool_fn"](cli_command))
-        return self._parse_json_output(output)
+        cli_command = ["parse-fns", "--path", adapt_mounted_file_path_inside_docker(file_path)]
+        return self._run_cs_cli(cli_command)
 
     def _review(self, file_path: str) -> dict:
-        cli_command = [cs_cli_path(), "review", "--output-format=json", self._adapt_file_path(file_path)]
-        output = run_cs_cli(lambda: self.deps["run_local_tool_fn"](cli_command))
-        return self._parse_json_output(output)
+        cli_command = ["review", "--output-format=json", adapt_mounted_file_path_inside_docker(file_path)]
+        return self._run_cs_cli(cli_command)
 
     def _get_function(self, functions: list[dict], function_name: str) -> dict:
         return next((f for f in functions if f["name"] == function_name), False)
