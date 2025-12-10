@@ -19,7 +19,7 @@ def mock_run_local_tool(command: list, cwd: str = None):
       return file.read()
     
 class TestAutoRefactor(unittest.TestCase):
-    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path"})
+    @mock.patch.dict(os.environ, {"CS_ACE_ACCESS_TOKEN": "some-token", "CS_MOUNT_PATH": "/some-path"})
     def test_refactor(self):
 
         def mock_post_refactor(payload: dict) -> dict:
@@ -83,7 +83,7 @@ class TestAutoRefactor(unittest.TestCase):
 
         self.assertEqual(expected, json.loads(result))
 
-    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path"})
+    @mock.patch.dict(os.environ, {"CS_ACE_ACCESS_TOKEN": "some-token", "CS_MOUNT_PATH": "/some-path"})
     def test_refactor_throws(self):
         def raise_exception(*kwargs):
             raise Exception("Some error")
@@ -98,7 +98,7 @@ class TestAutoRefactor(unittest.TestCase):
 
         self.assertEqual(expected, result)
     
-    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path"})
+    @mock.patch.dict(os.environ, {"CS_ACE_ACCESS_TOKEN": "some-token", "CS_MOUNT_PATH": "/some-path"})
     def test_refactor_missing_function(self):
         self.instance = AutoRefactor(FastMCP('Test'), {
             'post_refactor_fn': None,
@@ -110,7 +110,7 @@ class TestAutoRefactor(unittest.TestCase):
 
         self.assertEqual(expected, result)
         
-    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path"})
+    @mock.patch.dict(os.environ, {"CS_ACE_ACCESS_TOKEN": "some-token", "CS_MOUNT_PATH": "/some-path"})
     def test_refactor_no_code_smells(self):
         self.instance = AutoRefactor(FastMCP('Test'), {
             'post_refactor_fn': None,
@@ -118,6 +118,19 @@ class TestAutoRefactor(unittest.TestCase):
         })
 
         expected = "Error: No code smells were found in Document::isPerformingTransaction"
+        result = self.instance.code_health_auto_refactor("/some-path/some-file.cpp", 'Document::isPerformingTransaction')
+
+        self.assertEqual(expected, result)
+
+    
+    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path"})
+    def test_refactor_no_token(self):
+        self.instance = AutoRefactor(FastMCP('Test'), {
+            'post_refactor_fn': None,
+            'run_local_tool_fn': None,
+        })
+
+        expected = "Error: This tool needs a token valid for CodeScene ACE in CS_ACE_ACCESS_TOKEN"
         result = self.instance.code_health_auto_refactor("/some-path/some-file.cpp", 'Document::isPerformingTransaction')
 
         self.assertEqual(expected, result)
