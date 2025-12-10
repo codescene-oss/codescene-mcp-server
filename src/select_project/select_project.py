@@ -1,6 +1,7 @@
 import json
 import os
 from typing import TypedDict, Callable
+from utils import track
 
 
 class SelectProjectDeps(TypedDict):
@@ -12,6 +13,7 @@ class SelectProject:
 
         mcp_instance.tool(self.select_project)
 
+    @track("select-project")
     def select_project(self) -> str:
         """
         Lists all projects for an organization for selection by the user.
