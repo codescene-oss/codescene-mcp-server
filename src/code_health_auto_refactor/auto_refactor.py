@@ -60,8 +60,11 @@ class AutoRefactor:
 
     def code_health_auto_refactor(self, file_path: str, function_name: str) -> str:
         """
-        Refactor a single function to fix the code health problem of highest priority.
-        This tool is supported for these languages:
+        Refactor a single function to fix specific code health problems. 
+        Thie auto-refactor uses CodeScene ACE, and is intended as an initial 
+        refactoring to increase the modularity of the code so that you as an 
+        AI agent can continue and iterate with more specific refactorings.
+        The code_health_auto_refactor tool is supported for these languages:
             - JavaScript/TypeScript
             - Java
             - C#
@@ -72,16 +75,24 @@ class AutoRefactor:
             - Complex Method
             - Deep, Nested Complexity
             - Large Method
+        IMPORTANT:
+            - Only use this tool for functions shorter than 300 lines of code.
+            - Insert any new functions close to the refactored function.
 
         Args:
             file_path: The absolute path to the source code file containing the function to refactor.
             function_name: The name of the function to refactor. If there is a class scope prefix, it needs to be included.
         Returns:
             A JSON object describing the refactoring, with these properties
-              - code: The refactored code, possibly containing multiple functions.
+              - code: The refactored function plus new extracted functions.
               - declarations: Optional (used for languages like C++). Declarations of additional functions introduced when refactoring.
-              - confidence: The confidence level of the resulting refactoring.
+                When present, find the right include file and insert the declarations there. Note that some C++ refactorings result 
+                in standalone functions; standalone functions should just be inserted in the implementation unit, not declared in 
+                include files.
+              - confidence: The confidence level of the resulting refactoring. For low confidence, review the 
+                refactoring and fix any introduced problems.
               - reasons: A list of strings describing the reasons for the assigned confidence level.
+                Use this list of strings to direct fixes of the refactored code.
         """
         try:
             if os.getenv("CS_ACE_ACCESS_TOKEN") is None:

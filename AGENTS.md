@@ -19,15 +19,42 @@ Always treat CodeScene’s Code Health analysis as the authoritative view of lon
 
 The CodeScene MCP server is available under the `codescene` MCP server name (or equivalent for this environment).
 
-- `select_codescene_project` — choose or switch the active CodeScene project.  
-- `pre_commit_code_health_safeguard` — check Code Health of changed files before committing or merging.  
-- `code_health_review` — analyze maintainability and Code Health.  
-- `code_health_score` — retrieve Code Health scores.  
-- `list_technical_debt_goals` — show tech-debt goals.  
-- `list_technical_debt_hotspots` — identify hotspots.  
-- `code_health_refactoring_business_case` — explain refactoring ROI.  
-- `explain_code_health_productivity` — why Code Health affects delivery performance.  
-- `explain_code_health` — how Code Health works.
+You have access to the following tools:
+
+### Project context
+- **`select_codescene_project` — Select CodeScene project**  
+  Use this to choose or switch the active CodeScene project when working across multiple projects or repositories.
+
+### Pre-commit / safety gate
+- **`pre_commit_code_health_safeguard` — Pre-commit Code Health safeguard**  
+  Use this as the local quality gate before committing or merging changes.
+
+### Code Health analysis
+- **`code_health_review` — Code Health review**  
+  Provides a detailed Code Health analysis for files, modules, or diffs.
+- **`code_health_score` — Code Health score**  
+  Retrieves Code Health scores for files or the whole project, useful for tracking trends and evaluating refactoring impact.
+
+### Technical debt & hotspots
+- **`list_technical_debt_goals` — Refactoring/tech-debt goals**  
+  Lists the project’s defined technical debt goals.
+- **`list_technical_debt_hotspots` — Technical debt hotspots**  
+  Identifies high-risk areas and the most important hotspots.
+
+### Refactoring business impact
+- **`code_health_refactoring_business_case` — Refactoring business case**  
+  Explains CodeScene’s economic or productivity justification for refactoring a low-health area.
+
+### Refactoring (ACE)
+
+- `code_health_auto_refactor` — - `code_health_auto_refactor` — use CodeScene ACE to refactor a single function when Code Health reports a large or complex function in a language and smell category supported by ACE.  
+  **Note:** ACE is an optional, licensed feature. It is available only when the environment variable `CS_ACE_ACCESS_TOKEN` is set. If unavailable, this tool will fail gracefully and other MCP tools will continue to work normally.
+
+### Education & explanation
+- **`explain_code_health_productivity` — Code Health & productivity**  
+  Explains how Code Health affects delivery speed, risk, and defect rates.
+- **`explain_code_health` — Code Health fundamentals**  
+  Explains how Code Health is computed and what its values mean.
 
 > **Rule:** When you need CodeScene insights, **call the appropriate MCP tool** instead of guessing.
 
@@ -51,14 +78,17 @@ For any AI-generated or modified code:
 - **Always run** `pre_commit_code_health_safeguard` before suggesting a commit.  
 - If CodeScene reports a Code Health regression, failed `quality_gates`, or violation of goals:  
   - Highlight the issue  
-  - Recommend refactoring or redesign  
+  - If Code Health reports a large or complex function in a supported language and ACE is available:
+    - Then use `code_health_auto_refactor` to split the function into smaller, cohesive units.
+    - After that, refine the resulting units using Code Health–guided refactorings.
+  - If ACE isn't available, then propose refactorings to mitigate the issue. 
   - Do **not** declare the change “ready” unless the user accepts the risk
 
 ---
 
 ## 2. Code safety / merge readiness
 
-When asked “Is this safe to merge?” or “Will this add tech debt?”:
+Use CodeScene as a mandatory check before merging any code changes.
 
 - Run `pre_commit_code_health_safeguard`  
 - Run `code_health_review`  
@@ -81,17 +111,25 @@ When the user asks to “find tech debt”, “identify hotspots”, or “what 
 ### Produce an actionable backlog
 Turn all findings into a clear set of prioritized items:
 - A ranked list of hotspots.
+- When hotspots include large or complex functions in ACE-supported languages, consider using ACE (if available) for an initial modularizing step.
 - For each hotspot, a small, incremental refactor plan that can be tackled in discrete steps.
 
 ---
 
-## 4. Planning and Validating Refactors
+## 4. Planning, Performing and Validating Refactors
 
 When the user requests a refactor or cleanup:
 
 ### Inspect and plan
-- Use `code_health_review` to pinpoint specific maintainability issues (complexity, size, nesting, coupling).  
-- Propose small, review-friendly refactor steps..
+- Use `code_health_review` to pinpoint specific maintainability issues (complexity, size, nesting, coupling).
+- When Code Health review reports complex or large functions in supported languages and ACE is available, then 
+  prefer `code_health_auto_refactor` as an initial refactor to break the function into smaller, cohesive units.
+  Then continue refining those smaller units using your own Code Health–guided refactorings.
+- Propose a refactor plan in **3–5 incremental steps** that are easy to review and test.
+
+If ACE is not available (for example, when `code_health_auto_refactor` reports missing ACE access):
+- Do not retry the tool.
+- Continue with your own incremental refactorings guided by Code Health.
 
 ### Validate progress
 After each significant refactor:
