@@ -25,6 +25,9 @@ def post(endpoint: str, json_payload: dict) -> dict:
     url = f"{get_api_url()}/{endpoint}"
     return requests.post(url, json=json_payload, headers=get_api_request_headers())
 
+def _is_client_error(response: requests.Response) -> bool:
+   return response.status_code >= 400 and response.status_code < 500 
+
 def _is_json(response: requests.Response) -> bool:
    return response.headers.get('content-type').find('application/json') >= 0
 
@@ -37,7 +40,7 @@ def retrying_post(n: int, endpoint: str, json_payload: dict) -> dict:
     return retrying_post(n - 1, endpoint, json_payload)
   
   # devtools-portal and ACE provides error details as json on bad requests
-  if r.status_code >= 400 and r.status_code < 500 and _is_json(r):
+  if _is_client_error(r) and _is_json(r):
     error = r.json()['error']
     raise HttpClientError(f"HttpClientError {r.status_code}: {error}")
   
