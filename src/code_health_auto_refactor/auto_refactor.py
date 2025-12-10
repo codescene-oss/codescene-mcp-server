@@ -84,7 +84,7 @@ class AutoRefactor:
               'source-snippet': {
                 'file-type': ext[1:],
                 'body': function['body'],
-                'function-type': function.get('function-type', None)
+                'function-type': function.get('function-type', 'Unknown')
               },
               'review': code_smells
             }
