@@ -8,18 +8,9 @@ def get_api_url() -> str:
     return "https://devtools.codescene.io"
 
 def get_api_request_headers() -> dict:
-    if os.getenv("CS_ACE_ACCESS_TOKEN") is None:
-        return {}
-
     return {
         'Authorization': f"Bearer {os.getenv('CS_ACE_ACCESS_TOKEN')}"
     }
-
-def query_api(endpoint: str, params: dict) -> dict:
-    url = f"{get_api_url()}/{endpoint}"
-    response = requests.get(url, params=params, headers=get_api_request_headers())
-
-    return response.json()
 
 def post(endpoint: str, json_payload: dict) -> dict:
     url = f"{get_api_url()}/{endpoint}"
