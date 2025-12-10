@@ -4,6 +4,7 @@ import unittest
 from unittest import mock
 
 from fastmcp import FastMCP
+from test_utils import mocked_requests_post
 from . import TechnicalDebtGoals
 
 PROJECT_ID = 3
@@ -138,11 +139,12 @@ class TestTechnicalDebtGoals(unittest.TestCase):
 
     def _execute_scenario(self, scenario):
         with self._patch_environment(scenario):
-            instance = self._make_mocked_instance(scenario)
-            if scenario["method"] == "project":
-                return instance.list_technical_debt_goals_for_project(self.project_id)
-            
-            return instance.list_technical_debt_goals_for_project_file(self.file_path, self.project_id)
+            with mock.patch('requests.post', side_effect=mocked_requests_post):
+                instance = self._make_mocked_instance(scenario)
+                if scenario["method"] == "project":
+                    return instance.list_technical_debt_goals_for_project(self.project_id)
+                
+                return instance.list_technical_debt_goals_for_project_file(self.file_path, self.project_id)
 
     def _assert_scenario(self, scenario):
         result = self._execute_scenario(scenario)

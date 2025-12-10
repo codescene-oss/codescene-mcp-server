@@ -1,11 +1,14 @@
 import json
 import unittest
+from unittest import mock
 from fastmcp import FastMCP
 
+from test_utils import mocked_requests_post
 from .review_generator import CodeHealthReview
 
 class TestCodeHealthReview(unittest.TestCase):
-    def test_calculate_code_health_review_json(self):
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_calculate_code_health_review_json(self, mock_post):
         def mock_analyze_code(file_path: str):
             return json.dumps({'review': ["a", "b", "c"]})
 
@@ -17,7 +20,8 @@ class TestCodeHealthReview(unittest.TestCase):
 
         self.assertEqual(json.dumps({'review': ["a", "b", "c"]}), result)
 
-    def test_calculate_code_health_review_str(self):
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_calculate_code_health_review_str(self, mock_post):
         def mock_analyze_code(file_path: str):
             return "string output"
 
