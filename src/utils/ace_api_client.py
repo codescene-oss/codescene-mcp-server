@@ -8,11 +8,11 @@ def get_api_url() -> str:
     return "https://devtools.codescene.io"
 
 def get_api_request_headers() -> dict:
-    if os.getenv("ACE_ACCESS_TOKEN") is None:
+    if os.getenv("CS_ACE_ACCESS_TOKEN") is None:
         return {}
 
     return {
-        'Authorization': f"Bearer {os.getenv('ACE_ACCESS_TOKEN')}"
+        'Authorization': f"Bearer {os.getenv('CS_ACE_ACCESS_TOKEN')}"
     }
 
 def query_api(endpoint, params: dict) -> dict:
