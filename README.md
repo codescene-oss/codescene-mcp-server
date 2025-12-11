@@ -74,7 +74,9 @@ args = ["run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "-e", "CS_ONPREM_URL", "-e
 env = { "CS_ACCESS_TOKEN" = "<YOUR_ACCESS_TOKEN>", "CS_ONPREM_URL" = "<URL>" }
 ```
 
-Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
+Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have. 
+
+You also need to have the `CS_ACCESS_TOKEN` in your environments PATH (and `CS_ONPREM_URL` too if you're using an Onprem instance). If you wish to not add those to the environments path, or cannot do so, you can also add them directly in the config itself by changing `"CS_ACCESS_TOKEN"` to `"CS_ACCESS_TOKEN=<TOKEN GOES HERE>"`, for example. Same goes for `CS_ONPREM_URL`.
 
 ℹ️ You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
 
@@ -107,6 +109,8 @@ CodeScene On-prem:
 - Arguments: `run, --rm, -i, -e, CS_ACCESS_TOKEN, -e, CS_ONPREM_URL, -e, CS_MOUNT_PATH=<PATH_TO_CODE>, --mount, "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", codescene/codescene-mcp`
 
 Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the directory whose read-only access you want the CodeScene MCP server to have.
+
+You also need to have the `CS_ACCESS_TOKEN` in your environments PATH (and `CS_ONPREM_URL` too if you're using an Onprem instance). If you wish to not add those to the environments path, or cannot do so, you can also add them directly in the config itself by changing `CS_ACCESS_TOKEN` to `CS_ACCESS_TOKEN=<TOKEN GOES HERE>`, for example. Same goes for `CS_ONPREM_URL`.
 
 ℹ️ You can read more about what is `CS_MOUNT_PATH` and why we need it in the [Frequently Asked Questions](#frequently-asked-questions) section.
 
