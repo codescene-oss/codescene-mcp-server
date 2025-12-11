@@ -364,7 +364,7 @@ The result is a cooperative workflow where:
 - **AI performs more precise refactorings**, and  
 - **Code Health guides both toward maintainable outcomes**.
 
-🎗️ ACE is a **CodeScene add-on** and requires an additional license. You can [request access and more info here](https://codescene.com/product/request-demo).
+🎗️ ACE is a **CodeScene add-on** and requires an additional license. You can [request access and more info here](https://codescene.com/contact-us-about-codescene-ace).
 
 ### Make Targeted Refactoring  
 AI tools can refactor code, but they lack direction on *what* to fix and *how to measure* if it helped.  
