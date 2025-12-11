@@ -15,3 +15,9 @@ from .code_health_analysis import (
     cs_cli_review_command_for,
     analyze_code,
 )
+from .version_checker import (
+    VersionChecker,
+    VersionInfo,
+    check_version,
+    with_version_check
+)

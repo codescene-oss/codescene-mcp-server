@@ -1,5 +1,5 @@
 from typing import Callable, TypedDict
-from utils import run_cs_cli
+from utils import run_cs_cli, with_version_check
 
 
 class CodeHealthReviewDeps(TypedDict):
@@ -12,6 +12,7 @@ class CodeHealthReview:
 
         mcp_instance.tool(self.code_health_review)
 
+    @with_version_check
     def code_health_review(self, file_path: str) -> str:
         """
         Calculates the code quality of the given file using the Code Health metric.

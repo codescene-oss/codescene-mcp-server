@@ -2,7 +2,7 @@ import json
 import os
 from typing import Callable, TypedDict
 
-from utils import adapt_mounted_file_path_inside_docker, normalize_onprem_url
+from utils import adapt_mounted_file_path_inside_docker, normalize_onprem_url, with_version_check
 
 
 class TechnicalDebtHotspotsDeps(TypedDict):
@@ -15,6 +15,7 @@ class TechnicalDebtHotspots:
         mcp_instance.tool(self.list_technical_debt_hotspots_for_project)
         mcp_instance.tool(self.list_technical_debt_hotspots_for_project_file)
 
+    @with_version_check
     def list_technical_debt_hotspots_for_project(self, project_id: int) -> str:
         """
         Lists the technical debt hotspots for a project.
@@ -49,6 +50,7 @@ class TechnicalDebtHotspots:
         except Exception as e:
             return f"Error: {e}"
 
+    @with_version_check
     def list_technical_debt_hotspots_for_project_file(self, file_path: str, project_id: int) -> str:
         """
         Lists the technical debt hotspots for a specific file in a project.
