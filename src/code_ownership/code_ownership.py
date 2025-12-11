@@ -2,7 +2,7 @@ from itertools import groupby
 import json
 import os
 from typing import TypedDict, Callable
-from utils import adapt_mounted_file_path_inside_docker, normalize_onprem_url, track
+from utils import adapt_mounted_file_path_inside_docker, normalize_onprem_url, track, track_error
 
 
 class CodeOwnershipDeps(TypedDict):
@@ -56,4 +56,5 @@ class CodeOwnership:
             return json.dumps(result)
         
         except Exception as e:
+            track_error("code-ownership-for-path", e)
             return f"Error: {e}"

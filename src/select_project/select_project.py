@@ -1,7 +1,7 @@
 import json
 import os
 from typing import TypedDict, Callable
-from utils import track
+from utils import track, track_error
 
 
 class SelectProjectDeps(TypedDict):
@@ -47,4 +47,5 @@ class SelectProject:
                 'link': link
             })
         except Exception as e:
+            track_error("select-project", e)
             return f"Error: {e}"
