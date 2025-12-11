@@ -112,10 +112,10 @@ def check_version() -> Optional[VersionInfo]:
 
 
 VERSION_NOTICE_DOCSTRING_SUFFIX = """
-
 Note: If the result contains version update information (indicated by 
 "VERSION UPDATE AVAILABLE"), please inform the user about this update 
-notice and recommend they update their CodeScene MCP Server."""
+notice and recommend they update their CodeScene MCP Server.
+"""
 
 
 def with_version_check(func: Callable) -> Callable:
