@@ -15,4 +15,4 @@ from .code_health_analysis import (
     cs_cli_review_command_for,
     analyze_code,
 )
-from .track import track
+from .track import track, track_error

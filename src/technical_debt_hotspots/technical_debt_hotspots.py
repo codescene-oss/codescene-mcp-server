@@ -2,7 +2,7 @@ import json
 import os
 from typing import Callable, TypedDict
 
-from utils import adapt_mounted_file_path_inside_docker, normalize_onprem_url, track
+from utils import adapt_mounted_file_path_inside_docker, normalize_onprem_url, track, track_error
 
 
 class TechnicalDebtHotspotsDeps(TypedDict):
@@ -48,6 +48,7 @@ class TechnicalDebtHotspots:
                 'link': link
             })
         except Exception as e:
+            track_error("list-technical-debt-hotspots-for-project", e)
             return f"Error: {e}"
 
     @track("list-technical-debt-hotspots-for-project-file")
@@ -95,4 +96,5 @@ class TechnicalDebtHotspots:
                 'link': link
             })
         except Exception as e:
+            track_error("list-technical-debt-hotspots-for-project-file", e)
             return f"Error: {e}"
