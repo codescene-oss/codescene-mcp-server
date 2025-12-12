@@ -366,6 +366,37 @@ The result is a cooperative workflow where:
 
 🎗️ ACE is a **CodeScene add-on** and requires an additional license. You can [request access and more info here](https://codescene.com/contact-us-about-codescene-ace).
 
+#### 👉 Activate ACE in CodeScene MCP
+
+To enable ACE, add one extra environment variable: `CS_ACE_ACCESS_TOKEN`, which you receive when you purchase the ACE add-on.
+The exact setup depends on your editor or AI assistant, but you simply need to pass this token into the MCP server.
+
+Here’s an example for VS Code, where the variable appears in both `args` and `env`:
+```json
+"codescene": {
+  "command": "docker",
+  "args": [
+    "run",
+    "-i",
+    "--rm",
+    "-e", "CS_ACCESS_TOKEN",
+    "-e", "CS_ONPREM_URL",
+    "-e", "CS_ACE_ACCESS_TOKEN",
+    "-e", "CS_MOUNT_PATH=${input:CS_MOUNT_PATH}",
+    "--mount",
+    "type=bind,src=${input:CS_MOUNT_PATH},dst=/mount/,ro",
+    "codescene-mcp"
+  ],
+  "env": {
+    "CS_ACCESS_TOKEN":     "${input:CS_ACCESS_TOKEN}",
+    "CS_ONPREM_URL":       "${input:CS_ONPREM_URL}",
+    "CS_ACE_ACCESS_TOKEN": "${input:CS_ACE_ACCESS_TOKEN}"
+  },
+  "type": "stdio"
+}
+```
+Use the same principle for any other environment: just make sure `CS_ACE_ACCESS_TOKEN` is passed to the MCP server.
+
 ### Make Targeted Refactoring  
 AI tools can refactor code, but they lack direction on *what* to fix and *how to measure* if it helped.  
 The Code Health tools solve this by giving AI assistants precise insight into design problems, as well as an objective way to assess the outcome: **did the Code Health improve?**
