@@ -40,7 +40,7 @@
         },
         {
           "description": "CodeScene ACE API Token",
-          "isRequired": true,
+          "isRequired": false,
           "format": "string",
           "isSecret": true,
           "name": "CS_ACE_ACCESS_TOKEN"
