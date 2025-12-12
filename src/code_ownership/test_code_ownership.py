@@ -5,11 +5,13 @@ from unittest import mock
 
 from fastmcp import FastMCP
 
+from test_utils import mocked_requests_post
 from . import CodeOwnership
 
 class TestCodeOwnership(unittest.TestCase):
     @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path"})
-    def test_code_ownership_none_found(self):
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_code_ownership_none_found(self, mock_post):
         def mocked_query_api_list(*kwargs):
             return []
 
@@ -23,7 +25,8 @@ class TestCodeOwnership(unittest.TestCase):
         self.assertEqual(expected, json.loads(result))
 
     @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path"})
-    def test_code_ownership_some_found(self):
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_code_ownership_some_found(self, mock_post):
         def mocked_query_api_list(*kwargs):
             return [{
                 'owner': 'some_owner',
@@ -56,7 +59,8 @@ class TestCodeOwnership(unittest.TestCase):
         self.assertEqual(expected, json.loads(result))
 
     @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path", "CS_ONPREM_URL": "https://onprem-codescene.io"})
-    def test_code_ownership_some_found_onprem(self):
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_code_ownership_some_found_onprem(self, mock_post):
         def mocked_query_api_list(*kwargs):
             return [{
                 'owner': 'some_owner',
@@ -78,7 +82,8 @@ class TestCodeOwnership(unittest.TestCase):
         self.assertEqual(expected, json.loads(result))
 
     @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path", "CS_ONPREM_URL": "https://onprem-codescene.io/"})
-    def test_code_ownership_some_found_onprem(self):
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_code_ownership_some_found_onprem(self, mock_post):
         def mocked_query_api_list(*kwargs):
             return [{
                 'owner': 'some_owner',
@@ -100,7 +105,8 @@ class TestCodeOwnership(unittest.TestCase):
         self.assertEqual(expected, json.loads(result))
 
     @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path"})
-    def test_code_ownership_throws(self):
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_code_ownership_throws(self, mock_post):
         def mocked_query_api_list(*kwargs):
             raise Exception("Some error")
 
