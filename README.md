@@ -399,6 +399,17 @@ For complete details, please see CodeScene’s full [privacy and security docume
 
 <details>
 
+**<summary>Can I use any LLM as the backbone for CodeScene MCP?</summary>**
+
+CodeScene MCP can work with any model your AI assistant supports, but we strongly recommend choosing a frontier model when your assistant offers a model selector (as in tools like GitHub Copilot). 
+
+Frontier models -- such as Claude Sonnet -- deliver far better rule adherence and refactoring quality, while legacy models like GPT-4.1 often struggle with MCP constraints. 
+For a consistent, high-quality experience, select the newest available model.
+
+</details>
+
+<details>
+
 **<summary>I have multiple repos — how do I configure the MCP?</summary>**
 
 Since you have to provide a mount path for Docker, you can either have a MCP configuration per project (in VS Code that would be a `.vscode/mcp.json` file per project, for example) or you can mount a root directory within which all your projects are and then just use that one configuration instead.
