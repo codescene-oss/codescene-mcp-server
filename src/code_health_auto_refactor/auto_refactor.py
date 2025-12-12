@@ -96,7 +96,7 @@ class AutoRefactor:
         """
         try:
             if os.getenv("CS_ACE_ACCESS_TOKEN") is None:
-                return f"Error: This tool needs a token valid for CodeScene ACE in CS_ACE_ACCESS_TOKEN"
+                return f"Error: This tool needs a token valid for CodeScene ACE in CS_ACE_ACCESS_TOKEN. See the ACE activation instructions in https://github.com/codescene-oss/codescene-mcp-server?tab=readme-ov-file#-activate-ace-in-codescene-mcp"
             
             functions = self._parse_fns(file_path)
             review = self._review(file_path)
