@@ -1,7 +1,7 @@
 from typing import Callable, TypedDict
 
 from .business_case import make_business_case_for
-from utils import code_health_from_cli_output, track
+from utils import code_health_from_cli_output, track, with_version_check
 
 
 class CodeHealthRefactoringBusinessCaseDeps(TypedDict):
@@ -14,6 +14,7 @@ class CodeHealthRefactoringBusinessCase:
 
         mcp_instance.tool(self.code_health_refactoring_business_case)
 
+    @with_version_check
     @track("code-health-refactoring-business-case")
     def code_health_refactoring_business_case(self, file_path: str) -> dict:
         """

@@ -1,5 +1,5 @@
 from typing import Callable, TypedDict
-from utils import run_cs_cli, code_health_from_cli_output, track
+from utils import run_cs_cli, code_health_from_cli_output, track, with_version_check
 
 
 class CodeHealthScoreDeps(TypedDict):
@@ -19,6 +19,7 @@ class CodeHealthScore:
 
         return run_cs_cli(lambda: calculate_code_health_of())
 
+    @with_version_check
     @track("code-health-score")
     def code_health_score(self, file_path: str) -> str:
         """

@@ -2,7 +2,7 @@ import json
 from typing import TypedDict, Callable, Optional
 
 from code_health_tools.delta_analysis import analyze_delta_output
-from utils import cs_cli_path, adapt_mounted_file_path_inside_docker, run_cs_cli, track
+from utils import cs_cli_path, adapt_mounted_file_path_inside_docker, run_cs_cli, track, with_version_check
 
 
 class PreCommitCodeHealthSafeguardDeps(TypedDict):
@@ -22,6 +22,7 @@ class PreCommitCodeHealthSafeguard:
         return json.dumps(analyze_delta_output(output))
 
     @track("pre-commit-code-health-safeguard")
+    @with_version_check
     def pre_commit_code_health_safeguard(self, git_repository_path: str) -> str:
         """
         Performs a Code Health review on all modified and staged files in

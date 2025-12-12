@@ -1,7 +1,7 @@
 import json
 import os
 from typing import TypedDict, Callable
-from utils import track, track_error
+from utils import track, track_error, with_version_check
 
 
 class SelectProjectDeps(TypedDict):
@@ -14,6 +14,7 @@ class SelectProject:
         mcp_instance.tool(self.select_project)
 
     @track("select-project")
+    @with_version_check
     def select_project(self) -> str:
         """
         Lists all projects for an organization for selection by the user.
