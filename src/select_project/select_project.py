@@ -1,7 +1,7 @@
 import json
 import os
 from typing import TypedDict, Callable
-from utils import with_version_check
+from utils import track, track_error, with_version_check
 
 
 class SelectProjectDeps(TypedDict):
@@ -13,6 +13,7 @@ class SelectProject:
 
         mcp_instance.tool(self.select_project)
 
+    @track("select-project")
     @with_version_check
     def select_project(self) -> str:
         """
@@ -47,4 +48,5 @@ class SelectProject:
                 'link': link
             })
         except Exception as e:
+            track_error("select-project", e)
             return f"Error: {e}"

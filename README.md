@@ -355,6 +355,17 @@ With the CodeScene MCP Server in place, your AI tools can:
 ### Safeguard AI-Generated Code
 Prevent AI from introducing technical debt by flagging maintainability issues like complexity, deep nesting, low cohesion, etc.
 
+### Uplifting Unhealthy Code for AI Readiness: Refactoring With ACE + AI
+AI works best on healthy, modular code. Many legacy functions are too large or complex for reliable AI refactoring, which leads to poor suggestions and unstable changes.  
+[CodeScene ACE](https://codescene.com/product/integrations/ide-extensions/ai-refactoring), exposed through the MCP server, helps by *first* restructuring these complex functions into smaller and more cohesive units. This modularity makes the code far easier for AI agents to understand and refactor safely.
+
+The result is a cooperative workflow where:  
+- **CodeScene ACE improves modularity and structure**,  
+- **AI performs more precise refactorings**, and  
+- **Code Health guides both toward maintainable outcomes**.
+
+🎗️ ACE is a **CodeScene add-on** and requires an additional license. You can [request access and more info here](https://codescene.com/contact-us-about-codescene-ace).
+
 ### Make Targeted Refactoring  
 AI tools can refactor code, but they lack direction on *what* to fix and *how to measure* if it helped.  
 The Code Health tools solve this by giving AI assistants precise insight into design problems, as well as an objective way to assess the outcome: **did the Code Health improve?**

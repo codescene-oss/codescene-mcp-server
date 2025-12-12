@@ -1,11 +1,14 @@
 import json
 import unittest
+from unittest import mock
 from fastmcp import FastMCP
 
+from test_utils import mocked_requests_post
 from .score_calculator import CodeHealthScore
 
 class TestCodeHealthScore(unittest.TestCase):
-    def test_calculate_code_health_score_some(self):
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_calculate_code_health_score_some(self, mock_post):
         def mock_analyze_code(file_path: str):
             return json.dumps({'score': 1})
 
@@ -17,7 +20,8 @@ class TestCodeHealthScore(unittest.TestCase):
 
         self.assertEqual("Code Health score: 1", result)
 
-    def test_calculate_code_health_score_none(self):
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_calculate_code_health_score_none(self, mock_post):
         def mock_analyze_code(file_path: str):
             return json.dumps({})
 

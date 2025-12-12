@@ -16,6 +16,15 @@ Follow these steps:
 5. If the code is already healthy, then aim for an optimal Code Health of 10.0. Such code is optimized for both human and AI comprehension.
 6. Include a **one-sentence justification of the effort–risk tradeoff** for every proposed action.
 
+**ACE (auto_refactor) guidance:**
+If the Code Health Review reports a large or complex function in a supported language and CodeScene ACE (auto-refactor) is available, use the `code_health_auto_refactor` tool to split the function into smaller, cohesive units as the first remediation step. ACE supports these code smells:
+  - Complex Conditional
+  - Bumpy Road Ahead
+  - Complex Method
+  - Deep, Nested Complexity
+  - Large Method
+Then refine the resulting units using targeted refactorings. If ACE is unavailable or the function is not supported, proceed with manual, incremental refactorings.
+
 **Deliverable format:**
 - **Short summary** (1–2 sentences) describing the overall refactoring plan and its expected outcome.
 - **Prioritized list of remediation tasks**. For each task, include:
@@ -28,3 +37,5 @@ Follow these steps:
 Guidelines:
 - Keep the plan **pragmatic and low-risk**, emphasizing high-impact improvements first.
 - If details are missing, make **reasonable assumptions** and briefly state them.
+- When ACE is available, always prefer automated modularization for large/complex functions with supported code smells as an inital refactoring that you then iterate on.
+- If ACE is unavailable, proceed with manual, incremental refactorings.
