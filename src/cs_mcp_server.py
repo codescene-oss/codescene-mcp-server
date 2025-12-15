@@ -75,14 +75,14 @@ def read_documentation_content_for(md_doc_name):
     return Path(f"./src/docs/code-health/{md_doc_name}").read_text(encoding="utf-8")
 
 @mcp.tool()
-def explain_how_code_health_works(context: str | None = None) -> str:
+def explain_code_health(context: str | None = None) -> str:
     """
     Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI.
     """
     return read_documentation_content_for('how-it-works.md')
 
 @mcp.tool()
-def explain_how_code_health_is_relevant_for_productivity_and_business(context: str | None = None) -> str:
+def explain_code_health_productivity(context: str | None = None) -> str:
     """
     Describes how to build a business case for Code Health improvements. 
     Covers empirical data on how healthy code lets you ship faster with 
