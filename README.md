@@ -23,7 +23,7 @@ The Code Health insights augment the AI prompts with rich content around code qu
 
 <details>
 
-**<summary>Claude Code</summary>**
+<summary>Claude Code</summary>
 
 To connect with CodeScene Cloud:
 
@@ -52,7 +52,7 @@ Make sure to replace the `PATH_TO_CODE` with the absolute path to the directory 
 
 <details>
 
-**<summary>Codex CLI</summary>**
+<summary>Codex CLI</summary>
 
 Configure `~/.codex/config.toml` depending on whether or not you use Cloud or On-prem.
 
@@ -82,7 +82,7 @@ Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the director
 
 <details>
 
-**<summary>GitHub Copilot CLI</summary>**
+<summary>GitHub Copilot CLI</summary>
 
 After starting Copilot CLI, run the following command to add the CodeScene MCP server:
 
@@ -114,7 +114,7 @@ Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the director
 
 <details>
 
-**<summary>GitHub Copilot coding agent</summary>**
+<summary>GitHub Copilot coding agent</summary>
 
 GitHub Copilot coding agent can leverage the CodeScene MCP server directly in your CI/CD.
 
@@ -191,7 +191,7 @@ CodeScene On-prem:
 
 <details>
 
-**<summary>Kiro</summary>**
+<summary>Kiro</summary>
 
 Create a `.kiro/settings/mcp.json` file in your workspace directory (or edit if it already exists), add the following configuration.
 
@@ -264,7 +264,7 @@ Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the director
 
 <details>
 
-**<summary>VS Code</summary>**
+<summary>VS Code</summary>
 
 [![Install CodeScene MCP for Cloud](https://img.shields.io/badge/VS_Code-Install_CodeScene_MCP_for_Cloud-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[%7B%22id%22%3A%22CS_MOUNT_PATH%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22Path%20of%20the%20directory%20that%20CodeScene%20should%20be%20able%20to%20see.%22%2C%22password%22%3Afalse%7D%2C%7B%22id%22%3A%22CS_ACCESS_TOKEN%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20Access%20Token%22%2C%22password%22%3Atrue%7D]&config={%22command%22%3A%22docker%22%2C%22args%22%3A[%22run%22%2C%22-i%22%2C%22--rm%22%2C%22-e%22%2C%22CS_ACCESS_TOKEN%22%2C%22-e%22%2C%22CS_MOUNT_PATH%3D%24%7Binput%3ACS_MOUNT_PATH%7D%22%2C%22--mount%22%2C%22type%3Dbind%2Csrc%3D%24%7Binput%3ACS_MOUNT_PATH%7D%2Cdst%3D/mount/%2Cro%22%2C%22codescene/codescene-mcp%22]%2C%22env%22%3A%7B%22CS_ACCESS_TOKEN%22%3A%22%24%7Binput%3ACS_ACCESS_TOKEN%7D%22%7D%2C%22type%22%3A%22stdio%22})
 
@@ -276,7 +276,7 @@ Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the director
 
 <details>
 
-**<summary>Amazon Q CLI</summary>**
+<summary>Amazon Q CLI</summary>
 
 To configure the Amazon Q CLI to have the CodeScene Cloud MCP server:
 
@@ -300,7 +300,7 @@ Make sure to replace the `<PATH_TO_CODE>` with the absolute path to the director
 
 <details>
 
-**<summary>Amazon Q IDE</summary>**
+<summary>Amazon Q IDE</summary>
 
 1. [Access the MCP configuration UI](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/mcp-ide.html#mcp-ide-configuration-access-ui)
 2. Choose the plus (+) symbol
