@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 import subprocess
 from errors import CodeSceneCliError
 from .docker_path_adapter import adapt_mounted_file_path_inside_docker
@@ -55,14 +56,27 @@ def code_health_from_cli_output(cli_output) -> float:
 
 
 def cs_cli_path():
-    cs_cli_location_in_docker = '/root/.local/bin/cs'
-    return os.getenv("CS_CLI_PATH", default=cs_cli_location_in_docker)
+    bundle_dir = Path(__file__).parent.parent.absolute()
+    internal_cs_path = bundle_dir / "cs"
+
+    if internal_cs_path.exists():
+        if not os.access(internal_cs_path, os.X_OK):
+            os.chmod(internal_cs_path, 0o755)
+        return str(internal_cs_path)
+
+    if os.getenv("CS_CLI_PATH"):
+        return os.getenv("CS_CLI_PATH")
+
+    return '/root/.local/bin/cs'
 
 
 def make_cs_cli_review_command_for(cli_command: str, file_path: str):
     cs_cli = cs_cli_path()
 
-    mount_file_path = adapt_mounted_file_path_inside_docker(file_path)
+    if os.getenv("CS_MOUNT_PATH"):
+        mount_file_path = adapt_mounted_file_path_inside_docker(file_path)
+    else:
+        mount_file_path = file_path
 
     return [cs_cli, cli_command, mount_file_path, "--output-format=json"]
 

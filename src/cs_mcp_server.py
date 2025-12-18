@@ -1,3 +1,4 @@
+import os
 from fastmcp import FastMCP
 from fastmcp.resources import FileResource
 from pathlib import Path
@@ -14,6 +15,14 @@ from code_ownership import CodeOwnership
 from utils import query_api_list, analyze_code, run_local_tool, post_refactor
 
 mcp = FastMCP("CodeScene")
+
+def get_resource_path(relative_path):
+    if os.getenv("CS_MOUNT_PATH"):
+        return Path(f"./{relative_path}")
+    else: 
+        base_path = Path(__file__).parent.absolute()
+        return base_path / relative_path
+
 
 # Offer prompts that capture the key use cases. These prompts are more than a 
 # convenience; they also enable feature discoverability and guide users.
@@ -72,7 +81,7 @@ def plan_code_health_refactoring(context: str | None = None) -> str:
 # We want the MCP Server to explain its key concepts like Code Health.
 
 def read_documentation_content_for(md_doc_name):
-    return Path(f"./src/docs/code-health/{md_doc_name}").read_text(encoding="utf-8")
+    return get_resource_path(f"src/docs/code-health/{md_doc_name}").read_text(encoding="utf-8")
 
 @mcp.tool()
 def explain_how_code_health_works(context: str | None = None) -> str:
@@ -100,7 +109,7 @@ def resource_title_from_md_heading_in(path: Path) -> str:
         return first_line.lstrip("#").strip()
 
 def doc_to_file_resources(doc):
-    doc_path = Path(f"./src/docs/code-health/{doc['doc-path']}").resolve()
+    doc_path = get_resource_path(f"src/docs/code-health/{doc['doc-path']}").resolve()
     doc_resource = FileResource(
         uri=f"file://codescene-docs/code-health/{doc['doc-path']}",
         path=doc_path,
