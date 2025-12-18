@@ -25,6 +25,11 @@ jobs:
           pip install -r src/requirements.txt
           pip install Nuitka
 
+      - name: Download CodeScene CLI
+        run: |
+          RUN curl https://downloads.codescene.io/enterprise/cli/install-cs-tool.sh | bash -s -- -y
+          cp /root/.local/bin/cs ./cs
+
       - name: Build Executable
         run: |
           source .venv/bin/activate
