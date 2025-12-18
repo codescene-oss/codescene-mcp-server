@@ -183,11 +183,48 @@ jobs:
         with:
           name: cs-mcp-amd64.exe
           path: cs-mcp.exe
+
+  build-exe-windows-aarch64:
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - uses: actions/setup-python@v5 # Standard stable version
+        with:
+          python-version: '3.13'
+
+      - name: Install deps
+        run: |
+          python -m venv venv
+          .\venv\Scripts\python -m pip install --upgrade pip
+          .\venv\Scripts\pip install -r src/requirements.txt
+          .\venv\Scripts\pip install Nuitka
+
+      - name: Download CodeScene CLI zip
+        run: |
+          Invoke-WebRequest -Uri "https://downloads.codescene.io/enterprise/cli/cs-windows-aarch64-latest.zip" -OutFile "codescene-cli-windows.zip"
+          Expand-Archive -Path "codescene-cli-windows.zip" -DestinationPath "."
+
+      - name: Build Executable
+        run: |
+          .\venv\Scripts\python -m nuitka --onefile `
+            --assume-yes-for-downloads `
+            --include-data-dir=./src/docs=src/docs `
+            --include-data-files=./cs.exe=cs `
+            --output-filename=cs-mcp.exe `
+            src/cs_mcp_server.py
+
+      - name: Upload Executable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cs-mcp-aarch64.exe
         
   # publish-to-release:
   #   permissions:
   #     contents: write 
-  #   needs: [build-exe-linux-amd64, build-exe-linux-aarch64, build-exe-macos-amd64, build-exe-macos-aarch64, build-exe-windows-amd64]
+  #   needs: [build-exe-linux-amd64, build-exe-linux-aarch64, build-exe-macos-amd64, build-exe-macos-aarch64, build-exe-windows-amd64, build-exe-windows-aarch64]
   #   runs-on: ubuntu-latest
   #   steps:
   #     - name: Download all artifacts
@@ -201,8 +238,5 @@ jobs:
   #       with:
   #         tag_name: ${{ github.ref_name }}
   #         files: |
-  #           ./all-binaries/cs-mcp-linux-x86
-  #           ./all-binaries/cs-mcp-linux-aarch64
-  #           ./all-binaries/cs-mcp-macos
-  #           ./all-binaries/cs-mcp.exe
+  #           ./all-binaries/*
   #         append_body: true
