@@ -35,7 +35,7 @@ jobs:
           make create-executable
 
       - name: Upload Executable Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: cs-mcp-linux-x86
           path: cs-mcp
@@ -69,7 +69,7 @@ jobs:
           make create-executable
 
       - name: Upload Executable Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: cs-mcp-linux-arm
           path: cs-mcp
@@ -103,7 +103,7 @@ jobs:
           make create-executable
 
       - name: Upload Executable Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: cs-mcp-macos
           path: cs-mcp
