@@ -108,7 +108,7 @@ jobs:
           name: cs-mcp-macos
           path: cs-mcp
 
-  build-windows-x86:
+  build-exe-windows-x86:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -135,7 +135,7 @@ jobs:
         run: |
           .\venv\Scripts\python -m nuitka --onefile `
             --include-data-dir=./src/docs=src/docs `
-            --include-data-files=./cs=cs `
+            --include-data-files=./cs.exe=cs `
             --output-filename=cs-mcp.exe `
             src/cs_mcp_server.py
 
