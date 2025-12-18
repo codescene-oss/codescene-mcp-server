@@ -10,7 +10,7 @@ on:
   #     - 'MCP-[0-9]+.[0-9]+.[0-9]+-*'
 
 jobs:
-  build-exe-linux-x86:
+  build-exe-linux-amd64:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +41,7 @@ jobs:
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cs-mcp-linux-x86
+          name: cs-mcp-linux-amd64
           path: cs-mcp
 
   build-exe-linux-aarch64:
@@ -78,7 +78,41 @@ jobs:
           name: cs-mcp-linux-aarch64
           path: cs-mcp
 
-  build-exe-macos:
+  build-exe-macos-amd64:
+    runs-on: macos-14-large
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13' 
+
+      - name: Install deps
+        run: |
+          python -m venv .venv/
+          source .venv/bin/activate
+          pip install -r src/requirements.txt
+          pip install Nuitka
+
+      - name: Download CodeScene CLI zip
+        run: |
+          wget https://downloads.codescene.io/enterprise/cli/cs-macos-amd64-latest.zip -O codescene-cli-macos.zip
+          unzip codescene-cli-macos.zip -d .
+
+      - name: Build Executable
+        run: |
+          source .venv/bin/activate
+          make create-executable
+
+      - name: Upload Executable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cs-mcp-macos-amd64
+          path: cs-mcp-macos-amd64
+
+  build-exe-macos-aarch64:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -109,10 +143,10 @@ jobs:
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cs-mcp-macos
-          path: cs-mcp
+          name: cs-mcp-macos-aarch64
+          path: cs-mcp-macos-aarch64
 
-  build-exe-windows-x86:
+  build-exe-windows-amd64:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -147,13 +181,13 @@ jobs:
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cs-mcp-x86.exe
+          name: cs-mcp-amd64.exe
           path: cs-mcp.exe
         
   # publish-to-release:
   #   permissions:
   #     contents: write 
-  #   needs: [build-exe-linux-x86, build-exe-linux-aarch64, build-exe-macos, build-exe-windows-x86] # Make sure this matches your build job ID
+  #   needs: [build-exe-linux-amd64, build-exe-linux-aarch64, build-exe-macos-amd64, build-exe-macos-aarch64, build-exe-windows-amd64]
   #   runs-on: ubuntu-latest
   #   steps:
   #     - name: Download all artifacts
