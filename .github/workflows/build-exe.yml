@@ -1,0 +1,31 @@
+name: Build executables
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-exe-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      # Checkout source code and setup
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13' 
+
+      - name: Install deps
+        run: |
+          python -m venv .venv/
+          source .venv/bin/activate
+          pip install -r src/requirements.txt
+          pip install Nuitka
+
+      - name: Build Executable
+        run: |
+          source .venv/bin/activate
+          make create-executable
