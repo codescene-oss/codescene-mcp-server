@@ -25,10 +25,10 @@ jobs:
           pip install -r src/requirements.txt
           pip install Nuitka
 
-      - name: Download CodeScene CLI
+      - name: Download CodeScene CLI zip
         run: |
-          RUN curl https://downloads.codescene.io/enterprise/cli/install-cs-tool.sh | bash -s -- -y
-          cp /root/.local/bin/cs ./cs
+          wget https://downloads.codescene.io/enterprise/cli/cs-linux-amd64-latest.zip -O codescene-cli-linux.zip
+          unzip codescene-cli-linux.zip -d .
 
       - name: Build Executable
         run: |
