@@ -6,10 +6,9 @@ on:
       - main
 
 jobs:
-  build-exe-linux:
+  build-exe-linux-x86:
     runs-on: ubuntu-24.04
     steps:
-      # Checkout source code and setup
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -34,3 +33,114 @@ jobs:
         run: |
           source .venv/bin/activate
           make create-executable
+
+      - name: Upload Executable Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: cs-mcp-linux-x86
+          path: cs-mcp
+
+  build-exe-linux-arm:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13' 
+
+      - name: Install deps
+        run: |
+          python -m venv .venv/
+          source .venv/bin/activate
+          pip install -r src/requirements.txt
+          pip install Nuitka
+
+      - name: Download CodeScene CLI zip
+        run: |
+          wget https://downloads.codescene.io/enterprise/cli/cs-linux-aarch64-latest.zip -O codescene-cli-linux.zip
+          unzip codescene-cli-linux.zip -d .
+
+      - name: Build Executable
+        run: |
+          source .venv/bin/activate
+          make create-executable
+
+      - name: Upload Executable Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: cs-mcp-linux-arm
+          path: cs-mcp
+
+  build-exe-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13' 
+
+      - name: Install deps
+        run: |
+          python -m venv .venv/
+          source .venv/bin/activate
+          pip install -r src/requirements.txt
+          pip install Nuitka
+
+      - name: Download CodeScene CLI zip
+        run: |
+          wget https://downloads.codescene.io/enterprise/cli/cs-macos-aarch64-latest.zip -O codescene-cli-macos.zip
+          unzip codescene-cli-macos.zip -d .
+
+      - name: Build Executable
+        run: |
+          source .venv/bin/activate
+          make create-executable
+
+      - name: Upload Executable Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: cs-mcp-macos
+          path: cs-mcp
+
+  build-windows-x86:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - uses: actions/setup-python@v5 # Standard stable version
+        with:
+          python-version: '3.13'
+
+      - name: Install deps
+        run: |
+          python -m venv venv
+          .\venv\Scripts\python -m pip install --upgrade pip
+          .\venv\Scripts\pip install -r src/requirements.txt
+          .\venv\Scripts\pip install Nuitka
+
+      - name: Download CodeScene CLI zip
+        run: |
+          Invoke-WebRequest -Uri "https://downloads.codescene.io/enterprise/cli/cs-windows-amd64-latest.zip" -OutFile "codescene-cli-windows.zip"
+          Expand-Archive -Path "codescene-cli-windows.zip" -DestinationPath "."
+
+      - name: Build Executable
+        run: |
+          .\venv\Scripts\python -m nuitka --onefile `
+            --include-data-dir=./src/docs=src/docs `
+            --include-data-files=./cs=cs `
+            --output-filename=cs-mcp.exe `
+            src/cs_mcp_server.py
+
+      - name: Upload Executable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cs-mcp-x86.exe
+          path: cs-mcp.exe
