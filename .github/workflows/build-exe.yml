@@ -1,9 +1,13 @@
-name: Build executables
+name: Build and publish executables
 
-on:
+on: 
   pull_request:
     branches:
       - main
+  # push:
+  #   tags:
+  #     - 'MCP-[0-9]+.[0-9]+.[0-9]+'
+  #     - 'MCP-[0-9]+.[0-9]+.[0-9]+-*'
 
 jobs:
   build-exe-linux-x86:
@@ -40,7 +44,7 @@ jobs:
           name: cs-mcp-linux-x86
           path: cs-mcp
 
-  build-exe-linux-arm:
+  build-exe-linux-aarch64:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -71,7 +75,7 @@ jobs:
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cs-mcp-linux-arm
+          name: cs-mcp-linux-aarch64
           path: cs-mcp
 
   build-exe-macos:
@@ -134,6 +138,7 @@ jobs:
       - name: Build Executable
         run: |
           .\venv\Scripts\python -m nuitka --onefile `
+            --assume-yes-for-downloads `
             --include-data-dir=./src/docs=src/docs `
             --include-data-files=./cs.exe=cs `
             --output-filename=cs-mcp.exe `
@@ -144,3 +149,26 @@ jobs:
         with:
           name: cs-mcp-x86.exe
           path: cs-mcp.exe
+        
+  # publish-to-release:
+  #   permissions:
+  #     contents: write 
+  #   needs: [build-exe-linux-x86, build-exe-linux-aarch64, build-exe-macos, build-exe-windows-x86] # Make sure this matches your build job ID
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Download all artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         path: ./all-binaries
+  #         merge-multiple: true
+
+  #     - name: Upload to Existing Release
+  #       uses: softprops/action-gh-release@v2
+  #       with:
+  #         tag_name: ${{ github.ref_name }}
+  #         files: |
+  #           ./all-binaries/cs-mcp-linux-x86
+  #           ./all-binaries/cs-mcp-linux-aarch64
+  #           ./all-binaries/cs-mcp-macos
+  #           ./all-binaries/cs-mcp.exe
+  #         append_body: true
