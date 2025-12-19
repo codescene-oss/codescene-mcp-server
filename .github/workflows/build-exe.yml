@@ -10,8 +10,31 @@ on:
   #     - 'MCP-[0-9]+.[0-9]+.[0-9]+-*'
 
 jobs:
-  build-exe-linux-amd64:
-    runs-on: ubuntu-24.04
+  build-exe-unix:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            arch: amd64
+            cli-url: https://downloads.codescene.io/enterprise/cli/cs-linux-amd64-latest.zip
+            artifact-name: cs-mcp-linux-amd64
+            output-path: cs-mcp
+          - os: ubuntu-24.04
+            arch: aarch64
+            cli-url: https://downloads.codescene.io/enterprise/cli/cs-linux-aarch64-latest.zip
+            artifact-name: cs-mcp-linux-aarch64
+            output-path: cs-mcp
+          - os: macos-14-large
+            arch: amd64
+            cli-url: https://downloads.codescene.io/enterprise/cli/cs-macos-amd64-latest.zip
+            artifact-name: cs-mcp-macos-amd64
+            output-path: cs-mcp-macos-amd64
+          - os: macos-latest
+            arch: aarch64
+            cli-url: https://downloads.codescene.io/enterprise/cli/cs-macos-aarch64-latest.zip
+            artifact-name: cs-mcp-macos-aarch64
+            output-path: cs-mcp-macos-aarch64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,10 +51,10 @@ jobs:
           pip install -r src/requirements.txt
           pip install Nuitka
 
-      - name: Download CodeScene CLI zip
+      - name: Download CodeScene CLI
         run: |
-          wget https://downloads.codescene.io/enterprise/cli/cs-linux-amd64-latest.zip -O codescene-cli-linux.zip
-          unzip codescene-cli-linux.zip -d .
+          wget ${{ matrix.cli-url }} -O codescene-cli.zip
+          unzip codescene-cli.zip -d .
 
       - name: Build Executable
         run: |
@@ -41,110 +64,8 @@ jobs:
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cs-mcp-linux-amd64
-          path: cs-mcp
-
-  build-exe-linux-aarch64:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13' 
-
-      - name: Install deps
-        run: |
-          python -m venv .venv/
-          source .venv/bin/activate
-          pip install -r src/requirements.txt
-          pip install Nuitka
-
-      - name: Download CodeScene CLI zip
-        run: |
-          wget https://downloads.codescene.io/enterprise/cli/cs-linux-aarch64-latest.zip -O codescene-cli-linux.zip
-          unzip codescene-cli-linux.zip -d .
-
-      - name: Build Executable
-        run: |
-          source .venv/bin/activate
-          make create-executable
-
-      - name: Upload Executable Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cs-mcp-linux-aarch64
-          path: cs-mcp
-
-  build-exe-macos-amd64:
-    runs-on: macos-14-large
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13' 
-
-      - name: Install deps
-        run: |
-          python -m venv .venv/
-          source .venv/bin/activate
-          pip install -r src/requirements.txt
-          pip install Nuitka
-
-      - name: Download CodeScene CLI zip
-        run: |
-          wget https://downloads.codescene.io/enterprise/cli/cs-macos-amd64-latest.zip -O codescene-cli-macos.zip
-          unzip codescene-cli-macos.zip -d .
-
-      - name: Build Executable
-        run: |
-          source .venv/bin/activate
-          make create-executable
-
-      - name: Upload Executable Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cs-mcp-macos-amd64
-          path: cs-mcp-macos-amd64
-
-  build-exe-macos-aarch64:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13' 
-
-      - name: Install deps
-        run: |
-          python -m venv .venv/
-          source .venv/bin/activate
-          pip install -r src/requirements.txt
-          pip install Nuitka
-
-      - name: Download CodeScene CLI zip
-        run: |
-          wget https://downloads.codescene.io/enterprise/cli/cs-macos-aarch64-latest.zip -O codescene-cli-macos.zip
-          unzip codescene-cli-macos.zip -d .
-
-      - name: Build Executable
-        run: |
-          source .venv/bin/activate
-          make create-executable
-
-      - name: Upload Executable Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cs-mcp-macos-aarch64
-          path: cs-mcp-macos-aarch64
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.output-path }}
 
   build-exe-windows-amd64:
     runs-on: windows-latest
@@ -174,7 +95,7 @@ jobs:
           .\venv\Scripts\python -m nuitka --onefile `
             --assume-yes-for-downloads `
             --include-data-dir=./src/docs=src/docs `
-            --include-data-files=./cs.exe=cs `
+            --include-data-files=./cs.exe=cs.exe `
             --output-filename=cs-mcp.exe `
             src/cs_mcp_server.py
 
@@ -184,47 +105,47 @@ jobs:
           name: cs-mcp-amd64.exe
           path: cs-mcp.exe
 
-  build-exe-windows-aarch64:
-    runs-on: windows-11-arm
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+  # build-exe-windows-aarch64:
+  #   runs-on: windows-11-arm
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
       
-      - uses: actions/setup-python@v5 # Standard stable version
-        with:
-          python-version: '3.13'
+  #     - uses: actions/setup-python@v5 # Standard stable version
+  #       with:
+  #         python-version: '3.13'
 
-      - name: Install deps
-        run: |
-          python -m venv venv
-          .\venv\Scripts\python -m pip install --upgrade pip
-          .\venv\Scripts\pip install -r src/requirements.txt
-          .\venv\Scripts\pip install Nuitka
+  #     - name: Install deps
+  #       run: |
+  #         python -m venv venv
+  #         .\venv\Scripts\python -m pip install --upgrade pip
+  #         .\venv\Scripts\pip install -r src/requirements.txt
+  #         .\venv\Scripts\pip install Nuitka
 
-      - name: Download CodeScene CLI zip
-        run: |
-          Invoke-WebRequest -Uri "https://downloads.codescene.io/enterprise/cli/cs-windows-aarch64-latest.zip" -OutFile "codescene-cli-windows.zip"
-          Expand-Archive -Path "codescene-cli-windows.zip" -DestinationPath "."
+  #     - name: Download CodeScene CLI zip
+  #       run: |
+  #         Invoke-WebRequest -Uri "https://downloads.codescene.io/enterprise/cli/cs-windows-amd64-latest.zip" -OutFile "codescene-cli-windows.zip"
+  #         Expand-Archive -Path "codescene-cli-windows.zip" -DestinationPath "."
 
-      - name: Build Executable
-        run: |
-          .\venv\Scripts\python -m nuitka --onefile `
-            --assume-yes-for-downloads `
-            --include-data-dir=./src/docs=src/docs `
-            --include-data-files=./cs.exe=cs `
-            --output-filename=cs-mcp.exe `
-            src/cs_mcp_server.py
+  #     - name: Build Executable
+  #       run: |
+  #         .\venv\Scripts\python -m nuitka --onefile `
+  #           --assume-yes-for-downloads `
+  #           --include-data-dir=./src/docs=src/docs `
+  #           --include-data-files=./cs.exe=cs `
+  #           --output-filename=cs-mcp.exe `
+  #           src/cs_mcp_server.py
 
-      - name: Upload Executable Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cs-mcp-aarch64.exe
+  #     - name: Upload Executable Artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: cs-mcp-aarch64.exe
         
   # publish-to-release:
   #   permissions:
   #     contents: write 
-  #   needs: [build-exe-linux-amd64, build-exe-linux-aarch64, build-exe-macos-amd64, build-exe-macos-aarch64, build-exe-windows-amd64, build-exe-windows-aarch64]
+  #   needs: [build-exe-unix, build-exe-windows-amd64]
   #   runs-on: ubuntu-latest
   #   steps:
   #     - name: Download all artifacts
