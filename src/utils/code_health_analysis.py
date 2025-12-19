@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 from errors import CodeSceneCliError
 from .docker_path_adapter import adapt_mounted_file_path_inside_docker
 
@@ -57,7 +58,12 @@ def code_health_from_cli_output(cli_output) -> float:
 
 def cs_cli_path():
     bundle_dir = Path(__file__).parent.parent.absolute()
-    internal_cs_path = bundle_dir / "cs"
+
+    # Check for platform-specific binary name
+    if sys.platform == "win32":
+        internal_cs_path = bundle_dir / "cs.exe"
+    else:
+        internal_cs_path = bundle_dir / "cs"
 
     if internal_cs_path.exists():
         if not os.access(internal_cs_path, os.X_OK):
