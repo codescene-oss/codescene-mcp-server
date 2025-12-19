@@ -20,8 +20,9 @@ def mock_run_local_tool(command: list, cwd: str = None):
       return file.read()
     
 class TestAutoRefactor(unittest.TestCase):
+    @mock.patch('code_health_auto_refactor.auto_refactor.find_git_root', return_value='/some-path')
     @mock.patch.dict(os.environ, {"CS_ACE_ACCESS_TOKEN": "some-token", "CS_MOUNT_PATH": "/some-path"})
-    def test_refactor(self):
+    def test_refactor(self, mock_find_git_root):
 
         def mock_post_refactor(payload: dict) -> dict:
             payload['source-snippet'].pop('body')
@@ -84,8 +85,9 @@ class TestAutoRefactor(unittest.TestCase):
 
         self.assertEqual(expected, json.loads(result))
 
+    @mock.patch('code_health_auto_refactor.auto_refactor.find_git_root', return_value='/some-path')
     @mock.patch.dict(os.environ, {"CS_ACE_ACCESS_TOKEN": "some-token", "CS_MOUNT_PATH": "/some-path"})
-    def test_refactor_throws(self):
+    def test_refactor_throws(self, mock_find_git_root):
         def raise_exception(*kwargs):
             raise Exception("Some error")
 
@@ -99,8 +101,9 @@ class TestAutoRefactor(unittest.TestCase):
 
         self.assertEqual(expected, result)
     
+    @mock.patch('code_health_auto_refactor.auto_refactor.find_git_root', return_value='/some-path')
     @mock.patch.dict(os.environ, {"CS_ACE_ACCESS_TOKEN": "some-token", "CS_MOUNT_PATH": "/some-path"})
-    def test_refactor_missing_function(self):
+    def test_refactor_missing_function(self, mock_find_git_root):
         self.instance = AutoRefactor(FastMCP('Test'), {
             'post_refactor_fn': None,
             'run_local_tool_fn': mock_run_local_tool,
@@ -111,8 +114,9 @@ class TestAutoRefactor(unittest.TestCase):
 
         self.assertEqual(expected, result)
         
+    @mock.patch('code_health_auto_refactor.auto_refactor.find_git_root', return_value='/some-path')
     @mock.patch.dict(os.environ, {"CS_ACE_ACCESS_TOKEN": "some-token", "CS_MOUNT_PATH": "/some-path"})
-    def test_refactor_no_code_smells(self):
+    def test_refactor_no_code_smells(self, mock_find_git_root):
         self.instance = AutoRefactor(FastMCP('Test'), {
             'post_refactor_fn': None,
             'run_local_tool_fn': mock_run_local_tool,
@@ -136,8 +140,9 @@ class TestAutoRefactor(unittest.TestCase):
 
         self.assertEqual(expected, result)
          
+    @mock.patch('code_health_auto_refactor.auto_refactor.find_git_root', return_value='/some-path')
     @mock.patch.dict(os.environ, {"CS_ACE_ACCESS_TOKEN": "invalid-token", "CS_MOUNT_PATH": "/some-path"})
-    def test_refactor_invalid_token(self):
+    def test_refactor_invalid_token(self, mock_find_git_root):
         self.instance = AutoRefactor(FastMCP('Test'), {
             'post_refactor_fn': post_refactor,
             'run_local_tool_fn': mock_run_local_tool,

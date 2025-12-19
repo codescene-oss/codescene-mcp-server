@@ -2,7 +2,7 @@ import json
 from typing import TypedDict, Callable, Optional
 
 from code_health_tools.delta_analysis import analyze_delta_output
-from utils import cs_cli_path, adapt_mounted_file_path_inside_docker, run_cs_cli, track, with_version_check
+from utils import cs_cli_path, adapt_mounted_file_path_inside_docker, run_cs_cli, track, with_version_check, get_platform_details
 
 
 class PreCommitCodeHealthSafeguardDeps(TypedDict):
@@ -41,6 +41,6 @@ class PreCommitCodeHealthSafeguard:
                  - findings: an array describing improvements/degradation for each code smell.
              - Each quality gate indicates if the file meets the required Code Health standards, helping teams enforce healthy code before commit.
         """
-        cli_command = [cs_cli_path(), "delta", "--output-format=json"]
+        cli_command = [cs_cli_path(get_platform_details()), "delta", "--output-format=json"]
 
         return run_cs_cli(lambda: self._safeguard_code_on(cli_command, git_repository_path))
