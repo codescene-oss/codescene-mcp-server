@@ -25,6 +25,21 @@ class TestCsCliPath(unittest.TestCase):
         self.assertTrue(result.endswith('/cs'))
         self.assertIn('src', result)
 
+    @mock.patch('utils.code_health_analysis.sys')
+    @mock.patch('utils.code_health_analysis.Path.exists')
+    @mock.patch('os.access')
+    def test_returns_bundled_cs_exe_path_on_windows(self, mock_access, mock_exists, mock_sys):
+        from utils.code_health_analysis import cs_cli_path
+
+        mock_sys.platform = "win32"
+        mock_exists.return_value = True
+        mock_access.return_value = True
+
+        result = cs_cli_path()
+
+        self.assertTrue(result.endswith('cs.exe'))
+        self.assertIn('src', result)
+
     @mock.patch('utils.code_health_analysis.Path.exists')
     @mock.patch('os.access')
     @mock.patch('os.chmod')
