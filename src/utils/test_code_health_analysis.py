@@ -2,6 +2,7 @@ import os
 import unittest
 from unittest import mock
 from pathlib import Path
+from utils.platform_details import WindowsPlatformDetails, UnixPlatformDetails, get_platform_details
 
 
 class TestCsCliPath(unittest.TestCase):
@@ -19,10 +20,12 @@ class TestCsCliPath(unittest.TestCase):
 
         mock_exists.return_value = True
         mock_access.return_value = True
+        platform_details = get_platform_details()
 
-        result = cs_cli_path()
+        result = cs_cli_path(platform_details)
 
-        self.assertTrue(result.endswith('/cs'))
+        # Should return a path ending with either 'cs' or 'cs.exe' depending on platform
+        self.assertTrue(result.endswith('cs') or result.endswith('cs.exe'))
         self.assertIn('src', result)
 
     @mock.patch('utils.code_health_analysis.sys')
@@ -34,8 +37,9 @@ class TestCsCliPath(unittest.TestCase):
         mock_sys.platform = "win32"
         mock_exists.return_value = True
         mock_access.return_value = True
+        platform_details = WindowsPlatformDetails()
 
-        result = cs_cli_path()
+        result = cs_cli_path(platform_details)
 
         self.assertTrue(result.endswith('cs.exe'))
         self.assertIn('src', result)
@@ -48,11 +52,13 @@ class TestCsCliPath(unittest.TestCase):
 
         mock_exists.return_value = True
         mock_access.return_value = False
+        platform_details = get_platform_details()
 
-        result = cs_cli_path()
+        result = cs_cli_path(platform_details)
 
         mock_chmod.assert_called_once()
-        self.assertTrue(result.endswith('/cs'))
+        # Should return a path ending with either 'cs' or 'cs.exe' depending on platform
+        self.assertTrue(result.endswith('cs') or result.endswith('cs.exe'))
 
     @mock.patch('utils.code_health_analysis.Path.exists')
     def test_returns_env_cs_cli_path_when_bundled_not_exists(self, mock_exists):
@@ -60,8 +66,9 @@ class TestCsCliPath(unittest.TestCase):
 
         mock_exists.return_value = False
         os.environ["CS_CLI_PATH"] = "/custom/path/to/cs"
+        platform_details = get_platform_details()
 
-        result = cs_cli_path()
+        result = cs_cli_path(platform_details)
 
         self.assertEqual(result, "/custom/path/to/cs")
 
@@ -71,9 +78,11 @@ class TestCsCliPath(unittest.TestCase):
 
         mock_exists.return_value = False
         os.environ.pop("CS_CLI_PATH", None)
+        platform_details = get_platform_details()
 
-        result = cs_cli_path()
+        result = cs_cli_path(platform_details)
 
+        # Should return docker default path
         self.assertEqual(result, '/root/.local/bin/cs')
 
 
@@ -131,7 +140,7 @@ class TestCsCliReviewCommandFor(unittest.TestCase):
 
         result = cs_cli_review_command_for("/foo.py")
 
-        mock_make.assert_called_once_with("review", "/foo.py")
+        mock_make.assert_called_once_with("review", "/foo.py", None)
         self.assertEqual(result, ["/path/to/cs", "review", "/foo.py", "--output-format=json"])
 
 
