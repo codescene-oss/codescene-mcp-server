@@ -28,12 +28,12 @@ jobs:
             arch: amd64
             cli-url: https://downloads.codescene.io/enterprise/cli/cs-macos-amd64-latest.zip
             artifact-name: cs-mcp-macos-amd64
-            output-path: cs-mcp-macos-amd64
+            output-path: cs-mcp
           - os: macos-latest
             arch: aarch64
             cli-url: https://downloads.codescene.io/enterprise/cli/cs-macos-aarch64-latest.zip
             artifact-name: cs-mcp-macos-aarch64
-            output-path: cs-mcp-macos-aarch64
+            output-path: cs-mcp
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
