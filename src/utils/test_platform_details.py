@@ -114,6 +114,44 @@ class TestPlatformDetails(unittest.TestCase):
         
         self.assertIn(r'Git\bin', result['PATH'])
         self.assertIn('C:\\existing', result['PATH'])
+    
+    def test_windows_get_java_options_returns_tmpdir_setting(self):
+        details = WindowsPlatformDetails()
+        
+        result = details.get_java_options()
+        
+        self.assertIn('-Djava.io.tmpdir=', result)
+        # Should contain a valid temp directory path
+        self.assertTrue(len(result) > len('-Djava.io.tmpdir=""'))
+    
+    def test_unix_get_java_options_returns_empty_string(self):
+        details = UnixPlatformDetails()
+        
+        result = details.get_java_options()
+        
+        self.assertEqual("", result)
+    
+    def _test_platform_detection(self, platform_name: str, expected_class: str):
+        """Helper to test platform detection with mocked sys.platform."""
+        import utils.platform_details as pd
+        
+        try:
+            pd.sys = mock.MagicMock()
+            pd.sys.platform = platform_name
+            
+            details = pd.get_platform_details()
+            self.assertEqual(expected_class, details.__class__.__name__)
+        finally:
+            pd.sys = sys
+    
+    def test_get_platform_details_returns_windows_on_win32(self):
+        self._test_platform_detection('win32', 'WindowsPlatformDetails')
+    
+    def test_get_platform_details_returns_unix_on_darwin(self):
+        self._test_platform_detection('darwin', 'UnixPlatformDetails')
+    
+    def test_get_platform_details_returns_unix_on_linux(self):
+        self._test_platform_detection('linux', 'UnixPlatformDetails')
 
 
 if __name__ == '__main__':

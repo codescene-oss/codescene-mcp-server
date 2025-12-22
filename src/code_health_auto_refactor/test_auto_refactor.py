@@ -152,3 +152,20 @@ class TestAutoRefactor(unittest.TestCase):
         result = self.instance.code_health_auto_refactor("/some-path/some-file.cpp", 'Document::moveObject')
 
         self.assertEqual(expected, result)
+
+    @mock.patch('code_health_auto_refactor.auto_refactor.find_git_root', return_value='/some-path')
+    @mock.patch.dict(os.environ, {"CS_ACE_ACCESS_TOKEN": "some-token"}, clear=False)
+    def test_get_cli_file_path_without_mount_path(self, mock_find_git_root):
+        """Test that _get_cli_file_path returns relative path when CS_MOUNT_PATH is not set."""
+        # Remove CS_MOUNT_PATH if it exists
+        os.environ.pop("CS_MOUNT_PATH", None)
+        
+        self.instance = AutoRefactor(FastMCP('Test'), {
+            'post_refactor_fn': None,
+            'run_local_tool_fn': mock_run_local_tool,
+        })
+        
+        result = self.instance._get_cli_file_path("/some-path/src/file.cpp", "/some-path")
+        
+        # Should return relative path
+        self.assertEqual("src/file.cpp", result)

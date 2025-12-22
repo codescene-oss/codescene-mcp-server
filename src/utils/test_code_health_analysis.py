@@ -2,7 +2,230 @@ import os
 import unittest
 from unittest import mock
 from pathlib import Path
+from errors import CodeSceneCliError
 from utils.platform_details import WindowsPlatformDetails, UnixPlatformDetails, get_platform_details
+
+
+import tempfile
+
+
+class TestFindGitRoot(unittest.TestCase):
+    def setUp(self):
+        self._env = dict(os.environ)
+        # Create a temp directory structure with .git
+        # Use realpath to resolve symlinks (macOS /var -> /private/var)
+        self.temp_dir = os.path.realpath(tempfile.mkdtemp())
+        self.git_dir = os.path.join(self.temp_dir, '.git')
+        os.makedirs(self.git_dir)
+        self.sub_dir = os.path.join(self.temp_dir, 'src')
+        os.makedirs(self.sub_dir)
+        self.test_file = os.path.join(self.sub_dir, 'file.py')
+        with open(self.test_file, 'w') as f:
+            f.write('# test file')
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self._env)
+        # Clean up temp directory
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_find_git_root_from_file(self):
+        from utils.code_health_analysis import find_git_root
+        
+        result = find_git_root(self.test_file)
+        
+        self.assertEqual(self.temp_dir, result)
+    
+    def test_find_git_root_from_directory(self):
+        from utils.code_health_analysis import find_git_root
+        
+        result = find_git_root(self.sub_dir)
+        
+        self.assertEqual(self.temp_dir, result)
+    
+    def test_find_git_root_raises_when_not_in_repo(self):
+        from utils.code_health_analysis import find_git_root
+        
+        # Create a temp dir without .git
+        temp_no_git = tempfile.mkdtemp()
+        test_file = os.path.join(temp_no_git, 'file.py')
+        with open(test_file, 'w') as f:
+            f.write('# test')
+        
+        try:
+            with self.assertRaises(CodeSceneCliError) as context:
+                find_git_root(test_file)
+            
+            self.assertIn('Not in a git repository', str(context.exception))
+        finally:
+            import shutil
+            shutil.rmtree(temp_no_git, ignore_errors=True)
+
+
+class TestRunLocalTool(unittest.TestCase):
+    def setUp(self):
+        self._env = dict(os.environ)
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self._env)
+
+    @mock.patch('utils.code_health_analysis.subprocess.run')
+    @mock.patch('utils.code_health_analysis.get_platform_details')
+    def test_run_local_tool_sets_cs_context(self, mock_platform, mock_run):
+        from utils.code_health_analysis import run_local_tool
+        
+        mock_platform_instance = mock.MagicMock()
+        mock_platform_instance.get_java_options.return_value = ''
+        mock_platform_instance.configure_environment.side_effect = lambda x: x
+        mock_platform.return_value = mock_platform_instance
+        
+        mock_result = mock.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = 'output'
+        mock_run.return_value = mock_result
+        
+        run_local_tool(['echo', 'test'])
+        
+        # Check that CS_CONTEXT was set in the env passed to subprocess
+        call_kwargs = mock_run.call_args[1]
+        self.assertEqual('mcp-server', call_kwargs['env']['CS_CONTEXT'])
+    
+    @mock.patch('utils.code_health_analysis.subprocess.run')
+    @mock.patch('utils.code_health_analysis.get_platform_details')
+    def test_run_local_tool_sets_java_options_when_provided(self, mock_platform, mock_run):
+        from utils.code_health_analysis import run_local_tool
+        
+        mock_platform_instance = mock.MagicMock()
+        mock_platform_instance.get_java_options.return_value = '-Djava.io.tmpdir="/tmp"'
+        mock_platform_instance.configure_environment.side_effect = lambda x: x
+        mock_platform.return_value = mock_platform_instance
+        
+        mock_result = mock.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = 'output'
+        mock_run.return_value = mock_result
+        
+        run_local_tool(['echo', 'test'])
+        
+        call_kwargs = mock_run.call_args[1]
+        self.assertEqual('-Djava.io.tmpdir="/tmp"', call_kwargs['env']['_JAVA_OPTIONS'])
+    
+    @mock.patch('utils.code_health_analysis.subprocess.run')
+    @mock.patch('utils.code_health_analysis.get_platform_details')
+    def test_run_local_tool_raises_on_nonzero_return(self, mock_platform, mock_run):
+        from utils.code_health_analysis import run_local_tool
+        
+        mock_platform_instance = mock.MagicMock()
+        mock_platform_instance.get_java_options.return_value = ''
+        mock_platform_instance.configure_environment.side_effect = lambda x: x
+        mock_platform.return_value = mock_platform_instance
+        
+        mock_result = mock.MagicMock()
+        mock_result.returncode = 1
+        mock_result.stderr = 'error message'
+        mock_run.return_value = mock_result
+        
+        with self.assertRaises(CodeSceneCliError) as context:
+            run_local_tool(['failing', 'command'])
+        
+        self.assertIn('CLI command failed', str(context.exception))
+    
+    @mock.patch('utils.code_health_analysis.subprocess.run')
+    @mock.patch('utils.code_health_analysis.get_platform_details')
+    def test_run_local_tool_sets_onprem_url_when_present(self, mock_platform, mock_run):
+        from utils.code_health_analysis import run_local_tool
+        
+        os.environ['CS_ONPREM_URL'] = 'https://onprem.example.com'
+        
+        mock_platform_instance = mock.MagicMock()
+        mock_platform_instance.get_java_options.return_value = ''
+        mock_platform_instance.configure_environment.side_effect = lambda x: x
+        mock_platform.return_value = mock_platform_instance
+        
+        mock_result = mock.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = 'output'
+        mock_run.return_value = mock_result
+        
+        run_local_tool(['echo', 'test'])
+        
+        call_kwargs = mock_run.call_args[1]
+        self.assertEqual('https://onprem.example.com', call_kwargs['env']['CS_ONPREM_URL'])
+
+
+class TestRunCsCli(unittest.TestCase):
+    def test_run_cs_cli_handles_file_not_found(self):
+        from utils.code_health_analysis import run_cs_cli
+        
+        def raise_file_not_found():
+            raise FileNotFoundError()
+        
+        result = run_cs_cli(raise_file_not_found)
+        
+        self.assertIn("Error:", result)
+        self.assertIn("CodeScene CLI tool", result)
+    
+    def test_run_cs_cli_handles_called_process_error(self):
+        from utils.code_health_analysis import run_cs_cli
+        import subprocess
+        
+        def raise_called_process_error():
+            raise subprocess.CalledProcessError(1, 'cs', stderr='process failed')
+        
+        result = run_cs_cli(raise_called_process_error)
+        
+        self.assertIn("Error:", result)
+    
+    def test_run_cs_cli_handles_generic_exception(self):
+        from utils.code_health_analysis import run_cs_cli
+        
+        def raise_generic():
+            raise ValueError('something went wrong')
+        
+        result = run_cs_cli(raise_generic)
+        
+        self.assertIn("Error:", result)
+        self.assertIn("something went wrong", result)
+
+
+class TestAnalyzeCode(unittest.TestCase):
+    def setUp(self):
+        self._env = dict(os.environ)
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self._env)
+
+    @mock.patch('utils.code_health_analysis.run_local_tool')
+    @mock.patch('utils.code_health_analysis.cs_cli_review_command_for')
+    @mock.patch('utils.code_health_analysis.find_git_root')
+    def test_analyze_code_without_mount_path(self, mock_find_git_root, mock_cli_command, mock_run):
+        from utils.code_health_analysis import analyze_code
+        
+        os.environ.pop('CS_MOUNT_PATH', None)
+        mock_find_git_root.return_value = '/project'
+        mock_cli_command.return_value = ['cs', 'review', 'src/file.py', '--output-format=json']
+        mock_run.return_value = '{"score": 8.5}'
+        
+        result = analyze_code('/project/src/file.py')
+        
+        mock_find_git_root.assert_called_once_with('/project/src/file.py')
+        self.assertEqual('{"score": 8.5}', result)
+    
+    @mock.patch('utils.code_health_analysis.run_local_tool')
+    @mock.patch('utils.code_health_analysis.cs_cli_review_command_for')
+    def test_analyze_code_with_mount_path(self, mock_cli_command, mock_run):
+        from utils.code_health_analysis import analyze_code
+        
+        os.environ['CS_MOUNT_PATH'] = '/project'
+        mock_cli_command.return_value = ['cs', 'review', '/mount/file.py', '--output-format=json']
+        mock_run.return_value = '{"score": 9.0}'
+        
+        result = analyze_code('/project/src/file.py')
+        
+        self.assertEqual('{"score": 9.0}', result)
 
 
 class TestCsCliPath(unittest.TestCase):
