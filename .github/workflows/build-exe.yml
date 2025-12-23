@@ -1,13 +1,13 @@
 name: Build and publish executables
 
 on: 
-  pull_request:
-    branches:
-      - main
-  # push:
-  #   tags:
-  #     - 'MCP-[0-9]+.[0-9]+.[0-9]+'
-  #     - 'MCP-[0-9]+.[0-9]+.[0-9]+-*'
+  # pull_request:
+  #   branches:
+  #     - main
+  push:
+    tags:
+      - 'MCP-[0-9]+.[0-9]+.[0-9]+'
+      - 'MCP-[0-9]+.[0-9]+.[0-9]+-*'
 
 jobs:
   build-exe-unix:
@@ -142,22 +142,22 @@ jobs:
   #       with:
   #         name: cs-mcp-aarch64.exe
         
-  # publish-to-release:
-  #   permissions:
-  #     contents: write 
-  #   needs: [build-exe-unix, build-exe-windows-amd64]
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Download all artifacts
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         path: ./all-binaries
-  #         merge-multiple: true
+  publish-to-release:
+    permissions:
+      contents: write 
+    needs: [build-exe-unix, build-exe-windows-amd64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./all-binaries
+          merge-multiple: true
 
-  #     - name: Upload to Existing Release
-  #       uses: softprops/action-gh-release@v2
-  #       with:
-  #         tag_name: ${{ github.ref_name }}
-  #         files: |
-  #           ./all-binaries/*
-  #         append_body: true
+      - name: Upload to Existing Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            ./all-binaries/*
+          append_body: true
