@@ -37,13 +37,14 @@ def find_git_root(file_path: str) -> str:
     raise CodeSceneCliError(f"Not in a git repository: {file_path}")
 
 
-def run_local_tool(command: list, cwd: str = None):
+def run_local_tool(command: list, cwd: str = None, extra_env: dict = None):
     """
     Runs a local command-line tool and captures its output.
 
     Args:
         command (list): The command and its arguments, e.g. ['ls', '-l']
         cwd (str): Optional working directory to run the command in
+        extra_env (dict): Optional extra environment variables to set
 
     Returns:
         str: Combined stdout and stderr output
@@ -67,6 +68,10 @@ def run_local_tool(command: list, cwd: str = None):
         env['_JAVA_OPTIONS'] = java_options
     
     env = platform.configure_environment(env)
+
+    # Apply any extra environment variables (e.g., GIT_DIR for worktrees)
+    if extra_env:
+        env.update(extra_env)
 
     result = subprocess.run(command, capture_output=True, text=True, cwd=cwd, env=env)
     if result.returncode != 0:

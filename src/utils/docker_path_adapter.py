@@ -89,3 +89,54 @@ def adapt_mounted_file_path_inside_docker(file_path: str) -> str:
     if relative == Path("."):
         return "/mount"
     return f"/mount/{relative.as_posix()}"
+
+
+def _read_worktree_gitdir(git_path: str) -> str | None:
+    """
+    If git_path points to a worktree .git file (not a directory),
+    read and return the gitdir path it contains.
+    
+    Returns None if git_path is a directory (regular repo) or doesn't exist.
+    """
+    from pathlib import Path
+    git_file = Path(git_path)
+    
+    if not git_file.exists() or git_file.is_dir():
+        return None
+    
+    try:
+        content = git_file.read_text().strip()
+        if content.startswith("gitdir:"):
+            return content[7:].strip()
+    except (IOError, OSError):
+        pass
+    
+    return None
+
+
+def adapt_worktree_gitdir_for_docker(worktree_path: str) -> str | None:
+    """
+    For a git worktree, translate the gitdir path to work inside Docker.
+    
+    Git worktrees have a .git file (not directory) containing a pointer like:
+        gitdir: /Users/david/project/.git/worktrees/my-branch
+    
+    This absolute host path won't work inside Docker. This function:
+    1. Reads the .git file in the worktree
+    2. Translates the gitdir path using CS_MOUNT_PATH
+    3. Returns the Docker-internal path
+    
+    Returns None if not a worktree or translation not possible.
+    """
+    git_file_path = f"{worktree_path.rstrip('/')}/.git"
+    gitdir = _read_worktree_gitdir(git_file_path)
+    
+    if not gitdir:
+        return None
+    
+    # Translate the gitdir path the same way we translate file paths
+    try:
+        return adapt_mounted_file_path_inside_docker(gitdir)
+    except CodeSceneCliError:
+        # gitdir path is outside the mounted area - can't help
+        return None

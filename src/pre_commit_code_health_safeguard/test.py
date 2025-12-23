@@ -9,7 +9,7 @@ from .delta_analyzer import PreCommitCodeHealthSafeguard
 class TestPreCommitCodeHealthSafeguard(unittest.TestCase):
     @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/my/git/path"})
     def test_pre_commit_code_health_safeguard(self):
-        def mock_run_local_tool(cli_command, path):
+        def mock_run_local_tool(cli_command, path, extra_env=None):
             return json.dumps([{
                 'name': 'test.tsx'
             }])
@@ -31,7 +31,7 @@ class TestPreCommitCodeHealthSafeguard(unittest.TestCase):
 
     @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/my/git/path"})
     def test_pre_commit_code_health_safeguard_invalid_response(self):
-        def mock_run_local_tool(cli_command, path):
+        def mock_run_local_tool(cli_command, path, extra_env=None):
             return "string output"
 
         self.instance = PreCommitCodeHealthSafeguard(FastMCP("Test"), {

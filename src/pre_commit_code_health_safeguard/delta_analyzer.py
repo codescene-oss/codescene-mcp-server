@@ -1,12 +1,13 @@
 import json
+import os
 from typing import TypedDict, Callable, Optional
 
 from code_health_tools.delta_analysis import analyze_delta_output
-from utils import cs_cli_path, adapt_mounted_file_path_inside_docker, run_cs_cli, track, with_version_check, get_platform_details
+from utils import cs_cli_path, adapt_mounted_file_path_inside_docker, adapt_worktree_gitdir_for_docker, run_cs_cli, track, with_version_check, get_platform_details
 
 
 class PreCommitCodeHealthSafeguardDeps(TypedDict):
-    run_local_tool_fn: Callable[[list, Optional[str]], str]
+    run_local_tool_fn: Callable[[list, Optional[str], Optional[dict]], str]
 
 
 class PreCommitCodeHealthSafeguard:
@@ -15,10 +16,21 @@ class PreCommitCodeHealthSafeguard:
 
         mcp_instance.tool(self.pre_commit_code_health_safeguard)
 
-    def _safeguard_code_on(self, cli_command: list, git_repository_path: str) -> str:
+    def _safeguard_code_on_docker(self, cli_command: list, git_repository_path: str) -> str:
+        """Handle pre-commit safeguard in Docker environment with path translation."""
         docker_path = adapt_mounted_file_path_inside_docker(git_repository_path)
-        self.deps["run_local_tool_fn"](["git", "config", "--system", "--add", "safe.directory", docker_path], None)
-        output = self.deps["run_local_tool_fn"](cli_command, docker_path)
+        
+        # Detect if this is a git worktree and get the translated gitdir path
+        worktree_gitdir = adapt_worktree_gitdir_for_docker(docker_path)
+        extra_env = {"GIT_DIR": worktree_gitdir} if worktree_gitdir else None
+        
+        self.deps["run_local_tool_fn"](["git", "config", "--system", "--add", "safe.directory", docker_path], None, extra_env)
+        output = self.deps["run_local_tool_fn"](cli_command, docker_path, extra_env)
+        return json.dumps(analyze_delta_output(output))
+
+    def _safeguard_code_on_local(self, cli_command: list, git_repository_path: str) -> str:
+        """Handle pre-commit safeguard in local/native environment."""
+        output = self.deps["run_local_tool_fn"](cli_command, git_repository_path, None)
         return json.dumps(analyze_delta_output(output))
 
     @track("pre-commit-code-health-safeguard")
@@ -43,4 +55,9 @@ class PreCommitCodeHealthSafeguard:
         """
         cli_command = [cs_cli_path(get_platform_details()), "delta", "--output-format=json"]
 
-        return run_cs_cli(lambda: self._safeguard_code_on(cli_command, git_repository_path))
+        if os.getenv("CS_MOUNT_PATH"):
+            # Docker environment - needs path translation and worktree handling
+            return run_cs_cli(lambda: self._safeguard_code_on_docker(cli_command, git_repository_path))
+        else:
+            # Local/native binary - use paths directly
+            return run_cs_cli(lambda: self._safeguard_code_on_local(cli_command, git_repository_path))

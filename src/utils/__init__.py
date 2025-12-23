@@ -1,4 +1,4 @@
-from .docker_path_adapter import adapt_mounted_file_path_inside_docker
+from .docker_path_adapter import adapt_mounted_file_path_inside_docker, adapt_worktree_gitdir_for_docker
 from .platform_details import get_platform_details, PlatformDetails
 from .codescene_api_client import (
     normalize_onprem_url, 
