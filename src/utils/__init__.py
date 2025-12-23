@@ -1,4 +1,5 @@
-from .docker_path_adapter import adapt_mounted_file_path_inside_docker
+from .docker_path_adapter import adapt_mounted_file_path_inside_docker, adapt_worktree_gitdir_for_docker
+from .platform_details import get_platform_details, PlatformDetails
 from .codescene_api_client import (
     normalize_onprem_url, 
     get_api_url, 
@@ -14,6 +15,7 @@ from .code_health_analysis import (
     make_cs_cli_review_command_for,
     cs_cli_review_command_for,
     analyze_code,
+    find_git_root,
 )
 from .ace_api_client import (
     post_refactor

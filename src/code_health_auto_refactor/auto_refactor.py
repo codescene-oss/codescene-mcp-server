@@ -1,8 +1,9 @@
 import json
 import os
 import re
+from pathlib import Path
 from typing import Callable, TypedDict, Optional
-from utils import adapt_mounted_file_path_inside_docker, cs_cli_path
+from utils import adapt_mounted_file_path_inside_docker, cs_cli_path, find_git_root, get_platform_details
 
 class AutoRefactorError(Exception):
     pass
@@ -17,17 +18,28 @@ class AutoRefactor:
 
         mcp_instance.tool(self.code_health_auto_refactor)
 
-    def _run_cs_cli(self, args: list[str]):
-        output = self.deps["run_local_tool_fn"]([cs_cli_path()] + args)
+    def _run_cs_cli(self, args: list[str], git_root: str):
+        output = self.deps["run_local_tool_fn"]([cs_cli_path(get_platform_details())] + args, git_root)
         return json.loads(output)
+    
+    def _get_cli_file_path(self, file_path: str, git_root: str) -> str:
+        """Get the appropriate file path for CLI commands based on environment."""
+        if os.getenv("CS_MOUNT_PATH"):
+            # Docker environment - use mounted path
+            return adapt_mounted_file_path_inside_docker(file_path)
+        else:
+            # Local environment - use relative path from git root
+            return str(Path(file_path).relative_to(git_root))
         
-    def _parse_fns(self, file_path: str) -> list[dict]:
-        cli_command = ["parse-fns", "--path", adapt_mounted_file_path_inside_docker(file_path)]
-        return self._run_cs_cli(cli_command)
+    def _parse_fns(self, file_path: str, git_root: str) -> list[dict]:
+        cli_path = self._get_cli_file_path(file_path, git_root)
+        cli_command = ["parse-fns", "--path", cli_path]
+        return self._run_cs_cli(cli_command, git_root)
 
-    def _review(self, file_path: str) -> dict:
-        cli_command = ["review", "--output-format=json", adapt_mounted_file_path_inside_docker(file_path)]
-        return self._run_cs_cli(cli_command)
+    def _review(self, file_path: str, git_root: str) -> dict:
+        cli_path = self._get_cli_file_path(file_path, git_root)
+        cli_command = ["review", "--output-format=json", cli_path]
+        return self._run_cs_cli(cli_command, git_root)
 
     def _get_function(self, functions: list[dict], function_name: str) -> dict:
         return next((f for f in functions if f["name"] == function_name), False)
@@ -98,8 +110,9 @@ class AutoRefactor:
             if os.getenv("CS_ACE_ACCESS_TOKEN") is None:
                 return f"Error: This tool needs a token valid for CodeScene ACE in CS_ACE_ACCESS_TOKEN. See the ACE activation instructions in https://github.com/codescene-oss/codescene-mcp-server?tab=readme-ov-file#-activate-ace-in-codescene-mcp"
             
-            functions = self._parse_fns(file_path)
-            review = self._review(file_path)
+            git_root = find_git_root(file_path)
+            functions = self._parse_fns(file_path, git_root)
+            review = self._review(file_path, git_root)
 
             function = self._get_function(functions, function_name)
             if not function:
