@@ -223,40 +223,38 @@ class TestWorktreeGitdirAdapter(unittest.TestCase):
             result = adapt_worktree_gitdir_for_docker(tmpdir)
             self.assertIsNone(result)
 
-    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/Users/david/project-a"})
-    def test_adapt_worktree_gitdir_returns_none_when_gitdir_outside_mount(self):
-        """Test that gitdir pointing outside mount path returns None."""
+    def test_adapt_worktree_gitdir_edge_cases(self):
+        """Test worktree gitdir translation edge cases via table-driven tests."""
         from .docker_path_adapter import adapt_worktree_gitdir_for_docker
         import tempfile
         import os as os_module
         
-        with tempfile.TemporaryDirectory() as tmpdir:
-            worktree_dir = os_module.path.join(tmpdir, "worktree")
-            os_module.makedirs(worktree_dir)
-            git_file = os_module.path.join(worktree_dir, ".git")
-            
-            # gitdir points to a different project outside the mount
-            with open(git_file, 'w') as f:
-                f.write("gitdir: /Users/david/project-b/.git/worktrees/branch\n")
-            
-            result = adapt_worktree_gitdir_for_docker(worktree_dir)
-            self.assertIsNone(result)
-
-    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "C:\\Users\\david\\workspace"})
-    def test_adapt_worktree_gitdir_with_windows_paths(self):
-        """Test worktree gitdir translation with Windows-style paths."""
-        from .docker_path_adapter import adapt_worktree_gitdir_for_docker
-        import tempfile
-        import os as os_module
+        cases = [
+            # (mount_path, gitdir_content, expected_result, description)
+            (
+                "/Users/david/project-a",
+                "gitdir: /Users/david/project-b/.git/worktrees/branch\n",
+                None,
+                "gitdir outside mount path returns None"
+            ),
+            (
+                "C:\\Users\\david\\workspace",
+                "gitdir: C:\\Users\\david\\workspace\\main-repo\\.git\\worktrees\\my-branch\n",
+                "/mount/main-repo/.git/worktrees/my-branch",
+                "Windows-style paths are translated correctly"
+            ),
+        ]
         
-        with tempfile.TemporaryDirectory() as tmpdir:
-            worktree_dir = os_module.path.join(tmpdir, "worktree")
-            os_module.makedirs(worktree_dir)
-            git_file = os_module.path.join(worktree_dir, ".git")
-            
-            # Simulate Windows-style gitdir path in the .git file
-            with open(git_file, 'w') as f:
-                f.write("gitdir: C:\\Users\\david\\workspace\\main-repo\\.git\\worktrees\\my-branch\n")
-            
-            result = adapt_worktree_gitdir_for_docker(worktree_dir)
-            self.assertEqual(result, "/mount/main-repo/.git/worktrees/my-branch")
+        for mount_path, gitdir_content, expected, description in cases:
+            with self.subTest(description=description):
+                with mock.patch.dict(os.environ, {"CS_MOUNT_PATH": mount_path}):
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        worktree_dir = os_module.path.join(tmpdir, "worktree")
+                        os_module.makedirs(worktree_dir)
+                        git_file = os_module.path.join(worktree_dir, ".git")
+                        
+                        with open(git_file, 'w') as f:
+                            f.write(gitdir_content)
+                        
+                        result = adapt_worktree_gitdir_for_docker(worktree_dir)
+                        self.assertEqual(result, expected)
