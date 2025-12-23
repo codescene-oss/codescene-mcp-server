@@ -491,63 +491,7 @@ seems to hallucinate parts of the path some of the time. We're still investigati
 
 </details>
 
-## Building the docker instance locally
+## Building Locally
 
-You can build and run the dockerized CodeScene MCP server by first cloning the repo and then building the Docker image:
-
-```sh
-docker build -t codescene-mcp .
-```
-
-And then configuring the MCP in your editor, for example in VS Code:
-
-```json
-"codescene-mcp": {
-    "type": "stdio",
-    "command": "docker",
-    "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "CS_ACCESS_TOKEN",
-        "-e",
-        "CS_MOUNT_PATH=<PATH_TO_CODE>",
-        "--mount",
-        "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro",
-        "codescene-mcp"
-    ]
-}
-```
-
-This configuration will automatically pick up the `CS_ACCESS_TOKEN` environment variable, but if you can't create a system-wide one then you can manually specify it like this:
-
-```json
-"codescene-mcp": {
-    "type": "stdio",
-    "command": "docker",
-    "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "CS_ACCESS_TOKEN",
-        "-e",
-        "CS_MOUNT_PATH=<PATH_TO_CODE>",
-        "--mount",
-        "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro",
-        "codescene-mcp"
-    ],
-    "env": {
-		"CS_ACCESS_TOKEN": "token-goes-here",
-    }
-}
-```
-
-Or when running it from the CLI, like this:
-
-```sh
-docker run -i --rm -e CS_ACCESS_TOKEN=token-goes-here codescene-mcp
-```
-
-**Note:** if you want to use CodeScene On-prem, you need to additionally pass the `CS_ONPREM_URL` environment variable to it.
+- [Building the Docker image locally](docs/building-docker-locally.md)
+- [Building a static executable locally](docs/building-executable-locally.md)
