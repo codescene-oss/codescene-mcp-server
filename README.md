@@ -408,7 +408,7 @@ Use Code Health reviews to inform AI-driven summaries, diagnostics, or code tran
 
 <details>
 
-**<summary>Do I need a CodeScene account to use the MCP?</summary>**
+<summary>Do I need a CodeScene account to use the MCP?</summary>
 
 Yes, the MCP Server requires a [CodeScene subscription](https://codescene.com/pricing). Use your CodeScene instance to create the `CS_ACCESS_TOKEN` which activates the MCP. 
 The MCP supports both CodeScene Cloud and CodeScene on-prem.
@@ -417,7 +417,7 @@ The MCP supports both CodeScene Cloud and CodeScene on-prem.
 
 <details>
 
-**<summary>How does the MCP Server keep my code private and secure?</summary>**
+<summary>How does the MCP Server keep my code private and secure?</summary>
 
 The CodeScene MCP Server runs fully locally. All analysis — including Code Health scoring, delta reviews, and business-case calculations — is performed on your machine, against your local repository.
 No source code or analysis data is sent to cloud providers, LLM vendors, or any external service.
@@ -430,7 +430,7 @@ For complete details, please see CodeScene’s full [privacy and security docume
 
 <details>
 
-**<summary>Can I use any LLM as the backbone for CodeScene MCP?</summary>**
+<summary>Can I use any LLM as the backbone for CodeScene MCP?</summary>
 
 CodeScene MCP can work with any model your AI assistant supports, but we strongly recommend choosing a frontier model when your assistant offers a model selector (as in tools like GitHub Copilot). 
 
@@ -441,7 +441,7 @@ For a consistent, high-quality experience, select the newest available model.
 
 <details>
 
-**<summary>I have multiple repos — how do I configure the MCP?</summary>**
+<summary>I have multiple repos — how do I configure the MCP?</summary>
 
 Since you have to provide a mount path for Docker, you can either have a MCP configuration per project (in VS Code that would be a `.vscode/mcp.json` file per project, for example) or you can mount a root directory within which all your projects are and then just use that one configuration instead.
 
@@ -449,7 +449,7 @@ Since you have to provide a mount path for Docker, you can either have a MCP con
 
 <details>
 
-**<summary>Why are we mounting a directory in the Docker?</summary>**
+<summary>Why are we mounting a directory in the Docker?</summary>
 
 Previously we had the MCP client pass the entire file contents to us in a JSON object, but with this we ran into a problem where if the file contents exceed your AI model's input or output token limit, we'd either get no data or incorrect data. 
 
@@ -463,7 +463,7 @@ In addition this now saves your AI budget by not spending precious tokens on fil
 
 <details>
 
-**<summary>What is `CS_MOUNT_PATH`?</summary>**
+<summary>What is `CS_MOUNT_PATH`?</summary>
 
 The `CS_MOUNT_PATH` should be an absolute path to the directory whose code you want to analyse with CodeScene. It can be either just a singular project, say at `/home/john/Projects/MyProject`, in which case the MCP server only sees and is able to reason about the files in that particular project, or it could be a more global path like `/home/john/Projects`, in which case the MCP server sees all of your projects.
 
@@ -473,7 +473,7 @@ The difference here really comes down to your preference. Do you want to give it
 
 <details>
 
-**<summary>Why do we specify `CS_MOUNT_PATH` twice?</summary>**
+<summary>Why do we specify `CS_MOUNT_PATH` twice?</summary>
 
 Due to the limitation of not knowing the relative path to the file from within Docker, in order to read the correct file we need to know the full absolute path to your mounted directory, so that we could deduce a relative path to the internally mounted file by simply taking the absolute path to the file, the absolute path to the mounted directory, and replacing the mounted directory part with our internal mounted directory. 
 
@@ -483,7 +483,7 @@ We pass the absolute path to the mounted directory to us via a environment varia
 
 <details>
 
-**<summary>Why does IntelliJ give a wrong path to the MCP server?</summary>**
+<summary>Why does IntelliJ give a wrong path to the MCP server?</summary>
 
 In our testing we've seen that IntelliJ's AI Assistant sometimes gives a wrong path to the CodeScene MCP server. 
 From what we can tell, it seems to have nothing to do with the MCP server itself, but rather with IntelliJ's AI Assistant, which 
