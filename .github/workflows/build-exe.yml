@@ -8,9 +8,15 @@ on:
     tags:
       - 'MCP-[0-9]+.[0-9]+.[0-9]+'
       - 'MCP-[0-9]+.[0-9]+.[0-9]+-*'
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-exe-unix:
+    permissions:
+      contents: read
+
     strategy:
       matrix:
         include:
@@ -34,6 +40,7 @@ jobs:
             cli-url: https://downloads.codescene.io/enterprise/cli/cs-macos-aarch64-latest.zip
             artifact-name: cs-mcp-macos-aarch64
             output-path: cs-mcp
+            
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +67,91 @@ jobs:
         run: |
           source .venv/bin/activate
           make create-executable
+        
+      - name: Check for macOS signing secrets
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER'
+        id: check-mac-secrets
+        shell: bash
+        run: |
+          if [[ -n "${{ secrets.MACOS_CERTIFICATE }}" \
+             && -n "${{ secrets.MACOS_CERTIFICATE_PWD }}" \
+             && -n "${{ secrets.APPLE_DEVELOPER_ID }}" \
+             && -n "${{ secrets.APPLE_ID }}" \
+             && -n "${{ secrets.APPLE_APP_PASSWORD }}" \
+             && -n "${{ secrets.APPLE_TEAM_ID }}" ]]; then
+            echo "can-sign=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can-sign=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import Apple Developer Certificate (keychain)
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        shell: bash
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          KEYCHAIN_PWD: keychainpassword
+        run: |
+          security create-keychain -p "$KEYCHAIN_PWD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PWD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+
+          # Ne ispisuj sadržaj cert-a (nema echo/cat), samo decode u file
+          echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" build.keychain
+          rm -f certificate.p12
+
+      - name: Codesign macOS executable
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        shell: bash
+        env:
+          APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
+        run: |
+          BIN="${{ matrix.output-path }}"
+          if [[ ! -f "$BIN" ]]; then
+            echo "::error::Expected macOS binary at '$BIN' but it was not found."
+            ls -la
+            exit 1
+          fi
+
+          codesign --force --options runtime --sign "$APPLE_DEVELOPER_ID" --timestamp "$BIN"
+          codesign --verify --verbose "$BIN"
+
+      - name: Notarize macOS executable
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          BIN="${{ matrix.output-path }}"
+          ZIP="notarize-${{ matrix.arch }}.zip"
+
+          ditto -c -k --keepParent "$BIN" "$ZIP"
+          xcrun notarytool submit "$ZIP" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+      - name: Staple notarization ticket
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        shell: bash
+        run: |
+          BIN="${{ matrix.output-path }}"
+          xcrun stapler staple "$BIN"
+          xcrun stapler validate "$BIN" || true
+
+      - name: Clean up keychain
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true' && always()
+        shell: bash
+        run: |
+          security default-keychain -s login.keychain
+          security delete-keychain build.keychain || true
+          rm -f notarize-*.zip || true
 
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
