@@ -152,8 +152,15 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PWD" build.keychain
           security set-keychain-settings -t 3600 -u build.keychain
 
-          # Decode certificate (macOS uses -D, not --decode)
-          echo "$MACOS_CERTIFICATE" | base64 -D > certificate.p12
+          # Decode certificate using printf to avoid newline issues
+          printf '%s' "$MACOS_CERTIFICATE" | base64 -D -o certificate.p12
+          
+          # Verify the file was created and has content
+          if [[ ! -s certificate.p12 ]]; then
+            echo "::error::Failed to decode certificate - file is empty or missing"
+            exit 1
+          fi
+          
           security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" build.keychain
           rm -f certificate.p12
