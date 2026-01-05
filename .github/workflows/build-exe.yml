@@ -70,11 +70,12 @@ jobs:
 
       - name: Rename binary to include platform info
         run: mv ${{ matrix.output-path }} ${{ matrix.artifact-name }}
+
       - name: Verify Linux executable (optional)
         if: startsWith(matrix.os, 'ubuntu')
         shell: bash
         run: |
-          BIN="${{ matrix.output-path }}"
+          BIN="${{ matrix.artifact-name }}"
           chmod +x "$BIN" || true
           ./"$BIN" --help >/dev/null 2>&1 || true
 
@@ -82,7 +83,7 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu')
         shell: bash
         run: |
-          BIN="${{ matrix.output-path }}"
+          BIN="${{ matrix.artifact-name }}"
           sha256sum "$BIN" > "${BIN}.sha256"
 
       - name: Check for Linux signing secrets
@@ -113,7 +114,7 @@ jobs:
           LINUX_GPG_KEY_ID: ${{ secrets.LINUX_GPG_KEY_ID }}
           LINUX_GPG_PASSPHRASE: ${{ secrets.LINUX_GPG_PASSPHRASE }}
         run: |
-          BIN="${{ matrix.output-path }}"
+          BIN="${{ matrix.artifact-name }}"
           gpg --batch --yes --pinentry-mode loopback \
               --passphrase "$LINUX_GPG_PASSPHRASE" \
               --local-user "$LINUX_GPG_KEY_ID" \
@@ -219,7 +220,7 @@ jobs:
         with:
           name: ${{ matrix.artifact-name }}-checksums
           path: |
-            ${{ matrix.output-path }}.sha256
+            ${{ matrix.artifact-name }}.sha256
 
       - name: Upload Linux checksum signature
         if: startsWith(matrix.os, 'ubuntu') && github.event_name == 'push' && steps.check-linux-secrets.outputs.can-sign == 'true'
@@ -227,7 +228,7 @@ jobs:
         with:
           name: ${{ matrix.artifact-name }}-checksums
           path: |
-            ${{ matrix.output-path }}.sha256.asc
+            ${{ matrix.artifact-name }}.sha256.asc
 
   build-exe-windows-amd64:
     runs-on: windows-latest
