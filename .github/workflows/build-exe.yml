@@ -204,8 +204,10 @@ jobs:
         shell: bash
         run: |
           BIN="${{ matrix.artifact-name }}"
-          xcrun stapler staple "$BIN"
-          xcrun stapler validate "$BIN" || true
+          # Stapling doesn't work for standalone executables (only .app, .dmg, .pkg)
+          # The notarization is still valid - macOS checks with Apple servers at runtime
+          echo "::notice::Skipping staple for standalone executable (not supported by Apple)"
+          echo "Notarization is valid - Gatekeeper will verify online"
 
       - name: Clean up keychain
         if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true' && always()
