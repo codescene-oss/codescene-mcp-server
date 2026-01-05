@@ -121,7 +121,7 @@ jobs:
 
         
       - name: Check for macOS signing secrets
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER'
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push'
         id: check-mac-secrets
         shell: bash
         run: |
@@ -137,7 +137,7 @@ jobs:
           fi
 
       - name: Import Apple Developer Certificate (keychain)
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
@@ -156,7 +156,7 @@ jobs:
           rm -f certificate.p12
 
       - name: Codesign macOS executable
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
@@ -172,7 +172,7 @@ jobs:
           codesign --verify --verbose "$BIN"
 
       - name: Notarize macOS executable
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -190,7 +190,7 @@ jobs:
             --wait
 
       - name: Staple notarization ticket
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         run: |
           BIN="${{ matrix.output-path }}"
@@ -198,7 +198,7 @@ jobs:
           xcrun stapler validate "$BIN" || true
 
       - name: Clean up keychain
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true' && always()
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true' && always()
         shell: bash
         run: |
           security default-keychain -s login.keychain
