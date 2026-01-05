@@ -68,11 +68,14 @@ jobs:
           source .venv/bin/activate
           make create-executable
 
+      - name: Rename binary to include platform info
+        run: mv ${{ matrix.output-path }} ${{ matrix.artifact-name }}
+
       - name: Verify Linux executable (optional)
         if: startsWith(matrix.os, 'ubuntu')
         shell: bash
         run: |
-          BIN="${{ matrix.output-path }}"
+          BIN="${{ matrix.artifact-name }}"
           chmod +x "$BIN" || true
           ./"$BIN" --help >/dev/null 2>&1 || true
 
@@ -80,7 +83,7 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu')
         shell: bash
         run: |
-          BIN="${{ matrix.output-path }}"
+          BIN="${{ matrix.artifact-name }}"
           sha256sum "$BIN" > "${BIN}.sha256"
 
       - name: Check for Linux signing secrets
@@ -111,7 +114,7 @@ jobs:
           LINUX_GPG_KEY_ID: ${{ secrets.LINUX_GPG_KEY_ID }}
           LINUX_GPG_PASSPHRASE: ${{ secrets.LINUX_GPG_PASSPHRASE }}
         run: |
-          BIN="${{ matrix.output-path }}"
+          BIN="${{ matrix.artifact-name }}"
           gpg --batch --yes --pinentry-mode loopback \
               --passphrase "$LINUX_GPG_PASSPHRASE" \
               --local-user "$LINUX_GPG_KEY_ID" \
@@ -161,7 +164,7 @@ jobs:
         env:
           APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
         run: |
-          BIN="${{ matrix.output-path }}"
+          BIN="${{ matrix.artifact-name }}"
           if [[ ! -f "$BIN" ]]; then
             echo "::error::Expected macOS binary at '$BIN' but it was not found."
             ls -la
@@ -179,7 +182,7 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          BIN="${{ matrix.output-path }}"
+          BIN="${{ matrix.artifact-name }}"
           ZIP="notarize-${{ matrix.arch }}.zip"
 
           ditto -c -k --keepParent "$BIN" "$ZIP"
@@ -193,7 +196,7 @@ jobs:
         if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         run: |
-          BIN="${{ matrix.output-path }}"
+          BIN="${{ matrix.artifact-name }}"
           xcrun stapler staple "$BIN"
           xcrun stapler validate "$BIN" || true
 
@@ -209,7 +212,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.output-path }}
+          path: ${{ matrix.artifact-name }}
 
       - name: Upload Linux checksum
         if: startsWith(matrix.os, 'ubuntu')
@@ -217,7 +220,7 @@ jobs:
         with:
           name: ${{ matrix.artifact-name }}-checksums
           path: |
-            ${{ matrix.output-path }}.sha256
+            ${{ matrix.artifact-name }}.sha256
 
       - name: Upload Linux checksum signature
         if: startsWith(matrix.os, 'ubuntu') && github.event_name == 'push' && steps.check-linux-secrets.outputs.can-sign == 'true'
@@ -225,7 +228,7 @@ jobs:
         with:
           name: ${{ matrix.artifact-name }}-checksums
           path: |
-            ${{ matrix.output-path }}.sha256.asc
+            ${{ matrix.artifact-name }}.sha256.asc
 
   build-exe-windows-amd64:
     runs-on: windows-latest
@@ -259,11 +262,14 @@ jobs:
             --output-filename=cs-mcp.exe `
             src/cs_mcp_server.py
 
+      - name: Rename binary to include platform info
+        run: Rename-Item -Path "cs-mcp.exe" -NewName "cs-mcp-windows-amd64.exe"
+
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cs-mcp-amd64.exe
-          path: cs-mcp.exe
+          name: cs-mcp-windows-amd64
+          path: cs-mcp-windows-amd64.exe
 
   # build-exe-windows-aarch64:
   #   runs-on: windows-11-arm
