@@ -221,7 +221,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.output-path }}
+          path: ${{ matrix.artifact-name }}
 
       - name: Upload Linux checksums (sha256 + optional signature)
         if: startsWith(matrix.os, 'ubuntu')
@@ -229,8 +229,8 @@ jobs:
         with:
           name: ${{ matrix.artifact-name }}-checksums
           path: |
-            ${{ matrix.output-path }}.sha256
-            ${{ matrix.output-path }}.sha256.asc
+            ${{ matrix.artifact-name }}.sha256
+            ${{ matrix.artifact-name }}.sha256.asc
           if-no-files-found: warn
 
   build-exe-windows-amd64:
