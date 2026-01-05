@@ -24,22 +24,22 @@ jobs:
             arch: amd64
             cli-url: https://downloads.codescene.io/enterprise/cli/cs-linux-amd64-latest.zip
             artifact-name: cs-mcp-linux-amd64
-            output-path: cs-mcp
+            output-path: cs-mcp-linux-amd64
           - os: ubuntu-24.04
             arch: aarch64
             cli-url: https://downloads.codescene.io/enterprise/cli/cs-linux-aarch64-latest.zip
             artifact-name: cs-mcp-linux-aarch64
-            output-path: cs-mcp
+            output-path: cs-mcp-linux-aarch64
           - os: macos-14-large
             arch: amd64
             cli-url: https://downloads.codescene.io/enterprise/cli/cs-macos-amd64-latest.zip
             artifact-name: cs-mcp-macos-amd64
-            output-path: cs-mcp
+            output-path: cs-mcp-macos-amd64
           - os: macos-latest
             arch: aarch64
             cli-url: https://downloads.codescene.io/enterprise/cli/cs-macos-aarch64-latest.zip
             artifact-name: cs-mcp-macos-aarch64
-            output-path: cs-mcp
+            output-path: cs-mcp-macos-aarch64
             
     runs-on: ${{ matrix.os }}
     steps:
@@ -68,6 +68,12 @@ jobs:
           source .venv/bin/activate
           make create-executable
 
+      - name: Rename binary to include platform info
+        shell: bash
+        run: |
+          mv cs-mcp "${{ matrix.output-path }}"
+          chmod +x "${{ matrix.output-path }}" || true
+
       - name: Verify Linux executable (optional)
         if: startsWith(matrix.os, 'ubuntu')
         shell: bash
@@ -84,7 +90,7 @@ jobs:
           sha256sum "$BIN" > "${BIN}.sha256"
 
       - name: Check for Linux signing secrets
-        if: startsWith(matrix.os, 'ubuntu') && github.event_name == 'push'
+        if: startsWith(matrix.os, 'ubuntu')
         id: check-linux-secrets
         shell: bash
         run: |
@@ -97,7 +103,7 @@ jobs:
           fi
 
       - name: Import GPG key (Linux)
-        if: startsWith(matrix.os, 'ubuntu') && github.event_name == 'push' && steps.check-linux-secrets.outputs.can-sign == 'true'
+        if: startsWith(matrix.os, 'ubuntu') && steps.check-linux-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           LINUX_GPG_PRIVATE_KEY: ${{ secrets.LINUX_GPG_PRIVATE_KEY }}
@@ -105,7 +111,7 @@ jobs:
           echo "$LINUX_GPG_PRIVATE_KEY" | gpg --batch --import
 
       - name: Sign checksum (Linux)
-        if: startsWith(matrix.os, 'ubuntu') && github.event_name == 'push' && steps.check-linux-secrets.outputs.can-sign == 'true'
+        if: startsWith(matrix.os, 'ubuntu') && steps.check-linux-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           LINUX_GPG_KEY_ID: ${{ secrets.LINUX_GPG_KEY_ID }}
@@ -137,7 +143,7 @@ jobs:
           fi
 
       - name: Import Apple Developer Certificate (keychain)
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: startsWith(matrix.os, 'macos') && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
@@ -156,7 +162,7 @@ jobs:
           rm -f certificate.p12
 
       - name: Codesign macOS executable
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: startsWith(matrix.os, 'macos') && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
@@ -172,7 +178,7 @@ jobs:
           codesign --verify --verbose "$BIN"
 
       - name: Notarize macOS executable
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: startsWith(matrix.os, 'macos') && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -190,7 +196,7 @@ jobs:
             --wait
 
       - name: Staple notarization ticket
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: startsWith(matrix.os, 'macos') && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         run: |
           BIN="${{ matrix.output-path }}"
@@ -198,7 +204,7 @@ jobs:
           xcrun stapler validate "$BIN" || true
 
       - name: Clean up keychain
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true' && always()
+        if: startsWith(matrix.os, 'macos') && steps.check-mac-secrets.outputs.can-sign == 'true' && always()
         shell: bash
         run: |
           security default-keychain -s login.keychain
@@ -220,7 +226,7 @@ jobs:
             ${{ matrix.output-path }}.sha256
 
       - name: Upload Linux checksum signature
-        if: startsWith(matrix.os, 'ubuntu') && github.event_name == 'push' && steps.check-linux-secrets.outputs.can-sign == 'true'
+        if: startsWith(matrix.os, 'ubuntu') && steps.check-linux-secrets.outputs.can-sign == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}-checksums
