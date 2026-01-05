@@ -1,13 +1,13 @@
 name: Build and publish executables
 
 on: 
-  # pull_request:
-  #   branches:
-  #     - main
-  push:
-    tags:
-      - 'MCP-[0-9]+.[0-9]+.[0-9]+'
-      - 'MCP-[0-9]+.[0-9]+.[0-9]+-*'
+  pull_request:
+    branches:
+      - main
+  # push:
+  #   tags:
+  #     - 'MCP-[0-9]+.[0-9]+.[0-9]+'
+  #     - 'MCP-[0-9]+.[0-9]+.[0-9]+-*'
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
@@ -67,6 +67,9 @@ jobs:
         run: |
           source .venv/bin/activate
           make create-executable
+
+      - name: Rename binary to include platform info
+        run: mv ${{ matrix.output-path }} ${{ matrix.artifact-name }}
         
       - name: Check for macOS signing secrets
         if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER'
@@ -109,7 +112,7 @@ jobs:
         env:
           APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
         run: |
-          BIN="${{ matrix.output-path }}"
+          BIN="${{ matrix.artifact-name }}"
           if [[ ! -f "$BIN" ]]; then
             echo "::error::Expected macOS binary at '$BIN' but it was not found."
             ls -la
@@ -127,7 +130,7 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          BIN="${{ matrix.output-path }}"
+          BIN="${{ matrix.artifact-name }}"
           ZIP="notarize-${{ matrix.arch }}.zip"
 
           ditto -c -k --keepParent "$BIN" "$ZIP"
@@ -141,7 +144,7 @@ jobs:
         if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         run: |
-          BIN="${{ matrix.output-path }}"
+          BIN="${{ matrix.artifact-name }}"
           xcrun stapler staple "$BIN"
           xcrun stapler validate "$BIN" || true
 
@@ -157,7 +160,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.output-path }}
+          path: ${{ matrix.artifact-name }}
 
   build-exe-windows-amd64:
     runs-on: windows-latest
@@ -191,11 +194,14 @@ jobs:
             --output-filename=cs-mcp.exe `
             src/cs_mcp_server.py
 
+      - name: Rename binary to include platform info
+        run: Rename-Item -Path "cs-mcp.exe" -NewName "cs-mcp-windows-amd64.exe"
+
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cs-mcp-amd64.exe
-          path: cs-mcp.exe
+          name: cs-mcp-windows-amd64
+          path: cs-mcp-windows-amd64.exe
 
   # build-exe-windows-aarch64:
   #   runs-on: windows-11-arm
