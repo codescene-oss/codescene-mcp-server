@@ -221,23 +221,17 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.artifact-name }}
+          path: ${{ matrix.output-path }}
 
-      - name: Upload Linux checksum
+      - name: Upload Linux checksums (sha256 + optional signature)
         if: startsWith(matrix.os, 'ubuntu')
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}-checksums
           path: |
-            ${{ matrix.artifact-name }}.sha256
-
-      - name: Upload Linux checksum signature
-        if: startsWith(matrix.os, 'ubuntu') && github.event_name == 'push' && steps.check-linux-secrets.outputs.can-sign == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact-name }}-checksums
-          path: |
-            ${{ matrix.artifact-name }}.sha256.asc
+            ${{ matrix.output-path }}.sha256
+            ${{ matrix.output-path }}.sha256.asc
+          if-no-files-found: warn
 
   build-exe-windows-amd64:
     runs-on: windows-latest
