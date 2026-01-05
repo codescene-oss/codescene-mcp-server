@@ -70,9 +70,60 @@ jobs:
 
       - name: Rename binary to include platform info
         run: mv ${{ matrix.output-path }} ${{ matrix.artifact-name }}
+      - name: Verify Linux executable (optional)
+        if: startsWith(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          BIN="${{ matrix.output-path }}"
+          chmod +x "$BIN" || true
+          ./"$BIN" --help >/dev/null 2>&1 || true
+
+      - name: Generate checksum (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          BIN="${{ matrix.output-path }}"
+          sha256sum "$BIN" > "${BIN}.sha256"
+
+      - name: Check for Linux signing secrets
+        if: startsWith(matrix.os, 'ubuntu') && github.event_name == 'push'
+        id: check-linux-secrets
+        shell: bash
+        run: |
+          if [[ -n "${{ secrets.LINUX_GPG_PRIVATE_KEY }}" \
+             && -n "${{ secrets.LINUX_GPG_KEY_ID }}" \
+             && -n "${{ secrets.LINUX_GPG_PASSPHRASE }}" ]]; then
+            echo "can-sign=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can-sign=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import GPG key (Linux)
+        if: startsWith(matrix.os, 'ubuntu') && github.event_name == 'push' && steps.check-linux-secrets.outputs.can-sign == 'true'
+        shell: bash
+        env:
+          LINUX_GPG_PRIVATE_KEY: ${{ secrets.LINUX_GPG_PRIVATE_KEY }}
+        run: |
+          echo "$LINUX_GPG_PRIVATE_KEY" | gpg --batch --import
+
+      - name: Sign checksum (Linux)
+        if: startsWith(matrix.os, 'ubuntu') && github.event_name == 'push' && steps.check-linux-secrets.outputs.can-sign == 'true'
+        shell: bash
+        env:
+          LINUX_GPG_KEY_ID: ${{ secrets.LINUX_GPG_KEY_ID }}
+          LINUX_GPG_PASSPHRASE: ${{ secrets.LINUX_GPG_PASSPHRASE }}
+        run: |
+          BIN="${{ matrix.output-path }}"
+          gpg --batch --yes --pinentry-mode loopback \
+              --passphrase "$LINUX_GPG_PASSPHRASE" \
+              --local-user "$LINUX_GPG_KEY_ID" \
+              --armor \
+              --output "${BIN}.sha256.asc" \
+              --sign "${BIN}.sha256"
+
         
       - name: Check for macOS signing secrets
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER'
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push'
         id: check-mac-secrets
         shell: bash
         run: |
@@ -88,7 +139,7 @@ jobs:
           fi
 
       - name: Import Apple Developer Certificate (keychain)
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
@@ -107,7 +158,7 @@ jobs:
           rm -f certificate.p12
 
       - name: Codesign macOS executable
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
@@ -123,7 +174,7 @@ jobs:
           codesign --verify --verbose "$BIN"
 
       - name: Notarize macOS executable
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -141,7 +192,7 @@ jobs:
             --wait
 
       - name: Staple notarization ticket
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         run: |
           BIN="${{ matrix.artifact-name }}"
@@ -149,18 +200,34 @@ jobs:
           xcrun stapler validate "$BIN" || true
 
       - name: Clean up keychain
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && github.repository_owner == 'REPLACE_WITH_OWNER' && steps.check-mac-secrets.outputs.can-sign == 'true' && always()
+        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true' && always()
         shell: bash
         run: |
           security default-keychain -s login.keychain
           security delete-keychain build.keychain || true
           rm -f notarize-*.zip || true
 
-      - name: Upload Executable Artifact
+      - name: Upload Executable Artifact (binary)
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
           path: ${{ matrix.artifact-name }}
+
+      - name: Upload Linux checksum
+        if: startsWith(matrix.os, 'ubuntu')
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}-checksums
+          path: |
+            ${{ matrix.output-path }}.sha256
+
+      - name: Upload Linux checksum signature
+        if: startsWith(matrix.os, 'ubuntu') && github.event_name == 'push' && steps.check-linux-secrets.outputs.can-sign == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}-checksums
+          path: |
+            ${{ matrix.output-path }}.sha256.asc
 
   build-exe-windows-amd64:
     runs-on: windows-latest
