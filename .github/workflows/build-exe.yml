@@ -217,21 +217,27 @@ jobs:
           security delete-keychain build.keychain || true
           rm -f notarize-*.zip || true
 
-      - name: Upload Executable Artifact (binary)
+      - name: Set executable permissions and zip (macOS)
+        if: startsWith(matrix.os, 'macos')
+        shell: bash
+        run: |
+          chmod +x "${{ matrix.artifact-name }}"
+          zip "${{ matrix.artifact-name }}.zip" "${{ matrix.artifact-name }}"
+
+      - name: Zip binary with checksums (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          BIN="${{ matrix.artifact-name }}"
+          chmod +x "$BIN"
+          # Include binary and any checksum files in the zip
+          zip "${BIN}.zip" "$BIN" ${BIN}.sha256 ${BIN}.sha256.asc 2>/dev/null || zip "${BIN}.zip" "$BIN" ${BIN}.sha256 2>/dev/null || zip "${BIN}.zip" "$BIN"
+
+      - name: Upload Executable Artifact (zipped binary)
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.artifact-name }}
-
-      - name: Upload Linux checksums (sha256 + optional signature)
-        if: startsWith(matrix.os, 'ubuntu')
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact-name }}-checksums
-          path: |
-            ${{ matrix.artifact-name }}.sha256
-            ${{ matrix.artifact-name }}.sha256.asc
-          if-no-files-found: warn
+          path: ${{ matrix.artifact-name }}.zip
 
   build-exe-windows-amd64:
     runs-on: windows-latest
