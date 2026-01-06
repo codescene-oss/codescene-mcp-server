@@ -241,6 +241,9 @@ jobs:
 
   build-exe-windows-amd64:
     runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -273,6 +276,24 @@ jobs:
 
       - name: Rename binary to include platform info
         run: Rename-Item -Path "cs-mcp.exe" -NewName "cs-mcp-windows-amd64.exe"
+
+      - name: Sign with Azure Trusted Signing
+        uses: azure/trusted-signing-action@v0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+          endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_TRUSTED_SIGNING_CERT_PROFILE }}
+
+          files: |
+            ${{ github.workspace }}\cs-mcp-windows-amd64.exe
+
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
 
       - name: Upload Executable Artifact
         uses: actions/upload-artifact@v4
