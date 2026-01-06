@@ -1,4 +1,6 @@
 import os
+import signal
+import sys
 from fastmcp import FastMCP
 from fastmcp.resources import FileResource
 from pathlib import Path
@@ -187,4 +189,14 @@ if __name__ == "__main__":
         'run_local_tool_fn': run_local_tool
     })
 
-    mcp.run()
+    def handle_shutdown(signum, frame):
+        """Handle shutdown signals gracefully."""
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, handle_shutdown)
+    signal.signal(signal.SIGTERM, handle_shutdown)
+
+    try:
+        mcp.run()
+    except KeyboardInterrupt:
+        sys.exit(0)
