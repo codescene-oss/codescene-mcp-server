@@ -190,13 +190,10 @@ if __name__ == "__main__":
     })
 
     def handle_shutdown(signum, frame):
-        """Handle shutdown signals gracefully."""
-        sys.exit(0)
+        """Handle shutdown signals gracefully with immediate exit."""
+        os._exit(0)
 
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)
 
-    try:
-        mcp.run()
-    except KeyboardInterrupt:
-        sys.exit(0)
+    mcp.run()
