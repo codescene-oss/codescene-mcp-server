@@ -20,14 +20,7 @@ The Code Health insights augment the AI prompts with rich content around code qu
 
 ## Installation
 
-Choose the installation method that works best for your platform:
-
-| Method | Platforms | Best For |
-|--------|-----------|----------|
-| [Homebrew](#homebrew-macos--linux) | macOS, Linux | Native binary, no Docker required |
-| [Winget](#winget-windows) | Windows | Native binary, no Docker required |
-| [Manual Download](#manual-download-macos--linux--windows) | All | Direct binary download, no package manager |
-| [Docker](#docker-all-platforms) | All | Self-contained, works everywhere |
+Choose the installation method that works best for your platform.
 
 ### Homebrew (macOS / Linux)
 
@@ -36,7 +29,7 @@ brew tap codescene-oss/codescene-mcp-server https://github.com/codescene-oss/cod
 brew install cs-mcp
 ```
 
-📖 **[Full Homebrew installation & integration guide](docs/homebrew-installation.md)** - includes setup for VS Code, Claude Code, Codex CLI, Kiro, Amazon Q, and more.
+📖 **[Full installation & integration guide](docs/homebrew-installation.md)**
 
 ### Winget (Windows)
 
@@ -44,131 +37,30 @@ brew install cs-mcp
 winget install CodeScene.CsMcp
 ```
 
-📖 **[Full Winget installation & integration guide](docs/winget-installation.md)** - includes setup for VS Code, Claude Desktop, Codex CLI, Kiro, Amazon Q, and more.
+📖 **[Full installation & integration guide](docs/winget-installation.md)**
 
-### Manual Download (macOS / Linux / Windows)
+### Manual Download
 
 Download the latest binary for your platform from the [GitHub Releases page](https://github.com/codescene-oss/codescene-mcp-server/releases):
 
-| Platform | Binary |
-|----------|--------|
-| macOS (Apple Silicon) | `cs-mcp-macos-arm64` |
-| macOS (Intel) | `cs-mcp-macos-amd64` |
-| Linux (ARM64) | `cs-mcp-linux-arm64` |
-| Linux (x64) | `cs-mcp-linux-amd64` |
-| Windows (x64) | `cs-mcp-windows-amd64.exe` |
+- **macOS:** `cs-mcp-macos-arm64` (Apple Silicon) or `cs-mcp-macos-amd64` (Intel)
+- **Linux:** `cs-mcp-linux-arm64` or `cs-mcp-linux-amd64`
+- **Windows:** `cs-mcp-windows-amd64.exe`
 
-After downloading:
+After downloading, make it executable and optionally add it to your PATH:
 
 ```bash
-# Make it executable (macOS/Linux)
 chmod +x cs-mcp-*
-
-# Optionally move to a directory in your PATH
 mv cs-mcp-* /usr/local/bin/cs-mcp
 ```
 
-Then configure your AI assistant to use the binary path (see [Quick Setup](#quick-setup) below).
-
-### Docker (All Platforms)
+### Docker
 
 ```bash
 docker pull codescene/codescene-mcp
 ```
 
-📖 **[Full Docker installation & integration guide](docs/docker-installation.md)** - includes setup for VS Code, Claude Code, Codex CLI, Kiro, Amazon Q, GitHub Copilot coding agent, and more.
-
-## Quick Setup
-
-<details>
-
-<summary>VS Code / GitHub Copilot (Recommended)</summary>
-
-**For native binary (Homebrew/Winget):**
-
-Add to your `settings.json` or `.vscode/mcp.json`:
-
-```json
-{
-  "mcp": {
-    "servers": {
-      "codescene": {
-        "command": "cs-mcp",
-        "env": {
-          "CS_ACCESS_TOKEN": "<your token here>"
-        }
-      }
-    }
-  }
-}
-```
-
-**For Docker:**
-
-[![Install CodeScene MCP for Cloud](https://img.shields.io/badge/VS_Code-Install_CodeScene_MCP_for_Cloud-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[%7B%22id%22%3A%22CS_MOUNT_PATH%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22Path%20of%20the%20directory%20that%20CodeScene%20should%20be%20able%20to%20see.%22%2C%22password%22%3Afalse%7D%2C%7B%22id%22%3A%22CS_ACCESS_TOKEN%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20Access%20Token%22%2C%22password%22%3Atrue%7D]&config={%22command%22%3A%22docker%22%2C%22args%22%3A[%22run%22%2C%22-i%22%2C%22--rm%22%2C%22-e%22%2C%22CS_ACCESS_TOKEN%22%2C%22-e%22%2C%22CS_MOUNT_PATH%3D%24%7Binput%3ACS_MOUNT_PATH%7D%22%2C%22--mount%22%2C%22type%3Dbind%2Csrc%3D%24%7Binput%3ACS_MOUNT_PATH%7D%2Cdst%3D/mount/%2Cro%22%2C%22codescene/codescene-mcp%22]%2C%22env%22%3A%7B%22CS_ACCESS_TOKEN%22%3A%22%24%7Binput%3ACS_ACCESS_TOKEN%7D%22%7D%2C%22type%22%3A%22stdio%22})
-
-[![Install CodeScene MCP for On-prem](https://img.shields.io/badge/VS_Code-Install_CodeScene_MCP_for_Onprem-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[%7B%22id%22%3A%22CS_MOUNT_PATH%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22Path%20of%20the%20directory%20that%20CodeScene%20should%20be%20able%20to%20see.%22%2C%22password%22%3Afalse%7D%2C%7B%22id%22%3A%22CS_ACCESS_TOKEN%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20Access%20Token%22%2C%22password%22%3Atrue%7D%2C%7B%22id%22%3A%22CS_ONPREM_URL%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20On-prem%20URL%22%2C%22password%22%3Afalse%7D]&config={%22command%22%3A%22docker%22%2C%22args%22%3A[%22run%22%2C%22-i%22%2C%22--rm%22%2C%22-e%22%2C%22CS_ACCESS_TOKEN%22%2C%22-e%22%2C%22CS_ONPREM_URL%22%2C%22-e%22%2C%22CS_MOUNT_PATH%3D%24%7Binput%3ACS_MOUNT_PATH%7D%22%2C%22--mount%22%2C%22type%3Dbind%2Csrc%3D%24%7Binput%3ACS_MOUNT_PATH%7D%2Cdst%3D/mount/%2Cro%22%2C%22codescene/codescene-mcp%22]%2C%22env%22%3A%7B%22CS_ACCESS_TOKEN%22%3A%22%24%7Binput%3ACS_ACCESS_TOKEN%7D%22%2C%22CS_ONPREM_URL%22%3A%22%24%7Binput%3ACS_ONPREM_URL%7D%22%7D%2C%22type%22%3A%22stdio%22})
-
-</details>
-
-<details>
-
-<summary>Claude Code</summary>
-
-**For native binary (Homebrew):**
-
-```bash
-export CS_ACCESS_TOKEN="<your token here>"
-claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN -- cs-mcp
-```
-
-**For Docker:**
-
-```bash
-export CS_ACCESS_TOKEN="<your token here>"
-export PATH_TO_CODE="<your project dir here>"
-
-claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN -- docker run -i --rm -e CS_ACCESS_TOKEN -e CS_MOUNT_PATH=$PATH_TO_CODE --mount type=bind,src=$PATH_TO_CODE,dst=/mount/,ro codescene/codescene-mcp
-```
-
-</details>
-
-<details>
-
-<summary>Codex CLI</summary>
-
-**For native binary:**
-
-Configure `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.codescene]
-command = "cs-mcp"
-env = { "CS_ACCESS_TOKEN" = "<YOUR_ACCESS_TOKEN>" }
-```
-
-**For Docker:**
-
-```toml
-[mcp_servers.codescene]
-command = "docker"
-args = ["run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "-e", "CS_MOUNT_PATH=<PATH_TO_CODE>", "--mount", "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro", "codescene/codescene-mcp"]
-env = { "CS_ACCESS_TOKEN" = "<YOUR_ACCESS_TOKEN>" }
-```
-
-</details>
-
-<details>
-
-<summary>Other AI Assistants</summary>
-
-For detailed setup instructions for other AI assistants (Kiro, Amazon Q, GitHub Copilot CLI, GitHub Copilot coding agent, etc.), see the installation guides:
-
-- **[Homebrew installation guide](docs/homebrew-installation.md)** - for macOS/Linux native binary setup
-- **[Winget installation guide](docs/winget-installation.md)** - for Windows native binary setup
-- **[Docker installation guide](docs/docker-installation.md)** - for Docker-based setup on any platform
-
-</details>
+📖 **[Full installation & integration guide](docs/docker-installation.md)**
 
 ---
 
