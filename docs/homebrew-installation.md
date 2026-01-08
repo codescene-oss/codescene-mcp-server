@@ -2,6 +2,11 @@
 
 You can install the CodeScene MCP Server using Homebrew on macOS and Linux.
 
+## Prerequisites
+
+- [Homebrew](https://brew.sh/) installed
+- A CodeScene account with an access token ([get one here](https://codescene.io/users/me/pat) for Cloud, or via your on-prem instance)
+
 ## Quick Installation
 
 ```bash
@@ -45,20 +50,28 @@ brew untap codescene-oss/codescene-mcp-server
 | Linux          | ARM64 |
 | Linux          | AMD64 |
 
-## Using with AI Assistants
+## Integration with AI Assistants
 
-After installing via Homebrew, you can configure your AI assistant to use the binary directly instead of Docker.
+After installing via Homebrew, configure your AI assistant to use the `cs-mcp` binary directly (no Docker required).
 
-### Example: Claude Code
+### Claude Code
 
 ```bash
 export CS_ACCESS_TOKEN="<your token here>"
 claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN -- cs-mcp
 ```
 
-### Example: VS Code / GitHub Copilot
+For CodeScene On-prem:
 
-In your VS Code settings (`settings.json`):
+```bash
+export CS_ACCESS_TOKEN="<your token here>"
+export CS_ONPREM_URL="<your onprem url>"
+claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN --env CS_ONPREM_URL=$CS_ONPREM_URL -- cs-mcp
+```
+
+### VS Code / GitHub Copilot
+
+Add to your VS Code `settings.json` or `.vscode/mcp.json`:
 
 ```json
 {
@@ -68,6 +81,64 @@ In your VS Code settings (`settings.json`):
         "command": "cs-mcp",
         "env": {
           "CS_ACCESS_TOKEN": "<your token here>"
+        }
+      }
+    }
+  }
+}
+```
+
+For CodeScene On-prem, add `"CS_ONPREM_URL": "<your onprem url>"` to the `env` section.
+
+### Codex CLI
+
+Configure `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.codescene]
+command = "cs-mcp"
+env = { "CS_ACCESS_TOKEN" = "<YOUR_ACCESS_TOKEN>" }
+```
+
+### Kiro
+
+Create a `.kiro/settings/mcp.json` file:
+
+```json
+{
+  "mcpServers": {
+    "codescene": {
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "<YOUR_TOKEN>"
+      },
+      "disabled": false
+    }
+  }
+}
+```
+
+### Amazon Q CLI
+
+```bash
+q mcp add --name codescene-mcp --command cs-mcp
+```
+
+Make sure `CS_ACCESS_TOKEN` is set in your environment.
+
+## Enabling CodeScene ACE
+
+To enable [CodeScene ACE](https://codescene.com/product/integrations/ide-extensions/ai-refactoring) refactoring, add the `CS_ACE_ACCESS_TOKEN` environment variable to your configuration:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "codescene": {
+        "command": "cs-mcp",
+        "env": {
+          "CS_ACCESS_TOKEN": "<your token>",
+          "CS_ACE_ACCESS_TOKEN": "<your ACE token>"
         }
       }
     }

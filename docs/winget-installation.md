@@ -6,6 +6,7 @@ You can install the CodeScene MCP Server using Windows Package Manager (winget) 
 
 - Windows 10 1709 (build 16299) or later
 - [Windows Package Manager](https://docs.microsoft.com/en-us/windows/package-manager/winget/) (comes pre-installed on Windows 11)
+- A CodeScene account with an access token ([get one here](https://codescene.io/users/me/pat) for Cloud, or via your on-prem instance)
 
 ## Quick Installation
 
@@ -35,13 +36,13 @@ winget upgrade CodeScene.CsMcp
 winget uninstall CodeScene.CsMcp
 ```
 
-## Using with AI Assistants
+## Integration with AI Assistants
 
-After installing via winget, you can configure your AI assistant to use the binary directly.
+After installing via winget, configure your AI assistant to use the `cs-mcp` binary directly (no Docker required).
 
-### Example: VS Code / GitHub Copilot
+### VS Code / GitHub Copilot
 
-In your VS Code settings (`settings.json`):
+Add to your VS Code `settings.json` or `.vscode/mcp.json`:
 
 ```json
 {
@@ -58,9 +59,11 @@ In your VS Code settings (`settings.json`):
 }
 ```
 
-### Example: Claude Desktop
+For CodeScene On-prem, add `"CS_ONPREM_URL": "<your onprem url>"` to the `env` section.
 
-In your Claude Desktop configuration (`%APPDATA%\Claude\claude_desktop_config.json`):
+### Claude Desktop
+
+Add to your Claude Desktop configuration (`%APPDATA%\Claude\claude_desktop_config.json`):
 
 ```json
 {
@@ -69,6 +72,62 @@ In your Claude Desktop configuration (`%APPDATA%\Claude\claude_desktop_config.js
       "command": "cs-mcp",
       "env": {
         "CS_ACCESS_TOKEN": "<your token here>"
+      }
+    }
+  }
+}
+```
+
+### Codex CLI
+
+Configure `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.codescene]
+command = "cs-mcp"
+env = { "CS_ACCESS_TOKEN" = "<YOUR_ACCESS_TOKEN>" }
+```
+
+### Kiro
+
+Create a `.kiro/settings/mcp.json` file:
+
+```json
+{
+  "mcpServers": {
+    "codescene": {
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "<YOUR_TOKEN>"
+      },
+      "disabled": false
+    }
+  }
+}
+```
+
+### Amazon Q CLI
+
+```powershell
+q mcp add --name codescene-mcp --command cs-mcp
+```
+
+Make sure `CS_ACCESS_TOKEN` is set in your environment.
+
+## Enabling CodeScene ACE
+
+To enable [CodeScene ACE](https://codescene.com/product/integrations/ide-extensions/ai-refactoring) refactoring, add the `CS_ACE_ACCESS_TOKEN` environment variable to your configuration:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "codescene": {
+        "command": "cs-mcp",
+        "env": {
+          "CS_ACCESS_TOKEN": "<your token>",
+          "CS_ACE_ACCESS_TOKEN": "<your ACE token>"
+        }
       }
     }
   }
