@@ -1,0 +1,73 @@
+name: Update Homebrew Formula
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-formula:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get release version
+        id: version
+        run: |
+          # Extract version from tag (e.g., MCP-0.0.26 -> 0.0.26)
+          VERSION="${GITHUB_REF_NAME#MCP-}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download release assets and compute checksums
+        id: checksums
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BASE_URL="https://github.com/codescene-oss/codescene-mcp-server/releases/download/MCP-${VERSION}"
+          
+          # Download and compute SHA256 for each platform
+          MACOS_ARM64_SHA=$(curl -sL "${BASE_URL}/cs-mcp-macos-aarch64.zip" | sha256sum | cut -d' ' -f1)
+          MACOS_AMD64_SHA=$(curl -sL "${BASE_URL}/cs-mcp-macos-amd64.zip" | sha256sum | cut -d' ' -f1)
+          LINUX_ARM64_SHA=$(curl -sL "${BASE_URL}/cs-mcp-linux-aarch64.zip" | sha256sum | cut -d' ' -f1)
+          LINUX_AMD64_SHA=$(curl -sL "${BASE_URL}/cs-mcp-linux-amd64.zip" | sha256sum | cut -d' ' -f1)
+          
+          echo "macos_arm64_sha=$MACOS_ARM64_SHA" >> $GITHUB_OUTPUT
+          echo "macos_amd64_sha=$MACOS_AMD64_SHA" >> $GITHUB_OUTPUT
+          echo "linux_arm64_sha=$LINUX_ARM64_SHA" >> $GITHUB_OUTPUT
+          echo "linux_amd64_sha=$LINUX_AMD64_SHA" >> $GITHUB_OUTPUT
+
+      - name: Update Homebrew formula
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          FORMULA_FILE="Formula/cs-mcp.rb"
+          
+          # Update version
+          sed -i "s/version \".*\"/version \"${VERSION}\"/" "$FORMULA_FILE"
+          
+          # Update SHA256 checksums (in order they appear in the file)
+          # macOS ARM64
+          sed -i "0,/sha256 \"[a-f0-9]\{64\}\"/s//sha256 \"${{ steps.checksums.outputs.macos_arm64_sha }}\"/" "$FORMULA_FILE"
+          # macOS AMD64
+          sed -i "0,/sha256 \"[a-f0-9]\{64\}\"/s//sha256 \"${{ steps.checksums.outputs.macos_amd64_sha }}\"/" "$FORMULA_FILE"
+          # Linux ARM64
+          sed -i "0,/sha256 \"[a-f0-9]\{64\}\"/s//sha256 \"${{ steps.checksums.outputs.linux_arm64_sha }}\"/" "$FORMULA_FILE"
+          # Linux AMD64
+          sed -i "0,/sha256 \"[a-f0-9]\{64\}\"/s//sha256 \"${{ steps.checksums.outputs.linux_amd64_sha }}\"/" "$FORMULA_FILE"
+          
+          cat "$FORMULA_FILE"
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update Homebrew formula to ${{ steps.version.outputs.version }}"
+          title: "Update Homebrew formula to ${{ steps.version.outputs.version }}"
+          body: |
+            This PR updates the Homebrew formula to version ${{ steps.version.outputs.version }}.
+            
+            ## Checksums
+            - macOS ARM64: `${{ steps.checksums.outputs.macos_arm64_sha }}`
+            - macOS AMD64: `${{ steps.checksums.outputs.macos_amd64_sha }}`
+            - Linux ARM64: `${{ steps.checksums.outputs.linux_arm64_sha }}`
+            - Linux AMD64: `${{ steps.checksums.outputs.linux_amd64_sha }}`
+          branch: update-homebrew-${{ steps.version.outputs.version }}
+          delete-branch: true
