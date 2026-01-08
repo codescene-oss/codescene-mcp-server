@@ -4,13 +4,13 @@
 class CsMcp < Formula
   desc "MCP Server exposing Code Health analysis as AI-friendly tools"
   homepage "https://github.com/codescene-oss/codescene-mcp-server"
-  version "0.0.26"
+  version "0.0.27"
   license "MIT"
 
   on_macos do
     on_arm do
       url "https://github.com/codescene-oss/codescene-mcp-server/releases/download/MCP-#{version}/cs-mcp-macos-aarch64.zip"
-      sha256 "8e13a634e26e08c56a900aa01b0e8889fe84c3914ccf1c38e6b05bc7a085652f"
+      sha256 "c1d1accd6dc7bb4d79e32205deb7cd68c3ab0c56282830cfb9e9c041466fd7b7"
 
       define_method(:install) do
         bin.install "cs-mcp-macos-aarch64" => "cs-mcp"
