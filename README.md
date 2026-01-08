@@ -14,8 +14,9 @@ The Code Health insights augment the AI prompts with rich content around code qu
 1. Get a `CS_ACCESS_TOKEN` for the MCP Server via your CodeScene instance. (The token grants access to the code health analysis capability).
    * For CodeScene Cloud you create the token [here](https://codescene.io/users/me/pat).
    * In CodeScene on-prem, you get the token via `https://<your-cs-host><:port>/configuration/user/token`.
-2. Install the MCP Server using one of the methods below.
-3. Copy the file [AGENTS.md](AGENTS.md) to your repository. This file guides AI agents on how to use the MCP, e.g. rules to safeguard AI coding.
+2. Install the MCP Server. You can choose to install an executable ([Homebrew](#homebrew-macos--linux), [Winget](#winget-windows), or [manual download](#manual-download)) or run the MCP inside [Docker](#docker).
+3. Add the MCP Server to your AI assistant. See the detailed instructions for your environment [here](#installation).
+4. Copy the file [AGENTS.md](AGENTS.md) to your repository. This file guides AI agents on how to use the MCP, e.g. rules to safeguard AI coding.
    * ℹ️ If you use Amazon Q, then you want to copy our [.amazonq/rules](.amazonq/rules) to your repository instead.
 
 ## Installation
