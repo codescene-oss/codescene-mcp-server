@@ -1,0 +1,86 @@
+name: Update Winget Package
+
+on:
+  workflow_run:
+    workflows: ["Build and publish executables"]
+    types:
+      - completed
+
+jobs:
+  update-winget:
+    runs-on: windows-latest
+    # Only run if the build-exe workflow succeeded and was triggered by a tag
+    if: ${{ github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'MCP-') }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get release version
+        id: version
+        shell: pwsh
+        run: |
+          $version = "${{ github.event.workflow_run.head_branch }}" -replace '^MCP-', ''
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Submit to winget-pkgs
+        shell: pwsh
+        env:
+          # wingetcreate reads this specific environment variable for the GitHub token
+          WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $url = "https://github.com/codescene-oss/codescene-mcp-server/releases/download/MCP-${version}/cs-mcp-windows-amd64.exe"
+          
+          # Download wingetcreate
+          Invoke-WebRequest -Uri https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          
+          # Update and submit manifest to winget-pkgs
+          # Note: This requires CodeScene.CsMcp to already exist in winget-pkgs
+          # For the first submission, manually submit via: https://github.com/microsoft/winget-pkgs
+          .\wingetcreate.exe update CodeScene.CsMcp `
+            --version $version `
+            --urls $url `
+            --submit
+
+      - name: Update local manifest files
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $url = "https://github.com/codescene-oss/codescene-mcp-server/releases/download/MCP-${version}/cs-mcp-windows-amd64.exe"
+          
+          # Download the exe and compute SHA256
+          $tempFile = New-TemporaryFile
+          Invoke-WebRequest -Uri $url -OutFile $tempFile.FullName
+          $hash = (Get-FileHash -Path $tempFile.FullName -Algorithm SHA256).Hash
+          Remove-Item $tempFile.FullName
+          
+          # Update version manifest
+          $versionYaml = Get-Content winget/CodeScene.CsMcp.yaml -Raw
+          $versionYaml = $versionYaml -replace 'PackageVersion: .*', "PackageVersion: $version"
+          Set-Content winget/CodeScene.CsMcp.yaml $versionYaml
+          
+          # Update installer manifest
+          $installerYaml = Get-Content winget/CodeScene.CsMcp.installer.yaml -Raw
+          $installerYaml = $installerYaml -replace 'PackageVersion: .*', "PackageVersion: $version"
+          $installerYaml = $installerYaml -replace 'InstallerUrl: .*', "InstallerUrl: $url"
+          $installerYaml = $installerYaml -replace 'InstallerSha256: .*', "InstallerSha256: $hash"
+          Set-Content winget/CodeScene.CsMcp.installer.yaml $installerYaml
+          
+          # Update locale manifest
+          $localeYaml = Get-Content winget/CodeScene.CsMcp.locale.en-US.yaml -Raw
+          $localeYaml = $localeYaml -replace 'PackageVersion: .*', "PackageVersion: $version"
+          $localeYaml = $localeYaml -replace 'ReleaseNotesUrl: .*', "ReleaseNotesUrl: https://github.com/codescene-oss/codescene-mcp-server/releases/tag/MCP-$version"
+          Set-Content winget/CodeScene.CsMcp.locale.en-US.yaml $localeYaml
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update winget manifest to ${{ steps.version.outputs.version }}"
+          title: "Update winget manifest to ${{ steps.version.outputs.version }}"
+          body: |
+            This PR updates the winget manifest to version ${{ steps.version.outputs.version }}.
+            
+            A PR has also been submitted to the [winget-pkgs](https://github.com/microsoft/winget-pkgs) repository.
+          branch: update-winget-${{ steps.version.outputs.version }}
+          delete-branch: true
