@@ -51,7 +51,11 @@ class TestVersionChecker(unittest.TestCase):
         self.assertEqual(result.latest, 'MCP-2.0.0')
         self.assertTrue(result.outdated)
         self.assertIn('outdated', result.message.lower())
+        # Should mention all installation methods
+        self.assertIn('brew upgrade', result.message)
+        self.assertIn('winget upgrade', result.message)
         self.assertIn('docker pull', result.message)
+        self.assertIn('github.com', result.message.lower())
     
     @patch('utils.version_checker.__version__', 'MCP-2.0.0')
     @patch.object(VersionChecker, 'get_latest_version')

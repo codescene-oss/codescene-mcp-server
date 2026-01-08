@@ -86,8 +86,12 @@ class VersionChecker:
             message = (
                 f"⚠️  CodeScene MCP Server version {current_version} is outdated. "
                 f"Latest version is {latest_version}. "
-                f"Please update by pulling the latest Docker image: "
-                f"`docker pull codescene/codescene-mcp:latest`"
+                f"Please update using your installation method:\n"
+                f"  • Homebrew: `brew upgrade cs-mcp`\n"
+                f"  • Winget: `winget upgrade CodeScene.CsMcp`\n"
+                f"  • Docker: `docker pull codescene/codescene-mcp:latest`\n"
+                f"  • Manual: Download the latest binary from "
+                f"https://github.com/codescene-oss/codescene-mcp-server/releases"
             )
         
         result = VersionInfo(
