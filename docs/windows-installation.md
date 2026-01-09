@@ -1,73 +1,46 @@
-# Installing CodeScene MCP Server via Homebrew
+# Installing CodeScene MCP Server on Windows
 
-You can install the CodeScene MCP Server using Homebrew on macOS and Linux.
+You can install the CodeScene MCP Server on Windows using a simple PowerShell command.
 
 ## Prerequisites
 
-- [Homebrew](https://brew.sh/) installed
+- Windows 10 or later
+- PowerShell 5.1 or later
 - A CodeScene account with an access token ([get one here](https://codescene.io/users/me/pat) for Cloud, or via your on-prem instance)
 
 ## Quick Installation
 
-```bash
-# Add the CodeScene tap
-brew tap codescene-oss/codescene-mcp-server https://github.com/codescene-oss/codescene-mcp-server
+Run this in PowerShell:
 
-# Install CodeScene MCP Server
-brew install cs-mcp
+```powershell
+irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/install.ps1 | iex
 ```
 
-## Usage
+This downloads the latest version to `%LOCALAPPDATA%\Programs\cs-mcp` and adds it to your PATH.
 
-After installation, the `cs-mcp` command will be available in your PATH:
+After installation, restart your terminal and verify:
 
-```bash
-cs-mcp
+```powershell
+cs-mcp --version
 ```
 
 ## Updating
 
-To update to the latest version:
+Run the same installation command to update to the latest version:
 
-```bash
-brew update
-brew upgrade cs-mcp
+```powershell
+irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/install.ps1 | iex
 ```
 
 ## Uninstalling
 
-```bash
-brew uninstall cs-mcp
-brew untap codescene-oss/codescene-mcp-server
+```powershell
+irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/uninstall.ps1 | iex
 ```
-
-## Supported Platforms
-
-| Platform       | Architecture |
-|----------------|--------------|
-| macOS          | ARM64 (Apple Silicon) |
-| macOS          | AMD64 (Intel) |
-| Linux          | ARM64 |
-| Linux          | AMD64 |
 
 ## Integration with AI Assistants
 
-After installing via Homebrew, configure your AI assistant to use the `cs-mcp` binary directly (no Docker required).
-
-### Claude Code
-
-```bash
-export CS_ACCESS_TOKEN="<your token here>"
-claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN -- cs-mcp
-```
-
-For CodeScene On-prem:
-
-```bash
-export CS_ACCESS_TOKEN="<your token here>"
-export CS_ONPREM_URL="<your onprem url>"
-claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN --env CS_ONPREM_URL=$CS_ONPREM_URL -- cs-mcp
-```
+After installing, configure your AI assistant to use the `cs-mcp` binary directly (no Docker required).
 
 ### VS Code / GitHub Copilot
 
@@ -89,6 +62,23 @@ Add to your VS Code `settings.json` or `.vscode/mcp.json`:
 ```
 
 For CodeScene On-prem, add `"CS_ONPREM_URL": "<your onprem url>"` to the `env` section.
+
+### Claude Desktop
+
+Add to your Claude Desktop configuration (`%APPDATA%\Claude\claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "codescene": {
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "<your token here>"
+      }
+    }
+  }
+}
+```
 
 ### Codex CLI
 
@@ -120,7 +110,7 @@ Create a `.kiro/settings/mcp.json` file:
 
 ### Amazon Q CLI
 
-```bash
+```powershell
 q mcp add --name codescene-mcp --command cs-mcp
 ```
 
@@ -148,14 +138,16 @@ To enable [CodeScene ACE](https://codescene.com/product/integrations/ide-extensi
 
 ## Troubleshooting
 
-### Binary not found after installation
+### Binary not in PATH
 
-Make sure Homebrew's bin directory is in your PATH:
+If `cs-mcp` is not recognized, ensure the install directory is in your PATH:
 
-```bash
-# For macOS (Apple Silicon)
-export PATH="/opt/homebrew/bin:$PATH"
-
-# For macOS (Intel) or Linux
-export PATH="/usr/local/bin:$PATH"
+```powershell
+$env:Path += ";$env:LOCALAPPDATA\Programs\cs-mcp"
 ```
+
+To make this permanent, run the PATH modification from the installation script above.
+
+### Manual Download
+
+You can also download the executable directly from the [releases page](https://github.com/codescene-oss/codescene-mcp-server/releases/latest) and place it in a directory in your PATH.
