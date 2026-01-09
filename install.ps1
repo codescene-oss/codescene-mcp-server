@@ -31,4 +31,4 @@ Write-Host ""
 Write-Host "Successfully installed cs-mcp v$version!" -ForegroundColor Green
 Write-Host "Location: $installDir\cs-mcp.exe" -ForegroundColor Gray
 Write-Host ""
-Write-Host "Please restart your terminal, then run 'cs-mcp --version' to verify." -ForegroundColor Yellow
+Write-Host "Please restart your terminal, then run 'cs-mcp'." -ForegroundColor Yellow
