@@ -48,15 +48,15 @@ jobs:
           # Update version
           sed -i "s/version \".*\"/version \"${VERSION}\"/" "$FORMULA_FILE"
           
-          # Update SHA256 checksums (in order they appear in the file)
-          # macOS ARM64
-          sed -i "0,/sha256 \"[a-f0-9]\{64\}\"/s//sha256 \"${{ steps.checksums.outputs.macos_arm64_sha }}\"/" "$FORMULA_FILE"
+          # Update SHA256 checksums using URL context to target correct lines
+          # macOS ARM64 (aarch64)
+          sed -i "/cs-mcp-macos-aarch64\.zip/,/sha256/s/sha256 \"[a-f0-9]\{64\}\"/sha256 \"${{ steps.checksums.outputs.macos_arm64_sha }}\"/" "$FORMULA_FILE"
           # macOS AMD64
-          sed -i "0,/sha256 \"[a-f0-9]\{64\}\"/s//sha256 \"${{ steps.checksums.outputs.macos_amd64_sha }}\"/" "$FORMULA_FILE"
-          # Linux ARM64
-          sed -i "0,/sha256 \"[a-f0-9]\{64\}\"/s//sha256 \"${{ steps.checksums.outputs.linux_arm64_sha }}\"/" "$FORMULA_FILE"
+          sed -i "/cs-mcp-macos-amd64\.zip/,/sha256/s/sha256 \"[a-f0-9]\{64\}\"/sha256 \"${{ steps.checksums.outputs.macos_amd64_sha }}\"/" "$FORMULA_FILE"
+          # Linux ARM64 (aarch64)
+          sed -i "/cs-mcp-linux-aarch64\.zip/,/sha256/s/sha256 \"[a-f0-9]\{64\}\"/sha256 \"${{ steps.checksums.outputs.linux_arm64_sha }}\"/" "$FORMULA_FILE"
           # Linux AMD64
-          sed -i "0,/sha256 \"[a-f0-9]\{64\}\"/s//sha256 \"${{ steps.checksums.outputs.linux_amd64_sha }}\"/" "$FORMULA_FILE"
+          sed -i "/cs-mcp-linux-amd64\.zip/,/sha256/s/sha256 \"[a-f0-9]\{64\}\"/sha256 \"${{ steps.checksums.outputs.linux_amd64_sha }}\"/" "$FORMULA_FILE"
           
           cat "$FORMULA_FILE"
 
