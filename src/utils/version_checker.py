@@ -88,7 +88,7 @@ class VersionChecker:
                 f"Latest version is {latest_version}. "
                 f"Please update using your installation method:\n"
                 f"  • Homebrew: `brew upgrade cs-mcp`\n"
-                f"  • Winget: `winget upgrade CodeScene.CsMcp`\n"
+                f"  • Windows: Re-run the PowerShell install script\n"
                 f"  • Docker: `docker pull codescene/codescene-mcp:latest`\n"
                 f"  • Manual: Download the latest binary from "
                 f"https://github.com/codescene-oss/codescene-mcp-server/releases"

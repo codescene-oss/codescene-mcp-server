@@ -53,7 +53,7 @@ class TestVersionChecker(unittest.TestCase):
         self.assertIn('outdated', result.message.lower())
         # Should mention all installation methods
         self.assertIn('brew upgrade', result.message)
-        self.assertIn('winget upgrade', result.message)
+        self.assertIn('Windows', result.message)
         self.assertIn('docker pull', result.message)
         self.assertIn('github.com', result.message.lower())
     

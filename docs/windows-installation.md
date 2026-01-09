@@ -1,44 +1,46 @@
-# Installing CodeScene MCP Server via Winget (Windows)
+# Installing CodeScene MCP Server on Windows
 
-You can install the CodeScene MCP Server using Windows Package Manager (winget) on Windows 10/11.
+You can install the CodeScene MCP Server on Windows using a simple PowerShell command.
 
 ## Prerequisites
 
-- Windows 10 1709 (build 16299) or later
-- [Windows Package Manager](https://docs.microsoft.com/en-us/windows/package-manager/winget/) (comes pre-installed on Windows 11)
+- Windows 10 or later
+- PowerShell 5.1 or later
 - A CodeScene account with an access token ([get one here](https://codescene.io/users/me/pat) for Cloud, or via your on-prem instance)
 
 ## Quick Installation
 
+Run this in PowerShell:
+
 ```powershell
-winget install CodeScene.CsMcp
+irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/install.ps1 | iex
 ```
 
-## Usage
+This downloads the latest version to `%LOCALAPPDATA%\Programs\cs-mcp` and adds it to your PATH.
 
-After installation, the `cs-mcp` command will be available:
+After installation, restart your terminal and verify:
 
 ```powershell
-cs-mcp
+cs-mcp --version
 ```
 
 ## Updating
 
-To update to the latest version:
+Run the same installation command to update to the latest version:
 
 ```powershell
-winget upgrade CodeScene.CsMcp
+irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/install.ps1 | iex
 ```
 
 ## Uninstalling
 
 ```powershell
-winget uninstall CodeScene.CsMcp
+irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/uninstall.ps1 | iex
 ```
 
 ## Integration with AI Assistants
 
-After installing via winget, configure your AI assistant to use the `cs-mcp` binary directly (no Docker required).
+After installing, configure your AI assistant to use the `cs-mcp` binary directly (no Docker required).
 
 ### VS Code / GitHub Copilot
 
@@ -136,24 +138,16 @@ To enable [CodeScene ACE](https://codescene.com/product/integrations/ide-extensi
 
 ## Troubleshooting
 
-### Package not found
-
-If winget cannot find the package, make sure your winget sources are up to date:
-
-```powershell
-winget source update
-```
-
 ### Binary not in PATH
 
-The portable executable should be added to your PATH automatically. If not, you can find it at:
+If `cs-mcp` is not recognized, ensure the install directory is in your PATH:
 
+```powershell
+$env:Path += ";$env:LOCALAPPDATA\Programs\cs-mcp"
 ```
-%LOCALAPPDATA%\Microsoft\WinGet\Packages\CodeScene.CsMcp_*\
-```
 
-Add this directory to your system PATH environment variable.
+To make this permanent, run the PATH modification from the installation script above.
 
-## Manual Installation
+### Manual Download
 
-If you prefer not to use winget, you can download the executable directly from the [releases page](https://github.com/codescene-oss/codescene-mcp-server/releases/latest) and place it in a directory in your PATH.
+You can also download the executable directly from the [releases page](https://github.com/codescene-oss/codescene-mcp-server/releases/latest) and place it in a directory in your PATH.
