@@ -6,7 +6,7 @@ You can install the CodeScene MCP Server on Windows using a simple PowerShell co
 
 - Windows 10 or later
 - PowerShell 5.1 or later
-- A CodeScene account with an access token ([get one here](https://codescene.io/users/me/pat) for Cloud, or via your on-prem instance)
+- A CodeScene account with an access token (see [Getting a Personal Access Token](getting-a-personal-access-token.md))
 
 ## Quick Installation
 

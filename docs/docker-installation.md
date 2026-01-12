@@ -5,7 +5,7 @@ Docker provides a self-contained way to run the CodeScene MCP Server without ins
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-started/get-docker/) installed and running
-- A CodeScene account with an access token ([get one here](https://codescene.io/users/me/pat) for Cloud, or via your on-prem instance)
+- A CodeScene account with an access token (see [Getting a Personal Access Token](getting-a-personal-access-token.md))
 
 ## Quick Start
 
