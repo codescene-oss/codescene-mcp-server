@@ -18,10 +18,10 @@ irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/in
 
 This downloads the latest version to `%LOCALAPPDATA%\Programs\cs-mcp` and adds it to your PATH.
 
-After installation, restart your terminal and verify:
+After installation, restart your terminal and verify it runs:
 
 ```powershell
-cs-mcp --version
+cs-mcp
 ```
 
 ## Updating
@@ -48,13 +48,11 @@ Add to your VS Code `settings.json` or `.vscode/mcp.json`:
 
 ```json
 {
-  "mcp": {
-    "servers": {
-      "codescene": {
-        "command": "cs-mcp",
-        "env": {
-          "CS_ACCESS_TOKEN": "<your token here>"
-        }
+  "servers": {
+    "codescene": {
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "<your token here>"
       }
     }
   }
@@ -122,14 +120,12 @@ To enable [CodeScene ACE](https://codescene.com/product/integrations/ide-extensi
 
 ```json
 {
-  "mcp": {
-    "servers": {
-      "codescene": {
-        "command": "cs-mcp",
-        "env": {
-          "CS_ACCESS_TOKEN": "<your token>",
-          "CS_ACE_ACCESS_TOKEN": "<your ACE token>"
-        }
+  "servers": {
+    "codescene": {
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "<your token>",
+        "CS_ACE_ACCESS_TOKEN": "<your ACE token>"
       }
     }
   }

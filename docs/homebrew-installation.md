@@ -75,13 +75,11 @@ Add to your VS Code `settings.json` or `.vscode/mcp.json`:
 
 ```json
 {
-  "mcp": {
-    "servers": {
-      "codescene": {
-        "command": "cs-mcp",
-        "env": {
-          "CS_ACCESS_TOKEN": "<your token here>"
-        }
+  "servers": {
+    "codescene": {
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "<your token here>"
       }
     }
   }
@@ -132,14 +130,12 @@ To enable [CodeScene ACE](https://codescene.com/product/integrations/ide-extensi
 
 ```json
 {
-  "mcp": {
-    "servers": {
-      "codescene": {
-        "command": "cs-mcp",
-        "env": {
-          "CS_ACCESS_TOKEN": "<your token>",
-          "CS_ACE_ACCESS_TOKEN": "<your ACE token>"
-        }
+  "servers": {
+    "codescene": {
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "<your token>",
+        "CS_ACE_ACCESS_TOKEN": "<your ACE token>"
       }
     }
   }
