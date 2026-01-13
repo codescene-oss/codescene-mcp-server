@@ -120,20 +120,18 @@ Manual configuration:
 
 ```json
 {
-  "mcp": {
-    "servers": {
-      "codescene": {
-        "command": "docker",
-        "args": [
-          "run", "-i", "--rm",
-          "-e", "CS_ACCESS_TOKEN",
-          "-e", "CS_MOUNT_PATH=<PATH_TO_CODE>",
-          "--mount", "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro",
-          "codescene/codescene-mcp"
-        ],
-        "env": {
-          "CS_ACCESS_TOKEN": "<your token here>"
-        }
+  "servers": {
+    "codescene": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "CS_ACCESS_TOKEN",
+        "-e", "CS_MOUNT_PATH=<PATH_TO_CODE>",
+        "--mount", "type=bind,src=<PATH_TO_CODE>,dst=/mount/,ro",
+        "codescene/codescene-mcp"
+      ],
+      "env": {
+        "CS_ACCESS_TOKEN": "<your token here>"
       }
     }
   }
