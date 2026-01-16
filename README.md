@@ -214,6 +214,45 @@ seems to hallucinate parts of the path some of the time. We're still investigati
 
 </details>
 
+<details>
+
+<summary>How do I configure SSL certificates for on-premise CodeScene instances?</summary>
+
+If your organization uses an internal CA (Certificate Authority) for your on-premise CodeScene instance, you need to configure the MCP server to trust that certificate.
+
+Set the `REQUESTS_CA_BUNDLE` environment variable to point to your CA certificate file (PEM format):
+
+```bash
+export REQUESTS_CA_BUNDLE=/path/to/your/internal-ca.crt
+```
+
+This single environment variable configures SSL for both the Python MCP server and the embedded Java-based CodeScene CLI. The MCP server automatically converts the PEM certificate to a Java-compatible truststore at runtime.
+
+**Example for VS Code with Docker:**
+```json
+"codescene": {
+  "command": "docker",
+  "args": [
+    "run", "-i", "--rm",
+    "-e", "CS_ACCESS_TOKEN",
+    "-e", "CS_ONPREM_URL",
+    "-e", "REQUESTS_CA_BUNDLE=/mount/certs/internal-ca.crt",
+    "-e", "CS_MOUNT_PATH=${input:CS_MOUNT_PATH}",
+    "--mount", "type=bind,src=${input:CS_MOUNT_PATH},dst=/mount/,ro",
+    "--mount", "type=bind,src=/path/to/certs,dst=/mount/certs,ro",
+    "codescene/codescene-mcp"
+  ],
+  "env": {
+    "CS_ACCESS_TOKEN": "${input:CS_ACCESS_TOKEN}",
+    "CS_ONPREM_URL": "${input:CS_ONPREM_URL}"
+  }
+}
+```
+
+The MCP also supports `SSL_CERT_FILE` and `CURL_CA_BUNDLE` as alternatives to `REQUESTS_CA_BUNDLE`.
+
+</details>
+
 ## Building Locally
 
 - [Building the Docker image locally](docs/building-docker-locally.md)
