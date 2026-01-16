@@ -20,12 +20,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-24.04
+          - os: ubuntu-22.04
             arch: amd64
             cli-url: https://downloads.codescene.io/enterprise/cli/cs-linux-amd64-latest.zip
             artifact-name: cs-mcp-linux-amd64
             output-path: cs-mcp
-          - os: ubuntu-24.04
+          - os: ubuntu-22.04
             arch: aarch64
             cli-url: https://downloads.codescene.io/enterprise/cli/cs-linux-aarch64-latest.zip
             artifact-name: cs-mcp-linux-aarch64
