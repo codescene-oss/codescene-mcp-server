@@ -3,6 +3,8 @@ from unittest import mock
 import sys
 import os
 import tempfile
+from contextlib import contextmanager
+from typing import Generator
 from .platform_details import (
     get_platform_details,
     WindowsPlatformDetails,
@@ -10,6 +12,41 @@ from .platform_details import (
     _get_ssl_truststore_options,
     _create_truststore_from_pem
 )
+
+
+# Valid self-signed CA certificate for testing (generated with cryptography library)
+TEST_CA_CERT_PEM = b"""-----BEGIN CERTIFICATE-----
+MIIDPzCCAiegAwIBAgIUdGj465l77xx7Je8KqOESIqx9zXYwDQYJKoZIhvcNAQEL
+BQAwTzELMAkGA1UEBhMCVVMxDTALBgNVBAgMBFRlc3QxDTALBgNVBAcMBFRlc3Qx
+EDAOBgNVBAoMB1Rlc3QgQ0ExEDAOBgNVBAMMB1Rlc3QgQ0EwHhcNMjYwMTE2MDky
+OTQ5WhcNMjcwMTE2MDkyOTQ5WjBPMQswCQYDVQQGEwJVUzENMAsGA1UECAwEVGVz
+dDENMAsGA1UEBwwEVGVzdDEQMA4GA1UECgwHVGVzdCBDQTEQMA4GA1UEAwwHVGVz
+dCBDQTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMqoClSXXim/fiI9
+Lc3X/4D4rHK6cWAnKVPA+CetSJiGrMrfeJZMSTWUv19M8aKlmbZsQxN4X4neycWE
+UxH9y3XaqV9grmGvutTgw98t6fhawevGrjmcA+ygQ5S37reRQOHtc9ob51b8b9Rr
+nyE8qIU2dkZ115VpFN+/woG2LG23iGj2dJ3AaZc/R8X0UQu5tQCDwTOeO/zMWPGG
+xjzDpnFs4u7IAwPECEgEuxHH8PHapUoc0d+Aq/wBKM015qdohoaydrztzXp6DKJ5
+RBv/cn+lTpFdvJQS0CceIo+hOUa46ONq63VM3SQhT7enOWToONBxrZpof18bITFd
+2h4XxoMCAwEAAaMTMBEwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOC
+AQEAHDWTjJILOtrCBRFksVyvniUGFR8ioz2cE4R8xcKAFxNOPKLuxwm+ilbUBX3A
+8VOCJjR6IimsLMhAUEi5FGDiVVhOwIp1+pULEigTG7r72yOCr2xnw8NrX9UbJNnx
+rlyCjEN9URBpriiGGegixH6AoLVW0SjEsJ7CgfqmfWzKU+nsPIunvePtFhSw5jHC
+mHwYTxYcxYW33TK9qQxs119A9+qG5Z+cJlDtYrfHirHwPZQeuQ25jhKE5FUUiuiq
+iblIIstcPF4n6wQ0ieNajmj5nHXQEypkek8D/ANbwwhlVQ3u/hldcAyj4qD7G5oJ
+sC0Nc9QdNQt5Tos5Je5S7CWL0w==
+-----END CERTIFICATE-----"""
+
+
+@contextmanager
+def temp_pem_file(content: bytes = TEST_CA_CERT_PEM) -> Generator[str, None, None]:
+    """Context manager for creating and cleaning up temporary PEM files."""
+    with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
+        f.write(content)
+        pem_path = f.name
+    try:
+        yield pem_path
+    finally:
+        os.unlink(pem_path)
 
 
 class TestPlatformDetails(unittest.TestCase):
@@ -166,28 +203,6 @@ class TestPlatformDetails(unittest.TestCase):
 class TestSSLTruststoreOptions(unittest.TestCase):
     """Tests for SSL truststore configuration using REQUESTS_CA_BUNDLE."""
     
-    # Valid self-signed CA certificate for testing (generated with cryptography library)
-    TEST_CA_CERT_PEM = b"""-----BEGIN CERTIFICATE-----
-MIIDPzCCAiegAwIBAgIUdGj465l77xx7Je8KqOESIqx9zXYwDQYJKoZIhvcNAQEL
-BQAwTzELMAkGA1UEBhMCVVMxDTALBgNVBAgMBFRlc3QxDTALBgNVBAcMBFRlc3Qx
-EDAOBgNVBAoMB1Rlc3QgQ0ExEDAOBgNVBAMMB1Rlc3QgQ0EwHhcNMjYwMTE2MDky
-OTQ5WhcNMjcwMTE2MDkyOTQ5WjBPMQswCQYDVQQGEwJVUzENMAsGA1UECAwEVGVz
-dDENMAsGA1UEBwwEVGVzdDEQMA4GA1UECgwHVGVzdCBDQTEQMA4GA1UEAwwHVGVz
-dCBDQTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMqoClSXXim/fiI9
-Lc3X/4D4rHK6cWAnKVPA+CetSJiGrMrfeJZMSTWUv19M8aKlmbZsQxN4X4neycWE
-UxH9y3XaqV9grmGvutTgw98t6fhawevGrjmcA+ygQ5S37reRQOHtc9ob51b8b9Rr
-nyE8qIU2dkZ115VpFN+/woG2LG23iGj2dJ3AaZc/R8X0UQu5tQCDwTOeO/zMWPGG
-xjzDpnFs4u7IAwPECEgEuxHH8PHapUoc0d+Aq/wBKM015qdohoaydrztzXp6DKJ5
-RBv/cn+lTpFdvJQS0CceIo+hOUa46ONq63VM3SQhT7enOWToONBxrZpof18bITFd
-2h4XxoMCAwEAAaMTMBEwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOC
-AQEAHDWTjJILOtrCBRFksVyvniUGFR8ioz2cE4R8xcKAFxNOPKLuxwm+ilbUBX3A
-8VOCJjR6IimsLMhAUEi5FGDiVVhOwIp1+pULEigTG7r72yOCr2xnw8NrX9UbJNnx
-rlyCjEN9URBpriiGGegixH6AoLVW0SjEsJ7CgfqmfWzKU+nsPIunvePtFhSw5jHC
-mHwYTxYcxYW33TK9qQxs119A9+qG5Z+cJlDtYrfHirHwPZQeuQ25jhKE5FUUiuiq
-iblIIstcPF4n6wQ0ieNajmj5nHXQEypkek8D/ANbwwhlVQ3u/hldcAyj4qD7G5oJ
-sC0Nc9QdNQt5Tos5Je5S7CWL0w==
------END CERTIFICATE-----"""
-    
     def setUp(self):
         """Save original env vars and clear SSL-related ones."""
         self.original_env = os.environ.copy()
@@ -198,6 +213,10 @@ sC0Nc9QdNQt5Tos5Je5S7CWL0w==
         """Restore original env vars."""
         os.environ.clear()
         os.environ.update(self.original_env)
+    
+    def _assert_truststore_options_present(self, result: str) -> None:
+        """Assert that truststore options are present in the result."""
+        self.assertIn('-Djavax.net.ssl.trustStore=', result)
     
     def test_returns_empty_string_when_no_env_vars_set(self):
         result = _get_ssl_truststore_options()
@@ -211,210 +230,114 @@ sC0Nc9QdNQt5Tos5Je5S7CWL0w==
         self.assertEqual("", result)
     
     def test_returns_truststore_options_when_valid_pem_exists(self):
-        # Create a temporary file with a valid PEM certificate
-        with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
-            f.write(self.TEST_CA_CERT_PEM)
-            pem_path = f.name
-        
-        try:
+        with temp_pem_file() as pem_path:
             os.environ['REQUESTS_CA_BUNDLE'] = pem_path
             
             result = _get_ssl_truststore_options()
             
-            self.assertIn('-Djavax.net.ssl.trustStore=', result)
+            self._assert_truststore_options_present(result)
             self.assertIn('-Djavax.net.ssl.trustStoreType=PKCS12', result)
             self.assertIn('-Djavax.net.ssl.trustStorePassword=changeit', result)
-        finally:
-            os.unlink(pem_path)
     
     def test_ssl_cert_file_is_used_as_fallback(self):
-        with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
-            f.write(self.TEST_CA_CERT_PEM)
-            pem_path = f.name
-        
-        try:
+        with temp_pem_file() as pem_path:
             os.environ['SSL_CERT_FILE'] = pem_path
-            
             result = _get_ssl_truststore_options()
-            
-            self.assertIn('-Djavax.net.ssl.trustStore=', result)
-        finally:
-            os.unlink(pem_path)
+            self._assert_truststore_options_present(result)
     
     def test_curl_ca_bundle_is_used_as_fallback(self):
-        with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
-            f.write(self.TEST_CA_CERT_PEM)
-            pem_path = f.name
-        
-        try:
+        with temp_pem_file() as pem_path:
             os.environ['CURL_CA_BUNDLE'] = pem_path
-            
             result = _get_ssl_truststore_options()
-            
-            self.assertIn('-Djavax.net.ssl.trustStore=', result)
-        finally:
-            os.unlink(pem_path)
+            self._assert_truststore_options_present(result)
     
     def test_requests_ca_bundle_takes_precedence(self):
-        # Create two different files
-        with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
-            f.write(self.TEST_CA_CERT_PEM)
-            requests_path = f.name
-        with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
-            f.write(self.TEST_CA_CERT_PEM)
-            ssl_path = f.name
-        
-        try:
+        with temp_pem_file() as requests_path, temp_pem_file() as ssl_path:
             os.environ['REQUESTS_CA_BUNDLE'] = requests_path
             os.environ['SSL_CERT_FILE'] = ssl_path
             
             result = _get_ssl_truststore_options()
             
-            # Should produce a truststore (we can't easily verify which cert was used,
-            # but we verify the mechanism works)
-            self.assertIn('-Djavax.net.ssl.trustStore=', result)
-        finally:
-            os.unlink(requests_path)
-            os.unlink(ssl_path)
+            self._assert_truststore_options_present(result)
     
     def test_returns_empty_for_invalid_pem_content(self):
-        with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
-            f.write(b"not a valid certificate")
-            pem_path = f.name
-        
-        try:
+        with temp_pem_file(b"not a valid certificate") as pem_path:
             os.environ['REQUESTS_CA_BUNDLE'] = pem_path
-            
             result = _get_ssl_truststore_options()
-            
-            # Should return empty string for invalid PEM
             self.assertEqual("", result)
-        finally:
-            os.unlink(pem_path)
     
     def test_windows_includes_ssl_options_in_java_options(self):
-        with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
-            f.write(self.TEST_CA_CERT_PEM)
-            pem_path = f.name
-        
-        try:
+        with temp_pem_file() as pem_path:
             os.environ['REQUESTS_CA_BUNDLE'] = pem_path
             details = WindowsPlatformDetails()
             
             result = details.get_java_options()
             
-            # Should include both tmpdir and truststore
             self.assertIn('-Djava.io.tmpdir=', result)
-            self.assertIn('-Djavax.net.ssl.trustStore=', result)
-        finally:
-            os.unlink(pem_path)
+            self._assert_truststore_options_present(result)
     
     def test_unix_includes_ssl_options_when_configured(self):
-        with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
-            f.write(self.TEST_CA_CERT_PEM)
-            pem_path = f.name
-        
-        try:
+        with temp_pem_file() as pem_path:
             os.environ['REQUESTS_CA_BUNDLE'] = pem_path
             details = UnixPlatformDetails()
             
             result = details.get_java_options()
             
-            self.assertIn('-Djavax.net.ssl.trustStore=', result)
-        finally:
-            os.unlink(pem_path)
+            self._assert_truststore_options_present(result)
 
 
 class TestCreateTruststoreFromPem(unittest.TestCase):
     """Tests for PEM to PKCS12 conversion."""
     
-    # Valid test certificate (same as in TestSSLTruststoreOptions)
-    TEST_CA_CERT_PEM = TestSSLTruststoreOptions.TEST_CA_CERT_PEM
-    
     def test_returns_none_for_invalid_pem_content(self):
         """Test that invalid PEM content returns None via exception handler."""
-        with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
-            # Write invalid PEM data - triggers exception handler
-            f.write(b"not a valid certificate")
-            pem_path = f.name
-        
-        try:
+        with temp_pem_file(b"not a valid certificate") as pem_path:
             result = _create_truststore_from_pem(pem_path)
-            # Should return None for invalid PEM
             self.assertIsNone(result)
-        finally:
-            os.unlink(pem_path)
     
     def test_returns_none_for_empty_pem_file(self):
         """Test that an empty PEM file returns None via exception handler."""
-        with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
-            # Write empty content - triggers exception in load_pem_x509_certificates
-            f.write(b"")
-            pem_path = f.name
-        
-        try:
+        with temp_pem_file(b"") as pem_path:
             result = _create_truststore_from_pem(pem_path)
             self.assertIsNone(result)
-        finally:
-            os.unlink(pem_path)
     
     def test_creates_truststore_and_reuses_existing(self):
         """Test that truststore is created and reused on subsequent calls."""
-        with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
-            f.write(self.TEST_CA_CERT_PEM)
-            pem_path = f.name
-        
-        truststore_path = None
-        try:
-            # First call creates the truststore
+        with temp_pem_file() as pem_path:
             truststore_path = _create_truststore_from_pem(pem_path)
             self.assertIsNotNone(truststore_path)
-            assert truststore_path is not None  # Type narrowing for mypy
+            assert truststore_path is not None  # Type narrowing
             self.assertTrue(os.path.exists(truststore_path))
             
-            # Get the file's modification time
             mtime1 = os.path.getmtime(truststore_path)
             
-            # Second call should reuse the existing truststore (not recreate it)
+            # Second call should reuse existing truststore
             result2 = _create_truststore_from_pem(pem_path)
             self.assertEqual(truststore_path, result2)
             
-            # File should not have been modified
-            assert result2 is not None  # Type narrowing for mypy
+            assert result2 is not None  # Type narrowing
             mtime2 = os.path.getmtime(result2)
             self.assertEqual(mtime1, mtime2)
-        finally:
-            os.unlink(pem_path)
-            # Clean up truststore if created
-            if truststore_path and os.path.exists(truststore_path):
-                os.unlink(truststore_path)
+            
+            # Clean up truststore
+            os.unlink(truststore_path)
     
     def test_returns_none_on_file_read_error(self):
         """Test that file read errors are handled gracefully."""
-        # Use a path that doesn't exist - triggers exception handler
         result = _create_truststore_from_pem("/nonexistent/path/cert.pem")
         self.assertIsNone(result)
     
     def test_returns_none_when_no_certs_parsed(self):
-        """Test handling when certificate parsing returns empty list (line 109)."""
+        """Test handling when certificate parsing returns empty list."""
         from cryptography import x509
         
-        with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
-            f.write(self.TEST_CA_CERT_PEM)
-            pem_path = f.name
-        
-        try:
-            # Mock load_pem_x509_certificates to return empty list
-            with mock.patch.object(
-                x509, 'load_pem_x509_certificates', return_value=[]
-            ):
+        with temp_pem_file() as pem_path:
+            with mock.patch.object(x509, 'load_pem_x509_certificates', return_value=[]):
                 result = _create_truststore_from_pem(pem_path)
                 self.assertIsNone(result)
-        finally:
-            os.unlink(pem_path)
     
     def test_returns_none_when_cryptography_import_fails(self):
-        """Test handling when cryptography module is not available (lines 94-96)."""
+        """Test handling when cryptography module is not available."""
         import utils.platform_details as pd
         import builtins
         
@@ -425,20 +348,12 @@ class TestCreateTruststoreFromPem(unittest.TestCase):
                 raise ImportError("No module named 'cryptography'")
             return original_import(name, *args, **kwargs)
         
-        with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
-            f.write(self.TEST_CA_CERT_PEM)
-            pem_path = f.name
-        
-        try:
+        with temp_pem_file() as pem_path:
             with mock.patch.object(builtins, '__import__', side_effect=mock_import):
-                # Need to reload the function context - use exec to simulate fresh import
-                # Since the import happens inside the function, we need to test it directly
                 result = pd._create_truststore_from_pem(pem_path)
-                # When cryptography is available (as it is in test env), this will succeed
+                # When cryptography is available, this will succeed
                 # The ImportError branch can only be hit in envs without cryptography
                 self.assertTrue(result is None or isinstance(result, str))
-        finally:
-            os.unlink(pem_path)
 
 
 if __name__ == '__main__':
