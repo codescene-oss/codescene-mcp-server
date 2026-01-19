@@ -8,19 +8,20 @@ The tests communicate with the MCP server using the MCP protocol (JSON-RPC over 
 
 1. **Environment Setup** - CA certificate file is accessible, environment variables are set correctly
 2. **MCP Server Startup** - The MCP server starts and accepts protocol requests
-3. **MCP Tool Invocation** - Tools that use the CLI (like `code_health_score`) work correctly with SSL
-4. **No SSL Errors** - No certificate verification errors in tool responses
+3. **MCP Tool Invocation (valid cert)** - Tools work correctly with proper SSL configuration
+4. **MCP Tool Invocation (no cert)** - SSL errors occur when no cert is provided
+5. **MCP Tool Invocation (wrong cert)** - SSL errors occur when wrong cert is provided
 
 ## MCP Server Variants
 
 There are two deployment variants of the MCP server, and both are tested:
 
-### Docker Variant (default)
+### Docker Variant
 
-Tests the actual Docker image as deployed in production:
+Tests the actual Docker image as users run it:
 - Builds `docker build -t codescene-mcp .`
-- Runs via `docker run -i --rm codescene-mcp`
-- Mounts SSL certificates into the container
+- Runs via `docker run -i codescene-mcp` with SSL certs mounted
+- Uses the same command structure users would use
 
 ### Static Binary Variant
 
@@ -32,26 +33,32 @@ Tests the Nuitka-compiled standalone binary:
 ## Architecture
 
 ```
-┌─────────────────────┐  MCP Protocol   ┌─────────────────────┐
-│  Test Client        │ ◀─────────────▶ │  MCP Server         │
-│  (Python script)    │   (stdio)       │  (Docker or binary) │
-└─────────────────────┘                 │                     │
-                                        │  Invokes CLI:       │
-                                        │  cs -Djavax.net...  │
-                                        └──────────┬──────────┘
-                                                   │ HTTPS
-                                                   ▼
-                                        ┌─────────────────────┐
-                                        │  nginx (SSL)        │
-                                        │  Self-signed cert   │
-                                        └─────────────────────┘
+┌─────────────────────┐  MCP Protocol   ┌─────────────────────────┐
+│  Test Client        │ ◀─────────────▶ │  MCP Server             │
+│  (Python script)    │   (stdio)       │  docker run -i or       │
+│  runs on HOST       │                 │  ./cs-mcp binary        │
+└─────────────────────┘                 └───────────┬─────────────┘
+                                                    │ HTTPS
+                                                    ▼
+                                        ┌─────────────────────────┐
+                                        │  nginx (Docker)         │
+                                        │  Self-signed SSL cert   │
+                                        │  Proxies to real backend│
+                                        └───────────┬─────────────┘
+                                                    │ HTTPS
+                                                    ▼
+                                        ┌─────────────────────────┐
+                                        │  Backend                │
+                                        │  codescene.io or        │
+                                        │  on-prem instance       │
+                                        └─────────────────────────┘
 ```
 
 ## Running the Tests
 
 ### Prerequisites
 
-- Docker and Docker Compose installed
+- Docker installed
 - For static variant: Python 3.13, Nuitka
 
 ### Run Tests
@@ -83,12 +90,12 @@ cd tests/ssl-integration
 
 ### Docker Variant - What Happens
 
-1. Docker Compose starts nginx with a self-signed SSL certificate
-2. The MCP Docker image is built locally (`docker build -t codescene-mcp-ssl-test .`)
-3. The Docker image is run with SSL certificates mounted
-4. Test client sends MCP protocol requests to the container
-5. Verifies `code_health_score` tool works through SSL
-6. Cleans up the test Docker image
+1. Builds the MCP Docker image from the main Dockerfile
+2. Starts nginx container with self-signed SSL certificate
+3. Runs `docker run -i` with SSL certificates mounted
+4. Test client on HOST sends MCP protocol requests via stdio
+5. Verifies SSL works with valid cert, fails without cert or with wrong cert
+6. Cleans up containers and images
 
 ### Static Variant - What Happens
 
@@ -96,7 +103,7 @@ cd tests/ssl-integration
 2. Builds `cs-mcp` binary using Nuitka (takes several minutes)
 3. Starts nginx with self-signed SSL cert via Docker
 4. Runs the static binary and sends MCP protocol requests
-5. Verifies tools work correctly with SSL
+5. Verifies SSL works with valid cert, fails without cert or with wrong cert
 6. Cleans up
 
 ## Docker SSL Configuration

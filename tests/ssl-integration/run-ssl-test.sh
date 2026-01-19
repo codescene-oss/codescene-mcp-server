@@ -58,30 +58,12 @@ echo "============================================================"
 echo ""
 
 if [ "$VARIANT" = "docker" ] || [ "$VARIANT" = "docker-onprem" ]; then
-    # Docker variant: Use docker-compose to orchestrate the test
-    echo "Building and running Docker variant test..."
+    # Docker variant: Build Docker image and run with docker run
+    echo "Testing Docker image with docker run..."
     echo ""
     
-    if docker compose up --build --abort-on-container-exit --exit-code-from mcp-docker-test 2>&1; then
-        echo ""
-        echo "============================================================"
-        echo "  Docker Variant Tests PASSED ✓"
-        echo "============================================================"
-        exit_code=0
-    else
-        echo ""
-        echo "============================================================"
-        echo "  Docker Variant Tests FAILED ✗"
-        echo "============================================================"
-        exit_code=1
-    fi
-    
-    # Cleanup
-    echo ""
-    echo "Cleaning up Docker resources..."
-    docker compose down -v --remove-orphans 2>/dev/null || true
-    
-    exit $exit_code
+    # Run the Docker variant test script
+    exec "$SCRIPT_DIR/run-docker-ssl-test.sh"
 
 elif [ "$VARIANT" = "static" ] || [ "$VARIANT" = "static-onprem" ]; then
     # Static variant: Build cs-mcp binary and test it
