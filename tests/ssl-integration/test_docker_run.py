@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-Docker variant SSL integration test.
+Docker run SSL integration test.
 
-This test runs inside a container that matches the actual MCP Docker deployment.
-It verifies that:
-1. The MCP server starts correctly
-2. MCP protocol requests work via stdio
-3. Tool invocations that use the CLI work with SSL
-4. No SSL certificate errors occur
+This test runs on the HOST and tests the actual `docker run` command
+that users would use. It:
+1. Runs `docker run -i codescene-mcp` with SSL certs mounted
+2. Sends MCP protocol requests via stdio
+3. Verifies SSL works end-to-end
 
-The test container has the same setup as the production Docker image:
-- Same Python version and dependencies  
-- Same CodeScene CLI installation
-- Same MCP server code
+Environment variables (set by run-docker-ssl-test.sh):
+- CERT_PATH: Path to CA certificate
+- DOCKER_IMAGE: Docker image name to test
+- DOCKER_NETWORK: Docker network name
+- NGINX_HOST: Hostname of nginx container
+- TEST_DATA_PATH: Path to test data files
 """
 
 import json
@@ -79,60 +80,67 @@ def extract_result_text(tool_response: dict) -> str:
     result = tool_response["result"]
     if not isinstance(result, dict):
         return ""
-    # Try content array first
     content = result.get("content", [])
     if content and isinstance(content, list):
         return content[0].get("text", "")
-    # Fall back to structuredContent
     structured = result.get("structuredContent", {})
     return structured.get("result", "")
 
 
-def check_path_exists(path: str, name: str) -> bool:
-    """Check if path exists and print test result."""
-    exists = os.path.exists(path)
-    print_test(f"{name} exists", exists, f"Path: {path}")
-    return exists
-
-
-def check_env_var(var_name: str, description: str) -> bool:
-    """Check if environment variable is set and print test result."""
-    value = os.getenv(var_name)
-    if value:
-        print_test(f"{description}", True, f"{var_name}: {value}")
-        return True
-    print_test(f"{description}", False)
-    return False
+def build_docker_command(with_cert: bool = True, wrong_cert_path: str = None):
+    """Build the docker run command."""
+    image = os.environ['DOCKER_IMAGE']
+    network = os.environ['DOCKER_NETWORK']
+    nginx_host = os.environ['NGINX_HOST']
+    cert_path = os.environ['CERT_PATH']
+    test_data_path = os.environ['TEST_DATA_PATH']
+    
+    cmd = [
+        'docker', 'run', '-i', '--rm',
+        '--network', network,
+        '-e', f'CS_ONPREM_URL=https://{nginx_host}',
+        '-e', 'CS_ACCESS_TOKEN=test-token',
+        '-e', 'CS_MOUNT_PATH=/mount',
+        '-v', f'{test_data_path}:/mount:ro',
+    ]
+    
+    if with_cert:
+        actual_cert = wrong_cert_path if wrong_cert_path else cert_path
+        cmd.extend([
+            '-e', 'REQUESTS_CA_BUNDLE=/certs/ca.crt',
+            '-v', f'{actual_cert}:/certs/ca.crt:ro',
+        ])
+    
+    cmd.append(image)
+    return cmd
 
 
 class MCPClient:
-    """MCP client that communicates with the server via stdio."""
+    """MCP client that communicates with a Docker container via stdio."""
     
-    def __init__(self, command: list, env: dict = None):
+    def __init__(self, command: list):
         self.command = command
-        self.env = env or os.environ.copy()
         self.process = None
         self.response_queue = queue.Queue()
         self.reader_thread = None
         
     def start(self):
-        """Start the MCP server process."""
+        """Start the Docker container."""
         self.process = subprocess.Popen(
             self.command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env=self.env,
             text=True,
             bufsize=1
         )
         self.reader_thread = threading.Thread(target=self._read_responses, daemon=True)
         self.reader_thread.start()
-        time.sleep(1)
+        time.sleep(2)  # Docker containers take longer to start
         return self.process.poll() is None
     
     def _read_responses(self):
-        """Read responses from the server in a background thread."""
+        """Read responses from the container in a background thread."""
         try:
             while self.process and self.process.poll() is None:
                 line = self.process.stdout.readline()
@@ -149,58 +157,57 @@ class MCPClient:
             "method": method,
             "params": params or {}
         }
+        request_str = json.dumps(request)
+        self.process.stdin.write(request_str + '\n')
+        self.process.stdin.flush()
+        
         try:
-            self.process.stdin.write(json.dumps(request) + "\n")
-            self.process.stdin.flush()
-        except Exception as e:
-            return {"error": f"Failed to send request: {e}"}
-        try:
-            response_str = self.response_queue.get(timeout=30)
-            return json.loads(response_str)
+            response = self.response_queue.get(timeout=30)
+            return json.loads(response)
         except queue.Empty:
             return {"error": "Timeout waiting for response"}
         except json.JSONDecodeError as e:
-            return {"error": f"Invalid JSON response: {e}"}
+            return {"error": f"Invalid JSON: {e}"}
     
     def send_notification(self, method: str, params: dict = None):
         """Send a JSON-RPC notification (no response expected)."""
-        notification = {"jsonrpc": "2.0", "method": method}
-        if params:
-            notification["params"] = params
-        try:
-            self.process.stdin.write(json.dumps(notification) + "\n")
-            self.process.stdin.flush()
-        except Exception as e:
-            print(f"Failed to send notification: {e}")
-    
-    def call_tool(self, tool_name: str, arguments: dict) -> dict:
-        """Call an MCP tool."""
-        return self.send_request("tools/call", {"name": tool_name, "arguments": arguments})
+        notification = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params or {}
+        }
+        self.process.stdin.write(json.dumps(notification) + '\n')
+        self.process.stdin.flush()
     
     def initialize(self) -> dict:
-        """Initialize the MCP session and send initialized notification."""
+        """Initialize the MCP session."""
         response = self.send_request("initialize", {
             "protocolVersion": "2024-11-05",
             "capabilities": {},
-            "clientInfo": {"name": "ssl-test-client", "version": "1.0.0"}
+            "clientInfo": {"name": "ssl-test", "version": "1.0"}
         })
-        time.sleep(0.2)
         self.send_notification("notifications/initialized")
-        time.sleep(0.3)
+        time.sleep(0.5)
         return response
     
+    def call_tool(self, name: str, arguments: dict) -> dict:
+        """Call an MCP tool."""
+        return self.send_request("tools/call", {
+            "name": name,
+            "arguments": arguments
+        })
+    
     def stop(self):
-        """Stop the MCP server process."""
+        """Stop the Docker container."""
         if self.process:
             try:
-                self.process.stdin.close()
                 self.process.terminate()
                 self.process.wait(timeout=5)
             except Exception:
                 self.process.kill()
     
     def get_stderr(self) -> str:
-        """Get any stderr output from the server."""
+        """Get any stderr output from the container."""
         if self.process and self.process.stderr:
             try:
                 return self.process.stderr.read()
@@ -213,154 +220,54 @@ def test_environment_setup():
     """Verify the test environment is correctly configured."""
     print_header("Test Environment Setup")
     
-    checks = [
-        check_path_exists(os.getenv('REQUESTS_CA_BUNDLE', '/certs/ca.crt'), "CA certificate"),
-        check_env_var('CS_ONPREM_URL', "CS_ONPREM_URL is set"),
-        check_path_exists('/root/.local/bin/cs', "CS CLI"),
-        check_path_exists('/mount/OrderProcessor.java', "Test file"),
-        check_path_exists('/app/src/cs_mcp_server.py', "MCP server script"),
-    ]
-    return all(checks)
-
-
-def test_ssl_args_generation():
-    """Test that SSL args are correctly generated."""
-    print_header("Test SSL Arguments Generation")
-    
-    sys.path.insert(0, '/app/src')
-    from utils.platform_details import get_ssl_cli_args
-    from utils.code_health_analysis import _is_cs_cli_command
-    
-    args = get_ssl_cli_args()
     checks = []
     
-    # Check arg count
-    checks.append(len(args) == 3)
-    print_test("SSL args list has 3 elements", checks[-1], f"Got: {len(args)} args")
+    # Check required environment variables
+    for var in ['DOCKER_IMAGE', 'DOCKER_NETWORK', 'NGINX_HOST', 'CERT_PATH', 'TEST_DATA_PATH']:
+        value = os.getenv(var)
+        ok = bool(value)
+        checks.append(ok)
+        print_test(f"{var} is set", ok, f"Value: {value}" if value else "")
     
-    # Check truststore file exists
-    truststore_arg = next((a for a in args if '-Djavax.net.ssl.trustStore=' in a), None)
-    if truststore_arg:
-        truststore_path = truststore_arg.split('=', 1)[1]
-        checks.append(os.path.exists(truststore_path))
-        print_test("Truststore file created", checks[-1], f"Path: {truststore_path}")
-    else:
-        checks.append(False)
-        print_test("Truststore arg present", False)
+    # Check cert file exists
+    cert_path = os.getenv('CERT_PATH')
+    cert_ok = cert_path and os.path.exists(cert_path)
+    checks.append(cert_ok)
+    print_test("Certificate file exists", cert_ok, f"Path: {cert_path}")
     
-    # Check CLI detection
-    cli_detected = _is_cs_cli_command('/root/.local/bin/cs')
-    checks.append(cli_detected)
-    print_test("CS CLI command detection works", cli_detected)
-    
-    return all(checks)
-
-
-def test_cli_ssl_injection():
-    """Test that SSL args are injected into CLI commands."""
-    print_header("Test CLI SSL Args Injection")
-    
-    sys.path.insert(0, '/app/src')
-    from unittest import mock
-    from utils.code_health_analysis import run_local_tool
-    
-    captured_command = []
-    
-    def mock_run(command, **kwargs):
-        captured_command.extend(command)
-        result = mock.MagicMock()
-        result.returncode = 0
-        result.stdout = '{"score": 8.5}'
-        return result
-    
-    with mock.patch('utils.code_health_analysis.subprocess.run', side_effect=mock_run):
-        try:
-            run_local_tool(['/root/.local/bin/cs', 'review', 'test.py', '--output-format=json'])
-        except Exception:
-            pass
-    
-    command_str = ' '.join(captured_command)
-    checks = []
-    
-    checks.append('-Djavax.net.ssl.trustStore=' in command_str)
-    print_test("SSL trustStore arg injected", checks[-1])
-    
-    checks.append('-Djavax.net.ssl.trustStoreType=PKCS12' in command_str)
-    print_test("SSL trustStoreType arg injected", checks[-1])
-    
-    # Verify SSL args come before subcommand
-    if len(captured_command) >= 5:
-        ssl_indices = [i for i, arg in enumerate(captured_command) if '-Djavax.net.ssl' in arg]
-        review_idx = next((i for i, arg in enumerate(captured_command) if arg == 'review'), -1)
-        order_correct = ssl_indices and review_idx > 0 and all(idx < review_idx for idx in ssl_indices)
-        checks.append(order_correct)
-        print_test("SSL args come before subcommand", order_correct)
+    # Check Docker image exists
+    image = os.getenv('DOCKER_IMAGE')
+    result = subprocess.run(['docker', 'image', 'inspect', image], capture_output=True)
+    image_ok = result.returncode == 0
+    checks.append(image_ok)
+    print_test("Docker image exists", image_ok, f"Image: {image}")
     
     return all(checks)
 
 
-def test_mcp_server_startup():
-    """Test that the MCP server starts and responds."""
-    print_header("Test MCP Server Startup")
+def test_docker_run_starts():
+    """Verify docker run starts the MCP server."""
+    print_header("Test Docker Run Startup")
     
-    command = ['python', '/app/src/cs_mcp_server.py']
-    print(f"  Command: {' '.join(command)}")
+    cmd = build_docker_command(with_cert=True)
+    print(f"  Command: docker run -i ... {os.environ['DOCKER_IMAGE']}")
     
-    client = MCPClient(command)
+    client = MCPClient(cmd)
     try:
         started = client.start()
-        print_test("MCP server process started", started)
+        print_test("Docker container started", started)
         if not started:
+            stderr = client.get_stderr()
+            if stderr:
+                print(f"  stderr: {stderr[:200]}")
             return False
         
         response = client.initialize()
         print_test("MCP server responds to initialize", "result" in response)
         return True
     except Exception as e:
-        print_test("MCP server starts", False, str(e))
+        print_test("Docker run starts", False, str(e))
         return False
-    finally:
-        client.stop()
-
-
-def run_ssl_tool_test(test_name: str, env_modifier=None, expect_ssl_error=False):
-    """
-    Run an MCP tool test with the given environment configuration.
-    
-    Args:
-        test_name: Name of the test for output
-        env_modifier: Function to modify environment dict, or None for default
-        expect_ssl_error: If True, expect SSL errors; if False, expect auth errors
-    
-    Returns:
-        True if test passed, False otherwise
-    """
-    print_header(test_name)
-    
-    env = os.environ.copy()
-    if env_modifier:
-        env_modifier(env)
-    
-    command = ['python', '/app/src/cs_mcp_server.py']
-    client = MCPClient(command, env=env)
-    
-    try:
-        if not client.start():
-            print_test("MCP server started", False)
-            return False
-        print_test("MCP server started", True)
-        
-        init_response = client.initialize()
-        print_test("Session initialized", "result" in init_response, "Response received")
-        
-        tool_response = client.call_tool("code_health_score", {"file_path": "/mount/OrderProcessor.java"})
-        result_text = extract_result_text(tool_response)
-        print(f"  Result text: {result_text[:150]}...")
-        
-        return validate_ssl_response(result_text, tool_response, expect_ssl_error)
-        
-    except Exception as e:
-        return handle_test_exception(e, expect_ssl_error)
     finally:
         client.stop()
 
@@ -418,26 +325,49 @@ def handle_test_exception(e: Exception, expect_ssl_error: bool) -> bool:
     return False
 
 
+def run_ssl_tool_test(test_name: str, with_cert: bool = True, 
+                      wrong_cert_path: str = None, expect_ssl_error: bool = False):
+    """Run an MCP tool test with the given configuration."""
+    print_header(test_name)
+    
+    cmd = build_docker_command(with_cert=with_cert, wrong_cert_path=wrong_cert_path)
+    client = MCPClient(cmd)
+    
+    try:
+        if not client.start():
+            print_test("Docker container started", False)
+            return False
+        print_test("Docker container started", True)
+        
+        init_response = client.initialize()
+        print_test("Session initialized", "result" in init_response, "Response received")
+        
+        tool_response = client.call_tool("code_health_score", {"file_path": "/mount/OrderProcessor.java"})
+        result_text = extract_result_text(tool_response)
+        print(f"  Result text: {result_text[:150]}...")
+        
+        return validate_ssl_response(result_text, tool_response, expect_ssl_error)
+        
+    except Exception as e:
+        return handle_test_exception(e, expect_ssl_error)
+    finally:
+        client.stop()
+
+
 def test_mcp_tool_invocation():
     """Test invoking an MCP tool with valid SSL cert."""
     return run_ssl_tool_test(
         "Test MCP Tool Invocation (with valid SSL cert)",
-        env_modifier=None,
+        with_cert=True,
         expect_ssl_error=False
     )
 
 
 def test_mcp_tool_without_ssl_cert():
     """Test that CLI fails with SSL error when no cert is provided."""
-    def remove_certs(env):
-        env.pop('REQUESTS_CA_BUNDLE', None)
-        env.pop('SSL_CERT_FILE', None)
-        env.pop('CURL_CA_BUNDLE', None)
-        env['CS_SSL_CERT_PATH'] = '/nonexistent/cert.pem'
-    
     return run_ssl_tool_test(
         "Test MCP Tool Invocation (WITHOUT SSL cert - expect failure)",
-        env_modifier=remove_certs,
+        with_cert=False,
         expect_ssl_error=True
     )
 
@@ -448,7 +378,6 @@ def test_mcp_tool_with_wrong_cert():
 MIIBkTCB+wIJAKHBfpegPjMCMA0GCSqGSIb3DQEBCwUAMBExDzANBgNVBAMMBndy
 b25nMTAeFw0yNDAxMDEwMDAwMDBaFw0yNTAxMDEwMDAwMDBaMBExDzANBgNVBAMM
 BndyZeWuZzEwXDANBgkqhkiG9w0BAQEFAANLADBIAkEA0Z3VS5JJcds3xKFLEpzs
-TpGqT3gKH1234fakecertificatecontentABCDEFGHIJKLMNOPQRSTUVWXYZ
 -----END CERTIFICATE-----
 """
     
@@ -456,14 +385,11 @@ TpGqT3gKH1234fakecertificatecontentABCDEFGHIJKLMNOPQRSTUVWXYZ
         f.write(wrong_cert_content)
         wrong_cert_path = f.name
     
-    def use_wrong_cert(env):
-        env['REQUESTS_CA_BUNDLE'] = wrong_cert_path
-        env['SSL_CERT_FILE'] = wrong_cert_path
-    
     try:
         return run_ssl_tool_test(
             "Test MCP Tool Invocation (with WRONG SSL cert - expect failure)",
-            env_modifier=use_wrong_cert,
+            with_cert=True,
+            wrong_cert_path=wrong_cert_path,
             expect_ssl_error=True
         )
     finally:
@@ -475,16 +401,13 @@ TpGqT3gKH1234fakecertificatecontentABCDEFGHIJKLMNOPQRSTUVWXYZ
 
 def main():
     print("\n" + "="*60)
-    print("  Docker Variant SSL Integration Test")
-    print("  Testing: MCP Docker deployment with SSL certificates")
+    print("  Docker Run SSL Integration Tests")
+    print("  Testing: docker run -i codescene-mcp with SSL certs")
     print("="*60)
-    print("\n  This test runs inside a container matching the Docker deployment")
     
     results = [
         ("Environment Setup", test_environment_setup()),
-        ("SSL Args Generation", test_ssl_args_generation()),
-        ("CLI SSL Args Injection", test_cli_ssl_injection()),
-        ("MCP Server Startup", test_mcp_server_startup()),
+        ("Docker Run Startup", test_docker_run_starts()),
         ("MCP Tool Invocation (valid cert)", test_mcp_tool_invocation()),
         ("MCP Tool Invocation (no cert)", test_mcp_tool_without_ssl_cert()),
         ("MCP Tool Invocation (wrong cert)", test_mcp_tool_with_wrong_cert()),
@@ -501,7 +424,7 @@ def main():
     print(f"\n  Total: {passed}/{total} passed")
     
     if passed == total:
-        print("\n  Docker variant tests passed! ✓")
+        print("\n  All tests passed! ✓")
         return 0
     print(f"\n  {total - passed} test(s) failed! ✗")
     return 1
