@@ -264,3 +264,92 @@ Claude Desktop is available for macOS and Windows. Add to your configuration fil
 ## Building Docker Image Locally
 
 See [Building the Docker image locally](building-docker-locally.md) for instructions on building the image from source.
+
+## Custom SSL/TLS Certificates
+
+If your organization uses a corporate proxy or internal CA certificates for your on-premise CodeScene instance, you need to mount your CA certificate file into the container and configure the MCP server to use it.
+
+### Basic Configuration
+
+Mount your CA certificate and set `REQUESTS_CA_BUNDLE` to point to its location *inside* the container:
+
+```json
+{
+  "mcpServers": {
+    "codescene": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "CS_ACCESS_TOKEN",
+        "-e", "CS_ONPREM_URL",
+        "-e", "CS_MOUNT_PATH=/path/to/your/code",
+        "-e", "REQUESTS_CA_BUNDLE=/certs/ca-bundle.crt",
+        "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
+        "--mount", "type=bind,src=/path/to/your/ca-bundle.crt,dst=/certs/ca-bundle.crt,ro",
+        "codescene/codescene-mcp"
+      ],
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ONPREM_URL": "https://your-codescene-instance.example.com"
+      }
+    }
+  }
+}
+```
+
+> **Note:** The `REQUESTS_CA_BUNDLE` value (`/certs/ca-bundle.crt`) must match the destination path in the mount (`dst=/certs/ca-bundle.crt`).
+```
+
+### Mounting a Certificate Directory
+
+If you have multiple certificates or a certificate bundle directory:
+
+```json
+{
+  "mcpServers": {
+    "codescene": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "CS_ACCESS_TOKEN",
+        "-e", "CS_ONPREM_URL",
+        "-e", "CS_MOUNT_PATH=/path/to/your/code",
+        "-e", "REQUESTS_CA_BUNDLE=/certs/company-ca.crt",
+        "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
+        "--mount", "type=bind,src=/etc/ssl/company-certs,dst=/certs,ro",
+        "codescene/codescene-mcp"
+      ],
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ONPREM_URL": "https://your-codescene-instance.example.com"
+      }
+    }
+  }
+}
+```
+
+### Supported Environment Variables
+
+The following environment variables are checked in order of precedence:
+
+| Variable | Description |
+|----------|-------------|
+| `REQUESTS_CA_BUNDLE` | Standard Python/requests CA bundle path (recommended) |
+| `SSL_CERT_FILE` | Alternative CA certificate path |
+| `CURL_CA_BUNDLE` | curl-style CA bundle path |
+
+### How It Works
+
+The MCP server automatically handles SSL configuration for both its Python components and the embedded Java-based CodeScene CLI:
+
+1. **Python/requests**: Uses the certificate directly via `REQUESTS_CA_BUNDLE`
+2. **Java CLI**: The MCP server automatically converts the PEM certificate to a PKCS12 truststore at runtime and injects the appropriate Java SSL arguments (`-Djavax.net.ssl.trustStore`, `-Djavax.net.ssl.trustStoreType`, `-Djavax.net.ssl.trustStorePassword`)
+
+This means you only need to configure SSL once—the MCP server handles the rest.
+
+### Notes
+
+- The certificate file must be in PEM format (the standard format with `-----BEGIN CERTIFICATE-----` headers)
+- The mounted certificate path inside the container must match the `REQUESTS_CA_BUNDLE` value
+- If your certificate chain includes intermediate certificates, include them all in the same file
+- The certificate mount should be read-only (`:ro`) for security

@@ -6,7 +6,7 @@ import sys
 import tempfile
 from errors import CodeSceneCliError
 from .docker_path_adapter import adapt_mounted_file_path_inside_docker
-from .platform_details import get_platform_details
+from .platform_details import get_platform_details, get_ssl_cli_args
 
 
 def find_git_root(file_path: str) -> str:
@@ -61,23 +61,35 @@ def run_local_tool(command: list, cwd: str = None, extra_env: dict = None):
 
     # Apply platform-specific environment configuration
     platform = get_platform_details()
-    
-    # Set platform-specific Java options (e.g., temp directory on Windows)
-    java_options = platform.get_java_options()
-    if java_options:
-        env['_JAVA_OPTIONS'] = java_options
-    
     env = platform.configure_environment(env)
 
     # Apply any extra environment variables (e.g., GIT_DIR for worktrees)
     if extra_env:
         env.update(extra_env)
 
-    result = subprocess.run(command, capture_output=True, text=True, cwd=cwd, env=env)
+    # Check if this is a CS CLI command and inject SSL args if needed
+    # SSL args must be passed directly to the CLI (GraalVM native image doesn't read _JAVA_OPTIONS)
+    actual_command = command
+    if command and _is_cs_cli_command(command[0]):
+        ssl_args = get_ssl_cli_args()
+        if ssl_args:
+            # Insert SSL args after the CLI binary, before subcommand
+            actual_command = [command[0]] + ssl_args + command[1:]
+
+    result = subprocess.run(actual_command, capture_output=True, text=True, cwd=cwd, env=env)
     if result.returncode != 0:
         raise CodeSceneCliError(f"CLI command failed: {result.stderr}")
     
     return result.stdout
+
+
+def _is_cs_cli_command(cmd: str) -> bool:
+    """Check if the command is a CS CLI binary."""
+    if not cmd:
+        return False
+    # Check if command ends with 'cs' or 'cs.exe' (the CLI binary names)
+    cmd_lower = cmd.lower()
+    return cmd_lower.endswith('/cs') or cmd_lower.endswith('\\cs') or cmd_lower.endswith('/cs.exe') or cmd_lower.endswith('\\cs.exe') or cmd_lower == 'cs' or cmd_lower == 'cs.exe'
 
 
 def run_cs_cli(cli_fn) -> str:

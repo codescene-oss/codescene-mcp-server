@@ -31,9 +31,13 @@ class PlatformDetails(ABC):
         pass
 
 
-def _get_ssl_truststore_options() -> str:
+def get_ssl_cli_args() -> list[str]:
     """
-    Returns Java truststore options for custom CA certificates.
+    Returns SSL truststore CLI arguments for custom CA certificates.
+    
+    These arguments are passed directly to the CLI binary (GraalVM native image)
+    rather than via _JAVA_OPTIONS environment variable, since GraalVM native
+    images don't read _JAVA_OPTIONS.
     
     Checks these environment variables in order of precedence:
     
@@ -49,7 +53,7 @@ def _get_ssl_truststore_options() -> str:
     Requires the 'cryptography' package.
     
     Returns:
-        Java options string for SSL configuration, or empty string if not configured.
+        List of CLI arguments for SSL configuration, or empty list if not configured.
     """
     # Check standard CA bundle environment variables in order of precedence
     ca_cert_path = (
@@ -59,20 +63,20 @@ def _get_ssl_truststore_options() -> str:
     )
     
     if not ca_cert_path:
-        return ""
+        return []
     
     if not os.path.isfile(ca_cert_path):
-        return ""
+        return []
     
     truststore = _create_truststore_from_pem(ca_cert_path)
     if truststore:
-        return (
-            f'-Djavax.net.ssl.trustStore="{truststore}" '
-            f'-Djavax.net.ssl.trustStoreType=PKCS12 '
-            f'-Djavax.net.ssl.trustStorePassword=changeit'
-        )
+        return [
+            f'-Djavax.net.ssl.trustStore={truststore}',
+            '-Djavax.net.ssl.trustStoreType=PKCS12',
+            '-Djavax.net.ssl.trustStorePassword=changeit'
+        ]
     
-    return ""
+    return []
 
 
 def _create_truststore_from_pem(pem_path: str) -> str | None:
@@ -161,16 +165,10 @@ class WindowsPlatformDetails(PlatformDetails):
         return env
     
     def get_java_options(self) -> str:
-        """Set Java temp directory and SSL options for Windows."""
+        """Set Java temp directory for Windows."""
         import tempfile
         temp_dir = tempfile.gettempdir()
-        options = [f'-Djava.io.tmpdir="{temp_dir}"']
-        
-        ssl_options = _get_ssl_truststore_options()
-        if ssl_options:
-            options.append(ssl_options)
-        
-        return ' '.join(options)
+        return f'-Djava.io.tmpdir="{temp_dir}"'
 
 
 class UnixPlatformDetails(PlatformDetails):
@@ -185,8 +183,8 @@ class UnixPlatformDetails(PlatformDetails):
         return env.copy()
     
     def get_java_options(self) -> str:
-        """Returns SSL truststore options if configured, empty string otherwise."""
-        return _get_ssl_truststore_options()
+        """Returns empty string as Unix doesn't need special Java options."""
+        return ""
 
 
 def get_platform_details() -> PlatformDetails:

@@ -9,7 +9,7 @@ from .platform_details import (
     get_platform_details,
     WindowsPlatformDetails,
     UnixPlatformDetails,
-    _get_ssl_truststore_options,
+    get_ssl_cli_args,
     _create_truststore_from_pem
 )
 
@@ -214,59 +214,61 @@ class TestSSLTruststoreOptions(unittest.TestCase):
         os.environ.clear()
         os.environ.update(self.original_env)
     
-    def _assert_truststore_options_present(self, result: str) -> None:
-        """Assert that truststore options are present in the result."""
-        self.assertIn('-Djavax.net.ssl.trustStore=', result)
+    def _assert_truststore_args_present(self, result: list) -> None:
+        """Assert that truststore args are present in the result."""
+        self.assertTrue(any('-Djavax.net.ssl.trustStore=' in arg for arg in result))
     
-    def test_returns_empty_string_when_no_env_vars_set(self):
-        result = _get_ssl_truststore_options()
-        self.assertEqual("", result)
+    def test_returns_empty_list_when_no_env_vars_set(self):
+        result = get_ssl_cli_args()
+        self.assertEqual([], result)
     
-    def test_returns_empty_string_when_ca_bundle_file_not_found(self):
+    def test_returns_empty_list_when_ca_bundle_file_not_found(self):
         os.environ['REQUESTS_CA_BUNDLE'] = '/nonexistent/ca-bundle.crt'
         
-        result = _get_ssl_truststore_options()
+        result = get_ssl_cli_args()
         
-        self.assertEqual("", result)
+        self.assertEqual([], result)
     
-    def test_returns_truststore_options_when_valid_pem_exists(self):
+    def test_returns_truststore_args_when_valid_pem_exists(self):
         with temp_pem_file() as pem_path:
             os.environ['REQUESTS_CA_BUNDLE'] = pem_path
             
-            result = _get_ssl_truststore_options()
+            result = get_ssl_cli_args()
             
-            self._assert_truststore_options_present(result)
+            self.assertEqual(3, len(result))
+            self._assert_truststore_args_present(result)
             self.assertIn('-Djavax.net.ssl.trustStoreType=PKCS12', result)
             self.assertIn('-Djavax.net.ssl.trustStorePassword=changeit', result)
     
     def test_ssl_cert_file_is_used_as_fallback(self):
         with temp_pem_file() as pem_path:
             os.environ['SSL_CERT_FILE'] = pem_path
-            result = _get_ssl_truststore_options()
-            self._assert_truststore_options_present(result)
+            result = get_ssl_cli_args()
+            self._assert_truststore_args_present(result)
     
     def test_curl_ca_bundle_is_used_as_fallback(self):
         with temp_pem_file() as pem_path:
             os.environ['CURL_CA_BUNDLE'] = pem_path
-            result = _get_ssl_truststore_options()
-            self._assert_truststore_options_present(result)
+            result = get_ssl_cli_args()
+            self._assert_truststore_args_present(result)
     
     def test_requests_ca_bundle_takes_precedence(self):
         with temp_pem_file() as requests_path, temp_pem_file() as ssl_path:
             os.environ['REQUESTS_CA_BUNDLE'] = requests_path
             os.environ['SSL_CERT_FILE'] = ssl_path
             
-            result = _get_ssl_truststore_options()
+            result = get_ssl_cli_args()
             
-            self._assert_truststore_options_present(result)
+            self._assert_truststore_args_present(result)
     
     def test_returns_empty_for_invalid_pem_content(self):
         with temp_pem_file(b"not a valid certificate") as pem_path:
             os.environ['REQUESTS_CA_BUNDLE'] = pem_path
-            result = _get_ssl_truststore_options()
-            self.assertEqual("", result)
+            result = get_ssl_cli_args()
+            self.assertEqual([], result)
     
-    def test_windows_includes_ssl_options_in_java_options(self):
+    def test_windows_java_options_only_contains_tmpdir(self):
+        """Windows Java options should only contain tmpdir, SSL is handled via CLI args."""
         with temp_pem_file() as pem_path:
             os.environ['REQUESTS_CA_BUNDLE'] = pem_path
             details = WindowsPlatformDetails()
@@ -274,16 +276,19 @@ class TestSSLTruststoreOptions(unittest.TestCase):
             result = details.get_java_options()
             
             self.assertIn('-Djava.io.tmpdir=', result)
-            self._assert_truststore_options_present(result)
+            # SSL options should NOT be in Java options (they go directly to CLI)
+            self.assertNotIn('-Djavax.net.ssl.trustStore', result)
     
-    def test_unix_includes_ssl_options_when_configured(self):
+    def test_unix_java_options_is_empty(self):
+        """Unix Java options should be empty, SSL is handled via CLI args."""
         with temp_pem_file() as pem_path:
             os.environ['REQUESTS_CA_BUNDLE'] = pem_path
             details = UnixPlatformDetails()
             
             result = details.get_java_options()
             
-            self._assert_truststore_options_present(result)
+            # Unix doesn't need Java options, SSL goes directly to CLI
+            self.assertEqual('', result)
 
 
 class TestCreateTruststoreFromPem(unittest.TestCase):

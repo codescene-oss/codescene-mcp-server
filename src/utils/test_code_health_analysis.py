@@ -93,24 +93,58 @@ class TestRunLocalTool(unittest.TestCase):
         self.assertEqual('mcp-server', call_kwargs['env']['CS_CONTEXT'])
     
     @mock.patch('utils.code_health_analysis.subprocess.run')
+    @mock.patch('utils.code_health_analysis.get_ssl_cli_args')
     @mock.patch('utils.code_health_analysis.get_platform_details')
-    def test_run_local_tool_sets_java_options_when_provided(self, mock_platform, mock_run):
+    def test_run_local_tool_injects_ssl_args_for_cs_cli(self, mock_platform, mock_ssl_args, mock_run):
         from utils.code_health_analysis import run_local_tool
         
         mock_platform_instance = mock.MagicMock()
-        mock_platform_instance.get_java_options.return_value = '-Djava.io.tmpdir="/tmp"'
         mock_platform_instance.configure_environment.side_effect = lambda x: x
         mock_platform.return_value = mock_platform_instance
+        
+        # Mock SSL args
+        mock_ssl_args.return_value = ['-Djavax.net.ssl.trustStore=/tmp/test.p12', '-Djavax.net.ssl.trustStoreType=PKCS12']
         
         mock_result = mock.MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = 'output'
         mock_run.return_value = mock_result
         
-        run_local_tool(['echo', 'test'])
+        # Run with a CS CLI command
+        run_local_tool(['/path/to/cs', 'review', 'file.py'])
         
-        call_kwargs = mock_run.call_args[1]
-        self.assertEqual('-Djava.io.tmpdir="/tmp"', call_kwargs['env']['_JAVA_OPTIONS'])
+        # Verify SSL args were injected after CLI path but before subcommand
+        call_args = mock_run.call_args[0][0]
+        self.assertEqual('/path/to/cs', call_args[0])
+        self.assertEqual('-Djavax.net.ssl.trustStore=/tmp/test.p12', call_args[1])
+        self.assertEqual('-Djavax.net.ssl.trustStoreType=PKCS12', call_args[2])
+        self.assertEqual('review', call_args[3])
+        self.assertEqual('file.py', call_args[4])
+    
+    @mock.patch('utils.code_health_analysis.subprocess.run')
+    @mock.patch('utils.code_health_analysis.get_ssl_cli_args')
+    @mock.patch('utils.code_health_analysis.get_platform_details')
+    def test_run_local_tool_does_not_inject_ssl_args_for_non_cs_commands(self, mock_platform, mock_ssl_args, mock_run):
+        from utils.code_health_analysis import run_local_tool
+        
+        mock_platform_instance = mock.MagicMock()
+        mock_platform_instance.configure_environment.side_effect = lambda x: x
+        mock_platform.return_value = mock_platform_instance
+        
+        # Mock SSL args
+        mock_ssl_args.return_value = ['-Djavax.net.ssl.trustStore=/tmp/test.p12']
+        
+        mock_result = mock.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = 'output'
+        mock_run.return_value = mock_result
+        
+        # Run with a non-CS CLI command (like git)
+        run_local_tool(['git', 'status'])
+        
+        # Verify SSL args were NOT injected
+        call_args = mock_run.call_args[0][0]
+        self.assertEqual(['git', 'status'], call_args)
     
     @mock.patch('utils.code_health_analysis.subprocess.run')
     @mock.patch('utils.code_health_analysis.get_platform_details')
