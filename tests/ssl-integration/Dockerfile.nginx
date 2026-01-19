@@ -1,0 +1,57 @@
+FROM nginx:alpine
+
+# Build argument for target backend
+ARG BACKEND_HOST=codescene.io
+
+# Install openssl for certificate generation
+RUN apk add --no-cache openssl curl
+
+# Create directory for certificates
+RUN mkdir -p /etc/nginx/ssl /certs
+
+# Generate self-signed certificate with proper SANs for Docker networking
+RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /etc/nginx/ssl/server.key \
+    -out /etc/nginx/ssl/server.crt \
+    -subj "/C=US/ST=Test/L=Test/O=CodeScene Test/CN=nginx-ssl-proxy" \
+    -addext "subjectAltName=DNS:nginx-ssl-proxy,DNS:localhost,IP:127.0.0.1"
+
+# Copy the CA cert (same as server cert for self-signed) to shared location
+RUN cp /etc/nginx/ssl/server.crt /certs/ca.crt && chmod 644 /certs/ca.crt
+
+# Generate nginx config with the target backend
+RUN echo "events { worker_connections 1024; }" > /etc/nginx/nginx.conf && \
+    echo "" >> /etc/nginx/nginx.conf && \
+    echo "http {" >> /etc/nginx/nginx.conf && \
+    echo "    resolver 8.8.8.8 8.8.4.4 valid=300s;" >> /etc/nginx/nginx.conf && \
+    echo "    resolver_timeout 5s;" >> /etc/nginx/nginx.conf && \
+    echo "" >> /etc/nginx/nginx.conf && \
+    echo "    server {" >> /etc/nginx/nginx.conf && \
+    echo "        listen 443 ssl;" >> /etc/nginx/nginx.conf && \
+    echo "        server_name nginx-ssl-proxy localhost;" >> /etc/nginx/nginx.conf && \
+    echo "" >> /etc/nginx/nginx.conf && \
+    echo "        ssl_certificate /etc/nginx/ssl/server.crt;" >> /etc/nginx/nginx.conf && \
+    echo "        ssl_certificate_key /etc/nginx/ssl/server.key;" >> /etc/nginx/nginx.conf && \
+    echo "        ssl_protocols TLSv1.2 TLSv1.3;" >> /etc/nginx/nginx.conf && \
+    echo "" >> /etc/nginx/nginx.conf && \
+    echo "        location /health {" >> /etc/nginx/nginx.conf && \
+    echo "            return 200 'OK';" >> /etc/nginx/nginx.conf && \
+    echo "            add_header Content-Type text/plain;" >> /etc/nginx/nginx.conf && \
+    echo "        }" >> /etc/nginx/nginx.conf && \
+    echo "" >> /etc/nginx/nginx.conf && \
+    echo "        location / {" >> /etc/nginx/nginx.conf && \
+    echo "            proxy_pass https://${BACKEND_HOST};" >> /etc/nginx/nginx.conf && \
+    echo "            proxy_ssl_server_name on;" >> /etc/nginx/nginx.conf && \
+    echo "            proxy_set_header Host ${BACKEND_HOST};" >> /etc/nginx/nginx.conf && \
+    echo '            proxy_set_header X-Real-IP $remote_addr;' >> /etc/nginx/nginx.conf && \
+    echo '            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' >> /etc/nginx/nginx.conf && \
+    echo '            proxy_set_header X-Forwarded-Proto $scheme;' >> /etc/nginx/nginx.conf && \
+    echo "            proxy_ssl_protocols TLSv1.2 TLSv1.3;" >> /etc/nginx/nginx.conf && \
+    echo "        }" >> /etc/nginx/nginx.conf && \
+    echo "    }" >> /etc/nginx/nginx.conf && \
+    echo "}" >> /etc/nginx/nginx.conf
+
+# Expose the cert directory as a volume so other containers can access it
+VOLUME /certs
+
+EXPOSE 443

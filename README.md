@@ -220,26 +220,38 @@ seems to hallucinate parts of the path some of the time. We're still investigati
 
 If your organization uses an internal CA (Certificate Authority) for your on-premise CodeScene instance, you need to configure the MCP server to trust that certificate.
 
-Set the `REQUESTS_CA_BUNDLE` environment variable to point to your CA certificate file (PEM format):
+Set the `REQUESTS_CA_BUNDLE` environment variable to point to your CA certificate file (PEM format). This single variable configures SSL for both the Python MCP server and the embedded Java-based CodeScene CLI—the MCP server automatically converts the PEM certificate to a Java-compatible truststore at runtime.
 
-```bash
-export REQUESTS_CA_BUNDLE=/path/to/your/internal-ca.crt
+**For the static binary (Homebrew/Windows):**
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ONPREM_URL": "https://your-codescene-instance.example.com",
+        "REQUESTS_CA_BUNDLE": "/path/to/your/internal-ca.crt"
+      }
+    }
+  }
+}
 ```
 
-This single environment variable configures SSL for both the Python MCP server and the embedded Java-based CodeScene CLI. The MCP server automatically converts the PEM certificate to a Java-compatible truststore at runtime.
-
-**Example for VS Code with Docker:**
+**For Docker:**
+Mount your certificate into the container and set `REQUESTS_CA_BUNDLE` to the path *inside* the container:
 ```json
-"codescene": {
+{
   "command": "docker",
   "args": [
     "run", "-i", "--rm",
     "-e", "CS_ACCESS_TOKEN",
     "-e", "CS_ONPREM_URL",
-    "-e", "REQUESTS_CA_BUNDLE=/mount/certs/internal-ca.crt",
+    "-e", "REQUESTS_CA_BUNDLE=/certs/internal-ca.crt",
     "-e", "CS_MOUNT_PATH=${input:CS_MOUNT_PATH}",
     "--mount", "type=bind,src=${input:CS_MOUNT_PATH},dst=/mount/,ro",
-    "--mount", "type=bind,src=/path/to/certs,dst=/mount/certs,ro",
+    "--mount", "type=bind,src=/path/to/your/certs/internal-ca.crt,dst=/certs/internal-ca.crt,ro",
     "codescene/codescene-mcp"
   ],
   "env": {
@@ -249,7 +261,15 @@ This single environment variable configures SSL for both the Python MCP server a
 }
 ```
 
+> **Note:** The `REQUESTS_CA_BUNDLE` value (`/certs/internal-ca.crt`) must match the destination path in the mount (`dst=/certs/internal-ca.crt`).
+```
+
 The MCP also supports `SSL_CERT_FILE` and `CURL_CA_BUNDLE` as alternatives to `REQUESTS_CA_BUNDLE`.
+
+For detailed configuration examples, see:
+- [Docker SSL configuration](docs/docker-installation.md#custom-ssltls-certificates)
+- [Homebrew/static binary SSL configuration](docs/homebrew-installation.md#custom-ssltls-certificates)
+- [Windows SSL configuration](docs/windows-installation.md#custom-ssltls-certificates)
 
 </details>
 

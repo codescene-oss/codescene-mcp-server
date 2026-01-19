@@ -156,6 +156,62 @@ To enable [CodeScene ACE](https://codescene.com/product/integrations/ide-extensi
 }
 ```
 
+## Custom SSL/TLS Certificates
+
+If your organization uses a corporate proxy or internal CA certificates for your on-premise CodeScene instance, you need to configure the MCP server to trust that certificate.
+
+### Configuration
+
+Set the `REQUESTS_CA_BUNDLE` environment variable to point to your CA certificate file (PEM format):
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ONPREM_URL": "https://your-codescene-instance.example.com",
+        "REQUESTS_CA_BUNDLE": "C:\\certs\\company-ca.crt"
+      }
+    }
+  }
+}
+```
+
+Or set it as a PowerShell environment variable:
+
+```powershell
+$env:REQUESTS_CA_BUNDLE = "C:\certs\company-ca.crt"
+$env:CS_ACCESS_TOKEN = "your-token-here"
+$env:CS_ONPREM_URL = "https://your-codescene-instance.example.com"
+cs-mcp
+```
+
+### Supported Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `REQUESTS_CA_BUNDLE` | Standard Python/requests CA bundle path (recommended) |
+| `SSL_CERT_FILE` | Alternative CA certificate path |
+| `CURL_CA_BUNDLE` | curl-style CA bundle path |
+
+### How It Works
+
+The MCP server automatically handles SSL configuration for both its Python components and the embedded Java-based CodeScene CLI:
+
+1. **Python/requests**: Uses the certificate directly via `REQUESTS_CA_BUNDLE`
+2. **Java CLI**: The MCP server automatically converts the PEM certificate to a PKCS12 truststore at runtime and injects the appropriate Java SSL arguments
+
+This means you only need to configure SSL once—the MCP server handles the rest.
+
+### Notes
+
+- The certificate file must be in PEM format (the standard format with `-----BEGIN CERTIFICATE-----` headers)
+- Use full Windows paths (e.g., `C:\certs\ca.crt`)
+- If your certificate chain includes intermediate certificates, include them all in the same file
+
 ## Troubleshooting
 
 ### Binary not in PATH

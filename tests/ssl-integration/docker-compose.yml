@@ -1,0 +1,63 @@
+# Docker Compose setup for Docker variant SSL integration testing
+#
+# This creates an end-to-end test environment that:
+# 1. Builds the MCP Docker image from the main Dockerfile
+# 2. Runs nginx as an SSL proxy with a self-signed certificate  
+# 3. Runs the test inside the MCP container itself
+# 4. Verifies SSL works when the CA certificate is properly configured
+#
+# The test runs inside the actual Docker deployment to verify end-to-end SSL.
+#
+# Environment variables:
+# - BACKEND_HOST: The CodeScene host to proxy to (default: codescene.io)
+#
+# Usage:
+#   cd tests/ssl-integration && docker compose up --build
+#   BACKEND_HOST=test-env.enterprise.codescene.io docker compose up --build
+
+services:
+  # Nginx reverse proxy with self-signed SSL certificate
+  nginx-ssl-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+      args:
+        - BACKEND_HOST=${BACKEND_HOST:-codescene.io}
+    networks:
+      - ssl-test
+    volumes:
+      - certs-volume:/certs
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:443/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # Test runner - runs tests inside the MCP Docker image
+  # This tests the ACTUAL Docker deployment
+  mcp-docker-test:
+    build:
+      context: ../..
+      dockerfile: tests/ssl-integration/Dockerfile.docker-test
+    depends_on:
+      nginx-ssl-proxy:
+        condition: service_healthy
+    environment:
+      - CS_ONPREM_URL=https://nginx-ssl-proxy:443
+      - CS_ACCESS_TOKEN=${CS_ACCESS_TOKEN:-test-token}
+      - REQUESTS_CA_BUNDLE=/certs/ca.crt
+      - CS_MOUNT_PATH=/mount
+    volumes:
+      - certs-volume:/certs:ro
+      - ../../src/test_data:/mount:ro
+    networks:
+      - ssl-test
+
+volumes:
+  certs-volume:
+
+networks:
+  ssl-test:
+    driver: bridge
+

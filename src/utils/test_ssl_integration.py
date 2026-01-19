@@ -3,8 +3,11 @@ Integration tests for SSL certificate handling with the CS CLI.
 
 These tests verify that:
 1. Custom CA certificates are properly converted to Java truststores
-2. The truststore is correctly passed to the Java process via _JAVA_OPTIONS
+2. SSL arguments are correctly passed directly to the CLI command
 3. The CS CLI can be invoked with the SSL configuration
+
+Note: GraalVM native images (like the CS CLI) don't read _JAVA_OPTIONS,
+so SSL arguments must be passed directly as CLI arguments.
 
 To run these tests locally:
     cd src && python -m unittest utils.test_ssl_integration -v
@@ -25,10 +28,10 @@ from unittest import mock
 
 from .platform_details import (
     _create_truststore_from_pem,
-    _get_ssl_truststore_options,
+    get_ssl_cli_args,
     get_platform_details,
 )
-from .code_health_analysis import cs_cli_path, run_local_tool
+from .code_health_analysis import cs_cli_path, run_local_tool, _is_cs_cli_command
 
 
 # Test CA certificate for SSL testing
@@ -189,7 +192,7 @@ class TestSSLIntegration(unittest.TestCase):
             os.unlink(pem_path)
     
     def test_java_options_include_truststore_path(self):
-        """Verify that Java options include the truststore configuration."""
+        """Verify that SSL args include the truststore configuration."""
         with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
             f.write(TEST_CA_CERT_PEM)
             pem_path = f.name
@@ -197,16 +200,17 @@ class TestSSLIntegration(unittest.TestCase):
         try:
             os.environ['REQUESTS_CA_BUNDLE'] = pem_path
             
-            options = _get_ssl_truststore_options()
+            args = get_ssl_cli_args()
             
-            self.assertIn('-Djavax.net.ssl.trustStore=', options)
-            self.assertIn('-Djavax.net.ssl.trustStoreType=PKCS12', options)
-            self.assertIn('-Djavax.net.ssl.trustStorePassword=changeit', options)
+            self.assertEqual(len(args), 3)
+            self.assertTrue(any('-Djavax.net.ssl.trustStore=' in arg for arg in args))
+            self.assertIn('-Djavax.net.ssl.trustStoreType=PKCS12', args)
+            self.assertIn('-Djavax.net.ssl.trustStorePassword=changeit', args)
             
             # Extract truststore path and verify it exists
-            for part in options.split():
-                if part.startswith('-Djavax.net.ssl.trustStore='):
-                    truststore_path = part.split('=', 1)[1].strip('"')
+            for arg in args:
+                if arg.startswith('-Djavax.net.ssl.trustStore='):
+                    truststore_path = arg.split('=', 1)[1]
                     self.assertTrue(os.path.exists(truststore_path))
                     # Cleanup
                     os.unlink(truststore_path)
@@ -214,8 +218,8 @@ class TestSSLIntegration(unittest.TestCase):
         finally:
             os.unlink(pem_path)
     
-    def test_cli_receives_java_options_env_var(self):
-        """Verify that the CLI is invoked with _JAVA_OPTIONS set correctly."""
+    def test_cli_receives_ssl_args_in_command(self):
+        """Verify that the CLI is invoked with SSL args passed directly in command."""
         with tempfile.NamedTemporaryFile(suffix='.pem', delete=False) as f:
             f.write(TEST_CA_CERT_PEM)
             pem_path = f.name
@@ -223,11 +227,11 @@ class TestSSLIntegration(unittest.TestCase):
         try:
             os.environ['REQUESTS_CA_BUNDLE'] = pem_path
             
-            captured_env = {}
+            captured_command = []
             original_run = subprocess.run
             
             def mock_run(command, **kwargs):
-                captured_env.update(kwargs.get('env', {}))
+                captured_command.extend(command)
                 # Return a mock result for --version
                 result = mock.MagicMock()
                 result.returncode = 0
@@ -238,18 +242,41 @@ class TestSSLIntegration(unittest.TestCase):
             cli_path = get_cli_path()
             assert cli_path is not None
             
-            with mock.patch('subprocess.run', side_effect=mock_run):
+            with mock.patch('utils.code_health_analysis.subprocess.run', side_effect=mock_run):
                 try:
                     run_local_tool([cli_path, '--version'])
                 except Exception:
-                    pass  # We just want to capture the env
+                    pass  # We just want to capture the command
             
-            # Verify _JAVA_OPTIONS was set
-            self.assertIn('_JAVA_OPTIONS', captured_env)
-            java_options = captured_env['_JAVA_OPTIONS']
-            self.assertIn('-Djavax.net.ssl.trustStore=', java_options)
+            # Verify SSL args are in the command
+            command_str = ' '.join(captured_command)
+            self.assertIn('-Djavax.net.ssl.trustStore=', command_str)
+            self.assertIn('-Djavax.net.ssl.trustStoreType=PKCS12', command_str)
+            
+            # Verify SSL args come after CLI path but before subcommand
+            cli_idx = captured_command.index(cli_path)
+            version_idx = captured_command.index('--version')
+            ssl_arg_idx = next(i for i, arg in enumerate(captured_command) if '-Djavax.net.ssl.trustStore=' in arg)
+            self.assertLess(cli_idx, ssl_arg_idx)
+            self.assertLess(ssl_arg_idx, version_idx)
         finally:
             os.unlink(pem_path)
+    
+    def test_is_cs_cli_command_detection(self):
+        """Verify that CS CLI command detection works correctly."""
+        # Should be detected as CS CLI
+        self.assertTrue(_is_cs_cli_command('/path/to/cs'))
+        self.assertTrue(_is_cs_cli_command('/path/to/cs.exe'))
+        self.assertTrue(_is_cs_cli_command('cs'))
+        self.assertTrue(_is_cs_cli_command('cs.exe'))
+        self.assertTrue(_is_cs_cli_command('/root/.local/bin/cs'))
+        self.assertTrue(_is_cs_cli_command('C:\\Program Files\\cs.exe'))
+        
+        # Should NOT be detected as CS CLI
+        self.assertFalse(_is_cs_cli_command('git'))
+        self.assertFalse(_is_cs_cli_command('/usr/bin/python'))
+        self.assertFalse(_is_cs_cli_command(''))
+        self.assertFalse(_is_cs_cli_command(None))
     
     def test_cli_help_works_with_ssl_config(self):
         """Verify that the CLI can be invoked with SSL configuration."""
@@ -263,15 +290,17 @@ class TestSSLIntegration(unittest.TestCase):
             cli_path = get_cli_path()
             assert cli_path is not None
             
+            # Get SSL args
+            ssl_args = get_ssl_cli_args()
+            
             # Run the CLI with --help to verify it starts correctly
             # This tests that Java can read our truststore without errors
             result = subprocess.run(
-                [cli_path, '--help'],
+                [cli_path] + ssl_args + ['--help'],
                 capture_output=True,
                 text=True,
                 env={
                     **os.environ,
-                    '_JAVA_OPTIONS': _get_ssl_truststore_options(),
                     'CS_CONTEXT': 'mcp-server',
                 },
                 timeout=30,
@@ -344,19 +373,18 @@ class TestSSLIntegrationWithDownload(unittest.TestCase):
         
         try:
             os.environ['REQUESTS_CA_BUNDLE'] = pem_path
-            ssl_options = _get_ssl_truststore_options()
+            ssl_args = get_ssl_cli_args()
             
             cli_path = get_cli_path()
             if not cli_path:
                 self.skipTest("CLI not available")
             
-            # Run CLI with our SSL config
+            # Run CLI with our SSL config (args passed directly, not via env)
             env = os.environ.copy()
-            env['_JAVA_OPTIONS'] = ssl_options
             env['CS_CONTEXT'] = 'mcp-server'
             
             result = subprocess.run(
-                [cli_path, '--help'],
+                [cli_path] + ssl_args + ['--help'],
                 capture_output=True,
                 text=True,
                 env=env,

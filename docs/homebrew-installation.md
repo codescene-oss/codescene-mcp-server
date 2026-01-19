@@ -187,6 +187,81 @@ To enable [CodeScene ACE](https://codescene.com/product/integrations/ide-extensi
 }
 ```
 
+## Custom SSL/TLS Certificates
+
+If your organization uses a corporate proxy or internal CA certificates for your on-premise CodeScene instance, you need to configure the MCP server to trust that certificate.
+
+### Configuration
+
+Set the `REQUESTS_CA_BUNDLE` environment variable to point to your CA certificate file (PEM format):
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ONPREM_URL": "https://your-codescene-instance.example.com",
+        "REQUESTS_CA_BUNDLE": "/path/to/your/ca-bundle.crt"
+      }
+    }
+  }
+}
+```
+
+Or set it as a shell environment variable before running your AI assistant:
+
+```bash
+export REQUESTS_CA_BUNDLE=/path/to/your/internal-ca.crt
+export CS_ACCESS_TOKEN="your-token-here"
+export CS_ONPREM_URL="https://your-codescene-instance.example.com"
+cs-mcp
+```
+
+### Supported Environment Variables
+
+The following environment variables are checked in order of precedence:
+
+| Variable | Description |
+|----------|-------------|
+| `REQUESTS_CA_BUNDLE` | Standard Python/requests CA bundle path (recommended) |
+| `SSL_CERT_FILE` | Alternative CA certificate path |
+| `CURL_CA_BUNDLE` | curl-style CA bundle path |
+
+### How It Works
+
+The MCP server automatically handles SSL configuration for both its Python components and the embedded Java-based CodeScene CLI:
+
+1. **Python/requests**: Uses the certificate directly via `REQUESTS_CA_BUNDLE`
+2. **Java CLI**: The MCP server automatically converts the PEM certificate to a PKCS12 truststore at runtime and injects the appropriate Java SSL arguments
+
+This means you only need to configure SSL once—the MCP server handles the rest.
+
+### Example: Claude Desktop with On-Prem SSL
+
+```json
+{
+  "mcpServers": {
+    "codescene": {
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ONPREM_URL": "https://codescene.internal.company.com",
+        "REQUESTS_CA_BUNDLE": "/etc/ssl/certs/company-ca.crt"
+      }
+    }
+  }
+}
+```
+
+### Notes
+
+- The certificate file must be in PEM format (the standard format with `-----BEGIN CERTIFICATE-----` headers)
+- The path must be accessible to the MCP server process
+- If your certificate chain includes intermediate certificates, include them all in the same file
+
 ## Troubleshooting
 
 ### Binary not found after installation
