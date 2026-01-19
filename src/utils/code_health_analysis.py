@@ -89,7 +89,9 @@ def _is_cs_cli_command(cmd: str) -> bool:
         return False
     # Check if command ends with 'cs' or 'cs.exe' (the CLI binary names)
     cmd_lower = cmd.lower()
-    return cmd_lower.endswith('/cs') or cmd_lower.endswith('\\cs') or cmd_lower.endswith('/cs.exe') or cmd_lower.endswith('\\cs.exe') or cmd_lower == 'cs' or cmd_lower == 'cs.exe'
+    # Normalize path separators and get the basename
+    basename = cmd_lower.replace('\\', '/').split('/')[-1]
+    return basename in ('cs', 'cs.exe')
 
 
 def run_cs_cli(cli_fn) -> str:
