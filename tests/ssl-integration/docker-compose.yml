@@ -8,8 +8,12 @@
 #
 # The test runs inside the actual Docker deployment to verify end-to-end SSL.
 #
+# Environment variables:
+# - BACKEND_HOST: The CodeScene host to proxy to (default: codescene.io)
+#
 # Usage:
 #   cd tests/ssl-integration && docker compose up --build
+#   BACKEND_HOST=test-env.enterprise.codescene.io docker compose up --build
 
 services:
   # Nginx reverse proxy with self-signed SSL certificate
@@ -17,6 +21,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.nginx
+      args:
+        - BACKEND_HOST=${BACKEND_HOST:-codescene.io}
     networks:
       - ssl-test
     volumes:

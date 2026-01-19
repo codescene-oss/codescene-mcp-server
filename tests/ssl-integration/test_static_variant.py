@@ -31,7 +31,7 @@ SSL_ERROR_KEYWORDS = [
     'unable to find valid certification path',
     'certificate verify', 'CERTIFICATE_VERIFY_FAILED',
     'trustAnchors', 'ValidatorException', 'PEM',
-    'trustStore', 'PKCS12', 'KeyStoreException', 'SSL'
+    'trustStore', 'PKCS12', 'KeyStoreException'
 ]
 
 # Auth error keywords indicating successful SSL but failed authentication

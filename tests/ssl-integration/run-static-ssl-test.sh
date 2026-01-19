@@ -8,6 +8,10 @@
 # 4. Verifies SSL works end-to-end
 # 5. Cleans up
 #
+# Environment variables (set by run-ssl-test.sh):
+# - BACKEND_HOST: The host to proxy to (e.g., codescene.io)
+# - BACKEND_URL: The full URL (e.g., https://codescene.io)
+#
 # Prerequisites:
 # - Python 3.13
 # - Nuitka installed (pip install Nuitka)
@@ -20,9 +24,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
+# Default backend if not set by parent script
+BACKEND_HOST="${BACKEND_HOST:-codescene.io}"
+BACKEND_URL="${BACKEND_URL:-https://codescene.io}"
+
 echo "============================================================"
 echo "  Static Binary SSL Integration Test"
 echo "  Testing: cs-mcp binary with SSL certificates"
+echo "  Backend: $BACKEND_URL"
 echo "============================================================"
 echo ""
 
@@ -149,8 +158,8 @@ echo "  ✓ Certificate generated"
 echo ""
 echo "Step 5: Starting nginx SSL proxy..."
 
-# Create nginx config that proxies to real CodeScene API
-cat > "$BUILD_DIR/nginx.conf" << 'EOF'
+# Create nginx config that proxies to the target backend
+cat > "$BUILD_DIR/nginx.conf" << EOF
 events { worker_connections 1024; }
 http {
     # Resolver for DNS lookups (Docker's embedded DNS + public DNS)
@@ -167,14 +176,14 @@ http {
             add_header Content-Type text/plain;
         }
         
-        # Proxy all API requests to real CodeScene
+        # Proxy all API requests to target backend
         location / {
-            proxy_pass https://codescene.io;
+            proxy_pass https://${BACKEND_HOST};
             proxy_ssl_server_name on;
-            proxy_set_header Host codescene.io;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header Host ${BACKEND_HOST};
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
             
             # Timeouts
             proxy_connect_timeout 30s;

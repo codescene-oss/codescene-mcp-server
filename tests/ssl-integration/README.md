@@ -59,12 +59,27 @@ Tests the Nuitka-compiled standalone binary:
 ```bash
 cd tests/ssl-integration
 
-# Test Docker variant (builds and runs the Docker image)
+# Test Docker variant (proxies to codescene.io)
 ./run-ssl-test.sh docker
 
-# Test static binary variant (builds and runs cs-mcp binary)
+# Test static binary variant (proxies to codescene.io)
 ./run-ssl-test.sh static
+
+# Test Docker variant with on-prem backend
+./run-ssl-test.sh docker-onprem
+
+# Test static variant with on-prem backend
+./run-ssl-test.sh static-onprem
 ```
+
+### Test Variants
+
+| Variant | Deployment | Backend |
+|---------|------------|---------|
+| `docker` | Docker image | codescene.io |
+| `static` | Nuitka binary | codescene.io |
+| `docker-onprem` | Docker image | test-env.enterprise.codescene.io |
+| `static-onprem` | Nuitka binary | test-env.enterprise.codescene.io |
 
 ### Docker Variant - What Happens
 
@@ -83,24 +98,6 @@ cd tests/ssl-integration
 4. Runs the static binary and sends MCP protocol requests
 5. Verifies tools work correctly with SSL
 6. Cleans up
-
-## Why This Matters
-
-The CS CLI is compiled with GraalVM as a native image. Unlike regular Java applications, GraalVM native images **do not read the `_JAVA_OPTIONS` environment variable**. This means SSL truststore configuration must be passed directly as CLI arguments:
-
-```bash
-# OLD (doesn't work with GraalVM native images):
-export _JAVA_OPTIONS="-Djavax.net.ssl.trustStore=/path/to/truststore.p12"
-cs review file.py
-
-# NEW (works correctly):
-cs -Djavax.net.ssl.trustStore=/path/to/truststore.p12 -Djavax.net.ssl.trustStoreType=PKCS12 review file.py
-```
-
-The MCP server automatically:
-1. Detects `REQUESTS_CA_BUNDLE` (or `SSL_CERT_FILE`, `CURL_CA_BUNDLE`)
-2. Converts the PEM certificate to a PKCS12 truststore
-3. Injects the SSL arguments directly into CLI commands
 
 ## Docker SSL Configuration
 

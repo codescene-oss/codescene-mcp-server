@@ -6,17 +6,21 @@
 # not just running Python directly.
 #
 # Variants:
-# - docker: Builds the Docker image, runs it with docker run
-# - static: Builds the cs-mcp binary with Nuitka, runs it directly
+# - docker:        Builds the Docker image, proxies to codescene.io
+# - static:        Builds the cs-mcp binary with Nuitka, proxies to codescene.io
+# - docker-onprem: Builds the Docker image, proxies to on-prem test environment
+# - static-onprem: Builds the cs-mcp binary, proxies to on-prem test environment
 #
 # Prerequisites:
 # - Docker and Docker Compose installed
 # - For static: Python 3.13, Nuitka, and build dependencies
 #
 # Usage:
-#   ./run-ssl-test.sh          # Test Docker variant (default)
-#   ./run-ssl-test.sh docker   # Test Docker variant
-#   ./run-ssl-test.sh static   # Test static binary variant
+#   ./run-ssl-test.sh               # Test Docker variant (default)
+#   ./run-ssl-test.sh docker        # Test Docker variant
+#   ./run-ssl-test.sh static        # Test static binary variant
+#   ./run-ssl-test.sh docker-onprem # Test Docker variant with on-prem
+#   ./run-ssl-test.sh static-onprem # Test static binary with on-prem
 
 set -e
 
@@ -26,13 +30,34 @@ cd "$SCRIPT_DIR"
 
 VARIANT="${1:-docker}"
 
+# Determine target backend based on variant
+case "$VARIANT" in
+    docker|static)
+        BACKEND_HOST="codescene.io"
+        BACKEND_URL="https://codescene.io"
+        ;;
+    docker-onprem|static-onprem)
+        BACKEND_HOST="test-env.enterprise.codescene.io"
+        BACKEND_URL="https://test-env.enterprise.codescene.io"
+        ;;
+    *)
+        echo "Unknown variant: $VARIANT"
+        echo "Usage: $0 [docker|static|docker-onprem|static-onprem]"
+        exit 1
+        ;;
+esac
+
+export BACKEND_HOST
+export BACKEND_URL
+
 echo "============================================================"
 echo "  MCP Server SSL End-to-End Integration Tests"
 echo "  Testing variant: $VARIANT"
+echo "  Backend: $BACKEND_URL"
 echo "============================================================"
 echo ""
 
-if [ "$VARIANT" = "docker" ]; then
+if [ "$VARIANT" = "docker" ] || [ "$VARIANT" = "docker-onprem" ]; then
     # Docker variant: Use docker-compose to orchestrate the test
     echo "Building and running Docker variant test..."
     echo ""
@@ -58,16 +83,12 @@ if [ "$VARIANT" = "docker" ]; then
     
     exit $exit_code
 
-elif [ "$VARIANT" = "static" ]; then
+elif [ "$VARIANT" = "static" ] || [ "$VARIANT" = "static-onprem" ]; then
     # Static variant: Build cs-mcp binary and test it
     echo "Building static binary variant..."
     echo ""
     
     # Run the static variant test script
-    exec "$SCRIPT_DIR/run-static-test.sh"
+    exec "$SCRIPT_DIR/run-static-ssl-test.sh"
     
-else
-    echo "Unknown variant: $VARIANT"
-    echo "Usage: $0 [docker|static]"
-    exit 1
 fi
