@@ -24,6 +24,8 @@ After installation, restart your terminal and verify it runs:
 cs-mcp
 ```
 
+> **Note:** For PATH changes to take effect, you may need to restart your terminal, IDE, or other applications. Some applications (like VS Code or Claude Desktop) may require a full restart to pick up the new PATH.
+
 ## Updating
 
 Run the same installation command to update to the latest version:

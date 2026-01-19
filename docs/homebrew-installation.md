@@ -25,6 +25,8 @@ After installation, the `cs-mcp` command will be available in your PATH:
 cs-mcp
 ```
 
+> **Note:** If the command is not found, ensure Homebrew's bin directory is in your PATH—see the [Troubleshooting](#binary-not-found-after-installation) section below. Some applications (like VS Code or Claude Desktop) may require a restart to pick up PATH changes.
+
 ## Updating
 
 To update to the latest version:
@@ -195,6 +197,11 @@ Make sure Homebrew's bin directory is in your PATH:
 # For macOS (Apple Silicon)
 export PATH="/opt/homebrew/bin:$PATH"
 
-# For macOS (Intel) or Linux
+# For macOS (Intel)
 export PATH="/usr/local/bin:$PATH"
+
+# For Linux (default Homebrew location)
+export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
 ```
+
+To make this permanent, add the appropriate line to your shell configuration file (`~/.zshrc`, `~/.bashrc`, or similar). After updating, restart your terminal or run `source ~/.zshrc` (or your shell's config file).
