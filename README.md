@@ -262,7 +262,6 @@ Mount your certificate into the container and set `REQUESTS_CA_BUNDLE` to the pa
 ```
 
 > **Note:** The `REQUESTS_CA_BUNDLE` value (`/certs/internal-ca.crt`) must match the destination path in the mount (`dst=/certs/internal-ca.crt`).
-```
 
 The MCP also supports `SSL_CERT_FILE` and `CURL_CA_BUNDLE` as alternatives to `REQUESTS_CA_BUNDLE`.
 
