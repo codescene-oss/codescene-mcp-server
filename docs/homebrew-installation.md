@@ -25,6 +25,8 @@ After installation, the `cs-mcp` command will be available in your PATH:
 cs-mcp
 ```
 
+> **Note:** If the command is not found, ensure Homebrew's bin directory is in your PATH—see the [Troubleshooting](#binary-not-found-after-installation) section below. Some applications (like VS Code or Claude Desktop) may require a restart to pick up PATH changes.
+
 ## Updating
 
 To update to the latest version:
@@ -56,16 +58,18 @@ After installing via Homebrew, configure your AI assistant to use the `cs-mcp` b
 
 ### Claude Code
 
+Set your token and add the MCP server:
+
 ```bash
-export CS_ACCESS_TOKEN="<your token here>"
+export CS_ACCESS_TOKEN="your-token-here"
 claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN -- cs-mcp
 ```
 
 For CodeScene On-prem:
 
 ```bash
-export CS_ACCESS_TOKEN="<your token here>"
-export CS_ONPREM_URL="<your onprem url>"
+export CS_ACCESS_TOKEN="your-token-here"
+export CS_ONPREM_URL="https://your-codescene-instance.example.com"
 claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN --env CS_ONPREM_URL=$CS_ONPREM_URL -- cs-mcp
 ```
 
@@ -77,16 +81,17 @@ Add to your VS Code `settings.json` or `.vscode/mcp.json`:
 {
   "servers": {
     "codescene": {
+      "type": "stdio",
       "command": "cs-mcp",
       "env": {
-        "CS_ACCESS_TOKEN": "<your token here>"
+        "CS_ACCESS_TOKEN": "your-token-here"
       }
     }
   }
 }
 ```
 
-For CodeScene On-prem, add `"CS_ONPREM_URL": "<your onprem url>"` to the `env` section.
+For CodeScene On-prem, add `"CS_ONPREM_URL": "https://your-codescene-instance.example.com"` to the `env` section.
 
 ### Codex CLI
 
@@ -95,7 +100,7 @@ Configure `~/.codex/config.toml`:
 ```toml
 [mcp_servers.codescene]
 command = "cs-mcp"
-env = { "CS_ACCESS_TOKEN" = "<YOUR_ACCESS_TOKEN>" }
+env = { "CS_ACCESS_TOKEN" = "your-token-here" }
 ```
 
 ### Kiro
@@ -108,13 +113,52 @@ Create a `.kiro/settings/mcp.json` file:
     "codescene": {
       "command": "cs-mcp",
       "env": {
-        "CS_ACCESS_TOKEN": "<YOUR_TOKEN>"
+        "CS_ACCESS_TOKEN": "your-token-here"
       },
       "disabled": false
     }
   }
 }
 ```
+
+### Claude Desktop
+
+Claude Desktop is available for macOS and Windows. Add to your configuration file:
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+**CodeScene Cloud:**
+
+```json
+{
+  "mcpServers": {
+    "codescene": {
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here"
+      }
+    }
+  }
+}
+```
+
+**CodeScene On-prem:**
+
+```json
+{
+  "mcpServers": {
+    "codescene": {
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ONPREM_URL": "https://your-codescene-instance.example.com"
+      }
+    }
+  }
+}
+```
+
+> **Note:** After saving the configuration, restart Claude Desktop.
 
 ### Amazon Q CLI
 
@@ -132,10 +176,11 @@ To enable [CodeScene ACE](https://codescene.com/product/integrations/ide-extensi
 {
   "servers": {
     "codescene": {
+      "type": "stdio",
       "command": "cs-mcp",
       "env": {
-        "CS_ACCESS_TOKEN": "<your token>",
-        "CS_ACE_ACCESS_TOKEN": "<your ACE token>"
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ACE_ACCESS_TOKEN": "your-ace-token-here"
       }
     }
   }
@@ -152,6 +197,11 @@ Make sure Homebrew's bin directory is in your PATH:
 # For macOS (Apple Silicon)
 export PATH="/opt/homebrew/bin:$PATH"
 
-# For macOS (Intel) or Linux
+# For macOS (Intel)
 export PATH="/usr/local/bin:$PATH"
+
+# For Linux (default Homebrew location)
+export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
 ```
+
+To make this permanent, add the appropriate line to your shell configuration file (`~/.zshrc`, `~/.bashrc`, or similar). After updating, restart your terminal or run `source ~/.zshrc` (or your shell's config file).

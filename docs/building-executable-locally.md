@@ -64,15 +64,19 @@ This will produce a single `cs-mcp` (or `cs-mcp.exe` on Windows) executable that
 
 ## Using the Executable
 
-Configure your MCP client to use the executable directly instead of Docker. For example, in VS Code:
+Configure your MCP client to use the executable directly instead of Docker. For example, in VS Code (`.vscode/mcp.json`):
 
 ```json
-"codescene-mcp": {
-    "type": "stdio",
-    "command": "/path/to/cs-mcp",
-    "env": {
+{
+  "servers": {
+    "codescene-mcp": {
+      "type": "stdio",
+      "command": "/path/to/cs-mcp",
+      "env": {
         "CS_ACCESS_TOKEN": "your-token-here"
+      }
     }
+  }
 }
 ```
 
