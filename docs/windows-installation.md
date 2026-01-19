@@ -50,20 +50,23 @@ Add to your VS Code `settings.json` or `.vscode/mcp.json`:
 {
   "servers": {
     "codescene": {
+      "type": "stdio",
       "command": "cs-mcp",
       "env": {
-        "CS_ACCESS_TOKEN": "<your token here>"
+        "CS_ACCESS_TOKEN": "your-token-here"
       }
     }
   }
 }
 ```
 
-For CodeScene On-prem, add `"CS_ONPREM_URL": "<your onprem url>"` to the `env` section.
+For CodeScene On-prem, add `"CS_ONPREM_URL": "https://your-codescene-instance.example.com"` to the `env` section.
 
 ### Claude Desktop
 
 Add to your Claude Desktop configuration (`%APPDATA%\Claude\claude_desktop_config.json`):
+
+**CodeScene Cloud:**
 
 ```json
 {
@@ -71,12 +74,30 @@ Add to your Claude Desktop configuration (`%APPDATA%\Claude\claude_desktop_confi
     "codescene": {
       "command": "cs-mcp",
       "env": {
-        "CS_ACCESS_TOKEN": "<your token here>"
+        "CS_ACCESS_TOKEN": "your-token-here"
       }
     }
   }
 }
 ```
+
+**CodeScene On-prem:**
+
+```json
+{
+  "mcpServers": {
+    "codescene": {
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ONPREM_URL": "https://your-codescene-instance.example.com"
+      }
+    }
+  }
+}
+```
+
+> **Note:** After saving the configuration, restart Claude Desktop.
 
 ### Codex CLI
 
@@ -85,7 +106,7 @@ Configure `~/.codex/config.toml`:
 ```toml
 [mcp_servers.codescene]
 command = "cs-mcp"
-env = { "CS_ACCESS_TOKEN" = "<YOUR_ACCESS_TOKEN>" }
+env = { "CS_ACCESS_TOKEN" = "your-token-here" }
 ```
 
 ### Kiro
@@ -98,7 +119,7 @@ Create a `.kiro/settings/mcp.json` file:
     "codescene": {
       "command": "cs-mcp",
       "env": {
-        "CS_ACCESS_TOKEN": "<YOUR_TOKEN>"
+        "CS_ACCESS_TOKEN": "your-token-here"
       },
       "disabled": false
     }
@@ -122,10 +143,11 @@ To enable [CodeScene ACE](https://codescene.com/product/integrations/ide-extensi
 {
   "servers": {
     "codescene": {
+      "type": "stdio",
       "command": "cs-mcp",
       "env": {
-        "CS_ACCESS_TOKEN": "<your token>",
-        "CS_ACE_ACCESS_TOKEN": "<your ACE token>"
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ACE_ACCESS_TOKEN": "your-ace-token-here"
       }
     }
   }
