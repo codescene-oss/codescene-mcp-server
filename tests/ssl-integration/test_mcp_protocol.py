@@ -5,7 +5,10 @@ import subprocess
 import json
 import select
 import time
-import sys
+from pathlib import Path
+
+# Project root is two levels up from this test file
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def create_mcp_process():
@@ -16,7 +19,7 @@ def create_mcp_process():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        cwd='/Users/asko/Code/CodeScene/mcp'
+        cwd=str(PROJECT_ROOT)
     )
 
 
@@ -87,6 +90,7 @@ def print_tools_summary(tools_resp):
 def test_code_health_call(proc):
     """Test calling the code_health_score tool."""
     print("\n--- Testing tools/call ---")
+    test_file = PROJECT_ROOT / 'src' / 'test_data' / 'OrderProcessor.java'
     call_resp = send_and_recv(proc, {
         'jsonrpc': '2.0',
         'id': 3,
@@ -94,7 +98,7 @@ def test_code_health_call(proc):
         'params': {
             'name': 'code_health_score',
             'arguments': {
-                'file_path': '/Users/asko/Code/CodeScene/mcp/src/test_data/OrderProcessor.java'
+                'file_path': str(test_file)
             }
         }
     })
