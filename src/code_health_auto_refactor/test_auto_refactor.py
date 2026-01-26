@@ -16,7 +16,7 @@ MOCK_DATA_FILES = {
 
 def mock_run_local_tool(command: list, cwd: str = None):
     cli_command = command[1]
-    with open(MOCK_DATA_FILES[cli_command], 'r') as file:
+    with open(MOCK_DATA_FILES[cli_command], 'r', encoding='utf-8') as file:
       return file.read()
     
 class TestAutoRefactor(unittest.TestCase):

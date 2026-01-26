@@ -19,6 +19,7 @@ def create_mcp_process():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
         cwd=str(PROJECT_ROOT)
     )
 

@@ -76,7 +76,7 @@ def run_local_tool(command: list, cwd: str = None, extra_env: dict = None):
             # Insert SSL args after the CLI binary, before subcommand
             actual_command = [command[0]] + ssl_args + command[1:]
 
-    result = subprocess.run(actual_command, capture_output=True, text=True, cwd=cwd, env=env)
+    result = subprocess.run(actual_command, capture_output=True, text=True, encoding="utf-8", cwd=cwd, env=env)
     if result.returncode != 0:
         raise CodeSceneCliError(f"CLI command failed: {result.stderr}")
     

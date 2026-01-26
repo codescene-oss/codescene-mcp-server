@@ -105,7 +105,7 @@ def _read_worktree_gitdir(git_path: str) -> str | None:
         return None
     
     try:
-        content = git_file.read_text().strip()
+        content = git_file.read_text(encoding="utf-8").strip()
         if content.startswith("gitdir:"):
             return content[7:].strip()
     except (IOError, OSError):

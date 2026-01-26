@@ -105,6 +105,7 @@ class MCPClient:
             stderr=subprocess.PIPE,
             env=self.env,
             text=True,
+            encoding="utf-8",
             bufsize=1
         )
         self.reader_thread = threading.Thread(target=self._read_responses, daemon=True)
@@ -263,7 +264,7 @@ def run_ssl_tool_test(binary_path: str, test_name: str, env_modifier=None, expec
     
     try:
         # Create test file
-        with open(test_file, "w") as f:
+        with open(test_file, "w", encoding="utf-8") as f:
             f.write("def hello():\n    print('Hello')\n")
         
         if not client.start():
