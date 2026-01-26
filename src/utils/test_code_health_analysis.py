@@ -20,7 +20,7 @@ class TestFindGitRoot(unittest.TestCase):
         self.sub_dir = os.path.join(self.temp_dir, 'src')
         os.makedirs(self.sub_dir)
         self.test_file = os.path.join(self.sub_dir, 'file.py')
-        with open(self.test_file, 'w') as f:
+        with open(self.test_file, 'w', encoding='utf-8') as f:
             f.write('# test file')
 
     def tearDown(self):
@@ -50,7 +50,7 @@ class TestFindGitRoot(unittest.TestCase):
         # Create a temp dir without .git
         temp_no_git = tempfile.mkdtemp()
         test_file = os.path.join(temp_no_git, 'file.py')
-        with open(test_file, 'w') as f:
+        with open(test_file, 'w', encoding='utf-8') as f:
             f.write('# test')
         
         try:
@@ -187,6 +187,36 @@ class TestRunLocalTool(unittest.TestCase):
         
         call_kwargs = mock_run.call_args[1]
         self.assertEqual('https://onprem.example.com', call_kwargs['env']['CS_ONPREM_URL'])
+
+    @mock.patch('utils.code_health_analysis.get_platform_details')
+    def test_run_local_tool_handles_utf8_output(self, mock_platform):
+        """Test that CLI output containing UTF-8 characters is handled correctly.
+        
+        Regression test for: 'ascii' codec can't decode byte 0xe2 error
+        when source files contain UTF-8 characters (emojis, en-dashes, etc.)
+        """
+        from utils.code_health_analysis import run_local_tool
+        import sys
+        
+        mock_platform_instance = mock.MagicMock()
+        mock_platform_instance.configure_environment.side_effect = lambda x: x
+        mock_platform.return_value = mock_platform_instance
+        
+        # Use printf to output UTF-8 characters (more portable than echo)
+        # Test characters: warning emoji, en-dash, curly quote
+        utf8_test_string = "Test: \u26a0\ufe0f \u2013 \u201cquoted\u201d"
+        
+        if sys.platform == 'win32':
+            # Windows: use python to echo the string
+            result = run_local_tool(['python', '-c', f'print("{utf8_test_string}")'])
+        else:
+            # Unix: use printf which handles UTF-8 well
+            result = run_local_tool(['printf', '%s', utf8_test_string])
+        
+        # Verify UTF-8 characters are preserved
+        self.assertIn('\u26a0', result)  # warning sign
+        self.assertIn('\u2013', result)  # en-dash
+        self.assertIn('\u201c', result)  # left curly quote
 
 
 class TestRunCsCli(unittest.TestCase):

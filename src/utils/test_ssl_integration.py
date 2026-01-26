@@ -299,6 +299,7 @@ class TestSSLIntegration(unittest.TestCase):
                 [cli_path] + ssl_args + ['--help'],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 env={
                     **os.environ,
                     'CS_CONTEXT': 'mcp-server',
@@ -387,6 +388,7 @@ class TestSSLIntegrationWithDownload(unittest.TestCase):
                 [cli_path] + ssl_args + ['--help'],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 env=env,
                 timeout=60,
             )

@@ -161,7 +161,7 @@ class TestWorktreeGitdirAdapter(unittest.TestCase):
         from .docker_path_adapter import _read_worktree_gitdir
         import tempfile
         
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.git', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.git', delete=False, encoding='utf-8') as f:
             f.write("gitdir: /path/to/main/repo/.git/worktrees/my-branch\n")
             f.flush()
             
@@ -170,6 +170,44 @@ class TestWorktreeGitdirAdapter(unittest.TestCase):
         
         import os
         os.unlink(f.name)
+
+    def test_read_worktree_gitdir_with_utf8_content(self):
+        """Test that gitdir files with UTF-8 characters are read correctly.
+        
+        Regression test for: 'ascii' codec can't decode byte 0xe2 error
+        when source files contain UTF-8 characters (emojis, en-dashes, etc.)
+        """
+        from .docker_path_adapter import _read_worktree_gitdir
+        import tempfile
+        
+        # Test various UTF-8 characters that commonly cause issues
+        utf8_test_cases = [
+            # Path with emoji (warning sign)
+            ("gitdir: /path/to/repo/\u26a0\ufe0f-warning/.git/worktrees/branch\n",
+             "/path/to/repo/\u26a0\ufe0f-warning/.git/worktrees/branch"),
+            # Path with en-dash (U+2013)
+            ("gitdir: /path/to/repo/2023\u20132024/.git/worktrees/branch\n",
+             "/path/to/repo/2023\u20132024/.git/worktrees/branch"),
+            # Path with curly quotes (U+201C and U+201D)
+            ("gitdir: /path/to/repo/\u201cquoted\u201d/.git/worktrees/branch\n",
+             "/path/to/repo/\u201cquoted\u201d/.git/worktrees/branch"),
+            # Path with various Unicode characters
+            ("gitdir: /path/to/repo/f\u00f6\u00f6-b\u00e4r-\u00f1/.git/worktrees/branch\n",
+             "/path/to/repo/f\u00f6\u00f6-b\u00e4r-\u00f1/.git/worktrees/branch"),
+        ]
+        
+        for gitdir_content, expected in utf8_test_cases:
+            with self.subTest(gitdir_content=gitdir_content):
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.git', 
+                                                  delete=False, encoding='utf-8') as f:
+                    f.write(gitdir_content)
+                    f.flush()
+                    
+                    result = _read_worktree_gitdir(f.name)
+                    self.assertEqual(result, expected)
+                
+                import os
+                os.unlink(f.name)
 
     def test_read_worktree_gitdir_returns_none_for_directory(self):
         """Test that reading gitdir from a directory returns None."""
@@ -201,7 +239,7 @@ class TestWorktreeGitdirAdapter(unittest.TestCase):
             os_module.makedirs(worktree_dir)
             git_file = os_module.path.join(worktree_dir, ".git")
             
-            with open(git_file, 'w') as f:
+            with open(git_file, 'w', encoding='utf-8') as f:
                 f.write("gitdir: /Users/david/workspace/main-repo/.git/worktrees/my-branch\n")
             
             # The function should translate the host path in .git file
@@ -253,7 +291,7 @@ class TestWorktreeGitdirAdapter(unittest.TestCase):
                         os_module.makedirs(worktree_dir)
                         git_file = os_module.path.join(worktree_dir, ".git")
                         
-                        with open(git_file, 'w') as f:
+                        with open(git_file, 'w', encoding='utf-8') as f:
                             f.write(gitdir_content)
                         
                         result = adapt_worktree_gitdir_for_docker(worktree_dir)
