@@ -81,6 +81,36 @@ class TestTrack(unittest.TestCase):
         event_type = call_args[1]['json']['event-type']
         self.assertEqual(event_type, 'mcp-select-project-error')
 
+    @patch('utils.track.requests.post')
+    @patch('utils.track.get_api_url', return_value='https://api.example.com')
+    @patch('utils.track.get_api_request_headers', return_value={'Authorization': 'Bearer token'})
+    def test_track_decorator_fails_silently_on_network_error(self, mock_headers, mock_url, mock_post):
+        from utils.track import track
+        
+        mock_post.side_effect = Exception("Network error")
+        
+        class MyTool:
+            @track("my-event")
+            def my_method(self):
+                return "result"
+        
+        tool = MyTool()
+        result = tool.my_method()
+        
+        # Should return result normally despite tracking failure
+        self.assertEqual(result, "result")
+
+    @patch('utils.track.requests.post')
+    @patch('utils.track.get_api_url', return_value='https://api.example.com')
+    @patch('utils.track.get_api_request_headers', return_value={'Authorization': 'Bearer token'})
+    def test_track_error_fails_silently_on_network_error(self, mock_headers, mock_url, mock_post):
+        from utils.track import track_error
+        
+        mock_post.side_effect = Exception("Network error")
+        
+        # Should not raise an exception
+        track_error("my-event", ValueError("Some error"))
+
 
 if __name__ == '__main__':
     unittest.main()
