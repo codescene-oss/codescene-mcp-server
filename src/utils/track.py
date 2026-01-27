@@ -4,12 +4,18 @@ from utils import get_api_url, get_api_request_headers
 
 
 def _send_track_event(event_type: str, event_properties: dict = None):
-    """Send a tracking event to the analytics API."""
-    payload = {
-        "event-type": event_type,
-        "event-properties": event_properties or {}
-    }
-    requests.post(f"{get_api_url()}/v2/analytics/track", headers=get_api_request_headers(), json=payload)
+    """Send a tracking event to the analytics API.
+    
+    Fails silently - analytics should never interrupt user workflow.
+    """
+    try:
+        payload = {
+            "event-type": event_type,
+            "event-properties": event_properties or {}
+        }
+        requests.post(f"{get_api_url()}/v2/analytics/track", headers=get_api_request_headers(), json=payload)
+    except Exception:
+        pass
 
 
 def track(event_type: str, event_properties: dict = None):

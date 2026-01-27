@@ -50,7 +50,6 @@ class VersionChecker:
             response.raise_for_status()
             return response.json().get('tag_name')
         except Exception as e:
-            logger.debug(f"Could not fetch latest version: {e}")
             return None
 
     def check_version(self) -> Optional[VersionInfo]:
@@ -131,7 +130,10 @@ def with_version_check(func: Callable) -> Callable:
     @wraps(func)
     def wrapper(*args, **kwargs):
         result = func(*args, **kwargs)
-        version_info = check_version()
+        try:
+            version_info = check_version()
+        except Exception:
+            return result  # Fail silently - version check should never interrupt user workflow
         
         if version_info and version_info.outdated:
             separator = "=" * 80

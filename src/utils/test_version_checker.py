@@ -142,6 +142,18 @@ class TestWithVersionCheck(unittest.TestCase):
         result = sample_tool()
         self.assertEqual(result, "Tool result")
 
+    @patch('utils.version_checker.check_version')
+    def test_decorator_fails_silently_on_exception(self, mock_check):
+        mock_check.side_effect = Exception("Unexpected error")
+        
+        @with_version_check
+        def sample_tool():
+            return "Tool result"
+        
+        result = sample_tool()
+        # Should return result normally despite version check failure
+        self.assertEqual(result, "Tool result")
+
 
 if __name__ == '__main__':
     unittest.main()
