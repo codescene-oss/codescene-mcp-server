@@ -63,6 +63,13 @@ jobs:
           wget ${{ matrix.cli-url }} -O codescene-cli.zip
           unzip codescene-cli.zip -d .
 
+      - name: Inject version into version.py
+        run: |
+          VERSION="${{ github.ref_name }}"
+          sed -i.bak "s/__version__ = \"dev\"/__version__ = \"${VERSION}\"/" src/version.py
+          echo "Injected version: $VERSION"
+          cat src/version.py
+
       - name: Build Executable
         run: |
           source .venv/bin/activate
@@ -264,6 +271,13 @@ jobs:
         run: |
           Invoke-WebRequest -Uri "https://downloads.codescene.io/enterprise/cli/cs-windows-amd64-latest.zip" -OutFile "codescene-cli-windows.zip"
           Expand-Archive -Path "codescene-cli-windows.zip" -DestinationPath "."
+
+      - name: Inject version into version.py
+        run: |
+          $version = "${{ github.ref_name }}"
+          (Get-Content src/version.py) -replace '__version__ = "dev"', "__version__ = `"$version`"" | Set-Content src/version.py
+          Write-Host "Injected version: $version"
+          Get-Content src/version.py
 
       - name: Build Executable
         run: |

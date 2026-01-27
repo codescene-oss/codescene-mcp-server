@@ -20,6 +20,12 @@ from version import __version__
 
 mcp = FastMCP("CodeScene")
 
+def get_display_version():
+    """Return version string for display, stripping the MCP- prefix if present."""
+    if __version__.startswith("MCP-"):
+        return __version__[4:]
+    return __version__
+
 def get_resource_path(relative_path):
     base_path = Path(__file__).parent.absolute()
     # Nuitka sets __compiled__ as a module attribute when running as compiled executable
@@ -153,7 +159,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-v", "--version",
         action="version",
-        version=__version__
+        version=get_display_version()
     )
 
     parser.parse_args()
