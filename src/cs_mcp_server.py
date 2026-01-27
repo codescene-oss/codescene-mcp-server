@@ -1,3 +1,4 @@
+import argparse
 import os
 import signal
 import sys
@@ -15,6 +16,7 @@ from technical_debt_goals import TechnicalDebtGoals
 from technical_debt_hotspots import TechnicalDebtHotspots
 from code_ownership import CodeOwnership
 from utils import query_api_list, analyze_code, run_local_tool, post_refactor
+from version import __version__
 
 mcp = FastMCP("CodeScene")
 
@@ -145,6 +147,18 @@ def all_doc_resources_as_uris(docs_to_expose):
     return [to_uri(doc) for doc in docs_to_expose]
 
 if __name__ == "__main__":
+    # CLI args
+    parser = argparse.ArgumentParser(description="CodeScene MCP Server")
+
+    parser.add_argument(
+        "-v", "--version",
+        action="version",
+        version=__version__
+    )
+
+    parser.parse_args()
+
+    # resources
     docs_to_expose = [
         {'doc-path': "how-it-works.md",
          'description': "Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI."},
@@ -153,6 +167,7 @@ if __name__ == "__main__":
     ]
     add_as_mcp_resources(docs_to_expose)
 
+    # tools
     PreCommitCodeHealthSafeguard(mcp, {
         'run_local_tool_fn': run_local_tool
     })
