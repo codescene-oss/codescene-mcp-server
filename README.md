@@ -216,9 +216,9 @@ seems to hallucinate parts of the path some of the time. We're still investigati
 
 <details>
 
-<summary>How do I configure SSL certificates for on-premise CodeScene instances?</summary>
+<summary>How do I configure custom SSL certificates?</summary>
 
-If your organization uses an internal CA (Certificate Authority) for your on-premise CodeScene instance, you need to configure the MCP server to trust that certificate.
+If your organization uses an internal CA (Certificate Authority), you need to configure the MCP server to trust that certificate.
 
 Set the `REQUESTS_CA_BUNDLE` environment variable to point to your CA certificate file (PEM format). This single variable configures SSL for both the Python MCP server and the embedded Java-based CodeScene CLI—the MCP server automatically converts the PEM certificate to a Java-compatible truststore at runtime.
 
