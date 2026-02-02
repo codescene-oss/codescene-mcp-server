@@ -118,3 +118,25 @@ class TestCodeOwnership(unittest.TestCase):
         result = self.instance.code_ownership_for_path(3, "/some-path/some_file.tsx")
 
         self.assertEqual(expected, result)
+
+    @mock.patch('code_ownership.code_ownership.get_relative_file_path_for_api')
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_code_ownership_static_mode(self, mock_post, mock_get_path):
+        """Test that code_ownership_for_path works in static executable mode (no CS_MOUNT_PATH)."""
+        mock_get_path.return_value = "src/some_file.tsx"
+        
+        def mocked_query_api_list(*kwargs):
+            return [{
+                'owner': 'some_owner',
+                'path': 'src/some_file.tsx'
+            }]
+
+        self.instance = CodeOwnership(FastMCP("Test"), {
+            'query_api_list_fn': mocked_query_api_list
+        })
+
+        result = self.instance.code_ownership_for_path(3, "/some/git/repo/src/some_file.tsx")
+        
+        mock_get_path.assert_called_once_with("/some/git/repo/src/some_file.tsx")
+        result_data = json.loads(result)
+        self.assertEqual(result_data[0]['owner'], 'some_owner')

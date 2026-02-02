@@ -167,3 +167,20 @@ class TestTechnicalDebtGoals(unittest.TestCase):
         for scenario in all_goal_scenarios:
             with self.subTest(scenario=scenario["name"]):
                 self._assert_scenario(scenario)
+
+    @mock.patch('technical_debt_goals.technical_debt_goals.get_relative_file_path_for_api')
+    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    def test_file_goals_static_mode(self, mock_post, mock_get_path):
+        """Test that file-level goals work in static executable mode (no CS_MOUNT_PATH)."""
+        mock_get_path.return_value = "src/some_file.tsx"
+        
+        def mocked_query_api_list(*args, **kwargs):
+            return [{"path": "src/some_file.tsx", "goals": [{"name": "reduce complexity"}]}]
+        
+        instance = TechnicalDebtGoals(FastMCP("Test"), {'query_api_list_fn': mocked_query_api_list})
+        result = instance.list_technical_debt_goals_for_project_file("/some/git/repo/src/some_file.tsx", PROJECT_ID)
+        
+        mock_get_path.assert_called_once_with("/some/git/repo/src/some_file.tsx")
+        result_data = json.loads(result)
+        self.assertEqual(result_data['goals'], [{"name": "reduce complexity"}])
+        self.assertIn("src/some_file.tsx", result_data['description'])

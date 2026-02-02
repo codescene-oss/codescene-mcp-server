@@ -2,7 +2,7 @@ from itertools import groupby
 import json
 import os
 from typing import TypedDict, Callable
-from utils import adapt_mounted_file_path_inside_docker, normalize_onprem_url, track, track_error, with_version_check
+from utils import get_relative_file_path_for_api, normalize_onprem_url, track, track_error, with_version_check
 
 
 class CodeOwnershipDeps(TypedDict):
@@ -30,8 +30,7 @@ class CodeOwnership:
         """
         try:
             endpoint = f"v2/projects/{project_id}/analyses/latest/files"
-            mounted_path = adapt_mounted_file_path_inside_docker(path)
-            relative_path = mounted_path.lstrip("/mount/")
+            relative_path = get_relative_file_path_for_api(path)
             params = {'filter': f"path~{relative_path}", 'fields': 'owner,path'}
             files = self.deps["query_api_list_fn"](endpoint, params, 'files')
             
