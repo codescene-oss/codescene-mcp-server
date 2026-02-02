@@ -44,8 +44,8 @@ irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/in
 
 Download the latest binary for your platform from the [GitHub Releases page](https://github.com/codescene-oss/codescene-mcp-server/releases):
 
-- **macOS:** `cs-mcp-macos-arm64` (Apple Silicon) or `cs-mcp-macos-amd64` (Intel)
-- **Linux:** `cs-mcp-linux-arm64` or `cs-mcp-linux-amd64`
+- **macOS:** `cs-mcp-macos-aarch64.zip` (Apple Silicon) or `cs-mcp-macos-amd64` (Intel)
+- **Linux:** `cs-mcp-linux-aarch64.zip` or `cs-mcp-linux-amd64`
 - **Windows:** `cs-mcp-windows-amd64.exe`
 
 After downloading, make it executable and optionally add it to your PATH:
