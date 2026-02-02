@@ -2,7 +2,7 @@ import json
 import os
 from typing import Callable, TypedDict
 
-from utils import adapt_mounted_file_path_inside_docker, normalize_onprem_url, track, track_error, with_version_check
+from utils import get_relative_file_path_for_api, normalize_onprem_url, track, track_error, with_version_check
 
 
 class TechnicalDebtHotspotsDeps(TypedDict):
@@ -71,8 +71,7 @@ class TechnicalDebtHotspots:
             Make sure to include this link in the output, and explain its purpose clearly.
         """
         try:
-            mounted_file_path = adapt_mounted_file_path_inside_docker(file_path)
-            relative_file_path = mounted_file_path.lstrip("/mount/")
+            relative_file_path = get_relative_file_path_for_api(file_path)
             endpoint = f"/v2/projects/{project_id}/analyses/latest/technical-debt"
             params = {'filter': f"file_name~{relative_file_path}", 'refactoring_targets': "true"}
             hotspots = self.deps["query_api_list_fn"](endpoint, params, 'result')

@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest import mock
 from errors import CodeSceneCliError
-from .docker_path_adapter import adapt_mounted_file_path_inside_docker
+from .docker_path_adapter import adapt_mounted_file_path_inside_docker, get_relative_file_path_for_api
 
 
 class TestAdaptMountedFilePathInsideDocker(unittest.TestCase):
@@ -296,3 +296,97 @@ class TestWorktreeGitdirAdapter(unittest.TestCase):
                         
                         result = adapt_worktree_gitdir_for_docker(worktree_dir)
                         self.assertEqual(result, expected)
+
+
+class TestGetRelativeFilePathForApi(unittest.TestCase):
+    """Tests for get_relative_file_path_for_api supporting both Docker and static modes."""
+
+    def setUp(self):
+        self._env = dict(os.environ)
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self._env)
+
+    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/mnt/project"})
+    def test_docker_mode_returns_relative_path(self):
+        """In Docker mode, should use adapt_mounted_file_path and strip /mount/ prefix."""
+        result = get_relative_file_path_for_api("/mnt/project/src/foo.py")
+        self.assertEqual(result, "src/foo.py")
+
+    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/mnt/project"})
+    def test_docker_mode_nested_path(self):
+        """In Docker mode with nested paths, should work correctly."""
+        result = get_relative_file_path_for_api("/mnt/project/src/components/Button.tsx")
+        self.assertEqual(result, "src/components/Button.tsx")
+
+    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "C:\\code\\project"})
+    def test_docker_mode_windows_path(self):
+        """In Docker mode with Windows paths, should work correctly."""
+        result = get_relative_file_path_for_api("C:\\code\\project\\src\\foo.py")
+        self.assertEqual(result, "src/foo.py")
+
+    def test_static_mode_uses_git_root(self):
+        """In static mode (no CS_MOUNT_PATH), should use git root to compute relative path."""
+        import tempfile
+        import os as os_module
+        
+        # Ensure CS_MOUNT_PATH is not set
+        os.environ.pop("CS_MOUNT_PATH", None)
+        
+        # Create a temp git repo structure
+        with tempfile.TemporaryDirectory() as tmpdir:
+            git_dir = os_module.path.join(tmpdir, ".git")
+            os_module.makedirs(git_dir)
+            src_dir = os_module.path.join(tmpdir, "src")
+            os_module.makedirs(src_dir)
+            test_file = os_module.path.join(src_dir, "foo.py")
+            with open(test_file, 'w') as f:
+                f.write("# test")
+            
+            result = get_relative_file_path_for_api(test_file)
+            self.assertEqual(result, "src/foo.py")
+
+    def test_static_mode_nested_directories(self):
+        """In static mode, should handle nested directory structures."""
+        import tempfile
+        import os as os_module
+        
+        os.environ.pop("CS_MOUNT_PATH", None)
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            git_dir = os_module.path.join(tmpdir, ".git")
+            os_module.makedirs(git_dir)
+            nested_dir = os_module.path.join(tmpdir, "src", "components", "ui")
+            os_module.makedirs(nested_dir)
+            test_file = os_module.path.join(nested_dir, "Button.tsx")
+            with open(test_file, 'w') as f:
+                f.write("// test")
+            
+            result = get_relative_file_path_for_api(test_file)
+            self.assertEqual(result, "src/components/ui/Button.tsx")
+
+    def test_static_mode_not_in_git_repo_returns_path_as_is(self):
+        """In static mode with file outside git repo, should return path unchanged."""
+        import tempfile
+        
+        os.environ.pop("CS_MOUNT_PATH", None)
+        
+        # Create a temp file NOT in a git repo
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            test_file = f.name
+        
+        try:
+            result = get_relative_file_path_for_api(test_file)
+            # Should return the path unchanged when not in a git repo
+            self.assertEqual(result, test_file)
+        finally:
+            import os as os_module
+            os_module.unlink(test_file)
+
+    def test_static_mode_relative_path_returns_as_is(self):
+        """In static mode with relative path, should return unchanged."""
+        os.environ.pop("CS_MOUNT_PATH", None)
+        
+        result = get_relative_file_path_for_api("src/foo.py")
+        self.assertEqual(result, "src/foo.py")

@@ -114,6 +114,50 @@ def _read_worktree_gitdir(git_path: str) -> str | None:
     return None
 
 
+def get_relative_file_path_for_api(file_path: str) -> str:
+    """
+    Get a relative file path suitable for CodeScene API calls.
+    
+    This function converts paths to repository-relative format for API filtering.
+    It handles three scenarios:
+    
+    1. Docker mode (CS_MOUNT_PATH set): Converts host path to container path
+       and strips the '/mount/' prefix.
+    2. Already relative path: Returns as-is.
+    3. Absolute path without CS_MOUNT_PATH: Tries git root detection, falls back
+       to returning the path unchanged if not in a git repository.
+    
+    Args:
+        file_path: Path to the source code file (absolute or relative).
+        
+    Returns:
+        A relative path string suitable for API filtering.
+    """
+    from pathlib import Path
+    
+    # Docker mode - use mount path logic
+    if os.getenv("CS_MOUNT_PATH"):
+        mounted_path = adapt_mounted_file_path_inside_docker(file_path)
+        return mounted_path.lstrip("/mount/")
+    
+    path = Path(file_path)
+    
+    # Already relative - use as-is
+    if not path.is_absolute():
+        return file_path
+    
+    # Absolute path - try git root, but don't require it
+    try:
+        from .code_health_analysis import find_git_root
+        git_root = find_git_root(file_path)
+        return str(path.relative_to(git_root))
+    except Exception:
+        # Not in a git repo or git detection failed - return path as-is
+        # The API will do pattern matching, so an absolute path may still work
+        # or the user may need to provide a relative path
+        return file_path
+
+
 def adapt_worktree_gitdir_for_docker(worktree_path: str) -> str | None:
     """
     For a git worktree, translate the gitdir path to work inside Docker.
