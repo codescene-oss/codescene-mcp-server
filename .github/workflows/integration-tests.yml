@@ -2,15 +2,12 @@ name: Integration Tests
 
 on:
   workflow_dispatch:
-    inputs:
-      run_docker:
-        description: 'Run Docker variant tests'
-        type: boolean
-        default: true
-      run_static:
-        description: 'Run Static binary variant tests'
-        type: boolean
-        default: true
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
 
 concurrency:
   group: integration-tests-${{ github.ref }}
@@ -21,12 +18,11 @@ env:
 
 jobs:
   # =============================================================================
-  # Static Binary Tests - Linux
+  # Comprehensive Integration Tests - Linux
   # =============================================================================
-  static-linux:
-    if: ${{ inputs.run_static }}
+  integration-linux:
     runs-on: ubuntu-latest
-    name: Static Tests (Linux)
+    name: Integration Tests (Linux)
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -38,31 +34,21 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Create virtual environment and install dependencies
+      - name: Install dependencies
         run: |
-          python -m venv .venv
-          source .venv/bin/activate
           pip install --upgrade pip
           pip install -r src/requirements.txt
           pip install Nuitka
 
-      - name: Run path resolution tests (static variant)
-        run: |
-          source .venv/bin/activate
-          ./tests/path-resolution-integration/run-static-test.sh
-
-      - name: Run SSL tests (static variant)
-        run: |
-          source .venv/bin/activate
-          ./tests/ssl-integration/run-ssl-test.sh static
+      - name: Run comprehensive integration tests
+        run: ./run-integration-tests.sh
 
   # =============================================================================
-  # Static Binary Tests - macOS (Apple Silicon)
+  # Comprehensive Integration Tests - macOS (Apple Silicon)
   # =============================================================================
-  static-macos:
-    if: ${{ inputs.run_static }}
+  integration-macos:
     runs-on: macos-latest
-    name: Static Tests (macOS)
+    name: Integration Tests (macOS)
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -74,31 +60,21 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Create virtual environment and install dependencies
+      - name: Install dependencies
         run: |
-          python -m venv .venv
-          source .venv/bin/activate
           pip install --upgrade pip
           pip install -r src/requirements.txt
           pip install Nuitka
 
-      - name: Run path resolution tests (static variant)
-        run: |
-          source .venv/bin/activate
-          ./tests/path-resolution-integration/run-static-test.sh
-
-      - name: Run SSL tests (static variant)
-        run: |
-          source .venv/bin/activate
-          ./tests/ssl-integration/run-ssl-test.sh static
+      - name: Run comprehensive integration tests
+        run: ./run-integration-tests.sh
 
   # =============================================================================
-  # Static Binary Tests - Windows
+  # Comprehensive Integration Tests - Windows
   # =============================================================================
-  static-windows:
-    if: ${{ inputs.run_static }}
+  integration-windows:
     runs-on: windows-latest
-    name: Static Tests (Windows)
+    name: Integration Tests (Windows)
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -110,76 +86,13 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Create virtual environment and install dependencies
+      - name: Install dependencies
         shell: pwsh
         run: |
-          python -m venv venv
-          .\venv\Scripts\python -m pip install --upgrade pip
-          .\venv\Scripts\pip install -r src/requirements.txt
-          .\venv\Scripts\pip install Nuitka
+          python -m pip install --upgrade pip
+          pip install -r src/requirements.txt
+          pip install Nuitka
 
-      - name: Run path resolution tests (static variant)
+      - name: Run comprehensive integration tests
         shell: pwsh
-        run: |
-          .\tests\path-resolution-integration\run-windows-test.ps1
-
-  # =============================================================================
-  # Docker Tests - Linux
-  # =============================================================================
-  docker-linux:
-    if: ${{ inputs.run_docker }}
-    runs-on: ubuntu-latest
-    name: Docker Tests (Linux)
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install Python dependencies (for test scripts)
-        run: |
-          pip install --upgrade pip
-          pip install -r src/requirements.txt
-
-      - name: Run path resolution tests (docker variant)
-        run: ./tests/path-resolution-integration/run-docker-test.sh
-
-      - name: Run SSL tests (docker variant)
-        run: ./tests/ssl-integration/run-ssl-test.sh docker
-
-  # =============================================================================
-  # Docker Tests - macOS (Apple Silicon)
-  # =============================================================================
-  docker-macos:
-    if: ${{ inputs.run_docker }}
-    runs-on: macos-latest
-    name: Docker Tests (macOS)
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Docker
-        uses: docker/setup-docker-action@v4
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install Python dependencies (for test scripts)
-        run: |
-          pip install --upgrade pip
-          pip install -r src/requirements.txt
-
-      - name: Run path resolution tests (docker variant)
-        run: ./tests/path-resolution-integration/run-docker-test.sh
-
-      - name: Run SSL tests (docker variant)
-        run: ./tests/ssl-integration/run-ssl-test.sh docker
+        run: .\run-integration-tests.ps1
