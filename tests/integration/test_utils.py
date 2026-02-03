@@ -253,7 +253,8 @@ def extract_result_text(tool_response: dict) -> str:
     if not isinstance(result, dict):
         return ""
     content = result.get("content", [])
-    if content and isinstance(content, list) and len(content) > 0:
+    has_valid_content = content and isinstance(content, list) and len(content) > 0
+    if has_valid_content:
         return content[0].get("text", "")
     structured = result.get("structuredContent", {})
     return structured.get("result", "")
@@ -301,6 +302,20 @@ class BuildConfig:
 class ExecutableBuilder:
     """Handles building the static executable in an isolated environment."""
     
+    # Platform-specific CLI download URLs
+    CLI_URLS = {
+        ("Darwin", "arm64"): "https://downloads.codescene.io/enterprise/cli/cs-macos-aarch64-latest.zip",
+        ("Darwin", "aarch64"): "https://downloads.codescene.io/enterprise/cli/cs-macos-aarch64-latest.zip",
+        ("Darwin", "x86_64"): "https://downloads.codescene.io/enterprise/cli/cs-macos-amd64-latest.zip",
+        ("Darwin", "amd64"): "https://downloads.codescene.io/enterprise/cli/cs-macos-amd64-latest.zip",
+        ("Linux", "aarch64"): "https://downloads.codescene.io/enterprise/cli/cs-linux-aarch64-latest.zip",
+        ("Linux", "arm64"): "https://downloads.codescene.io/enterprise/cli/cs-linux-aarch64-latest.zip",
+        ("Linux", "x86_64"): "https://downloads.codescene.io/enterprise/cli/cs-linux-amd64-latest.zip",
+        ("Linux", "amd64"): "https://downloads.codescene.io/enterprise/cli/cs-linux-amd64-latest.zip",
+        ("Windows", "amd64"): "https://downloads.codescene.io/enterprise/cli/cs-windows-amd64-latest.zip",
+        ("Windows", "x86_64"): "https://downloads.codescene.io/enterprise/cli/cs-windows-amd64-latest.zip",
+    }
+    
     def __init__(self, config: BuildConfig):
         self.config = config
     
@@ -309,20 +324,17 @@ class ExecutableBuilder:
         system = platform.system()
         machine = platform.machine().lower()
         
-        if system == "Darwin":  # macOS
-            if machine in ["arm64", "aarch64"]:
-                return "https://downloads.codescene.io/enterprise/cli/cs-macos-aarch64-latest.zip"
-            else:
-                return "https://downloads.codescene.io/enterprise/cli/cs-macos-amd64-latest.zip"
-        elif system == "Linux":
-            if machine in ["aarch64", "arm64"]:
-                return "https://downloads.codescene.io/enterprise/cli/cs-linux-aarch64-latest.zip"
-            else:
-                return "https://downloads.codescene.io/enterprise/cli/cs-linux-amd64-latest.zip"
-        elif system == "Windows":
-            return "https://downloads.codescene.io/enterprise/cli/cs-windows-amd64-latest.zip"
-        else:
-            raise RuntimeError(f"Unsupported platform: {system} {machine}")
+        url = self.CLI_URLS.get((system, machine))
+        if url:
+            return url
+        
+        # Fallback for unrecognized architectures
+        fallback_key = (system, "x86_64")
+        url = self.CLI_URLS.get(fallback_key)
+        if url:
+            return url
+        
+        raise RuntimeError(f"Unsupported platform: {system} {machine}")
     
     def _download_cli(self, dest_dir: Path) -> Path:
         """
@@ -365,53 +377,53 @@ class ExecutableBuilder:
         print(f"  Downloaded CLI to: {cli_path}")
         return cli_path
         
-    def build(self) -> Path:
-        """
-        Build the static executable using Nuitka.
-        
-        Returns:
-            Path to the built executable in the isolated build directory
-        """
-        print_header("Building Static Executable")
-        
-        # Create isolated build directory
-        self.config.build_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Copy source files to build directory
+    def _is_windows(self) -> bool:
+        """Check if running on Windows."""
+        return os.name == "nt" or platform.system() == "Windows"
+    
+    def _get_cli_name(self) -> str:
+        """Get the platform-specific CLI executable name."""
+        return "cs.exe" if self._is_windows() else "cs"
+    
+    def _get_executable_name(self) -> str:
+        """Get the platform-specific output executable name."""
+        return "cs-mcp.exe" if self._is_windows() else "cs-mcp"
+    
+    def _copy_source_files(self) -> None:
+        """Copy source files to the build directory."""
         print("  Copying source files to build directory...")
         src_dest = self.config.build_dir / "src"
         if src_dest.exists():
             shutil.rmtree(src_dest)
         shutil.copytree(self.config.repo_root / "src", src_dest)
         
-        # Copy docs
         docs_dest = self.config.build_dir / "src" / "docs"
         if docs_dest.exists():
             shutil.rmtree(docs_dest)
         shutil.copytree(self.config.repo_root / "src" / "docs", docs_dest)
-        
-        # Get cs CLI - either from repo root or download
-        is_windows = os.name == "nt" or platform.system() == "Windows"
-        cs_name = "cs.exe" if is_windows else "cs"
+    
+    def _ensure_cli_available(self) -> None:
+        """Ensure the CodeScene CLI is available in the build directory."""
+        cs_name = self._get_cli_name()
         cs_source = self.config.repo_root / cs_name
+        cs_dest = self.config.build_dir / cs_name
         
         if cs_source.exists():
-            cs_dest = self.config.build_dir / cs_name
             shutil.copy2(cs_source, cs_dest)
             print(f"  Copied {cs_name} from repo root")
-        else:
-            print(f"  No {cs_name} found in repo root, downloading...")
-            cli_path = self._download_cli(self.config.build_dir)
-            # Ensure it's named correctly
-            cs_dest = self.config.build_dir / cs_name
-            if cli_path != cs_dest:
-                shutil.move(str(cli_path), str(cs_dest))
+            return
         
-        # Build with Nuitka
+        print(f"  No {cs_name} found in repo root, downloading...")
+        cli_path = self._download_cli(self.config.build_dir)
+        if cli_path != cs_dest:
+            shutil.move(str(cli_path), str(cs_dest))
+    
+    def _run_nuitka_build(self) -> Path:
+        """Run Nuitka to build the executable."""
         print("  Building with Nuitka (this may take several minutes)...")
         
-        executable_name = "cs-mcp.exe" if os.name == "nt" else "cs-mcp"
-        cs_data_file = "cs.exe" if os.name == "nt" else "cs"
+        executable_name = self._get_executable_name()
+        cs_data_file = self._get_cli_name()
         
         build_cmd = [
             self.config.python_executable,
@@ -440,6 +452,22 @@ class ExecutableBuilder:
         if not binary_path.exists():
             raise FileNotFoundError(f"Binary not found at {binary_path} after build")
         
+        return binary_path
+        
+    def build(self) -> Path:
+        """
+        Build the static executable using Nuitka.
+        
+        Returns:
+            Path to the built executable in the isolated build directory
+        """
+        print_header("Building Static Executable")
+        
+        self.config.build_dir.mkdir(parents=True, exist_ok=True)
+        self._copy_source_files()
+        self._ensure_cli_available()
+        
+        binary_path = self._run_nuitka_build()
         print(f"  \033[92mBuild successful:\033[0m {binary_path}")
         return binary_path
 

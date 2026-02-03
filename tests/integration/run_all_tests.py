@@ -28,6 +28,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -401,6 +402,35 @@ def build_executable() -> Path:
         return final_path
 
 
+def validate_prerequisites() -> bool:
+    """Validate prerequisites and print any issues. Returns True if OK."""
+    prereqs_ok, issues = check_prerequisites()
+    if prereqs_ok:
+        print("\n\033[92mPrerequisites OK\033[0m")
+        return True
+    
+    print("\n\033[91mPrerequisite checks failed:\033[0m")
+    for issue in issues:
+        print(f"  - {issue}")
+    return False
+
+
+def get_executable(args) -> Optional[Path]:
+    """Get executable from args or build it. Returns None on failure."""
+    if args.executable:
+        if not args.executable.exists():
+            print(f"\n\033[91mError:\033[0m Executable not found: {args.executable}")
+            return None
+        print(f"\nUsing existing executable: {args.executable}")
+        return args.executable
+    
+    try:
+        return build_executable()
+    except Exception as e:
+        print(f"\n\033[91mBuild failed:\033[0m {e}")
+        return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run comprehensive MCP integration tests")
     parser.add_argument(
@@ -412,31 +442,13 @@ def main() -> int:
     
     print_header("MCP Server Comprehensive Integration Tests")
     
-    # Check prerequisites
-    prereqs_ok, issues = check_prerequisites()
-    if not prereqs_ok:
-        print("\n\033[91mPrerequisite checks failed:\033[0m")
-        for issue in issues:
-            print(f"  - {issue}")
+    if not validate_prerequisites():
         return 1
     
-    print("\n\033[92mPrerequisites OK\033[0m")
+    executable = get_executable(args)
+    if executable is None:
+        return 1
     
-    # Get or build executable
-    if args.executable:
-        executable = args.executable
-        if not executable.exists():
-            print(f"\n\033[91mError:\033[0m Executable not found: {executable}")
-            return 1
-        print(f"\nUsing existing executable: {executable}")
-    else:
-        try:
-            executable = build_executable()
-        except Exception as e:
-            print(f"\n\033[91mBuild failed:\033[0m {e}")
-            return 1
-    
-    # Run tests
     return run_all_tests(executable)
 
 

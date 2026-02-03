@@ -252,10 +252,24 @@ def test_subtree_pre_commit(executable: Path, repo_dir: Path, subtree_path: str)
         client.stop()
 
 
-def test_subtree_relative_paths(executable: Path, repo_dir: Path, subtree_path: str) -> bool:
-    """Test relative path resolution for subtree files."""
-    print_header("Test: Relative Paths in Git Subtree")
+def run_subtree_code_health_test(
+    executable: Path, 
+    repo_dir: Path, 
+    file_path: str, 
+    test_description: str
+) -> bool:
+    """
+    Run a code health score test for subtree files.
     
+    Args:
+        executable: Path to the cs-mcp executable
+        repo_dir: Repository directory
+        file_path: Path to the file to analyze
+        test_description: Description for test output
+        
+    Returns:
+        True if test passed
+    """
     env = create_test_environment()
     client = MCPClient([str(executable)], env=env, cwd=str(repo_dir))
     
@@ -267,66 +281,47 @@ def test_subtree_relative_paths(executable: Path, repo_dir: Path, subtree_path: 
         print_test("Server started", True)
         client.initialize()
         
-        # Use relative path to subtree file
-        rel_path = f"{subtree_path}/utils.py"
+        print(f"\n  Testing: {file_path}")
         
-        print(f"\n  Testing relative path to subtree: {rel_path}")
-        print(f"  Working directory: {repo_dir}")
-        
-        response = client.call_tool("code_health_score", {"file_path": rel_path}, timeout=60)
+        response = client.call_tool("code_health_score", {"file_path": file_path}, timeout=60)
         result_text = extract_result_text(response)
         score = extract_code_health_score(result_text)
         
         if score is None:
-            print_test("Relative path resolved", False, f"Response: {result_text[:200]}")
+            print_test(test_description, False, f"Response: {result_text[:200]}")
             return False
         
-        print_test("Relative path resolved", True, f"Score: {score}")
+        print_test(test_description, True, f"Score: {score}")
         return True
         
     except Exception as e:
-        print_test("Subtree relative path test", False, str(e))
+        print_test(test_description, False, str(e))
         return False
     finally:
         client.stop()
+
+
+def test_subtree_relative_paths(executable: Path, repo_dir: Path, subtree_path: str) -> bool:
+    """Test relative path resolution for subtree files."""
+    print_header("Test: Relative Paths in Git Subtree")
+    
+    rel_path = f"{subtree_path}/utils.py"
+    print(f"  Working directory: {repo_dir}")
+    
+    return run_subtree_code_health_test(
+        executable, repo_dir, rel_path, "Relative path resolved"
+    )
 
 
 def test_main_repo_still_works(executable: Path, repo_dir: Path) -> bool:
     """Test that main repo files still work correctly with subtree present."""
     print_header("Test: Main Repository Files with Subtree Present")
     
-    env = create_test_environment()
-    client = MCPClient([str(executable)], env=env, cwd=str(repo_dir))
+    test_file = str(repo_dir / "src/utils/calculator.py")
     
-    try:
-        if not client.start():
-            print_test("Server started", False)
-            return False
-        
-        print_test("Server started", True)
-        client.initialize()
-        
-        # Test file in main repo (not in subtree)
-        test_file = repo_dir / "src/utils/calculator.py"
-        
-        print(f"\n  Testing main repo file: {test_file}")
-        
-        response = client.call_tool("code_health_score", {"file_path": str(test_file)}, timeout=60)
-        result_text = extract_result_text(response)
-        score = extract_code_health_score(result_text)
-        
-        if score is None:
-            print_test("Main repo file analysis", False, f"Response: {result_text[:200]}")
-            return False
-        
-        print_test("Main repo file analysis works", True, f"Score: {score}")
-        return True
-        
-    except Exception as e:
-        print_test("Main repo test", False, str(e))
-        return False
-    finally:
-        client.stop()
+    return run_subtree_code_health_test(
+        executable, repo_dir, test_file, "Main repo file analysis works"
+    )
 
 
 def run_subtree_tests(executable: Path) -> int:
