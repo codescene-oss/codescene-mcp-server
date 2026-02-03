@@ -129,8 +129,9 @@ def _try_nuitka_cli_path(cli_binary_name: str):
     """
     Try to find CLI binary in Nuitka compiled environment.
     
-    For onefile builds with --include-data-files, the cs binary is embedded
-    in the executable and extracted to the same directory as sys.executable.
+    For onefile builds with --include-data-files, the cs binary location differs:
+    - Linux: next to the executable (sys.executable.parent)
+    - Windows: in the extraction root (__file__ traversal)
     
     Returns:
         str: Path to CLI binary if found, None otherwise.
@@ -139,13 +140,40 @@ def _try_nuitka_cli_path(cli_binary_name: str):
         # Check if we're running in a Nuitka compiled environment
         __compiled__  # type: ignore[name-defined]
         
-        # For onefile builds, data files are in the same directory as the executable
-        executable_dir = Path(sys.executable).parent
-        nuitka_cs_path = executable_dir / cli_binary_name
-        if nuitka_cs_path.exists():
-            return _ensure_executable(nuitka_cs_path)
+        import sys
+        
+        # Try multiple locations with debug logging
+        locations_to_try = [
+            # Linux: next to the executable
+            Path(sys.executable).parent / cli_binary_name,
+            # Windows: in extraction root (up from src/utils/code_health_analysis.py)
+            Path(__file__).parent.parent.parent.absolute() / cli_binary_name,
+            # Alternative: relative to sys.argv[0]
+            Path(sys.argv[0]).parent.absolute() / cli_binary_name,
+        ]
+        
+        print(f"DEBUG Nuitka: sys.executable={sys.executable}", file=sys.stderr)
+        print(f"DEBUG Nuitka: __file__={__file__}", file=sys.stderr)
+        print(f"DEBUG Nuitka: sys.argv[0]={sys.argv[0]}", file=sys.stderr)
+        print(f"DEBUG Nuitka: Looking for {cli_binary_name}", file=sys.stderr)
+        
+        for location in locations_to_try:
+            print(f"DEBUG Nuitka: Checking {location}", file=sys.stderr)
+            if location.exists():
+                print(f"DEBUG Nuitka: Found cs binary at {location}", file=sys.stderr)
+                return _ensure_executable(location)
+        
+        print(f"DEBUG Nuitka: cs binary not found in any location", file=sys.stderr)
+        # List contents of extraction root for debugging
+        extraction_root = Path(__file__).parent.parent.parent.absolute()
+        try:
+            print(f"DEBUG Nuitka: Extraction root contents: {list(extraction_root.iterdir())[:10]}", file=sys.stderr)
+        except Exception as e:
+            print(f"DEBUG Nuitka: Failed to list extraction root: {e}", file=sys.stderr)
+            
     except NameError:
-        pass
+        import sys
+        print(f"DEBUG: Not in Nuitka environment (__compiled__ not found)", file=sys.stderr)
     return None
 
 
