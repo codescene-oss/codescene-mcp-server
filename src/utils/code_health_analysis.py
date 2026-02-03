@@ -118,44 +118,76 @@ def code_health_from_cli_output(cli_output) -> float:
     return r['score']
 
 
-def cs_cli_path(platform_details):
-    # Check for environment variable override first
-    if os.getenv("CS_CLI_PATH"):
-        return os.getenv("CS_CLI_PATH")
+def _ensure_executable(path: Path) -> str:
+    """Ensure the path is executable and return it as a string."""
+    if not os.access(path, os.X_OK):
+        os.chmod(path, 0o755)
+    return str(path)
 
-    # Docker environment - use static path
-    if os.getenv("CS_MOUNT_PATH"):
-        return '/root/.local/bin/cs'
 
-    cli_binary_name = platform_details.get_cli_binary_name()
-
-    # For Nuitka compiled binaries, __compiled__.containing_dir gives the
-    # distribution/extraction root where cs.exe is placed
+def _try_nuitka_cli_path(cli_binary_name: str):
+    """
+    Try to find CLI binary in Nuitka compiled environment.
+    
+    Returns:
+        str: Path to CLI binary if found, None otherwise.
+    """
     try:
-        # __compiled__ is set by Nuitka at runtime
         compiled_dir = __compiled__.containing_dir  # type: ignore[name-defined]
         nuitka_cs_path = Path(compiled_dir) / cli_binary_name
         if nuitka_cs_path.exists():
-            if not os.access(nuitka_cs_path, os.X_OK):
-                os.chmod(nuitka_cs_path, 0o755)
-            return str(nuitka_cs_path)
+            return _ensure_executable(nuitka_cs_path)
     except NameError:
-        # Not running as Nuitka compiled binary
         pass
+    return None
 
-    # Check for bundled binary in source tree (development mode)
-    # From src/utils/code_health_analysis.py, go up to project root
-    # (parent.parent = src/, parent.parent.parent = project root)
+
+def _try_bundled_cli_path(cli_binary_name: str):
+    """
+    Try to find CLI binary in source tree (development mode).
+    
+    Returns:
+        str: Path to CLI binary if found, None otherwise.
+    """
     bundle_dir = Path(__file__).parent.parent.parent.absolute()
     internal_cs_path = bundle_dir / cli_binary_name
-
     if internal_cs_path.exists():
-        if not os.access(internal_cs_path, os.X_OK):
-            os.chmod(internal_cs_path, 0o755)
-        return str(internal_cs_path)
+        return _ensure_executable(internal_cs_path)
+    return None
 
-    # Fall back to static docker default (shouldn't reach here normally)
-    return '/root/.local/bin/cs'
+
+DOCKER_CLI_PATH = '/root/.local/bin/cs'
+
+
+def cs_cli_path(platform_details):
+    """
+    Determine the path to the CodeScene CLI binary.
+    
+    Resolution order:
+    1. CS_CLI_PATH environment variable override
+    2. Docker environment static path
+    3. Nuitka compiled binary location
+    4. Bundled binary in source tree (development mode)
+    5. Default Docker path (fallback)
+    """
+    env_override = os.getenv("CS_CLI_PATH")
+    if env_override:
+        return env_override
+
+    if os.getenv("CS_MOUNT_PATH"):
+        return DOCKER_CLI_PATH
+
+    cli_binary_name = platform_details.get_cli_binary_name()
+
+    nuitka_path = _try_nuitka_cli_path(cli_binary_name)
+    if nuitka_path:
+        return nuitka_path
+
+    bundled_path = _try_bundled_cli_path(cli_binary_name)
+    if bundled_path:
+        return bundled_path
+
+    return DOCKER_CLI_PATH
 
 
 def make_cs_cli_review_command_for(cli_command: str, file_path: str, platform_details=None):
