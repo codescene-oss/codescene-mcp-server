@@ -7,7 +7,7 @@ import tempfile
 from errors import CodeSceneCliError
 from .docker_path_adapter import adapt_mounted_file_path_inside_docker
 from .platform_details import get_platform_details, get_ssl_cli_args
-
+from .docker_path_adapter import get_worktree_gitdir
 
 def find_git_root(file_path: str) -> str:
     """
@@ -37,7 +37,7 @@ def find_git_root(file_path: str) -> str:
     raise CodeSceneCliError(f"Not in a git repository: {file_path}")
 
 
-def run_local_tool(command: list, cwd: str = None, extra_env: dict = None):
+def run_local_tool(command: list, cwd: str | None = None, extra_env: dict | None = None):
     """
     Runs a local command-line tool and captures its output.
 
@@ -215,4 +215,9 @@ def analyze_code(file_path: str) -> str:
         # Local/Nuitka binary - find git root and use relative path
         git_root = find_git_root(file_path)
         relative_path = str(Path(file_path).relative_to(git_root))
-        return run_local_tool(cs_cli_review_command_for(relative_path), cwd=git_root)
+        
+        # Detect worktree and set GIT_DIR if needed (mirrors Docker mode logic)
+        gitdir = get_worktree_gitdir(git_root)
+        extra_env = {"GIT_DIR": gitdir} if gitdir else None
+        
+        return run_local_tool(cs_cli_review_command_for(relative_path), cwd=git_root, extra_env=extra_env)

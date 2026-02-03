@@ -82,6 +82,79 @@ python tests/path-resolution-integration/test_static_variant.py ./dist/cs-mcp
 python tests/path-resolution-integration/test_docker_run.py
 ```
 
+### `test_windows_static.py`
+
+Tests Windows-specific path handling and git worktree support with the static executable.
+
+**Usage:**
+```powershell
+# Set access token first
+$env:CS_ACCESS_TOKEN = "your_token_here"
+
+# Run with auto-detected binary
+python test_windows_static.py
+
+# Or specify binary path explicitly
+python test_windows_static.py C:\path\to\cs-mcp.exe
+```
+
+**What it tests:**
+1. MCP server starts successfully on Windows
+2. `code_health_score` works with Windows absolute paths (e.g., `C:\Users\...`)
+3. `pre_commit_code_health_safeguard` works with Windows git repository paths
+4. `code_health_score` works in Windows git worktrees
+
+**Prerequisites:**
+- Python 3.10+ (3.13 recommended)
+- Git installed and in PATH
+- `CS_ACCESS_TOKEN` environment variable set
+- `cs-mcp.exe` in repo root (will auto-build if missing and Nuitka is available)
+
+**Auto-build behavior:**
+If `cs-mcp.exe` is not found in the repo root, the test will attempt to build it
+using Nuitka. This requires:
+- Nuitka installed (`pip install Nuitka`)
+- Internet access to download the CodeScene CLI
+
+If build prerequisites are not available, the test will skip gracefully.
+
+### `run-windows-test.ps1`
+
+PowerShell wrapper script for running Windows tests.
+
+**Usage:**
+```powershell
+# With environment variable
+$env:CS_ACCESS_TOKEN = "your_token_here"
+.\run-windows-test.ps1
+
+# Or pass token as parameter
+.\run-windows-test.ps1 -Token "your_token_here"
+
+# With explicit binary path
+.\run-windows-test.ps1 -BinaryPath "C:\path\to\cs-mcp.exe"
+```
+
+## Running All Tests
+
+### On Linux/macOS
+
+```bash
+# Test static executable mode
+./run-static-test.sh
+
+# Test Docker mode  
+./run-docker-test.sh
+```
+
+### On Windows
+
+```powershell
+# Test Windows path handling
+$env:CS_ACCESS_TOKEN = "your_token_here"
+.\run-windows-test.ps1
+```
+
 ## Note
 
 These tests verify that the path resolution doesn't fail with the
@@ -89,3 +162,7 @@ These tests verify that the path resolution doesn't fail with the
 (e.g., authentication errors) if proper CodeScene credentials are not
 configured, but that's expected - the key verification is that the
 path resolution step succeeds.
+
+The Windows tests (`test_windows_static.py`) require a valid `CS_ACCESS_TOKEN`
+because they test CLI-based tools that make actual API calls to verify
+real Code Health scores are returned.

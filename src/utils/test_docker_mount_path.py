@@ -1,8 +1,34 @@
 import os
+import tempfile
 import unittest
 from unittest import mock
 from errors import CodeSceneCliError
 from .docker_path_adapter import adapt_mounted_file_path_inside_docker, get_relative_file_path_for_api
+
+
+def create_git_worktree_file(tmpdir: str, gitdir_content: str) -> str:
+    """Create a .git file (worktree style) with the given gitdir content."""
+    git_file = os.path.join(tmpdir, '.git')
+    with open(git_file, 'w', encoding='utf-8') as f:
+        f.write(gitdir_content)
+    return git_file
+
+
+def create_git_directory(tmpdir: str) -> str:
+    """Create a .git directory (regular repo style)."""
+    git_dir = os.path.join(tmpdir, '.git')
+    os.makedirs(git_dir)
+    return git_dir
+
+
+def create_temp_git_repo_with_file(tmpdir: str, relative_path: str, content: str = "# test") -> str:
+    """Create a git repo structure with a file at the given relative path."""
+    create_git_directory(tmpdir)
+    file_path = os.path.join(tmpdir, relative_path)
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    with open(file_path, 'w') as f:
+        f.write(content)
+    return file_path
 
 
 class TestAdaptMountedFilePathInsideDocker(unittest.TestCase):
@@ -159,7 +185,6 @@ class TestWorktreeGitdirAdapter(unittest.TestCase):
     def test_read_worktree_gitdir_from_file(self):
         """Test reading gitdir from a worktree .git file."""
         from .docker_path_adapter import _read_worktree_gitdir
-        import tempfile
         
         with tempfile.NamedTemporaryFile(mode='w', suffix='.git', delete=False, encoding='utf-8') as f:
             f.write("gitdir: /path/to/main/repo/.git/worktrees/my-branch\n")
@@ -168,7 +193,6 @@ class TestWorktreeGitdirAdapter(unittest.TestCase):
             result = _read_worktree_gitdir(f.name)
             self.assertEqual(result, "/path/to/main/repo/.git/worktrees/my-branch")
         
-        import os
         os.unlink(f.name)
 
     def test_read_worktree_gitdir_with_utf8_content(self):
@@ -178,7 +202,6 @@ class TestWorktreeGitdirAdapter(unittest.TestCase):
         when source files contain UTF-8 characters (emojis, en-dashes, etc.)
         """
         from .docker_path_adapter import _read_worktree_gitdir
-        import tempfile
         
         # Test various UTF-8 characters that commonly cause issues
         utf8_test_cases = [
@@ -206,13 +229,11 @@ class TestWorktreeGitdirAdapter(unittest.TestCase):
                     result = _read_worktree_gitdir(f.name)
                     self.assertEqual(result, expected)
                 
-                import os
                 os.unlink(f.name)
 
     def test_read_worktree_gitdir_returns_none_for_directory(self):
         """Test that reading gitdir from a directory returns None."""
         from .docker_path_adapter import _read_worktree_gitdir
-        import tempfile
         
         with tempfile.TemporaryDirectory() as tmpdir:
             result = _read_worktree_gitdir(tmpdir)
@@ -229,20 +250,12 @@ class TestWorktreeGitdirAdapter(unittest.TestCase):
     def test_adapt_worktree_gitdir_for_docker(self):
         """Test full worktree gitdir path translation."""
         from .docker_path_adapter import adapt_worktree_gitdir_for_docker
-        import tempfile
-        import os as os_module
         
-        # Create a temp directory structure simulating a mounted worktree
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Create a mock .git file with a gitdir pointer
-            worktree_dir = os_module.path.join(tmpdir, "worktree")
-            os_module.makedirs(worktree_dir)
-            git_file = os_module.path.join(worktree_dir, ".git")
+            worktree_dir = os.path.join(tmpdir, "worktree")
+            os.makedirs(worktree_dir)
+            create_git_worktree_file(worktree_dir, "gitdir: /Users/david/workspace/main-repo/.git/worktrees/my-branch\n")
             
-            with open(git_file, 'w', encoding='utf-8') as f:
-                f.write("gitdir: /Users/david/workspace/main-repo/.git/worktrees/my-branch\n")
-            
-            # The function should translate the host path in .git file
             result = adapt_worktree_gitdir_for_docker(worktree_dir)
             self.assertEqual(result, "/mount/main-repo/.git/worktrees/my-branch")
 
@@ -250,22 +263,15 @@ class TestWorktreeGitdirAdapter(unittest.TestCase):
     def test_adapt_worktree_gitdir_returns_none_for_regular_repo(self):
         """Test that regular repos (with .git directory) return None."""
         from .docker_path_adapter import adapt_worktree_gitdir_for_docker
-        import tempfile
-        import os as os_module
         
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Create a .git directory (regular repo, not worktree)
-            git_dir = os_module.path.join(tmpdir, ".git")
-            os_module.makedirs(git_dir)
-            
+            create_git_directory(tmpdir)
             result = adapt_worktree_gitdir_for_docker(tmpdir)
             self.assertIsNone(result)
 
     def test_adapt_worktree_gitdir_edge_cases(self):
         """Test worktree gitdir translation edge cases via table-driven tests."""
         from .docker_path_adapter import adapt_worktree_gitdir_for_docker
-        import tempfile
-        import os as os_module
         
         cases = [
             # (mount_path, gitdir_content, expected_result, description)
@@ -287,15 +293,51 @@ class TestWorktreeGitdirAdapter(unittest.TestCase):
             with self.subTest(description=description):
                 with mock.patch.dict(os.environ, {"CS_MOUNT_PATH": mount_path}):
                     with tempfile.TemporaryDirectory() as tmpdir:
-                        worktree_dir = os_module.path.join(tmpdir, "worktree")
-                        os_module.makedirs(worktree_dir)
-                        git_file = os_module.path.join(worktree_dir, ".git")
-                        
-                        with open(git_file, 'w', encoding='utf-8') as f:
-                            f.write(gitdir_content)
+                        worktree_dir = os.path.join(tmpdir, "worktree")
+                        os.makedirs(worktree_dir)
+                        create_git_worktree_file(worktree_dir, gitdir_content)
                         
                         result = adapt_worktree_gitdir_for_docker(worktree_dir)
                         self.assertEqual(result, expected)
+
+
+class TestGetWorktreeGitdir(unittest.TestCase):
+    """Tests for get_worktree_gitdir() supporting static mode worktree detection."""
+
+    def test_get_worktree_gitdir_returns_gitdir_for_worktree(self):
+        """Test that get_worktree_gitdir returns gitdir path for a worktree."""
+        from .docker_path_adapter import get_worktree_gitdir
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            create_git_worktree_file(tmpdir, 'gitdir: /path/to/main/.git/worktrees/feature')
+            result = get_worktree_gitdir(tmpdir)
+            self.assertEqual('/path/to/main/.git/worktrees/feature', result)
+
+    def test_get_worktree_gitdir_returns_none_for_regular_repo(self):
+        """Test that get_worktree_gitdir returns None for regular git repo."""
+        from .docker_path_adapter import get_worktree_gitdir
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            create_git_directory(tmpdir)
+            result = get_worktree_gitdir(tmpdir)
+            self.assertIsNone(result)
+
+    def test_get_worktree_gitdir_returns_none_for_no_git(self):
+        """Test that get_worktree_gitdir returns None when no .git exists."""
+        from .docker_path_adapter import get_worktree_gitdir
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = get_worktree_gitdir(tmpdir)
+            self.assertIsNone(result)
+
+    def test_get_worktree_gitdir_handles_windows_paths(self):
+        """Test that get_worktree_gitdir handles Windows-style paths in .git file."""
+        from .docker_path_adapter import get_worktree_gitdir
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            create_git_worktree_file(tmpdir, 'gitdir: C:\\workspace\\stargate\\.git\\worktrees\\ip_ps')
+            result = get_worktree_gitdir(tmpdir)
+            self.assertEqual('C:\\workspace\\stargate\\.git\\worktrees\\ip_ps', result)
 
 
 class TestGetRelativeFilePathForApi(unittest.TestCase):
@@ -328,48 +370,24 @@ class TestGetRelativeFilePathForApi(unittest.TestCase):
 
     def test_static_mode_uses_git_root(self):
         """In static mode (no CS_MOUNT_PATH), should use git root to compute relative path."""
-        import tempfile
-        import os as os_module
-        
-        # Ensure CS_MOUNT_PATH is not set
         os.environ.pop("CS_MOUNT_PATH", None)
         
-        # Create a temp git repo structure
         with tempfile.TemporaryDirectory() as tmpdir:
-            git_dir = os_module.path.join(tmpdir, ".git")
-            os_module.makedirs(git_dir)
-            src_dir = os_module.path.join(tmpdir, "src")
-            os_module.makedirs(src_dir)
-            test_file = os_module.path.join(src_dir, "foo.py")
-            with open(test_file, 'w') as f:
-                f.write("# test")
-            
+            test_file = create_temp_git_repo_with_file(tmpdir, "src/foo.py")
             result = get_relative_file_path_for_api(test_file)
             self.assertEqual(result, "src/foo.py")
 
     def test_static_mode_nested_directories(self):
         """In static mode, should handle nested directory structures."""
-        import tempfile
-        import os as os_module
-        
         os.environ.pop("CS_MOUNT_PATH", None)
         
         with tempfile.TemporaryDirectory() as tmpdir:
-            git_dir = os_module.path.join(tmpdir, ".git")
-            os_module.makedirs(git_dir)
-            nested_dir = os_module.path.join(tmpdir, "src", "components", "ui")
-            os_module.makedirs(nested_dir)
-            test_file = os_module.path.join(nested_dir, "Button.tsx")
-            with open(test_file, 'w') as f:
-                f.write("// test")
-            
+            test_file = create_temp_git_repo_with_file(tmpdir, "src/components/ui/Button.tsx", "// test")
             result = get_relative_file_path_for_api(test_file)
             self.assertEqual(result, "src/components/ui/Button.tsx")
 
     def test_static_mode_not_in_git_repo_returns_path_as_is(self):
         """In static mode with file outside git repo, should return path unchanged."""
-        import tempfile
-        
         os.environ.pop("CS_MOUNT_PATH", None)
         
         # Create a temp file NOT in a git repo
@@ -381,8 +399,7 @@ class TestGetRelativeFilePathForApi(unittest.TestCase):
             # Should return the path unchanged when not in a git repo
             self.assertEqual(result, test_file)
         finally:
-            import os as os_module
-            os_module.unlink(test_file)
+            os.unlink(test_file)
 
     def test_static_mode_relative_path_returns_as_is(self):
         """In static mode with relative path, should return unchanged."""
