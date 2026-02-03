@@ -173,6 +173,49 @@ class ToolTestConfig:
     required_patterns: list[str] | None = None  # Patterns that MUST be in the response
 
 
+def find_forbidden_patterns(text: str, patterns: list[str]) -> list[str]:
+    """Find which forbidden patterns appear in the text."""
+    return [p for p in patterns if p.lower() in text.lower()]
+
+
+def find_missing_patterns(text: str, patterns: list[str] | None) -> list[str]:
+    """Find which required patterns are missing from the text."""
+    if not patterns:
+        return []
+    return [p for p in patterns if p.lower() not in text.lower()]
+
+
+def build_test_details(
+    result_text: str,
+    found_forbidden: list[str],
+    missing_required: list[str],
+) -> str:
+    """Build the test details message."""
+    details = f"Response: {result_text[:150]}..."
+    if found_forbidden:
+        details = f"Found forbidden patterns: {found_forbidden}\n{details}"
+    if missing_required:
+        details = f"Missing required patterns: {missing_required}\n{details}"
+    return details
+
+
+def execute_tool_test(client: MCPClient, config: ToolTestConfig) -> bool:
+    """Execute the tool test and check results. Assumes client is started."""
+    client.initialize()
+    
+    tool_response = client.call_tool(config.tool_name, config.arguments)
+    result_text = extract_result_text(tool_response)
+    
+    found_forbidden = find_forbidden_patterns(result_text, config.forbidden_patterns)
+    missing_required = find_missing_patterns(result_text, config.required_patterns)
+    
+    passed = len(found_forbidden) == 0 and len(missing_required) == 0
+    details = build_test_details(result_text, found_forbidden, missing_required)
+    
+    print_test(config.test_description, passed, details)
+    return passed
+
+
 def run_tool_test(command: list, env: dict, config: ToolTestConfig) -> bool:
     """
     Run a generic tool test with the given configuration.
@@ -204,33 +247,7 @@ def run_tool_test(command: list, env: dict, config: ToolTestConfig) -> bool:
             return False
         print_test("MCP server started", True)
         
-        client.initialize()
-        
-        tool_response = client.call_tool(config.tool_name, config.arguments)
-        result_text = extract_result_text(tool_response)
-        
-        # Check for forbidden patterns in the response
-        found_forbidden = []
-        for pattern in config.forbidden_patterns:
-            if pattern.lower() in result_text.lower():
-                found_forbidden.append(pattern)
-        
-        # Check for required patterns in the response
-        missing_required = []
-        if config.required_patterns:
-            for pattern in config.required_patterns:
-                if pattern.lower() not in result_text.lower():
-                    missing_required.append(pattern)
-        
-        passed = len(found_forbidden) == 0 and len(missing_required) == 0
-        details = f"Response: {result_text[:150]}..."
-        if found_forbidden:
-            details = f"Found forbidden patterns: {found_forbidden}\n{details}"
-        if missing_required:
-            details = f"Missing required patterns: {missing_required}\n{details}"
-        
-        print_test(config.test_description, passed, details)
-        return passed
+        return execute_tool_test(client, config)
         
     except Exception as e:
         print_test("Tool invocation", False, str(e))

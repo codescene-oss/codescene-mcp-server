@@ -30,6 +30,7 @@ import sys
 import tempfile
 import urllib.request
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 # Add parent directory for imports
@@ -58,6 +59,26 @@ MOUNT_PATH_ERROR = "CS_MOUNT_PATH"
 GIT_REPO_ERROR = "not in a git repository"
 NONETYPE_ERROR = "NoneType"
 PATH_ERROR = "path"  # Generic path-related errors
+
+
+@dataclass
+class CodeHealthTestParams:
+    """Parameters for building a code health test configuration."""
+    test_file: str
+    test_name: str
+    header: str
+    description: str
+    extra_forbidden: list[str] | None = None
+
+
+@dataclass
+class TestContext:
+    """Context for running all tests."""
+    binary_path: Path
+    git_test_file: str
+    git_tmpdir: str
+    worktree_test_file: str | None
+    worktree_created: bool
 
 
 def is_windows() -> bool:
@@ -121,46 +142,44 @@ def download_cs_cli(dest_dir: Path) -> Path:
     return cs_exe
 
 
-def build_binary(repo_root: Path) -> Path:
-    """
-    Build the cs-mcp.exe binary using Nuitka.
-    
-    Returns:
-        Path to the built binary
-    """
-    print_header("Building cs-mcp.exe")
-    
-    binary_path = repo_root / BINARY_NAME
-    
-    # Create virtual environment if needed
+def get_venv_paths(venv_dir: Path) -> tuple[Path, Path]:
+    """Get paths to venv Python and pip executables."""
+    if is_windows():
+        return venv_dir / "Scripts" / "python.exe", venv_dir / "Scripts" / "pip.exe"
+    return venv_dir / "bin" / "python", venv_dir / "bin" / "pip"
+
+
+def ensure_venv_exists(repo_root: Path) -> tuple[Path, Path]:
+    """Ensure virtual environment exists and return Python/pip paths."""
     venv_dir = repo_root / "venv"
     if not venv_dir.exists():
         print("    Creating virtual environment...")
         subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
-    
-    # Paths to venv Python and pip
-    if is_windows():
-        venv_python = venv_dir / "Scripts" / "python.exe"
-        venv_pip = venv_dir / "Scripts" / "pip.exe"
-    else:
-        venv_python = venv_dir / "bin" / "python"
-        venv_pip = venv_dir / "bin" / "pip"
-    
-    # Install dependencies
+    return get_venv_paths(venv_dir)
+
+
+def install_build_dependencies(repo_root: Path, venv_pip: Path) -> None:
+    """Install required dependencies for building."""
     print("    Installing dependencies...")
     requirements = repo_root / "src" / "requirements.txt"
     subprocess.run([str(venv_pip), "install", "-r", str(requirements)], check=True, capture_output=True)
     subprocess.run([str(venv_pip), "install", "Nuitka"], check=True, capture_output=True)
-    
-    # Download CS CLI if not present
+
+
+def ensure_cs_cli_exists(repo_root: Path) -> Path:
+    """Ensure CodeScene CLI exists, downloading if necessary."""
     cs_cli = repo_root / CS_CLI_NAME
     if not cs_cli.exists():
         cs_cli_downloaded = download_cs_cli(repo_root)
         if cs_cli_downloaded != cs_cli:
             shutil.copy(cs_cli_downloaded, cs_cli)
-    
-    # Build with Nuitka
+    return cs_cli
+
+
+def run_nuitka_build(repo_root: Path, venv_python: Path, cs_cli: Path) -> Path:
+    """Run Nuitka build and return path to built binary."""
     print("    Building with Nuitka (this may take a few minutes)...")
+    binary_path = repo_root / BINARY_NAME
     build_cmd = [
         str(venv_python), "-m", "nuitka",
         "--onefile",
@@ -181,6 +200,21 @@ def build_binary(repo_root: Path) -> Path:
     
     print(f"    ✓ Built {binary_path}")
     return binary_path
+
+
+def build_binary(repo_root: Path) -> Path:
+    """
+    Build the cs-mcp.exe binary using Nuitka.
+    
+    Returns:
+        Path to the built binary
+    """
+    print_header("Building cs-mcp.exe")
+    
+    venv_python, venv_pip = ensure_venv_exists(repo_root)
+    install_build_dependencies(repo_root, venv_pip)
+    cs_cli = ensure_cs_cli_exists(repo_root)
+    return run_nuitka_build(repo_root, venv_python, cs_cli)
 
 
 def ensure_binary_exists(repo_root: Path = REPO_ROOT) -> tuple[Path | None, str | None]:
@@ -295,16 +329,29 @@ def create_test_git_worktree_windows() -> tuple[str, str, str]:
     return base_dir, worktree_dir, test_file
 
 
+def build_code_health_test_config(params: CodeHealthTestParams) -> tuple[str, ToolTestConfig]:
+    """Build a code_health_score test configuration."""
+    forbidden = [MOUNT_PATH_ERROR, NONETYPE_ERROR, "Error:", "error:"]
+    if params.extra_forbidden:
+        forbidden.extend(params.extra_forbidden)
+    return (params.test_name, ToolTestConfig(
+        tool_name="code_health_score",
+        arguments={"file_path": params.test_file},
+        header=params.header,
+        forbidden_patterns=forbidden,
+        test_description=params.description,
+        required_patterns=["code health"],
+    ))
+
+
 def build_windows_path_test_configs(git_test_file: str) -> list[tuple[str, ToolTestConfig]]:
     """Build test configurations for Windows path handling."""
     return [
-        ("code_health_score (Windows absolute path)", ToolTestConfig(
-            tool_name="code_health_score",
-            arguments={"file_path": git_test_file},
+        build_code_health_test_config(CodeHealthTestParams(
+            test_file=git_test_file,
+            test_name="code_health_score (Windows absolute path)",
             header="Test code_health_score (Windows Absolute Path)",
-            forbidden_patterns=[MOUNT_PATH_ERROR, NONETYPE_ERROR, "Error:", "error:"],
-            test_description="Returns valid Code Health score for Windows path",
-            required_patterns=["code health"],
+            description="Returns valid Code Health score for Windows path",
         )),
     ]
 
@@ -312,13 +359,12 @@ def build_windows_path_test_configs(git_test_file: str) -> list[tuple[str, ToolT
 def build_windows_worktree_test_configs(worktree_test_file: str) -> list[tuple[str, ToolTestConfig]]:
     """Build test configurations for Windows git worktree handling."""
     return [
-        ("code_health_score (Windows worktree)", ToolTestConfig(
-            tool_name="code_health_score",
-            arguments={"file_path": worktree_test_file},
+        build_code_health_test_config(CodeHealthTestParams(
+            test_file=worktree_test_file,
+            test_name="code_health_score (Windows worktree)",
             header="Test code_health_score (Windows Git Worktree)",
-            forbidden_patterns=[MOUNT_PATH_ERROR, NONETYPE_ERROR, "Error:", "error:", "not a git repository"],
-            test_description="Returns valid Code Health score in Windows worktree",
-            required_patterns=["code health"],
+            description="Returns valid Code Health score in Windows worktree",
+            extra_forbidden=["not a git repository"],
         )),
     ]
 
@@ -398,38 +444,119 @@ def test_mcp_server_starts(binary_path: Path) -> bool:
         client.stop()
 
 
-def main():
-    # Check for explicit binary path argument
+def parse_binary_path_arg() -> Path | None:
+    """Parse binary path from command line argument."""
     if len(sys.argv) > 1:
         binary_path = Path(sys.argv[1])
         if not binary_path.exists():
-            print(f"Error: Specified binary not found: {binary_path}")
-            return 1
-    else:
-        binary_path = None
-    
+            raise FileNotFoundError(f"Specified binary not found: {binary_path}")
+        return binary_path
+    return None
+
+
+def print_test_banner() -> None:
+    """Print the test suite banner."""
     print("\n" + "=" * 60)
     print("  Windows Static Binary Path Resolution Integration Tests")
     print("  Testing: cs-mcp.exe with Windows paths and worktrees")
     print("=" * 60)
+
+
+def check_access_token() -> bool:
+    """Check if CS_ACCESS_TOKEN is set. Returns False if missing."""
+    if os.getenv("CS_ACCESS_TOKEN"):
+        return True
+    print("\n  ✗ SKIP: CS_ACCESS_TOKEN environment variable not set")
+    print("  These tests require a valid CodeScene access token.")
+    print("\n  Set it with:")
+    print("    set CS_ACCESS_TOKEN=your_token_here")
+    print("  Or in PowerShell:")
+    print("    $env:CS_ACCESS_TOKEN = 'your_token_here'")
+    return False
+
+
+def resolve_binary_path(explicit_path: Path | None) -> Path | None:
+    """Resolve binary path, building if necessary."""
+    if explicit_path:
+        return explicit_path
+    print("\n  Looking for cs-mcp.exe...")
+    binary_path, skip_reason = ensure_binary_exists()
+    if binary_path is None:
+        print(f"\n  ✗ SKIP: {skip_reason}")
+    return binary_path
+
+
+def create_worktree_environment() -> tuple[str | None, str | None, bool]:
+    """Create test worktree environment. Returns (base_dir, test_file, success)."""
+    print("\n  Creating temporary git worktree...")
+    try:
+        base_dir, worktree_dir, test_file = create_test_git_worktree_windows()
+        print(f"  Worktree dir: {worktree_dir}")
+        print(f"  Test file: {test_file}")
+        return base_dir, test_file, True
+    except Exception as e:
+        print(f"  Warning: Could not create worktree: {e}")
+        return None, None, False
+
+
+def run_test_configs(
+    binary_path: Path,
+    env: dict,
+    configs: list[tuple[str, ToolTestConfig]],
+) -> list[tuple[str, bool]]:
+    """Run a list of test configurations and return results."""
+    results = []
+    for name, config in configs:
+        passed = run_tool_test(command=[str(binary_path)], env=env, config=config)
+        results.append((name, passed))
+    return results
+
+
+def run_all_tests(ctx: TestContext) -> list[tuple[str, bool]]:
+    """Run all test suites and return combined results."""
+    results = []
     
-    # Check for access token first
-    if not os.getenv("CS_ACCESS_TOKEN"):
-        print("\n  ✗ SKIP: CS_ACCESS_TOKEN environment variable not set")
-        print("  These tests require a valid CodeScene access token.")
-        print("\n  Set it with:")
-        print("    set CS_ACCESS_TOKEN=your_token_here")
-        print("  Or in PowerShell:")
-        print("    $env:CS_ACCESS_TOKEN = 'your_token_here'")
+    # Environment and startup tests
+    results.append(("Environment Setup", test_environment_setup(ctx.binary_path)))
+    results.append(("MCP Server Startup", test_mcp_server_starts(ctx.binary_path)))
+    
+    # Only continue if server starts
+    if not results[-1][1]:
+        print("\n  ✗ Server failed to start, skipping remaining tests")
+        return results
+    
+    env = create_static_mode_env()
+    
+    # Run path resolution tests
+    print_header("Windows Path Resolution Tests")
+    results.extend(run_test_configs(ctx.binary_path, env, build_windows_path_test_configs(ctx.git_test_file)))
+    
+    # Run pre-commit tests
+    results.extend(run_test_configs(ctx.binary_path, env, build_pre_commit_test_configs(ctx.git_tmpdir)))
+    
+    # Run worktree tests if available
+    if ctx.worktree_created and ctx.worktree_test_file:
+        print_header("Windows Git Worktree Tests")
+        results.extend(run_test_configs(ctx.binary_path, env, build_windows_worktree_test_configs(ctx.worktree_test_file)))
+    
+    return results
+
+
+def main():
+    try:
+        explicit_binary_path = parse_binary_path_arg()
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        return 1
+    
+    print_test_banner()
+    
+    if not check_access_token():
         return 0  # Return 0 to not fail CI when token isn't available
     
-    # Ensure binary exists
+    binary_path = resolve_binary_path(explicit_binary_path)
     if binary_path is None:
-        print("\n  Looking for cs-mcp.exe...")
-        binary_path, skip_reason = ensure_binary_exists()
-        if binary_path is None:
-            print(f"\n  ✗ SKIP: {skip_reason}")
-            return 0  # Skip gracefully
+        return 0  # Skip gracefully
     
     print(f"\n  Using binary: {binary_path}")
     
@@ -439,53 +566,19 @@ def main():
     print(f"  Test repo: {git_tmpdir}")
     print(f"  Test file: {git_test_file}")
     
-    # Create worktree
-    print("\n  Creating temporary git worktree...")
-    worktree_base_dir = None
-    worktree_test_file = None
-    worktree_created = False
-    try:
-        worktree_base_dir, worktree_dir, worktree_test_file = create_test_git_worktree_windows()
-        print(f"  Worktree dir: {worktree_dir}")
-        print(f"  Test file: {worktree_test_file}")
-        worktree_created = True
-    except Exception as e:
-        print(f"  Warning: Could not create worktree: {e}")
+    worktree_base_dir, worktree_test_file, worktree_created = create_worktree_environment()
+    
+    ctx = TestContext(
+        binary_path=binary_path,
+        git_test_file=git_test_file,
+        git_tmpdir=git_tmpdir,
+        worktree_test_file=worktree_test_file,
+        worktree_created=worktree_created,
+    )
     
     try:
-        results = []
-        
-        # Environment and startup tests
-        results.append(("Environment Setup", test_environment_setup(binary_path)))
-        results.append(("MCP Server Startup", test_mcp_server_starts(binary_path)))
-        
-        # Only continue if server starts
-        if not results[-1][1]:
-            print("\n  ✗ Server failed to start, skipping remaining tests")
-            return print_test_summary(results)
-        
-        # Run path resolution tests
-        env = create_static_mode_env()
-        
-        print_header("Windows Path Resolution Tests")
-        for name, config in build_windows_path_test_configs(git_test_file):
-            passed = run_tool_test(command=[str(binary_path)], env=env, config=config)
-            results.append((name, passed))
-        
-        # Run pre-commit tests
-        for name, config in build_pre_commit_test_configs(git_tmpdir):
-            passed = run_tool_test(command=[str(binary_path)], env=env, config=config)
-            results.append((name, passed))
-        
-        # Run worktree tests if available
-        if worktree_created and worktree_test_file:
-            print_header("Windows Git Worktree Tests")
-            for name, config in build_windows_worktree_test_configs(worktree_test_file):
-                passed = run_tool_test(command=[str(binary_path)], env=env, config=config)
-                results.append((name, passed))
-        
+        results = run_all_tests(ctx)
         return print_test_summary(results)
-    
     finally:
         cleanup_test_dir(git_tmpdir)
         if worktree_base_dir:
