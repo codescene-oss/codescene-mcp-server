@@ -4,7 +4,7 @@ from typing import TypedDict, Callable, Optional
 
 from code_health_tools.delta_analysis import analyze_delta_output
 from utils import cs_cli_path, adapt_mounted_file_path_inside_docker, adapt_worktree_gitdir_for_docker, run_cs_cli, track, with_version_check, get_platform_details
-
+from utils.docker_path_adapter import get_worktree_gitdir
 
 class PreCommitCodeHealthSafeguardDeps(TypedDict):
     run_local_tool_fn: Callable[[list, Optional[str], Optional[dict]], str]
@@ -29,8 +29,12 @@ class PreCommitCodeHealthSafeguard:
         return json.dumps(analyze_delta_output(output))
 
     def _safeguard_code_on_local(self, cli_command: list, git_repository_path: str) -> str:
-        """Handle pre-commit safeguard in local/native environment."""
-        output = self.deps["run_local_tool_fn"](cli_command, git_repository_path, None)
+        """Handle pre-commit safeguard in local/native environment."""        
+        # Detect worktree and set GIT_DIR if needed (mirrors Docker mode logic)
+        gitdir = get_worktree_gitdir(git_repository_path)
+        extra_env = {"GIT_DIR": gitdir} if gitdir else None
+        
+        output = self.deps["run_local_tool_fn"](cli_command, git_repository_path, extra_env)
         return json.dumps(analyze_delta_output(output))
 
     @track("pre-commit-code-health-safeguard")

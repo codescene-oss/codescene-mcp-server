@@ -1,5 +1,6 @@
 import json
 import os
+import tempfile
 import unittest
 from unittest import mock
 from fastmcp import FastMCP
@@ -73,3 +74,70 @@ Input: string output"""
         self.assertEqual(json.dumps(expected), result)
         # Verify the path was passed directly without Docker translation
         self.assertEqual(captured_path[-1], "/my/local/git/path")
+
+
+class TestPreCommitCodeHealthSafeguardWorktree(unittest.TestCase):
+    """Tests for pre-commit safeguard git worktree support in static mode."""
+
+    def setUp(self):
+        self._env = dict(os.environ)
+        # Create a temp worktree-like structure
+        self.temp_dir = os.path.realpath(tempfile.mkdtemp())
+        
+        # Write .git file pointing to main repo's worktrees
+        self.worktree_gitdir = '/path/to/main/.git/worktrees/feature'
+        with open(os.path.join(self.temp_dir, '.git'), 'w') as f:
+            f.write(f'gitdir: {self.worktree_gitdir}')
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self._env)
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_safeguard_local_sets_git_dir_for_worktree(self):
+        """Test that local safeguard sets GIT_DIR for worktree environments."""
+        os.environ.pop("CS_MOUNT_PATH", None)
+        
+        captured_extra_env = []
+        
+        def mock_run_local_tool(cli_command, path, extra_env=None):
+            captured_extra_env.append(extra_env)
+            return json.dumps([{'name': 'test.tsx'}])
+
+        instance = PreCommitCodeHealthSafeguard(FastMCP("Test"), {
+            'run_local_tool_fn': mock_run_local_tool
+        })
+
+        instance.pre_commit_code_health_safeguard(self.temp_dir)
+
+        # Verify GIT_DIR was passed in extra_env
+        self.assertEqual(len(captured_extra_env), 1)
+        extra_env = captured_extra_env[0]
+        self.assertIsNotNone(extra_env)
+        self.assertIn('GIT_DIR', extra_env)
+        self.assertEqual(self.worktree_gitdir, extra_env['GIT_DIR'])
+
+    def test_safeguard_local_no_extra_env_for_regular_repo(self):
+        """Test that local safeguard doesn't set GIT_DIR for regular repos."""
+        os.environ.pop("CS_MOUNT_PATH", None)
+        
+        # Create a regular repo with .git directory
+        regular_repo = os.path.join(self.temp_dir, 'regular')
+        os.makedirs(os.path.join(regular_repo, '.git'))
+        
+        captured_extra_env = []
+        
+        def mock_run_local_tool(cli_command, path, extra_env=None):
+            captured_extra_env.append(extra_env)
+            return json.dumps([{'name': 'test.tsx'}])
+
+        instance = PreCommitCodeHealthSafeguard(FastMCP("Test"), {
+            'run_local_tool_fn': mock_run_local_tool
+        })
+
+        instance.pre_commit_code_health_safeguard(regular_repo)
+
+        # Verify extra_env was None (no GIT_DIR needed)
+        self.assertEqual(len(captured_extra_env), 1)
+        self.assertIsNone(captured_extra_env[0])

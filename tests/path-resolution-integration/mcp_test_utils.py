@@ -170,6 +170,50 @@ class ToolTestConfig:
     header: str
     forbidden_patterns: list[str]
     test_description: str
+    required_patterns: list[str] | None = None  # Patterns that MUST be in the response
+
+
+def find_forbidden_patterns(text: str, patterns: list[str]) -> list[str]:
+    """Find which forbidden patterns appear in the text."""
+    return [p for p in patterns if p.lower() in text.lower()]
+
+
+def find_missing_patterns(text: str, patterns: list[str] | None) -> list[str]:
+    """Find which required patterns are missing from the text."""
+    if not patterns:
+        return []
+    return [p for p in patterns if p.lower() not in text.lower()]
+
+
+def build_test_details(
+    result_text: str,
+    found_forbidden: list[str],
+    missing_required: list[str],
+) -> str:
+    """Build the test details message."""
+    details = f"Response: {result_text[:150]}..."
+    if found_forbidden:
+        details = f"Found forbidden patterns: {found_forbidden}\n{details}"
+    if missing_required:
+        details = f"Missing required patterns: {missing_required}\n{details}"
+    return details
+
+
+def execute_tool_test(client: MCPClient, config: ToolTestConfig) -> bool:
+    """Execute the tool test and check results. Assumes client is started."""
+    client.initialize()
+    
+    tool_response = client.call_tool(config.tool_name, config.arguments)
+    result_text = extract_result_text(tool_response)
+    
+    found_forbidden = find_forbidden_patterns(result_text, config.forbidden_patterns)
+    missing_required = find_missing_patterns(result_text, config.required_patterns)
+    
+    passed = len(found_forbidden) == 0 and len(missing_required) == 0
+    details = build_test_details(result_text, found_forbidden, missing_required)
+    
+    print_test(config.test_description, passed, details)
+    return passed
 
 
 def run_tool_test(command: list, env: dict, config: ToolTestConfig) -> bool:
@@ -182,6 +226,7 @@ def run_tool_test(command: list, env: dict, config: ToolTestConfig) -> bool:
     - Initializing the session
     - Calling the specified tool
     - Checking the response for forbidden patterns
+    - Checking the response for required patterns
     - Cleanup
     
     Args:
@@ -202,24 +247,7 @@ def run_tool_test(command: list, env: dict, config: ToolTestConfig) -> bool:
             return False
         print_test("MCP server started", True)
         
-        client.initialize()
-        
-        tool_response = client.call_tool(config.tool_name, config.arguments)
-        result_text = extract_result_text(tool_response)
-        
-        # Check for forbidden patterns in the response
-        found_patterns = []
-        for pattern in config.forbidden_patterns:
-            if pattern.lower() in result_text.lower():
-                found_patterns.append(pattern)
-        
-        passed = len(found_patterns) == 0
-        details = f"Response: {result_text[:150]}..."
-        if found_patterns:
-            details = f"Found forbidden patterns: {found_patterns}\n{details}"
-        
-        print_test(config.test_description, passed, details)
-        return passed
+        return execute_tool_test(client, config)
         
     except Exception as e:
         print_test("Tool invocation", False, str(e))
@@ -297,6 +325,57 @@ def cleanup_test_dir(tmpdir: str):
         shutil.rmtree(tmpdir)
     except Exception:
         pass
+
+
+def create_test_git_worktree() -> tuple[str, str, str]:
+    """
+    Create a temporary git worktree with a test file.
+    
+    This creates:
+    1. A main git repository with initial commit
+    2. A worktree linked to that repository
+    3. A test file in the worktree
+    
+    Returns:
+        Tuple of (base_dir, worktree_dir, test_file_path)
+        base_dir contains both main repo and worktree, use for cleanup
+    """
+    # Create base temp directory to hold both main repo and worktree
+    base_dir = tempfile.mkdtemp(prefix="mcp-worktree-test-")
+    main_dir = os.path.join(base_dir, "main-repo")
+    worktree_dir = os.path.join(base_dir, "worktree")
+    os.makedirs(main_dir)
+    
+    # Initialize main repo
+    subprocess.run(["git", "init"], cwd=main_dir, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=main_dir, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=main_dir, capture_output=True)
+    
+    # Create and commit a file in main repo
+    src_dir = os.path.join(main_dir, "src")
+    os.makedirs(src_dir)
+    test_file_main = os.path.join(src_dir, "TestFile.java")
+    with open(test_file_main, "w", encoding="utf-8") as f:
+        f.write("""public class TestFile {
+    public void hello() {
+        System.out.println("Hello");
+    }
+}
+""")
+    subprocess.run(["git", "add", "."], cwd=main_dir, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=main_dir, capture_output=True)
+    
+    # Create worktree
+    result = subprocess.run(
+        ["git", "worktree", "add", worktree_dir, "-b", "test-worktree-branch"],
+        cwd=main_dir, capture_output=True, text=True
+    )
+    
+    if result.returncode != 0:
+        raise RuntimeError(f"Failed to create worktree: {result.stderr}")
+    
+    test_file = os.path.join(worktree_dir, "src", "TestFile.java")
+    return base_dir, worktree_dir, test_file
 
 
 def print_test_summary(results: list[tuple[str, bool]]) -> int:

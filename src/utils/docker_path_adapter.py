@@ -114,6 +114,27 @@ def _read_worktree_gitdir(git_path: str) -> str | None:
     return None
 
 
+def get_worktree_gitdir(git_root_path: str) -> str | None:
+    """
+    Detect if git_root_path is a git worktree and return the gitdir path.
+    
+    Git worktrees have a .git file (not directory) containing a path like:
+        gitdir: /path/to/main-repo/.git/worktrees/my-branch
+    
+    This function reads that .git file and returns the gitdir path if present.
+    Works for both Docker and static modes - returns the raw path without
+    any Docker path translation.
+    
+    Args:
+        git_root_path: Path to the git repository root directory
+        
+    Returns:
+        The gitdir path if this is a worktree, None if it's a regular repo
+    """
+    git_file = os.path.join(git_root_path, '.git')
+    return _read_worktree_gitdir(git_file)
+
+
 def get_relative_file_path_for_api(file_path: str) -> str:
     """
     Get a relative file path suitable for CodeScene API calls.
@@ -133,8 +154,6 @@ def get_relative_file_path_for_api(file_path: str) -> str:
     Returns:
         A relative path string suitable for API filtering.
     """
-    from pathlib import Path
-    
     # Docker mode - use mount path logic
     if os.getenv("CS_MOUNT_PATH"):
         mounted_path = adapt_mounted_file_path_inside_docker(file_path)
