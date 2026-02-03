@@ -390,20 +390,22 @@ class ExecutableBuilder:
             shutil.rmtree(docs_dest)
         shutil.copytree(self.config.repo_root / "src" / "docs", docs_dest)
         
-        # Copy cs CLI if it exists in repo root
-        cs_cli_names = ["cs", "cs.exe"]
-        cs_cli_found = False
-        for cs_name in cs_cli_names:
-            cs_source = self.config.repo_root / cs_name
-            if cs_source.exists():
-                cs_dest = self.config.build_dir / cs_name
-                shutil.copy2(cs_source, cs_dest)
-                print(f"  Copied {cs_name} to build directory")
-                cs_cli_found = True
-                break
+        # Get cs CLI - either from repo root or download
+        is_windows = os.name == "nt" or platform.system() == "Windows"
+        cs_name = "cs.exe" if is_windows else "cs"
+        cs_source = self.config.repo_root / cs_name
         
-        if not cs_cli_found:
-            print("  Warning: No cs/cs.exe found in repo root")
+        if cs_source.exists():
+            cs_dest = self.config.build_dir / cs_name
+            shutil.copy2(cs_source, cs_dest)
+            print(f"  Copied {cs_name} from repo root")
+        else:
+            print(f"  No {cs_name} found in repo root, downloading...")
+            cli_path = self._download_cli(self.config.build_dir)
+            # Ensure it's named correctly
+            cs_dest = self.config.build_dir / cs_name
+            if cli_path != cs_dest:
+                shutil.move(str(cli_path), str(cs_dest))
         
         # Build with Nuitka
         print("  Building with Nuitka (this may take several minutes)...")
