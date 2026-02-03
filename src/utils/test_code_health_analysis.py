@@ -313,7 +313,8 @@ class TestCsCliPath(unittest.TestCase):
 
         # Should return a path ending with either 'cs' or 'cs.exe' depending on platform
         self.assertTrue(result.endswith('cs') or result.endswith('cs.exe'))
-        self.assertIn('src', result)
+        # The bundled binary is in the project root (parent of src/)
+        self.assertIn('codescene-mcp-server', result)
 
     @mock.patch('utils.code_health_analysis.sys')
     @mock.patch('utils.code_health_analysis.Path.exists')
@@ -329,7 +330,8 @@ class TestCsCliPath(unittest.TestCase):
         result = cs_cli_path(platform_details)
 
         self.assertTrue(result.endswith('cs.exe'))
-        self.assertIn('src', result)
+        # The bundled binary is in the project root (parent of src/)
+        self.assertIn('codescene-mcp-server', result)
 
     @mock.patch('utils.code_health_analysis.Path.exists')
     @mock.patch('os.access')

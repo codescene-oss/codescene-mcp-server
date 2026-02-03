@@ -119,21 +119,42 @@ def code_health_from_cli_output(cli_output) -> float:
 
 
 def cs_cli_path(platform_details):
-    bundle_dir = Path(__file__).parent.parent.absolute()
+    # Check for environment variable override first
+    if os.getenv("CS_CLI_PATH"):
+        return os.getenv("CS_CLI_PATH")
 
-    # Check for bundled binary using platform-specific name
-    internal_cs_path = bundle_dir / platform_details.get_cli_binary_name()
+    # Docker environment - use static path
+    if os.getenv("CS_MOUNT_PATH"):
+        return '/root/.local/bin/cs'
+
+    cli_binary_name = platform_details.get_cli_binary_name()
+
+    # For Nuitka compiled binaries, __compiled__.containing_dir gives the
+    # distribution/extraction root where cs.exe is placed
+    try:
+        # __compiled__ is set by Nuitka at runtime
+        compiled_dir = __compiled__.containing_dir  # type: ignore[name-defined]
+        nuitka_cs_path = Path(compiled_dir) / cli_binary_name
+        if nuitka_cs_path.exists():
+            if not os.access(nuitka_cs_path, os.X_OK):
+                os.chmod(nuitka_cs_path, 0o755)
+            return str(nuitka_cs_path)
+    except NameError:
+        # Not running as Nuitka compiled binary
+        pass
+
+    # Check for bundled binary in source tree (development mode)
+    # From src/utils/code_health_analysis.py, go up to project root
+    # (parent.parent = src/, parent.parent.parent = project root)
+    bundle_dir = Path(__file__).parent.parent.parent.absolute()
+    internal_cs_path = bundle_dir / cli_binary_name
 
     if internal_cs_path.exists():
         if not os.access(internal_cs_path, os.X_OK):
             os.chmod(internal_cs_path, 0o755)
         return str(internal_cs_path)
 
-    # Check for environment variable override
-    if os.getenv("CS_CLI_PATH"):
-        return os.getenv("CS_CLI_PATH")
-
-    # Fall back to static docker default
+    # Fall back to static docker default (shouldn't reach here normally)
     return '/root/.local/bin/cs'
 
 
