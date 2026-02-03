@@ -76,7 +76,9 @@ def run_local_tool(command: list, cwd: str | None = None, extra_env: dict | None
             # Insert SSL args after the CLI binary, before subcommand
             actual_command = [command[0]] + ssl_args + command[1:]
 
-    result = subprocess.run(actual_command, capture_output=True, text=True, encoding="utf-8", cwd=cwd, env=env)
+    # Use 'replace' error handling to gracefully handle encoding issues on Windows
+    # where the CLI may output text in CP1252 instead of UTF-8
+    result = subprocess.run(actual_command, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd, env=env)
     if result.returncode != 0:
         raise CodeSceneCliError(f"CLI command failed: {result.stderr}")
     
