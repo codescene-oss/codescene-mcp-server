@@ -93,6 +93,7 @@ Options:
   --executable PATH   Use existing executable (skip build)
   --platform-only     Run only platform-specific tests
   --worktree-only     Run only git worktree tests
+  --subtree-only      Run only git subtree tests
   --skip-build        Skip build step (use previously built executable)
 
 Environment Variables:
@@ -134,6 +135,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --worktree-only)
             TEST_MODE="worktree"
+            shift
+            ;;
+        --subtree-only)
+            TEST_MODE="subtree"
             shift
             ;;
         --skip-build)
@@ -194,6 +199,14 @@ main() {
                 exit 1
             fi
             python3 test_git_worktree.py "$EXECUTABLE"
+            ;;
+        subtree)
+            echo "Running git subtree tests..."
+            if [ -z "$EXECUTABLE" ]; then
+                echo -e "${RED}--subtree-only requires --executable option${NC}"
+                exit 1
+            fi
+            python3 test_git_subtree.py "$EXECUTABLE"
             ;;
     esac
     

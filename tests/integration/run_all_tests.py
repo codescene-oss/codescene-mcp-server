@@ -341,6 +341,22 @@ def run_all_tests(executable: Path) -> int:
         all_results.append(("Outside Git Repo", test_outside_git_repo(executable, test_dir)))
         all_results.append(("No Bundled CLI", test_no_bundled_cli_interference(executable, test_dir)))
         
+        # Run git worktree tests
+        print("\n" + "="*70)
+        print("  Running Git Worktree Tests")
+        print("="*70)
+        from test_git_worktree import run_worktree_tests
+        worktree_result = run_worktree_tests(executable)
+        all_results.append(("Git Worktree Tests", worktree_result == 0))
+        
+        # Run git subtree tests
+        print("\n" + "="*70)
+        print("  Running Git Subtree Tests")
+        print("="*70)
+        from test_git_subtree import run_subtree_tests
+        subtree_result = run_subtree_tests(executable)
+        all_results.append(("Git Subtree Tests", subtree_result == 0))
+        
         return print_summary(all_results)
 
 

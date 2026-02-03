@@ -477,7 +477,7 @@ def create_git_repo(base_dir: Path, sample_files: dict[str, str]) -> Path:
     repo_dir.mkdir(parents=True, exist_ok=True)
     
     # Initialize git repo
-    subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
+    subprocess.run(["git", "init", "-b", "master"], cwd=repo_dir, check=True, capture_output=True)
     subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True, capture_output=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True, capture_output=True)
     

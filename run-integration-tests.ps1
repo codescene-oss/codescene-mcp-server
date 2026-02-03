@@ -23,6 +23,7 @@ param(
     [string]$Executable = "",
     [switch]$PlatformOnly,
     [switch]$WorktreeOnly,
+    [switch]$SubtreeOnly,
     [switch]$SkipBuild
 )
 
@@ -66,6 +67,7 @@ Options:
   -Executable PATH   Use existing executable (skip build)
   -PlatformOnly      Run only platform-specific tests
   -WorktreeOnly      Run only git worktree tests
+  -SubtreeOnly       Run only git subtree tests
   -SkipBuild         Skip build step (use previously built executable)
 
 Environment Variables:
@@ -185,6 +187,14 @@ function Main {
                 exit 1
             }
             python test_git_worktree.py $Executable
+        }
+        elseif ($SubtreeOnly) {
+            Write-Host "Running git subtree tests..."
+            if (-not $Executable) {
+                Write-Error-Message "--SubtreeOnly requires -Executable option"
+                exit 1
+            }
+            python test_git_subtree.py $Executable
         }
         else {
             Write-Host "Running comprehensive test suite..."

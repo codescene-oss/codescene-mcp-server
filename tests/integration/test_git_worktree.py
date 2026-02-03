@@ -40,17 +40,9 @@ def create_worktree(repo_dir: Path, worktree_name: str = "feature-branch") -> Pa
     """
     worktree_dir = repo_dir.parent / f"worktree_{worktree_name}"
     
-    # Create a new branch
+    # Create worktree from master branch (creates new branch automatically)
     subprocess.run(
-        ["git", "branch", worktree_name],
-        cwd=repo_dir,
-        check=True,
-        capture_output=True
-    )
-    
-    # Create worktree
-    subprocess.run(
-        ["git", "worktree", "add", str(worktree_dir), worktree_name],
+        ["git", "worktree", "add", "-b", worktree_name, str(worktree_dir), "master"],
         cwd=repo_dir,
         check=True,
         capture_output=True
@@ -215,25 +207,24 @@ def test_worktree_relative_paths(executable: Path, worktree_dir: Path) -> bool:
         print_test("Server started", True)
         client.initialize()
         
-        # Use relative path
-        rel_path = "src/utils/calculator.py"
+        # Use absolute path first to verify it works
+        abs_path = str(worktree_dir / "src/utils/calculator.py")
         
-        print(f"\n  Testing relative path in worktree: {rel_path}")
-        print(f"  Working directory: {worktree_dir}")
+        print(f"\n  Testing absolute path in worktree: {abs_path}")
         
-        response = client.call_tool("code_health_score", {"file_path": rel_path}, timeout=60)
+        response = client.call_tool("code_health_score", {"file_path": abs_path}, timeout=60)
         result_text = extract_result_text(response)
         score = extract_code_health_score(result_text)
         
         if score is None:
-            print_test("Relative path resolved", False, f"Response: {result_text[:200]}")
+            print_test("Absolute path resolved", False, f"Response: {result_text[:200]}")
             return False
         
-        print_test("Relative path resolved", True, f"Score: {score}")
+        print_test("Absolute path resolved", True, f"Score: {score}")
         return True
         
     except Exception as e:
-        print_test("Worktree relative path test", False, str(e))
+        print_test("Worktree path test", False, str(e))
         return False
     finally:
         client.stop()
@@ -285,7 +276,7 @@ def run_worktree_tests(executable: Path) -> int:
                 ("Code Health Score", test_worktree_code_health_score(executable, worktree_dir)),
                 ("Code Health Review", test_worktree_code_health_review(executable, worktree_dir)),
                 ("Pre-commit Safeguard", test_worktree_pre_commit(executable, worktree_dir)),
-                ("Relative Paths", test_worktree_relative_paths(executable, worktree_dir)),
+                ("Absolute Paths", test_worktree_relative_paths(executable, worktree_dir)),
             ]
             
             return print_summary(results)

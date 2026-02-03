@@ -16,6 +16,8 @@ make test-integration
 # Run specific test suites
 make test-integration-platform
 make test-integration-worktree
+./run-integration-tests.sh --worktree-only --executable /path/to/cs-mcp
+./run-integration-tests.sh --subtree-only --executable /path/to/cs-mcp
 ```
 
 ### Windows
@@ -29,6 +31,7 @@ make test-integration-worktree
 # Run specific test suites
 .\run-integration-tests.ps1 -PlatformOnly -Executable C:\path\to\cs-mcp.exe
 .\run-integration-tests.ps1 -WorktreeOnly -Executable C:\path\to\cs-mcp.exe
+.\run-integration-tests.ps1 -SubtreeOnly -Executable C:\path\to\cs-mcp.exe
 ```
 
 ## Prerequisites
@@ -42,6 +45,8 @@ pip install nuitka
 export CS_ACCESS_TOKEN="your_token_here"
 
 # Note: CS CLI is downloaded automatically if not present
+# Note: git-subtree tests will be skipped if git-subtree is not installed
+#       (it's a contrib command, not always available by default)
 ```
 
 ### Windows
