@@ -76,7 +76,9 @@ def run_local_tool(command: list, cwd: str | None = None, extra_env: dict | None
             # Insert SSL args after the CLI binary, before subcommand
             actual_command = [command[0]] + ssl_args + command[1:]
 
-    result = subprocess.run(actual_command, capture_output=True, text=True, encoding="utf-8", cwd=cwd, env=env)
+    # Use 'replace' error handling to gracefully handle encoding issues on Windows
+    # where the CLI may output text in CP1252 instead of UTF-8
+    result = subprocess.run(actual_command, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd, env=env)
     if result.returncode != 0:
         raise CodeSceneCliError(f"CLI command failed: {result.stderr}")
     
@@ -125,6 +127,52 @@ def _ensure_executable(path: Path) -> str:
     return str(path)
 
 
+def _is_nuitka_environment() -> bool:
+    """Check if running in a Nuitka compiled environment."""
+    try:
+        __compiled__  # type: ignore[name-defined]
+        return True
+    except NameError:
+        return False
+
+
+def _get_nuitka_cli_locations(cli_binary_name: str) -> list[Path]:
+    """
+    Get list of potential CLI binary locations in Nuitka environment.
+    
+    For onefile builds with --include-data-files, the cs binary location differs:
+    - Linux: next to the executable (sys.executable.parent)
+    - Windows: in the extraction root (traverse up from __file__ until we find it)
+    """
+    locations = [
+        # Linux: next to the executable
+        Path(sys.executable).parent / cli_binary_name,
+        # Alternative: relative to sys.argv[0]
+        Path(sys.argv[0]).parent.absolute() / cli_binary_name,
+    ]
+    
+    # Windows: Walk up from __file__ to find the cs binary
+    # On Windows, __file__ might be something like:
+    # C:/Users/.../Temp/onefile_12345/.../src/utils/code_health_analysis.py
+    # and cs.exe would be in the onefile_12345 directory
+    current = Path(__file__).parent
+    for _ in range(10):  # Try up to 10 levels up
+        locations.append(current / cli_binary_name)
+        if current.parent == current:  # Reached root
+            break
+        current = current.parent
+    
+    return locations
+
+
+def _find_existing_cli_binary(locations: list[Path]) -> str | None:
+    """Find the first existing CLI binary from a list of locations."""
+    for location in locations:
+        if location.exists():
+            return _ensure_executable(location)
+    return None
+
+
 def _try_nuitka_cli_path(cli_binary_name: str):
     """
     Try to find CLI binary in Nuitka compiled environment.
@@ -132,14 +180,17 @@ def _try_nuitka_cli_path(cli_binary_name: str):
     Returns:
         str: Path to CLI binary if found, None otherwise.
     """
-    try:
-        compiled_dir = __compiled__.containing_dir  # type: ignore[name-defined]
-        nuitka_cs_path = Path(compiled_dir) / cli_binary_name
-        if nuitka_cs_path.exists():
-            return _ensure_executable(nuitka_cs_path)
-    except NameError:
-        pass
-    return None
+    if not _is_nuitka_environment():
+        print(f"DEBUG: Not in Nuitka environment (__compiled__ not found)", file=sys.stderr)
+        return None
+    
+    locations = _get_nuitka_cli_locations(cli_binary_name)
+    cli_path = _find_existing_cli_binary(locations)
+    
+    if not cli_path:
+        print(f"DEBUG Nuitka: cs binary not found in any location", file=sys.stderr)
+    
+    return cli_path
 
 
 def _try_bundled_cli_path(cli_binary_name: str):

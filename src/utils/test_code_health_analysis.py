@@ -19,6 +19,9 @@ from utils.code_health_analysis import (
     make_cs_cli_review_command_for,
     cs_cli_review_command_for,
     _try_nuitka_cli_path,
+    _is_nuitka_environment,
+    _get_nuitka_cli_locations,
+    _find_existing_cli_binary,
 )
 
 
@@ -396,6 +399,125 @@ class TestCsCliReviewCommandFor(unittest.TestCase):
         self.assertEqual(result, ["/path/to/cs", "review", "/foo.py", "--output-format=json"])
 
 
+class TestIsNuitkaEnvironment(unittest.TestCase):
+    """Tests for _is_nuitka_environment helper function."""
+    
+    def test_returns_false_when_not_in_nuitka(self):
+        """Test that _is_nuitka_environment returns False in normal Python."""
+        result = _is_nuitka_environment()
+        self.assertFalse(result)
+    
+    def test_returns_true_when_compiled_exists(self):
+        """Test that _is_nuitka_environment returns True when __compiled__ exists."""
+        original_compiled = getattr(builtins, '__compiled__', None)
+        builtins.__compiled__ = mock.MagicMock()  # type: ignore[attr-defined]
+        
+        try:
+            result = _is_nuitka_environment()
+            self.assertTrue(result)
+        finally:
+            if original_compiled is None:
+                delattr(builtins, '__compiled__')
+            else:
+                builtins.__compiled__ = original_compiled  # type: ignore[attr-defined]
+
+
+class TestGetNuitkaCliLocations(unittest.TestCase):
+    """Tests for _get_nuitka_cli_locations helper function."""
+    
+    def test_returns_list_with_multiple_locations(self):
+        """Test that multiple potential locations are returned."""
+        result = _get_nuitka_cli_locations('cs')
+        
+        self.assertIsInstance(result, list)
+        self.assertGreater(len(result), 2)  # Should have at least base locations + some parent dirs
+        
+    def test_includes_sys_executable_location(self):
+        """Test that sys.executable parent is included."""
+        result = _get_nuitka_cli_locations('cs')
+        expected = Path(sys.executable).parent / 'cs'
+        self.assertIn(expected, result)
+    
+    def test_includes_argv_location(self):
+        """Test that sys.argv[0] parent is included."""
+        result = _get_nuitka_cli_locations('cs')
+        expected = Path(sys.argv[0]).parent.absolute() / 'cs'
+        self.assertIn(expected, result)
+    
+    def test_respects_custom_binary_name(self):
+        """Test that custom binary names are used."""
+        result = _get_nuitka_cli_locations('cs.exe')
+        # All locations should end with cs.exe
+        for location in result:
+            self.assertEqual(location.name, 'cs.exe')
+
+
+class TestFindExistingCliBinary(unittest.TestCase):
+    """Tests for _find_existing_cli_binary helper function."""
+    
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+    
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def test_returns_none_when_no_locations_exist(self):
+        """Test that None is returned when no locations exist."""
+        locations = [
+            Path('/nonexistent/path1/cs'),
+            Path('/nonexistent/path2/cs'),
+        ]
+        result = _find_existing_cli_binary(locations)
+        self.assertIsNone(result)
+    
+    def test_returns_first_existing_location(self):
+        """Test that the first existing location is returned."""
+        # Create two files
+        file1 = Path(self.temp_dir) / 'cs1'
+        file2 = Path(self.temp_dir) / 'cs2'
+        file1.touch()
+        file2.touch()
+        
+        locations = [
+            Path('/nonexistent/cs'),
+            file1,
+            file2,
+        ]
+        
+        result = _find_existing_cli_binary(locations)
+        self.assertEqual(result, str(file1))
+    
+    @mock.patch('os.access')
+    @mock.patch('os.chmod')
+    def test_makes_binary_executable_when_not_executable(self, mock_chmod, mock_access):
+        """Test that chmod is called when binary exists but is not executable."""
+        binary_file = Path(self.temp_dir) / 'cs'
+        binary_file.touch()
+        
+        mock_access.return_value = False  # Not executable
+        
+        locations = [binary_file]
+        result = _find_existing_cli_binary(locations)
+        
+        mock_chmod.assert_called_once_with(binary_file, 0o755)
+        self.assertEqual(result, str(binary_file))
+    
+    @mock.patch('os.access')
+    def test_returns_executable_without_chmod_when_already_executable(self, mock_access):
+        """Test that chmod is not called when binary is already executable."""
+        binary_file = Path(self.temp_dir) / 'cs'
+        binary_file.touch()
+        
+        mock_access.return_value = True  # Already executable
+        
+        locations = [binary_file]
+        
+        with mock.patch('os.chmod') as mock_chmod:
+            result = _find_existing_cli_binary(locations)
+            mock_chmod.assert_not_called()
+            self.assertEqual(result, str(binary_file))
+
+
 class TestTryNuitkaCliPath(unittest.TestCase):
     def setUp(self):
         self._env = dict(os.environ)
@@ -404,35 +526,22 @@ class TestTryNuitkaCliPath(unittest.TestCase):
         os.environ.clear()
         os.environ.update(self._env)
 
-    @mock.patch('os.chmod')
-    @mock.patch('os.access')
-    def test_returns_nuitka_path_when_compiled_and_binary_exists(self, mock_access, mock_chmod):
+    @mock.patch('utils.code_health_analysis._find_existing_cli_binary')
+    @mock.patch('utils.code_health_analysis._get_nuitka_cli_locations')
+    @mock.patch('utils.code_health_analysis._is_nuitka_environment')
+    def test_returns_nuitka_path_when_compiled_and_binary_exists(self, mock_is_nuitka, mock_get_locations, mock_find_binary):
         """Test that Nuitka binary path is returned when running in Nuitka environment."""
-        # Create a mock __compiled__ object with containing_dir
-        mock_compiled = mock.MagicMock()
-        mock_compiled.containing_dir = '/nuitka/dist'
+        mock_is_nuitka.return_value = True
+        mock_locations = [Path('/nuitka/dist/cs')]
+        mock_get_locations.return_value = mock_locations
+        mock_find_binary.return_value = '/nuitka/dist/cs'
 
-        # Temporarily inject __compiled__ into builtins
-        original_compiled = getattr(builtins, '__compiled__', None)
-        builtins.__compiled__ = mock_compiled  # type: ignore[attr-defined]
+        result = _try_nuitka_cli_path('cs')
 
-        try:
-            with mock.patch('utils.code_health_analysis.Path') as MockPath:
-                mock_path_instance = mock.MagicMock()
-                mock_path_instance.exists.return_value = True
-                MockPath.return_value.__truediv__ = mock.MagicMock(return_value=mock_path_instance)
-
-                mock_access.return_value = True
-
-                result = _try_nuitka_cli_path('cs')
-
-                self.assertEqual(result, str(mock_path_instance))
-        finally:
-            # Restore original state
-            if original_compiled is None:
-                delattr(builtins, '__compiled__')
-            else:
-                builtins.__compiled__ = original_compiled  # type: ignore[attr-defined]
+        mock_is_nuitka.assert_called_once()
+        mock_get_locations.assert_called_once_with('cs')
+        mock_find_binary.assert_called_once_with(mock_locations)
+        self.assertEqual(result, '/nuitka/dist/cs')
 
     def test_returns_none_when_not_in_nuitka_environment(self):
         """Test that None is returned when not running in Nuitka environment."""
@@ -440,33 +549,22 @@ class TestTryNuitkaCliPath(unittest.TestCase):
 
         self.assertIsNone(result)
 
-    @mock.patch('os.chmod')
-    @mock.patch('os.access')
-    def test_sets_executable_when_nuitka_binary_not_executable(self, mock_access, mock_chmod):
-        """Test that chmod is called when Nuitka binary exists but is not executable."""
-        mock_compiled = mock.MagicMock()
-        mock_compiled.containing_dir = '/nuitka/dist'
+    @mock.patch('utils.code_health_analysis._find_existing_cli_binary')
+    @mock.patch('utils.code_health_analysis._get_nuitka_cli_locations')
+    @mock.patch('utils.code_health_analysis._is_nuitka_environment')
+    def test_returns_none_when_no_binary_found(self, mock_is_nuitka, mock_get_locations, mock_find_binary):
+        """Test that None is returned when Nuitka environment but no binary found."""
+        mock_is_nuitka.return_value = True
+        mock_locations = [Path('/nuitka/dist/cs')]
+        mock_get_locations.return_value = mock_locations
+        mock_find_binary.return_value = None
 
-        original_compiled = getattr(builtins, '__compiled__', None)
-        builtins.__compiled__ = mock_compiled  # type: ignore[attr-defined]
+        result = _try_nuitka_cli_path('cs')
 
-        try:
-            with mock.patch('utils.code_health_analysis.Path') as MockPath:
-                mock_path_instance = mock.MagicMock()
-                mock_path_instance.exists.return_value = True
-                MockPath.return_value.__truediv__ = mock.MagicMock(return_value=mock_path_instance)
-
-                mock_access.return_value = False  # Not executable
-
-                result = _try_nuitka_cli_path('cs')
-
-                mock_chmod.assert_called_once_with(mock_path_instance, 0o755)
-                self.assertEqual(result, str(mock_path_instance))
-        finally:
-            if original_compiled is None:
-                delattr(builtins, '__compiled__')
-            else:
-                builtins.__compiled__ = original_compiled  # type: ignore[attr-defined]
+        mock_is_nuitka.assert_called_once()
+        mock_get_locations.assert_called_once_with('cs')
+        mock_find_binary.assert_called_once_with(mock_locations)
+        self.assertIsNone(result)
 
 
 class TestCsCliPathNuitkaIntegration(unittest.TestCase):
