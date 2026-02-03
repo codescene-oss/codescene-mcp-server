@@ -198,7 +198,7 @@ def run_nuitka_build(repo_root: Path, venv_python: Path, cs_cli: Path) -> Path:
     if not binary_path.exists():
         raise FileNotFoundError(f"Binary not found at {binary_path} after build")
     
-    print(f"    ✓ Built {binary_path}")
+    print(f"    [OK] Built {binary_path}")
     return binary_path
 
 
@@ -466,7 +466,7 @@ def check_access_token() -> bool:
     """Check if CS_ACCESS_TOKEN is set. Returns False if missing."""
     if os.getenv("CS_ACCESS_TOKEN"):
         return True
-    print("\n  ✗ SKIP: CS_ACCESS_TOKEN environment variable not set")
+    print("\n  [SKIP]: CS_ACCESS_TOKEN environment variable not set")
     print("  These tests require a valid CodeScene access token.")
     print("\n  Set it with:")
     print("    set CS_ACCESS_TOKEN=your_token_here")
@@ -482,7 +482,7 @@ def resolve_binary_path(explicit_path: Path | None) -> Path | None:
     print("\n  Looking for cs-mcp.exe...")
     binary_path, skip_reason = ensure_binary_exists()
     if binary_path is None:
-        print(f"\n  ✗ SKIP: {skip_reason}")
+        print(f"\n  [SKIP]: {skip_reason}")
     return binary_path
 
 
@@ -522,7 +522,7 @@ def run_all_tests(ctx: TestContext) -> list[tuple[str, bool]]:
     
     # Only continue if server starts
     if not results[-1][1]:
-        print("\n  ✗ Server failed to start, skipping remaining tests")
+        print("\n  [FAIL] Server failed to start, skipping remaining tests")
         return results
     
     env = create_static_mode_env()

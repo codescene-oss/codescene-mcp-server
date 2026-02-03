@@ -36,7 +36,7 @@ def print_header(msg: str):
 
 
 def print_test(name: str, passed: bool, details: str = ""):
-    status = "\u2713 PASS" if passed else "\u2717 FAIL"
+    status = "[PASS]" if passed else "[FAIL]"
     print(f"  {status}: {name}")
     if details:
         for line in details.split('\n')[:5]:
@@ -394,12 +394,12 @@ def print_test_summary(results: list[tuple[str, bool]]) -> int:
     total = len(results)
     
     for name, result in results:
-        print(f"  {'\u2713 PASS' if result else '\u2717 FAIL'}: {name}")
+        print(f"  {'[PASS]' if result else '[FAIL]'}: {name}")
     
     print(f"\n  Total: {passed}/{total} passed")
     
     if passed == total:
-        print("\n  All tests passed! \u2713")
+        print("\n  All tests passed!")
         return 0
-    print(f"\n  {total - passed} test(s) failed! \u2717")
+    print(f"\n  {total - passed} test(s) failed!")
     return 1

@@ -152,34 +152,4 @@ jobs:
       - name: Run SSL tests (docker variant)
         run: ./tests/ssl-integration/run-ssl-test.sh docker
 
-  # =============================================================================
-  # Docker Tests - macOS (Apple Silicon)
-  # =============================================================================
-  docker-macos:
-    if: ${{ inputs.run_docker }}
-    runs-on: macos-latest
-    name: Docker Tests (macOS)
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Set up Docker
-        uses: docker/setup-docker-action@v4
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install Python dependencies (for test scripts)
-        run: |
-          pip install --upgrade pip
-          pip install -r src/requirements.txt
-
-      - name: Run path resolution tests (docker variant)
-        run: ./tests/path-resolution-integration/run-docker-test.sh
-
-      - name: Run SSL tests (docker variant)
-        run: ./tests/ssl-integration/run-ssl-test.sh docker
