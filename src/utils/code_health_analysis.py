@@ -129,12 +129,19 @@ def _try_nuitka_cli_path(cli_binary_name: str):
     """
     Try to find CLI binary in Nuitka compiled environment.
     
+    For onefile builds with --include-data-files, the cs binary is embedded
+    in the executable and extracted to the same directory as sys.executable.
+    
     Returns:
         str: Path to CLI binary if found, None otherwise.
     """
     try:
-        compiled_dir = __compiled__.containing_dir  # type: ignore[name-defined]
-        nuitka_cs_path = Path(compiled_dir) / cli_binary_name
+        # Check if we're running in a Nuitka compiled environment
+        __compiled__  # type: ignore[name-defined]
+        
+        # For onefile builds, data files are in the same directory as the executable
+        executable_dir = Path(sys.executable).parent
+        nuitka_cs_path = executable_dir / cli_binary_name
         if nuitka_cs_path.exists():
             return _ensure_executable(nuitka_cs_path)
     except NameError:
