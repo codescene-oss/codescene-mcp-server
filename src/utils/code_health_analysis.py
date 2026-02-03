@@ -142,13 +142,6 @@ def _try_nuitka_cli_path(cli_binary_name: str):
         # Check if we're running in a Nuitka compiled environment
         __compiled__  # type: ignore[name-defined]
         
-        import sys
-        
-        print(f"DEBUG Nuitka: sys.executable={sys.executable}", file=sys.stderr)
-        print(f"DEBUG Nuitka: __file__={__file__}", file=sys.stderr)
-        print(f"DEBUG Nuitka: sys.argv[0]={sys.argv[0]}", file=sys.stderr)
-        print(f"DEBUG Nuitka: Looking for {cli_binary_name}", file=sys.stderr)
-        
         # Try locations in order of likelihood
         locations_to_try = [
             # Linux: next to the executable
@@ -165,15 +158,12 @@ def _try_nuitka_cli_path(cli_binary_name: str):
         for _ in range(10):  # Try up to 10 levels up
             candidate = current / cli_binary_name
             locations_to_try.append(candidate)
-            print(f"DEBUG Nuitka: Checking parent level {current}", file=sys.stderr)
             if current.parent == current:  # Reached root
                 break
             current = current.parent
         
         for location in locations_to_try:
-            print(f"DEBUG Nuitka: Checking {location}", file=sys.stderr)
             if location.exists():
-                print(f"DEBUG Nuitka: Found cs binary at {location}", file=sys.stderr)
                 return _ensure_executable(location)
         
         print(f"DEBUG Nuitka: cs binary not found in any location", file=sys.stderr)
