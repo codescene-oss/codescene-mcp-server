@@ -355,7 +355,8 @@ def run_subtree_tests(executable: Path) -> int:
         return 0
     
     with tempfile.TemporaryDirectory(prefix="cs_mcp_subtree_test_") as tmp:
-        test_dir = Path(tmp)
+        # Resolve to real path (handles macOS /var -> /private/var symlink)
+        test_dir = Path(tmp).resolve()
         print(f"\nTest directory: {test_dir}")
         
         # Create external library repo
@@ -419,7 +420,8 @@ def run_subtree_tests_with_backend(backend: ServerBackend) -> int:
         return 0
     
     with tempfile.TemporaryDirectory(prefix="cs_mcp_subtree_test_") as tmp:
-        test_dir = Path(tmp)
+        # Resolve to real path (handles macOS /var -> /private/var symlink)
+        test_dir = Path(tmp).resolve()
         print(f"\nTest directory: {test_dir}")
         
         print("\nCreating external library repository...")

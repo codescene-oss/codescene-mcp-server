@@ -119,7 +119,7 @@ EOF
 EXECUTABLE=""
 TEST_MODE="all"
 SKIP_BUILD=0
-BACKEND="nuitka"
+BACKEND="static"
 
 while [[ $# -gt 0 ]]; do
     case $1 in

@@ -255,7 +255,8 @@ def run_worktree_tests(executable: Path) -> int:
         Exit code (0 for success, 1 for failure)
     """
     with tempfile.TemporaryDirectory(prefix="cs_mcp_worktree_test_") as tmp:
-        test_dir = Path(tmp)
+        # Resolve to real path (handles macOS /var -> /private/var symlink)
+        test_dir = Path(tmp).resolve()
         print(f"\nTest directory: {test_dir}")
         
         # Create main git repo
@@ -297,7 +298,8 @@ def run_worktree_tests_with_backend(backend: ServerBackend) -> int:
         Exit code (0 for success, 1 for failure)
     """
     with tempfile.TemporaryDirectory(prefix="cs_mcp_worktree_test_") as tmp:
-        test_dir = Path(tmp)
+        # Resolve to real path (handles macOS /var -> /private/var symlink)
+        test_dir = Path(tmp).resolve()
         print(f"\nTest directory: {test_dir}")
         
         # Create main git repo

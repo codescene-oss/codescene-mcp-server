@@ -384,7 +384,8 @@ def run_all_tests(executable: Path) -> int:
     """
     # Create isolated test directory
     with tempfile.TemporaryDirectory(prefix="cs_mcp_test_") as tmp:
-        test_dir = Path(tmp)
+        # Resolve to real path (handles macOS /var -> /private/var symlink)
+        test_dir = Path(tmp).resolve()
         print(f"\nTest directory: {test_dir}")
         
         # Create git repo with sample files
@@ -520,7 +521,8 @@ def run_all_tests_with_backend(backend: ServerBackend) -> int:
     """
     # Create isolated test directory
     with tempfile.TemporaryDirectory(prefix="cs_mcp_test_") as tmp:
-        test_dir = Path(tmp)
+        # Resolve to real path (handles macOS /var -> /private/var symlink)
+        test_dir = Path(tmp).resolve()
         print(f"\nTest directory: {test_dir}")
         
         # Create git repo with sample files
