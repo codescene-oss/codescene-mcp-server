@@ -48,7 +48,11 @@ def print_header(msg: str) -> None:
 
 def print_test(name: str, passed: bool, details: str = "") -> None:
     """Print a test result."""
-    status = "\u2713 PASS" if passed else "\u2717 FAIL"
+    # Use ASCII fallbacks for Windows cp1252 encoding compatibility
+    if sys.stdout.encoding and sys.stdout.encoding.lower() in ('cp1252', 'ascii'):
+        status = "[PASS]" if passed else "[FAIL]"
+    else:
+        status = "\u2713 PASS" if passed else "\u2717 FAIL"
     color = "\033[92m" if passed else "\033[91m"
     reset = "\033[0m"
     print(f"  {color}{status}{reset}: {name}")
