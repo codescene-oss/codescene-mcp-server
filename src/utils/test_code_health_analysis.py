@@ -431,5 +431,81 @@ class TestCsCliReviewCommandFor(unittest.TestCase):
         self.assertEqual(result, ["/path/to/cs", "review", "/foo.py", "--output-format=json"])
 
 
+class TestAnalyzeCodeWorktree(unittest.TestCase):
+    """Tests for analyze_code() git worktree support in static mode."""
+
+    def setUp(self):
+        self._env = dict(os.environ)
+        # Create a temp worktree-like structure
+        self.temp_dir = os.path.realpath(tempfile.mkdtemp())
+        
+        # Create worktree directory with .git file
+        self.worktree_dir = os.path.join(self.temp_dir, 'worktree')
+        os.makedirs(self.worktree_dir)
+        
+        # Write .git file pointing to main repo's worktrees
+        self.worktree_gitdir = '/path/to/main/.git/worktrees/feature'
+        with open(os.path.join(self.worktree_dir, '.git'), 'w') as f:
+            f.write(f'gitdir: {self.worktree_gitdir}')
+        
+        self.src_dir = os.path.join(self.worktree_dir, 'src')
+        os.makedirs(self.src_dir)
+        self.test_file = os.path.join(self.src_dir, 'file.py')
+        with open(self.test_file, 'w') as f:
+            f.write('# test')
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self._env)
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    @mock.patch('utils.code_health_analysis.run_local_tool')
+    @mock.patch('utils.code_health_analysis.cs_cli_review_command_for')
+    def test_analyze_code_sets_git_dir_for_worktree(self, mock_cli_command, mock_run):
+        from utils.code_health_analysis import analyze_code
+        
+        os.environ.pop('CS_MOUNT_PATH', None)
+        mock_cli_command.return_value = ['cs', 'review', 'src/file.py', '--output-format=json']
+        mock_run.return_value = '{"score": 8.5}'
+        
+        analyze_code(self.test_file)
+        
+        # Verify GIT_DIR was passed in extra_env
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args
+        extra_env = call_args.kwargs.get('extra_env')
+        
+        self.assertIsNotNone(extra_env)
+        self.assertIn('GIT_DIR', extra_env)
+        self.assertEqual(self.worktree_gitdir, extra_env['GIT_DIR'])
+
+    @mock.patch('utils.code_health_analysis.run_local_tool')
+    @mock.patch('utils.code_health_analysis.cs_cli_review_command_for')
+    def test_analyze_code_no_extra_env_for_regular_repo(self, mock_cli_command, mock_run):
+        from utils.code_health_analysis import analyze_code
+        
+        # Create regular repo (with .git directory, not file)
+        regular_repo = os.path.join(self.temp_dir, 'regular')
+        os.makedirs(os.path.join(regular_repo, '.git'))
+        os.makedirs(os.path.join(regular_repo, 'src'))
+        regular_file = os.path.join(regular_repo, 'src', 'file.py')
+        with open(regular_file, 'w') as f:
+            f.write('# test')
+        
+        os.environ.pop('CS_MOUNT_PATH', None)
+        mock_cli_command.return_value = ['cs', 'review', 'src/file.py', '--output-format=json']
+        mock_run.return_value = '{"score": 8.5}'
+        
+        analyze_code(regular_file)
+        
+        # Verify extra_env was None (no GIT_DIR needed)
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args
+        extra_env = call_args.kwargs.get('extra_env')
+        
+        self.assertIsNone(extra_env)
+
+
 if __name__ == "__main__":
     unittest.main()

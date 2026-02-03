@@ -298,6 +298,66 @@ class TestWorktreeGitdirAdapter(unittest.TestCase):
                         self.assertEqual(result, expected)
 
 
+class TestGetWorktreeGitdir(unittest.TestCase):
+    """Tests for get_worktree_gitdir() supporting static mode worktree detection."""
+
+    def test_get_worktree_gitdir_returns_gitdir_for_worktree(self):
+        """Test that get_worktree_gitdir returns gitdir path for a worktree."""
+        from .docker_path_adapter import get_worktree_gitdir
+        import tempfile
+        import os as os_module
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create .git file (not directory) with gitdir content
+            git_file = os_module.path.join(tmpdir, '.git')
+            with open(git_file, 'w', encoding='utf-8') as f:
+                f.write('gitdir: /path/to/main/.git/worktrees/feature')
+            
+            result = get_worktree_gitdir(tmpdir)
+            
+            self.assertEqual('/path/to/main/.git/worktrees/feature', result)
+
+    def test_get_worktree_gitdir_returns_none_for_regular_repo(self):
+        """Test that get_worktree_gitdir returns None for regular git repo."""
+        from .docker_path_adapter import get_worktree_gitdir
+        import tempfile
+        import os as os_module
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create .git directory (regular repo)
+            git_dir = os_module.path.join(tmpdir, '.git')
+            os_module.makedirs(git_dir)
+            
+            result = get_worktree_gitdir(tmpdir)
+            
+            self.assertIsNone(result)
+
+    def test_get_worktree_gitdir_returns_none_for_no_git(self):
+        """Test that get_worktree_gitdir returns None when no .git exists."""
+        from .docker_path_adapter import get_worktree_gitdir
+        import tempfile
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = get_worktree_gitdir(tmpdir)
+            
+            self.assertIsNone(result)
+
+    def test_get_worktree_gitdir_handles_windows_paths(self):
+        """Test that get_worktree_gitdir handles Windows-style paths in .git file."""
+        from .docker_path_adapter import get_worktree_gitdir
+        import tempfile
+        import os as os_module
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            git_file = os_module.path.join(tmpdir, '.git')
+            with open(git_file, 'w', encoding='utf-8') as f:
+                f.write('gitdir: C:\\workspace\\stargate\\.git\\worktrees\\ip_ps')
+            
+            result = get_worktree_gitdir(tmpdir)
+            
+            self.assertEqual('C:\\workspace\\stargate\\.git\\worktrees\\ip_ps', result)
+
+
 class TestGetRelativeFilePathForApi(unittest.TestCase):
     """Tests for get_relative_file_path_for_api supporting both Docker and static modes."""
 
