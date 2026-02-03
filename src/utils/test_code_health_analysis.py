@@ -404,35 +404,22 @@ class TestTryNuitkaCliPath(unittest.TestCase):
         os.environ.clear()
         os.environ.update(self._env)
 
-    @mock.patch('os.chmod')
-    @mock.patch('os.access')
-    def test_returns_nuitka_path_when_compiled_and_binary_exists(self, mock_access, mock_chmod):
+    @mock.patch('utils.code_health_analysis._find_existing_cli_binary')
+    @mock.patch('utils.code_health_analysis._get_nuitka_cli_locations')
+    @mock.patch('utils.code_health_analysis._is_nuitka_environment')
+    def test_returns_nuitka_path_when_compiled_and_binary_exists(self, mock_is_nuitka, mock_get_locations, mock_find_binary):
         """Test that Nuitka binary path is returned when running in Nuitka environment."""
-        # Create a mock __compiled__ object with containing_dir
-        mock_compiled = mock.MagicMock()
-        mock_compiled.containing_dir = '/nuitka/dist'
+        mock_is_nuitka.return_value = True
+        mock_locations = [Path('/nuitka/dist/cs')]
+        mock_get_locations.return_value = mock_locations
+        mock_find_binary.return_value = '/nuitka/dist/cs'
 
-        # Temporarily inject __compiled__ into builtins
-        original_compiled = getattr(builtins, '__compiled__', None)
-        builtins.__compiled__ = mock_compiled  # type: ignore[attr-defined]
+        result = _try_nuitka_cli_path('cs')
 
-        try:
-            with mock.patch('utils.code_health_analysis.Path') as MockPath:
-                mock_path_instance = mock.MagicMock()
-                mock_path_instance.exists.return_value = True
-                MockPath.return_value.__truediv__ = mock.MagicMock(return_value=mock_path_instance)
-
-                mock_access.return_value = True
-
-                result = _try_nuitka_cli_path('cs')
-
-                self.assertEqual(result, str(mock_path_instance))
-        finally:
-            # Restore original state
-            if original_compiled is None:
-                delattr(builtins, '__compiled__')
-            else:
-                builtins.__compiled__ = original_compiled  # type: ignore[attr-defined]
+        mock_is_nuitka.assert_called_once()
+        mock_get_locations.assert_called_once_with('cs')
+        mock_find_binary.assert_called_once_with(mock_locations)
+        self.assertEqual(result, '/nuitka/dist/cs')
 
     def test_returns_none_when_not_in_nuitka_environment(self):
         """Test that None is returned when not running in Nuitka environment."""
@@ -440,33 +427,22 @@ class TestTryNuitkaCliPath(unittest.TestCase):
 
         self.assertIsNone(result)
 
-    @mock.patch('os.chmod')
-    @mock.patch('os.access')
-    def test_sets_executable_when_nuitka_binary_not_executable(self, mock_access, mock_chmod):
-        """Test that chmod is called when Nuitka binary exists but is not executable."""
-        mock_compiled = mock.MagicMock()
-        mock_compiled.containing_dir = '/nuitka/dist'
+    @mock.patch('utils.code_health_analysis._find_existing_cli_binary')
+    @mock.patch('utils.code_health_analysis._get_nuitka_cli_locations')
+    @mock.patch('utils.code_health_analysis._is_nuitka_environment')
+    def test_returns_none_when_no_binary_found(self, mock_is_nuitka, mock_get_locations, mock_find_binary):
+        """Test that None is returned when Nuitka environment but no binary found."""
+        mock_is_nuitka.return_value = True
+        mock_locations = [Path('/nuitka/dist/cs')]
+        mock_get_locations.return_value = mock_locations
+        mock_find_binary.return_value = None
 
-        original_compiled = getattr(builtins, '__compiled__', None)
-        builtins.__compiled__ = mock_compiled  # type: ignore[attr-defined]
+        result = _try_nuitka_cli_path('cs')
 
-        try:
-            with mock.patch('utils.code_health_analysis.Path') as MockPath:
-                mock_path_instance = mock.MagicMock()
-                mock_path_instance.exists.return_value = True
-                MockPath.return_value.__truediv__ = mock.MagicMock(return_value=mock_path_instance)
-
-                mock_access.return_value = False  # Not executable
-
-                result = _try_nuitka_cli_path('cs')
-
-                mock_chmod.assert_called_once_with(mock_path_instance, 0o755)
-                self.assertEqual(result, str(mock_path_instance))
-        finally:
-            if original_compiled is None:
-                delattr(builtins, '__compiled__')
-            else:
-                builtins.__compiled__ = original_compiled  # type: ignore[attr-defined]
+        mock_is_nuitka.assert_called_once()
+        mock_get_locations.assert_called_once_with('cs')
+        mock_find_binary.assert_called_once_with(mock_locations)
+        self.assertIsNone(result)
 
 
 class TestCsCliPathNuitkaIntegration(unittest.TestCase):
