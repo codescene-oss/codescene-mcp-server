@@ -77,35 +77,6 @@ def check_prerequisites() -> tuple[bool, list[str]]:
     return len(issues) == 0, issues
 
 
-def test_server_startup(executable: Path, test_dir: Path) -> bool:
-    """Test that the MCP server starts successfully."""
-    print_header("Test 1: MCP Server Startup")
-    
-    env = create_test_environment()
-    client = MCPClient([str(executable)], env=env, cwd=str(test_dir))
-    
-    try:
-        started = client.start()
-        print_test("Server process started", started)
-        if not started:
-            stderr = client.get_stderr()
-            print(f"  Stderr: {stderr}")
-            return False
-        
-        response = client.initialize()
-        has_result = "result" in response
-        print_test("Server responds to initialize", has_result)
-        if not has_result:
-            print(f"  Response: {response}")
-        
-        return has_result
-    except Exception as e:
-        print_test("Server startup", False, str(e))
-        return False
-    finally:
-        client.stop()
-
-
 def test_server_startup_with_backend(command: list[str], env: dict, test_dir: Path) -> bool:
     """Test that the MCP server starts successfully (backend version)."""
     print_header("Test 1: MCP Server Startup")
@@ -132,12 +103,6 @@ def test_server_startup_with_backend(command: list[str], env: dict, test_dir: Pa
         return False
     finally:
         client.stop()
-
-
-def test_code_health_score(executable: Path, test_dir: Path, repo_dir: Path) -> list[tuple[str, bool]]:
-    """Test code_health_score tool with actual code samples."""
-    env = create_test_environment()
-    return test_code_health_score_with_backend([str(executable)], env, test_dir, repo_dir)
 
 
 def test_code_health_score_with_backend(
@@ -189,12 +154,6 @@ def test_code_health_score_with_backend(
         client.stop()
 
 
-def test_code_health_review(executable: Path, test_dir: Path, repo_dir: Path) -> bool:
-    """Test code_health_review tool."""
-    env = create_test_environment()
-    return test_code_health_review_with_backend([str(executable)], env, test_dir, repo_dir)
-
-
 def test_code_health_review_with_backend(
     command: list[str], env: dict, test_dir: Path, repo_dir: Path
 ) -> bool:
@@ -234,12 +193,6 @@ def test_code_health_review_with_backend(
         return False
     finally:
         client.stop()
-
-
-def test_pre_commit_safeguard(executable: Path, test_dir: Path, repo_dir: Path) -> bool:
-    """Test pre_commit_code_health_safeguard tool."""
-    env = create_test_environment()
-    return test_pre_commit_safeguard_with_backend([str(executable)], env, test_dir, repo_dir)
 
 
 def test_pre_commit_safeguard_with_backend(
@@ -296,12 +249,6 @@ def test_pre_commit_safeguard_with_backend(
         return False
     finally:
         client.stop()
-
-
-def test_outside_git_repo(executable: Path, test_dir: Path) -> bool:
-    """Test tools with files outside a git repository."""
-    env = create_test_environment()
-    return test_outside_git_repo_with_backend([str(executable)], env, test_dir)
 
 
 def test_outside_git_repo_with_backend(command: list[str], env: dict, test_dir: Path) -> bool:
@@ -370,59 +317,6 @@ def test_no_bundled_cli_interference_with_backend(
         parent = parent.parent
     
     return not has_cs
-
-
-def run_all_tests(executable: Path) -> int:
-    """
-    Run all integration tests.
-    
-    Args:
-        executable: Path to the cs-mcp executable
-        
-    Returns:
-        Exit code (0 for success, 1 for failure)
-    """
-    # Create isolated test directory
-    with tempfile.TemporaryDirectory(prefix="cs_mcp_test_") as tmp:
-        # Resolve to real path (handles macOS /var -> /private/var symlink)
-        test_dir = Path(tmp).resolve()
-        print(f"\nTest directory: {test_dir}")
-        
-        # Create git repo with sample files
-        print("\nCreating test repository with sample files...")
-        repo_dir = create_git_repo(test_dir, get_sample_files())
-        print(f"Repository created: {repo_dir}")
-        
-        all_results = []
-        
-        # Run tests
-        all_results.append(("Server Startup", test_server_startup(executable, test_dir)))
-        
-        score_results = test_code_health_score(executable, test_dir, repo_dir)
-        all_results.extend(score_results)
-        
-        all_results.append(("Code Health Review", test_code_health_review(executable, test_dir, repo_dir)))
-        all_results.append(("Pre-commit Safeguard", test_pre_commit_safeguard(executable, test_dir, repo_dir)))
-        all_results.append(("Outside Git Repo", test_outside_git_repo(executable, test_dir)))
-        all_results.append(("No Bundled CLI", test_no_bundled_cli_interference(executable, test_dir)))
-        
-        # Run git worktree tests
-        print("\n" + "="*70)
-        print("  Running Git Worktree Tests")
-        print("="*70)
-        from test_git_worktree import run_worktree_tests
-        worktree_result = run_worktree_tests(executable)
-        all_results.append(("Git Worktree Tests", worktree_result == 0))
-        
-        # Run git subtree tests
-        print("\n" + "="*70)
-        print("  Running Git Subtree Tests")
-        print("="*70)
-        from test_git_subtree import run_subtree_tests
-        subtree_result = run_subtree_tests(executable)
-        all_results.append(("Git Subtree Tests", subtree_result == 0))
-        
-        return print_summary(all_results)
 
 
 def build_executable() -> Path:

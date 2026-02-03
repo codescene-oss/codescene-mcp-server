@@ -89,12 +89,19 @@ Examples:
 "@
 }
 
-# Check prerequisites
-function Check-Prerequisites {
-    Write-Host "Checking prerequisites..."
-    $missing = 0
-    
-    # Check Python version
+# Check if a command exists
+function Test-CommandExists {
+    param([string]$Command)
+    try {
+        $null = Get-Command $Command -ErrorAction Stop
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+# Check Python version requirement
+function Test-PythonVersion {
     try {
         $pythonVersion = python --version 2>&1
         if ($pythonVersion -match "Python (\d+)\.(\d+)") {
@@ -102,59 +109,142 @@ function Check-Prerequisites {
             $minor = [int]$matches[2]
             if ($major -ge 3 -and $minor -ge 10) {
                 Write-Success "✓ Python: $pythonVersion"
-            } else {
-                Write-Error-Message "✗ Python 3.10+ required, found: $pythonVersion"
-                $missing++
+                return $true
             }
-        } else {
-            Write-Success "✓ Python: $pythonVersion"
+            Write-Error-Message "✗ Python 3.10+ required, found: $pythonVersion"
+            return $false
         }
+        Write-Success "✓ Python: $pythonVersion"
+        return $true
     } catch {
         Write-Error-Message "✗ Python not found"
-        $missing++
+        return $false
     }
-    
-    # Check Git
-    try {
-        $gitVersion = git --version 2>&1
-        Write-Success "✓ Git: $gitVersion"
-    } catch {
-        Write-Error-Message "✗ Git not found"
-        $missing++
-    }
-    
-    # Check CS_ACCESS_TOKEN
-    if ($env:CS_ACCESS_TOKEN) {
-        Write-Success "✓ CS_ACCESS_TOKEN is set"
-    } else {
-        Write-Error-Message "✗ CS_ACCESS_TOKEN not set"
-        Write-Host "  Set it with: `$env:CS_ACCESS_TOKEN='your_token_here'"
-        $missing++
-    }
-    
-    # Check Nuitka
+}
+
+# Check if Nuitka is installed
+function Test-NuitkaInstalled {
     try {
         python -c "import nuitka" 2>$null
         if ($LASTEXITCODE -eq 0) {
             Write-Success "✓ Nuitka is installed"
-        } else {
-            Write-Warning-Message "! Nuitka not installed (required for building)"
-            Write-Host "  Install with: pip install nuitka"
-            $missing++
+            return $true
         }
-    } catch {
-        Write-Warning-Message "! Nuitka not installed (required for building)"
-        Write-Host "  Install with: pip install nuitka"
-        $missing++
+    } catch { }
+    Write-Warning-Message "! Nuitka not installed (required for static backend)"
+    Write-Host "  Install with: pip install nuitka"
+    return $false
+}
+
+# Check Git is available
+function Test-GitInstalled {
+    if (Test-CommandExists "git") {
+        Write-Success "✓ Git: $(git --version)"
+        return $true
     }
+    Write-Error-Message "✗ Git not found"
+    return $false
+}
+
+# Check CS_ACCESS_TOKEN is set
+function Test-AccessToken {
+    if ($env:CS_ACCESS_TOKEN) {
+        Write-Success "✓ CS_ACCESS_TOKEN is set"
+        return $true
+    }
+    Write-Error-Message "✗ CS_ACCESS_TOKEN not set"
+    Write-Host "  Set it with: `$env:CS_ACCESS_TOKEN='your_token_here'"
+    return $false
+}
+
+# Check Docker is available
+function Test-DockerInstalled {
+    if (Test-CommandExists "docker") {
+        Write-Success "✓ Docker: $(docker --version)"
+        return $true
+    }
+    Write-Error-Message "✗ Docker not found (required for docker backend)"
+    return $false
+}
+
+# Check prerequisites based on backend
+function Check-Prerequisites {
+    param([string]$Backend)
     
-    if ($missing -gt 0) {
+    Write-Host "Checking prerequisites..."
+    $allOk = (Test-PythonVersion) -and (Test-GitInstalled) -and (Test-AccessToken)
+    
+    if ($Backend -eq "static" -and -not (Test-NuitkaInstalled)) { $allOk = $false }
+    if ($Backend -eq "docker" -and -not (Test-DockerInstalled)) { $allOk = $false }
+    
+    if (-not $allOk) {
         Write-Host ""
         Write-Error-Message "Some prerequisites are missing. Please install them before running tests."
         exit 1
     }
     
     Write-Host ""
+}
+
+# Run a specific test suite that requires an executable
+function Invoke-SpecificTest {
+    param([string]$TestScript, [string]$TestName)
+    
+    Write-Host "Running $TestName tests..."
+    if (-not $Executable) {
+        Write-Error-Message "-$TestName requires -Executable option"
+        exit 1
+    }
+    python $TestScript $Executable
+}
+
+# Run comprehensive test suite
+function Invoke-ComprehensiveTests {
+    param([string]$Backend, [string]$RepoRoot)
+    
+    Write-Host "Running comprehensive test suite..."
+    
+    if ($Executable) {
+        python run_all_tests.py --executable $Executable --backend $Backend
+        return
+    }
+    
+    if ($SkipBuild) {
+        $builtExec = Join-Path (Split-Path $RepoRoot) "cs_mcp_test_bin" "cs-mcp.exe"
+        if (Test-Path $builtExec) {
+            Write-Host "Using previously built executable: $builtExec"
+            python run_all_tests.py --executable $builtExec --backend $Backend
+        } else {
+            Write-Error-Message "No previously built executable found"
+            Write-Host "Run without -SkipBuild to build a new one"
+            exit 1
+        }
+        return
+    }
+    
+    python run_all_tests.py --backend $Backend
+}
+
+# Display test results
+function Show-TestResults {
+    param([int]$ExitCode)
+    
+    Write-Host ""
+    if ($ExitCode -eq 0) {
+        Write-Success "======================================================================"
+        Write-Success "  All tests passed! ✓"
+        Write-Success "======================================================================"
+    } else {
+        Write-Error-Message "======================================================================"
+        Write-Error-Message "  Some tests failed ✗"
+        Write-Error-Message "======================================================================"
+    }
+}
+
+# Get backend from command-line flags
+function Get-Backend {
+    if ($Docker) { return "docker" }
+    return "static"
 }
 
 # Main execution
@@ -166,16 +256,11 @@ function Main {
         exit 0
     }
     
-    # Determine backend
-    $backend = "static"
-    if ($Docker) {
-        $backend = "docker"
-    }
-    
+    $backend = Get-Backend
     Write-Host "  Backend: $backend"
     Write-Host ""
     
-    Check-Prerequisites
+    Check-Prerequisites -Backend $backend
     
     $scriptDir = $PSScriptRoot
     $testDir = Join-Path $scriptDir "integration"
@@ -185,65 +270,20 @@ function Main {
     
     try {
         if ($PlatformOnly) {
-            Write-Host "Running platform-specific tests..."
-            if (-not $Executable) {
-                Write-Error-Message "--PlatformOnly requires -Executable option"
-                exit 1
-            }
-            python test_platform_specific.py $Executable
+            Invoke-SpecificTest "test_platform_specific.py" "platform-specific"
         }
         elseif ($WorktreeOnly) {
-            Write-Host "Running git worktree tests..."
-            if (-not $Executable) {
-                Write-Error-Message "--WorktreeOnly requires -Executable option"
-                exit 1
-            }
-            python test_git_worktree.py $Executable
+            Invoke-SpecificTest "test_git_worktree.py" "git worktree"
         }
         elseif ($SubtreeOnly) {
-            Write-Host "Running git subtree tests..."
-            if (-not $Executable) {
-                Write-Error-Message "--SubtreeOnly requires -Executable option"
-                exit 1
-            }
-            python test_git_subtree.py $Executable
+            Invoke-SpecificTest "test_git_subtree.py" "git subtree"
         }
         else {
-            Write-Host "Running comprehensive test suite..."
-            if ($Executable) {
-                python run_all_tests.py --executable $Executable --backend $backend
-            }
-            elseif ($SkipBuild) {
-                # Try to find previously built executable
-                $builtExec = Join-Path (Split-Path $repoRoot) "cs_mcp_test_bin" "cs-mcp.exe"
-                if (Test-Path $builtExec) {
-                    Write-Host "Using previously built executable: $builtExec"
-                    python run_all_tests.py --executable $builtExec --backend $backend
-                } else {
-                    Write-Error-Message "No previously built executable found"
-                    Write-Host "Run without -SkipBuild to build a new one"
-                    exit 1
-                }
-            }
-            else {
-                python run_all_tests.py --backend $backend
-            }
+            Invoke-ComprehensiveTests -Backend $backend -RepoRoot $repoRoot
         }
         
-        $exitCode = $LASTEXITCODE
-        
-        Write-Host ""
-        if ($exitCode -eq 0) {
-            Write-Success "======================================================================"
-            Write-Success "  All tests passed! ✓"
-            Write-Success "======================================================================"
-        } else {
-            Write-Error-Message "======================================================================"
-            Write-Error-Message "  Some tests failed ✗"
-            Write-Error-Message "======================================================================"
-        }
-        
-        exit $exitCode
+        Show-TestResults -ExitCode $LASTEXITCODE
+        exit $LASTEXITCODE
     }
     finally {
         Pop-Location

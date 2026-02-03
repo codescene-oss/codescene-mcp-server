@@ -63,13 +63,25 @@ check_prerequisites() {
         echo -e "${GREEN}✓ CS_ACCESS_TOKEN is set${NC}"
     fi
     
-    # Check Nuitka
-    if ! python3 -c "import nuitka" 2>/dev/null; then
-        echo -e "${YELLOW}! Nuitka not installed (required for building)${NC}"
-        echo "  Install with: pip install nuitka"
-        missing=1
-    else
-        echo -e "${GREEN}✓ Nuitka is installed${NC}"
+    # Check Nuitka (only required for static backend)
+    if [ "$BACKEND" = "static" ]; then
+        if ! python3 -c "import nuitka" 2>/dev/null; then
+            echo -e "${YELLOW}! Nuitka not installed (required for static backend)${NC}"
+            echo "  Install with: pip install nuitka"
+            missing=1
+        else
+            echo -e "${GREEN}✓ Nuitka is installed${NC}"
+        fi
+    fi
+    
+    # Check Docker (only required for docker backend)
+    if [ "$BACKEND" = "docker" ]; then
+        if ! command -v docker &> /dev/null; then
+            echo -e "${RED}✗ Docker not found (required for docker backend)${NC}"
+            missing=1
+        else
+            echo -e "${GREEN}✓ Docker is available${NC}"
+        fi
     fi
     
     if [ $missing -eq 1 ]; then
