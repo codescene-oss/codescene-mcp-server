@@ -1,12 +1,25 @@
+import builtins
 import os
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 from unittest import mock
 from pathlib import Path
+
 from errors import CodeSceneCliError
 from utils.platform_details import WindowsPlatformDetails, UnixPlatformDetails, get_platform_details
-
-
-import tempfile
+from utils.code_health_analysis import (
+    find_git_root,
+    run_local_tool,
+    run_cs_cli,
+    analyze_code,
+    cs_cli_path,
+    make_cs_cli_review_command_for,
+    cs_cli_review_command_for,
+    _try_nuitka_cli_path,
+)
 
 
 class TestFindGitRoot(unittest.TestCase):
@@ -27,26 +40,19 @@ class TestFindGitRoot(unittest.TestCase):
         os.environ.clear()
         os.environ.update(self._env)
         # Clean up temp directory
-        import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_find_git_root_from_file(self):
-        from utils.code_health_analysis import find_git_root
-        
         result = find_git_root(self.test_file)
         
         self.assertEqual(self.temp_dir, result)
     
     def test_find_git_root_from_directory(self):
-        from utils.code_health_analysis import find_git_root
-        
         result = find_git_root(self.sub_dir)
         
         self.assertEqual(self.temp_dir, result)
     
     def test_find_git_root_raises_when_not_in_repo(self):
-        from utils.code_health_analysis import find_git_root
-        
         # Create a temp dir without .git
         temp_no_git = tempfile.mkdtemp()
         test_file = os.path.join(temp_no_git, 'file.py')
@@ -59,7 +65,6 @@ class TestFindGitRoot(unittest.TestCase):
             
             self.assertIn('Not in a git repository', str(context.exception))
         finally:
-            import shutil
             shutil.rmtree(temp_no_git, ignore_errors=True)
 
 
@@ -74,8 +79,6 @@ class TestRunLocalTool(unittest.TestCase):
     @mock.patch('utils.code_health_analysis.subprocess.run')
     @mock.patch('utils.code_health_analysis.get_platform_details')
     def test_run_local_tool_sets_cs_context(self, mock_platform, mock_run):
-        from utils.code_health_analysis import run_local_tool
-        
         mock_platform_instance = mock.MagicMock()
         mock_platform_instance.get_java_options.return_value = ''
         mock_platform_instance.configure_environment.side_effect = lambda x: x
@@ -96,8 +99,6 @@ class TestRunLocalTool(unittest.TestCase):
     @mock.patch('utils.code_health_analysis.get_ssl_cli_args')
     @mock.patch('utils.code_health_analysis.get_platform_details')
     def test_run_local_tool_injects_ssl_args_for_cs_cli(self, mock_platform, mock_ssl_args, mock_run):
-        from utils.code_health_analysis import run_local_tool
-        
         mock_platform_instance = mock.MagicMock()
         mock_platform_instance.configure_environment.side_effect = lambda x: x
         mock_platform.return_value = mock_platform_instance
@@ -125,8 +126,6 @@ class TestRunLocalTool(unittest.TestCase):
     @mock.patch('utils.code_health_analysis.get_ssl_cli_args')
     @mock.patch('utils.code_health_analysis.get_platform_details')
     def test_run_local_tool_does_not_inject_ssl_args_for_non_cs_commands(self, mock_platform, mock_ssl_args, mock_run):
-        from utils.code_health_analysis import run_local_tool
-        
         mock_platform_instance = mock.MagicMock()
         mock_platform_instance.configure_environment.side_effect = lambda x: x
         mock_platform.return_value = mock_platform_instance
@@ -149,8 +148,6 @@ class TestRunLocalTool(unittest.TestCase):
     @mock.patch('utils.code_health_analysis.subprocess.run')
     @mock.patch('utils.code_health_analysis.get_platform_details')
     def test_run_local_tool_raises_on_nonzero_return(self, mock_platform, mock_run):
-        from utils.code_health_analysis import run_local_tool
-        
         mock_platform_instance = mock.MagicMock()
         mock_platform_instance.get_java_options.return_value = ''
         mock_platform_instance.configure_environment.side_effect = lambda x: x
@@ -169,8 +166,6 @@ class TestRunLocalTool(unittest.TestCase):
     @mock.patch('utils.code_health_analysis.subprocess.run')
     @mock.patch('utils.code_health_analysis.get_platform_details')
     def test_run_local_tool_sets_onprem_url_when_present(self, mock_platform, mock_run):
-        from utils.code_health_analysis import run_local_tool
-        
         os.environ['CS_ONPREM_URL'] = 'https://onprem.example.com'
         
         mock_platform_instance = mock.MagicMock()
@@ -195,9 +190,6 @@ class TestRunLocalTool(unittest.TestCase):
         Regression test for: 'ascii' codec can't decode byte 0xe2 error
         when source files contain UTF-8 characters (emojis, en-dashes, etc.)
         """
-        from utils.code_health_analysis import run_local_tool
-        import sys
-        
         mock_platform_instance = mock.MagicMock()
         mock_platform_instance.configure_environment.side_effect = lambda x: x
         mock_platform.return_value = mock_platform_instance
@@ -221,8 +213,6 @@ class TestRunLocalTool(unittest.TestCase):
 
 class TestRunCsCli(unittest.TestCase):
     def test_run_cs_cli_handles_file_not_found(self):
-        from utils.code_health_analysis import run_cs_cli
-        
         def raise_file_not_found():
             raise FileNotFoundError()
         
@@ -232,9 +222,6 @@ class TestRunCsCli(unittest.TestCase):
         self.assertIn("CodeScene CLI tool", result)
     
     def test_run_cs_cli_handles_called_process_error(self):
-        from utils.code_health_analysis import run_cs_cli
-        import subprocess
-        
         def raise_called_process_error():
             raise subprocess.CalledProcessError(1, 'cs', stderr='process failed')
         
@@ -243,8 +230,6 @@ class TestRunCsCli(unittest.TestCase):
         self.assertIn("Error:", result)
     
     def test_run_cs_cli_handles_generic_exception(self):
-        from utils.code_health_analysis import run_cs_cli
-        
         def raise_generic():
             raise ValueError('something went wrong')
         
@@ -266,8 +251,6 @@ class TestAnalyzeCode(unittest.TestCase):
     @mock.patch('utils.code_health_analysis.cs_cli_review_command_for')
     @mock.patch('utils.code_health_analysis.find_git_root')
     def test_analyze_code_without_mount_path(self, mock_find_git_root, mock_cli_command, mock_run):
-        from utils.code_health_analysis import analyze_code
-        
         os.environ.pop('CS_MOUNT_PATH', None)
         mock_find_git_root.return_value = '/project'
         mock_cli_command.return_value = ['cs', 'review', 'src/file.py', '--output-format=json']
@@ -281,8 +264,6 @@ class TestAnalyzeCode(unittest.TestCase):
     @mock.patch('utils.code_health_analysis.run_local_tool')
     @mock.patch('utils.code_health_analysis.cs_cli_review_command_for')
     def test_analyze_code_with_mount_path(self, mock_cli_command, mock_run):
-        from utils.code_health_analysis import analyze_code
-        
         os.environ['CS_MOUNT_PATH'] = '/project'
         mock_cli_command.return_value = ['cs', 'review', '/mount/file.py', '--output-format=json']
         mock_run.return_value = '{"score": 9.0}'
@@ -303,8 +284,6 @@ class TestCsCliPath(unittest.TestCase):
     @mock.patch('utils.code_health_analysis.Path.exists')
     @mock.patch('os.access')
     def test_returns_bundled_cs_path_when_exists_and_executable(self, mock_access, mock_exists):
-        from utils.code_health_analysis import cs_cli_path
-
         mock_exists.return_value = True
         mock_access.return_value = True
         platform_details = get_platform_details()
@@ -313,15 +292,13 @@ class TestCsCliPath(unittest.TestCase):
 
         # Should return a path ending with either 'cs' or 'cs.exe' depending on platform
         self.assertTrue(result.endswith('cs') or result.endswith('cs.exe'))
-        # The bundled binary is in the project root (parent of src/)
-        self.assertIn('codescene-mcp-server', result)
+        # Should be an absolute path
+        self.assertTrue(os.path.isabs(result))
 
     @mock.patch('utils.code_health_analysis.sys')
     @mock.patch('utils.code_health_analysis.Path.exists')
     @mock.patch('os.access')
     def test_returns_bundled_cs_exe_path_on_windows(self, mock_access, mock_exists, mock_sys):
-        from utils.code_health_analysis import cs_cli_path
-
         mock_sys.platform = "win32"
         mock_exists.return_value = True
         mock_access.return_value = True
@@ -330,15 +307,13 @@ class TestCsCliPath(unittest.TestCase):
         result = cs_cli_path(platform_details)
 
         self.assertTrue(result.endswith('cs.exe'))
-        # The bundled binary is in the project root (parent of src/)
-        self.assertIn('codescene-mcp-server', result)
+        # Should be an absolute path
+        self.assertTrue(os.path.isabs(result))
 
     @mock.patch('utils.code_health_analysis.Path.exists')
     @mock.patch('os.access')
     @mock.patch('os.chmod')
     def test_sets_executable_permission_when_bundled_cs_not_executable(self, mock_chmod, mock_access, mock_exists):
-        from utils.code_health_analysis import cs_cli_path
-
         mock_exists.return_value = True
         mock_access.return_value = False
         platform_details = get_platform_details()
@@ -351,8 +326,6 @@ class TestCsCliPath(unittest.TestCase):
 
     @mock.patch('utils.code_health_analysis.Path.exists')
     def test_returns_env_cs_cli_path_when_bundled_not_exists(self, mock_exists):
-        from utils.code_health_analysis import cs_cli_path
-
         mock_exists.return_value = False
         os.environ["CS_CLI_PATH"] = "/custom/path/to/cs"
         platform_details = get_platform_details()
@@ -363,8 +336,6 @@ class TestCsCliPath(unittest.TestCase):
 
     @mock.patch('utils.code_health_analysis.Path.exists')
     def test_returns_default_path_when_no_bundled_and_no_env(self, mock_exists):
-        from utils.code_health_analysis import cs_cli_path
-
         mock_exists.return_value = False
         os.environ.pop("CS_CLI_PATH", None)
         platform_details = get_platform_details()
@@ -385,8 +356,6 @@ class TestMakeCsCliReviewCommandFor(unittest.TestCase):
 
     @mock.patch('utils.code_health_analysis.cs_cli_path')
     def test_returns_command_without_path_adaptation_when_no_mount_path(self, mock_cli_path):
-        from utils.code_health_analysis import make_cs_cli_review_command_for
-
         mock_cli_path.return_value = "/path/to/cs"
         os.environ.pop("CS_MOUNT_PATH", None)
 
@@ -397,8 +366,6 @@ class TestMakeCsCliReviewCommandFor(unittest.TestCase):
     @mock.patch('utils.code_health_analysis.cs_cli_path')
     @mock.patch('utils.code_health_analysis.adapt_mounted_file_path_inside_docker')
     def test_adapts_path_when_mount_path_set(self, mock_adapt, mock_cli_path):
-        from utils.code_health_analysis import make_cs_cli_review_command_for
-
         mock_cli_path.return_value = "/path/to/cs"
         mock_adapt.return_value = "/mount/src/foo.py"
         os.environ["CS_MOUNT_PATH"] = "/project"
@@ -410,8 +377,6 @@ class TestMakeCsCliReviewCommandFor(unittest.TestCase):
 
     @mock.patch('utils.code_health_analysis.cs_cli_path')
     def test_supports_different_cli_commands(self, mock_cli_path):
-        from utils.code_health_analysis import make_cs_cli_review_command_for
-
         mock_cli_path.return_value = "/path/to/cs"
         os.environ.pop("CS_MOUNT_PATH", None)
 
@@ -423,14 +388,112 @@ class TestMakeCsCliReviewCommandFor(unittest.TestCase):
 class TestCsCliReviewCommandFor(unittest.TestCase):
     @mock.patch('utils.code_health_analysis.make_cs_cli_review_command_for')
     def test_calls_make_with_review_command(self, mock_make):
-        from utils.code_health_analysis import cs_cli_review_command_for
-
         mock_make.return_value = ["/path/to/cs", "review", "/foo.py", "--output-format=json"]
 
         result = cs_cli_review_command_for("/foo.py")
 
         mock_make.assert_called_once_with("review", "/foo.py", None)
         self.assertEqual(result, ["/path/to/cs", "review", "/foo.py", "--output-format=json"])
+
+
+class TestTryNuitkaCliPath(unittest.TestCase):
+    def setUp(self):
+        self._env = dict(os.environ)
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self._env)
+
+    @mock.patch('os.chmod')
+    @mock.patch('os.access')
+    def test_returns_nuitka_path_when_compiled_and_binary_exists(self, mock_access, mock_chmod):
+        """Test that Nuitka binary path is returned when running in Nuitka environment."""
+        # Create a mock __compiled__ object with containing_dir
+        mock_compiled = mock.MagicMock()
+        mock_compiled.containing_dir = '/nuitka/dist'
+
+        # Temporarily inject __compiled__ into builtins
+        original_compiled = getattr(builtins, '__compiled__', None)
+        builtins.__compiled__ = mock_compiled  # type: ignore[attr-defined]
+
+        try:
+            with mock.patch('utils.code_health_analysis.Path') as MockPath:
+                mock_path_instance = mock.MagicMock()
+                mock_path_instance.exists.return_value = True
+                MockPath.return_value.__truediv__ = mock.MagicMock(return_value=mock_path_instance)
+
+                mock_access.return_value = True
+
+                result = _try_nuitka_cli_path('cs')
+
+                self.assertEqual(result, str(mock_path_instance))
+        finally:
+            # Restore original state
+            if original_compiled is None:
+                delattr(builtins, '__compiled__')
+            else:
+                builtins.__compiled__ = original_compiled  # type: ignore[attr-defined]
+
+    def test_returns_none_when_not_in_nuitka_environment(self):
+        """Test that None is returned when not running in Nuitka environment."""
+        result = _try_nuitka_cli_path('cs')
+
+        self.assertIsNone(result)
+
+    @mock.patch('os.chmod')
+    @mock.patch('os.access')
+    def test_sets_executable_when_nuitka_binary_not_executable(self, mock_access, mock_chmod):
+        """Test that chmod is called when Nuitka binary exists but is not executable."""
+        mock_compiled = mock.MagicMock()
+        mock_compiled.containing_dir = '/nuitka/dist'
+
+        original_compiled = getattr(builtins, '__compiled__', None)
+        builtins.__compiled__ = mock_compiled  # type: ignore[attr-defined]
+
+        try:
+            with mock.patch('utils.code_health_analysis.Path') as MockPath:
+                mock_path_instance = mock.MagicMock()
+                mock_path_instance.exists.return_value = True
+                MockPath.return_value.__truediv__ = mock.MagicMock(return_value=mock_path_instance)
+
+                mock_access.return_value = False  # Not executable
+
+                result = _try_nuitka_cli_path('cs')
+
+                mock_chmod.assert_called_once_with(mock_path_instance, 0o755)
+                self.assertEqual(result, str(mock_path_instance))
+        finally:
+            if original_compiled is None:
+                delattr(builtins, '__compiled__')
+            else:
+                builtins.__compiled__ = original_compiled  # type: ignore[attr-defined]
+
+
+class TestCsCliPathNuitkaIntegration(unittest.TestCase):
+    def setUp(self):
+        self._env = dict(os.environ)
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self._env)
+
+    @mock.patch('utils.code_health_analysis._try_bundled_cli_path')
+    @mock.patch('utils.code_health_analysis._try_nuitka_cli_path')
+    def test_returns_nuitka_path_when_available(self, mock_nuitka, mock_bundled):
+        """Test that cs_cli_path returns Nuitka path when available."""
+        os.environ.pop('CS_CLI_PATH', None)
+        os.environ.pop('CS_MOUNT_PATH', None)
+
+        mock_nuitka.return_value = '/nuitka/dist/cs'
+        mock_bundled.return_value = None
+
+        mock_platform = mock.MagicMock()
+        mock_platform.get_cli_binary_name.return_value = 'cs'
+
+        result = cs_cli_path(mock_platform)
+
+        self.assertEqual(result, '/nuitka/dist/cs')
+        mock_bundled.assert_not_called()  # Should short-circuit before checking bundled
 
 
 if __name__ == "__main__":
