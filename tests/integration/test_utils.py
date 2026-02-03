@@ -421,7 +421,7 @@ class ExecutableBuilder:
     def _run_nuitka_build(self) -> Path:
         """Run Nuitka to build the executable."""
         print("  Building with Nuitka (this may take several minutes)...")
-        print("  ", end="", flush=True)
+        sys.stdout.flush()
         
         executable_name = self._get_executable_name()
         cs_data_file = self._get_cli_name()
@@ -431,37 +431,22 @@ class ExecutableBuilder:
             "-m", "nuitka",
             "--onefile",
             "--assume-yes-for-downloads",
+            "--show-progress",
             f"--include-data-dir=./src/docs=src/docs",
             f"--include-data-files=./{cs_data_file}={cs_data_file}",
             f"--output-filename={executable_name}",
             "src/cs_mcp_server.py"
         ]
         
-        # Stream output to avoid GitHub Actions timeout on silence
-        process = subprocess.Popen(
+        # Run with output visible to avoid GitHub Actions timeout
+        result = subprocess.run(
             build_cmd,
             cwd=str(self.config.build_dir),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1
+            text=True
         )
         
-        # Print dots every few lines to show progress
-        line_count = 0
-        output_lines = []
-        for line in process.stdout:
-            output_lines.append(line)
-            line_count += 1
-            if line_count % 10 == 0:
-                print(".", end="", flush=True)
-        
-        return_code = process.wait()
-        print()  # Newline after dots
-        
-        if return_code != 0:
-            print(f"  \033[91mBuild failed:\033[0m")
-            print("".join(output_lines[-50:]))  # Show last 50 lines
+        if result.returncode != 0:
+            print(f"  \033[91mBuild failed with exit code {result.returncode}\033[0m")
             raise RuntimeError("Nuitka build failed")
         
         binary_path = self.config.build_dir / executable_name
