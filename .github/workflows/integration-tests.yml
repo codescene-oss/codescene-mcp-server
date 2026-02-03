@@ -41,7 +41,7 @@ jobs:
           pip install Nuitka
 
       - name: Run comprehensive integration tests
-        run: ./run-integration-tests.sh
+        run: ./tests/run-integration-tests.sh
 
   # =============================================================================
   # Comprehensive Integration Tests - macOS (Apple Silicon)
@@ -67,7 +67,7 @@ jobs:
           pip install Nuitka
 
       - name: Run comprehensive integration tests
-        run: ./run-integration-tests.sh
+        run: ./tests/run-integration-tests.sh
 
   # =============================================================================
   # Comprehensive Integration Tests - Windows
@@ -95,4 +95,4 @@ jobs:
 
       - name: Run comprehensive integration tests
         shell: pwsh
-        run: .\run-integration-tests.ps1
+        run: .\tests\run-integration-tests.ps1

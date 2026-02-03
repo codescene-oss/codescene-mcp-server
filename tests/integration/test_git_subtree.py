@@ -16,6 +16,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from test_utils import (
     MCPClient,
+    NuitkaBackend,
+    ServerBackend,
     create_git_repo,
     create_test_environment,
     extract_code_health_score,
@@ -394,6 +396,208 @@ def run_subtree_tests(executable: Path) -> int:
         ]
         
         return print_summary(results)
+
+
+def run_subtree_tests_with_backend(backend: ServerBackend) -> int:
+    """
+    Run all git subtree tests using a backend.
+    
+    Args:
+        backend: Server backend to use
+        
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    # Check if git subtree is available
+    try:
+        result = subprocess.run(["git", "subtree", "--help"], capture_output=True, text=True)
+        if result.returncode != 0:
+            print("\nGit subtree command not available. Skipping subtree tests.")
+            return 0
+    except Exception as e:
+        print(f"\nGit subtree not available: {e}")
+        return 0
+    
+    with tempfile.TemporaryDirectory(prefix="cs_mcp_subtree_test_") as tmp:
+        test_dir = Path(tmp)
+        print(f"\nTest directory: {test_dir}")
+        
+        print("\nCreating external library repository...")
+        external_repo = create_external_repo(test_dir)
+        print(f"External repo: {external_repo}")
+        
+        print("\nCreating main repository...")
+        repo_dir = create_git_repo(test_dir / "main_project", get_sample_files())
+        print(f"Main repo: {repo_dir}")
+        
+        subtree_prefix = "lib/external"
+        print(f"\nAdding git subtree at '{subtree_prefix}'...")
+        try:
+            add_subtree(repo_dir, external_repo, subtree_prefix)
+            print("Subtree added successfully")
+        except Exception as e:
+            print(f"\nError adding subtree: {e}")
+            return 0
+        
+        subtree_file = repo_dir / subtree_prefix / "utils.py"
+        if not subtree_file.exists():
+            print(f"\nError: Subtree file not found: {subtree_file}")
+            return 1
+        print(f"Verified subtree file exists: {subtree_file}")
+        
+        command = backend.get_command(repo_dir)
+        env = backend.get_env(os.environ.copy(), repo_dir)
+        
+        results = [
+            ("Code Health Score (subtree)", test_subtree_score_cmd(command, env, repo_dir, subtree_prefix)),
+            ("Code Health Review (subtree)", test_subtree_review_cmd(command, env, repo_dir, subtree_prefix)),
+            ("Pre-commit Safeguard (subtree)", test_subtree_precommit_cmd(command, env, repo_dir, subtree_prefix)),
+            ("Absolute Paths (subtree)", test_subtree_abspaths_cmd(command, env, repo_dir, subtree_prefix)),
+            ("Main Repo Files Still Work", test_main_repo_cmd(command, env, repo_dir)),
+        ]
+        
+        return print_summary(results)
+
+
+def test_subtree_score_cmd(command: list[str], env: dict, repo_dir: Path, subtree_path: str) -> bool:
+    """Test code_health_score on files in a git subtree (command version)."""
+    print_header("Test: Code Health Score in Git Subtree")
+    client = MCPClient(command, env=env, cwd=str(repo_dir))
+    try:
+        if not client.start():
+            print_test("Server started", False)
+            return False
+        print_test("Server started", True)
+        client.initialize()
+        test_file = repo_dir / subtree_path / "utils.py"
+        print(f"\n  Testing subtree file: {test_file}")
+        response = client.call_tool("code_health_score", {"file_path": str(test_file)}, timeout=60)
+        result_text = extract_result_text(response)
+        score = extract_code_health_score(result_text)
+        if score is None:
+            print_test("Code Health Score returned", False, f"Response: {result_text[:200]}")
+            return False
+        print_test("Code Health Score returned", True, f"Score: {score}")
+        no_errors = "traceback" not in result_text.lower() and "nonetype" not in result_text.lower()
+        print_test("No errors in response", no_errors)
+        return score is not None and no_errors
+    except Exception as e:
+        print_test("Subtree code health score test", False, str(e))
+        return False
+    finally:
+        client.stop()
+
+
+def test_subtree_review_cmd(command: list[str], env: dict, repo_dir: Path, subtree_path: str) -> bool:
+    """Test code_health_review on files in a git subtree (command version)."""
+    print_header("Test: Code Health Review in Git Subtree")
+    client = MCPClient(command, env=env, cwd=str(repo_dir))
+    try:
+        if not client.start():
+            print_test("Server started", False)
+            return False
+        print_test("Server started", True)
+        client.initialize()
+        test_file = repo_dir / subtree_path / "config.py"
+        print(f"\n  Reviewing subtree file: {test_file}")
+        response = client.call_tool("code_health_review", {"file_path": str(test_file)}, timeout=60)
+        result_text = extract_result_text(response)
+        has_content = len(result_text) > 0
+        print_test("Review returned content", has_content, f"Length: {len(result_text)} chars")
+        no_errors = "traceback" not in result_text.lower() and "nonetype" not in result_text.lower()
+        print_test("No errors in response", no_errors)
+        return has_content and no_errors
+    except Exception as e:
+        print_test("Subtree code health review test", False, str(e))
+        return False
+    finally:
+        client.stop()
+
+
+def test_subtree_precommit_cmd(command: list[str], env: dict, repo_dir: Path, subtree_path: str) -> bool:
+    """Test pre_commit_code_health_safeguard with subtree modifications (command version)."""
+    print_header("Test: Pre-commit Safeguard with Subtree Changes")
+    client = MCPClient(command, env=env, cwd=str(repo_dir))
+    try:
+        if not client.start():
+            print_test("Server started", False)
+            return False
+        print_test("Server started", True)
+        client.initialize()
+        test_file = repo_dir / subtree_path / "utils.py"
+        original_content = test_file.read_text()
+        test_file.write_text(original_content + "\n# Subtree modification test\n")
+        subprocess.run(["git", "add", str(test_file)], cwd=repo_dir, check=True, capture_output=True)
+        print(f"\n  Running safeguard with subtree modification...")
+        response = client.call_tool(
+            "pre_commit_code_health_safeguard", {"git_repository_path": str(repo_dir)}, timeout=60
+        )
+        result_text = extract_result_text(response)
+        has_content = len(result_text) > 20
+        print_test("Safeguard returned content", has_content, f"Length: {len(result_text)} chars")
+        no_errors = "traceback" not in result_text.lower()
+        print_test("No errors in response", no_errors)
+        test_file.write_text(original_content)
+        subprocess.run(["git", "reset", "HEAD", str(test_file)], cwd=repo_dir, capture_output=True)
+        return has_content and no_errors
+    except Exception as e:
+        print_test("Subtree pre-commit test", False, str(e))
+        return False
+    finally:
+        client.stop()
+
+
+def test_subtree_abspaths_cmd(command: list[str], env: dict, repo_dir: Path, subtree_path: str) -> bool:
+    """Test absolute path resolution for subtree files (command version)."""
+    print_header("Test: Absolute Paths in Git Subtree")
+    abs_path = str(repo_dir / subtree_path / "utils.py")
+    print(f"  Testing absolute path: {abs_path}")
+    client = MCPClient(command, env=env, cwd=str(repo_dir))
+    try:
+        if not client.start():
+            print_test("Server started", False)
+            return False
+        print_test("Server started", True)
+        client.initialize()
+        response = client.call_tool("code_health_score", {"file_path": abs_path}, timeout=60)
+        result_text = extract_result_text(response)
+        score = extract_code_health_score(result_text)
+        if score is None:
+            print_test("Absolute path resolved", False, f"Response: {result_text[:200]}")
+            return False
+        print_test("Absolute path resolved", True, f"Score: {score}")
+        return True
+    except Exception as e:
+        print_test("Subtree absolute paths test", False, str(e))
+        return False
+    finally:
+        client.stop()
+
+
+def test_main_repo_cmd(command: list[str], env: dict, repo_dir: Path) -> bool:
+    """Test that main repo files still work correctly with subtree present (command version)."""
+    print_header("Test: Main Repository Files with Subtree Present")
+    test_file = str(repo_dir / "src/utils/calculator.py")
+    client = MCPClient(command, env=env, cwd=str(repo_dir))
+    try:
+        if not client.start():
+            print_test("Server started", False)
+            return False
+        print_test("Server started", True)
+        client.initialize()
+        response = client.call_tool("code_health_score", {"file_path": test_file}, timeout=60)
+        result_text = extract_result_text(response)
+        score = extract_code_health_score(result_text)
+        if score is None:
+            print_test("Main repo file analysis works", False, f"Response: {result_text[:200]}")
+            return False
+        print_test("Main repo file analysis works", True, f"Score: {score}")
+        return True
+    except Exception as e:
+        print_test("Main repo file test", False, str(e))
+        return False
+    finally:
+        client.stop()
 
 
 def main() -> int:

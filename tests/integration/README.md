@@ -13,10 +13,32 @@ Comprehensive integration test suite for the CodeScene MCP server. These tests v
 tests/integration/
 ├── README.md                       # This file
 ├── run_all_tests.py               # Main test runner (builds and runs all tests)
-├── test_utils.py                  # Shared utilities (MCPClient, builders, helpers)
+├── test_utils.py                  # Shared utilities (MCPClient, backends, helpers)
 ├── fixtures.py                    # Test code samples with known Code Health characteristics
 ├── test_platform_specific.py      # Platform-specific path handling tests
-└── test_git_worktree.py          # Git worktree-specific tests
+├── test_git_worktree.py          # Git worktree-specific tests
+└── test_git_subtree.py           # Git subtree-specific tests
+```
+
+## Backends
+
+The test suite supports two backends for running the MCP server:
+
+| Backend | Flag | Description | Use Case |
+|---------|------|-------------|----------|
+| **Static** | (default) | Builds static executable with Nuitka | CI/CD, release testing |
+| **Docker** | `--docker` | Runs in Docker container | Container testing (Linux/macOS) |
+
+### Backend Examples
+
+```bash
+# Static backend (default) - builds and tests static executable (from repo root)
+./tests/run-integration-tests.sh
+python tests/integration/run_all_tests.py
+
+# Docker backend - tests containerized server (from repo root)
+./tests/run-integration-tests.sh --docker
+python tests/integration/run_all_tests.py --backend docker
 ```
 
 ## Prerequisites

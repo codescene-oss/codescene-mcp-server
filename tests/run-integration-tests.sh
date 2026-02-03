@@ -21,7 +21,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TEST_DIR="$SCRIPT_DIR/tests/integration"
+TEST_DIR="$SCRIPT_DIR/integration"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Colors
 RED='\033[0;31m'
@@ -95,6 +96,7 @@ Options:
   --worktree-only     Run only git worktree tests
   --subtree-only      Run only git subtree tests
   --skip-build        Skip build step (use previously built executable)
+  --docker            Run tests using Docker backend
 
 Environment Variables:
   CS_ACCESS_TOKEN     CodeScene access token (required)
@@ -117,6 +119,7 @@ EOF
 EXECUTABLE=""
 TEST_MODE="all"
 SKIP_BUILD=0
+BACKEND="nuitka"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -145,6 +148,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_BUILD=1
             shift
             ;;
+        --docker)
+            BACKEND="docker"
+            shift
+            ;;
         *)
             echo "Unknown option: $1"
             echo "Use --help for usage information"
@@ -159,6 +166,8 @@ main() {
     echo "  CodeScene MCP Server - Integration Tests"
     echo "======================================================================"
     echo ""
+    echo "  Backend: $BACKEND"
+    echo ""
     
     check_prerequisites
     
@@ -168,20 +177,20 @@ main() {
         all)
             echo "Running comprehensive test suite..."
             if [ -n "$EXECUTABLE" ]; then
-                python3 run_all_tests.py --executable "$EXECUTABLE"
+                python3 run_all_tests.py --executable "$EXECUTABLE" --backend "$BACKEND"
             elif [ $SKIP_BUILD -eq 1 ]; then
                 # Try to find previously built executable
-                BUILT_EXEC="$SCRIPT_DIR/../cs_mcp_test_bin/cs-mcp"
+                BUILT_EXEC="$REPO_ROOT/../cs_mcp_test_bin/cs-mcp"
                 if [ -f "$BUILT_EXEC" ]; then
                     echo "Using previously built executable: $BUILT_EXEC"
-                    python3 run_all_tests.py --executable "$BUILT_EXEC"
+                    python3 run_all_tests.py --executable "$BUILT_EXEC" --backend "$BACKEND"
                 else
                     echo -e "${RED}No previously built executable found${NC}"
                     echo "Run without --skip-build to build a new one"
                     exit 1
                 fi
             else
-                python3 run_all_tests.py
+                python3 run_all_tests.py --backend "$BACKEND"
             fi
             ;;
         platform)

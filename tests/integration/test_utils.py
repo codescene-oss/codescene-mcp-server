@@ -3,6 +3,7 @@
 Shared utilities for comprehensive MCP integration tests.
 
 This module provides:
+- ServerBackend protocol for abstracting server execution (Nuitka, Docker, Python)
 - Build utilities for creating static executables in isolated test environments
 - MCPClient for communicating with MCP servers via stdio
 - Test helpers for validating Code Health and other tool responses
@@ -21,6 +22,7 @@ import threading
 import time
 import urllib.request
 import zipfile
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -292,6 +294,34 @@ def extract_code_health_score(response_text: str) -> Optional[float]:
     return None
 
 
+# =============================================================================
+# Server Backend Abstraction
+# =============================================================================
+
+class ServerBackend(ABC):
+    """Abstract backend for running the MCP server."""
+    
+    @abstractmethod
+    def prepare(self) -> None:
+        """Prepare the backend (build executable, build image, etc.)."""
+        pass
+    
+    @abstractmethod
+    def get_command(self, working_dir: Path) -> list[str]:
+        """Get the command to launch the MCP server."""
+        pass
+    
+    @abstractmethod
+    def get_env(self, base_env: dict[str, str], working_dir: Path) -> dict[str, str]:
+        """Get environment variables for the server process."""
+        pass
+    
+    @abstractmethod
+    def cleanup(self) -> None:
+        """Clean up any resources."""
+        pass
+
+
 @dataclass
 class BuildConfig:
     """Configuration for building the static executable."""
@@ -472,6 +502,119 @@ class ExecutableBuilder:
         binary_path = self._run_nuitka_build()
         print(f"  \033[92mBuild successful:\033[0m {binary_path}")
         return binary_path
+
+
+class NuitkaBackend(ServerBackend):
+    """Backend that uses a Nuitka-compiled executable."""
+    
+    def __init__(self, executable: Optional[Path] = None):
+        self.executable = executable
+        self._temp_dir: Optional[Path] = None
+    
+    def prepare(self) -> None:
+        """Build the Nuitka executable if not already provided."""
+        if self.executable:
+            print(f"\nUsing existing executable: {self.executable}")
+            return
+        
+        repo_root = Path(__file__).parent.parent.parent
+        self._temp_dir = Path(tempfile.mkdtemp(prefix="cs_mcp_build_"))
+        build_dir = self._temp_dir / "build"
+        
+        config = BuildConfig(
+            repo_root=repo_root,
+            build_dir=build_dir,
+            python_executable=sys.executable
+        )
+        
+        builder = ExecutableBuilder(config)
+        binary_path = builder.build()
+        
+        # Move to persistent location outside repo
+        test_bin_dir = repo_root.parent / "cs_mcp_test_bin"
+        test_bin_dir.mkdir(exist_ok=True)
+        self.executable = test_bin_dir / binary_path.name
+        shutil.copy2(binary_path, self.executable)
+        
+        if os.name != "nt":
+            os.chmod(self.executable, 0o755)
+        
+        print(f"\n\033[92mExecutable ready:\033[0m {self.executable}")
+    
+    def get_command(self, working_dir: Path) -> list[str]:
+        """Return command to run the Nuitka executable."""
+        return [str(self.executable)]
+    
+    def get_env(self, base_env: dict[str, str], working_dir: Path) -> dict[str, str]:
+        """Return environment without CS_MOUNT_PATH for native execution."""
+        env = base_env.copy()
+        env.pop("CS_MOUNT_PATH", None)
+        return env
+    
+    def cleanup(self) -> None:
+        """Clean up temporary build directory."""
+        if self._temp_dir and self._temp_dir.exists():
+            shutil.rmtree(self._temp_dir, ignore_errors=True)
+
+
+class DockerBackend(ServerBackend):
+    """Backend that uses Docker to run the MCP server.
+    
+    The Docker setup works as follows:
+    - CS_MOUNT_PATH is set to the HOST path (e.g., /tmp/test_repo)
+    - The mount destination is /mount/ inside the container
+    - The server translates paths from CS_MOUNT_PATH to /mount/ internally
+    - Tests pass host paths, and the server handles the translation
+    """
+    
+    IMAGE_NAME = "codescene-mcp-test"
+    CONTAINER_MOUNT_DEST = "/mount/"
+    
+    def __init__(self, image_name: Optional[str] = None):
+        self.image_name = image_name or self.IMAGE_NAME
+        self._built = False
+    
+    def prepare(self) -> None:
+        """Build the Docker image."""
+        print_header("Building Docker Image")
+        repo_root = Path(__file__).parent.parent.parent
+        
+        result = subprocess.run(
+            ["docker", "build", "-t", self.image_name, "."],
+            cwd=str(repo_root),
+            text=True
+        )
+        
+        if result.returncode != 0:
+            raise RuntimeError("Docker build failed")
+        
+        self._built = True
+        print(f"\n\033[92mDocker image ready:\033[0m {self.image_name}")
+    
+    def get_command(self, working_dir: Path) -> list[str]:
+        """Return docker run command with proper mounts.
+        
+        Following the documented pattern:
+        - CS_MOUNT_PATH is set to the HOST path (working_dir)
+        - Mount binds host path to /mount/ in container
+        - Server translates paths internally
+        """
+        return [
+            "docker", "run", "-i", "--rm",
+            "-e", "CS_ACCESS_TOKEN",
+            "-e", f"CS_MOUNT_PATH={working_dir}",
+            "-e", "CS_ONPREM_URL",
+            "--mount", f"type=bind,src={working_dir},dst={self.CONTAINER_MOUNT_DEST}",
+            self.image_name
+        ]
+    
+    def get_env(self, base_env: dict[str, str], working_dir: Path) -> dict[str, str]:
+        """Return environment for Docker execution."""
+        return base_env.copy()
+    
+    def cleanup(self) -> None:
+        """No cleanup needed - containers use --rm."""
+        pass
 
 
 def create_test_environment() -> dict[str, str]:

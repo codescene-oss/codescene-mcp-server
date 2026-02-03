@@ -9,16 +9,16 @@ create-executable:
 .PHONY: test-integration
 test-integration:
 	@echo "Running comprehensive integration tests..."
-	./run-integration-tests.sh
+	./tests/run-integration-tests.sh
 
 .PHONY: test-integration-platform
 test-integration-platform:
 	@echo "Running platform-specific integration tests..."
 	@if [ ! -f "../cs_mcp_test_bin/cs-mcp" ]; then \
 		echo "No executable found. Building first..."; \
-		./run-integration-tests.sh; \
+		./tests/run-integration-tests.sh; \
 	else \
-		./run-integration-tests.sh --platform-only --executable ../cs_mcp_test_bin/cs-mcp; \
+		./tests/run-integration-tests.sh --platform-only --executable ../cs_mcp_test_bin/cs-mcp; \
 	fi
 
 .PHONY: test-integration-worktree
@@ -26,9 +26,9 @@ test-integration-worktree:
 	@echo "Running git worktree integration tests..."
 	@if [ ! -f "../cs_mcp_test_bin/cs-mcp" ]; then \
 		echo "No executable found. Building first..."; \
-		./run-integration-tests.sh; \
+		./tests/run-integration-tests.sh; \
 	else \
-		./run-integration-tests.sh --worktree-only --executable ../cs_mcp_test_bin/cs-mcp; \
+		./tests/run-integration-tests.sh --worktree-only --executable ../cs_mcp_test_bin/cs-mcp; \
 	fi
 
 .PHONY: test-all
@@ -37,4 +37,4 @@ test-all:
 	python3 -m pytest src/
 	@echo ""
 	@echo "Running integration tests..."
-	./run-integration-tests.sh
+	./tests/run-integration-tests.sh

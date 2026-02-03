@@ -24,7 +24,8 @@ param(
     [switch]$PlatformOnly,
     [switch]$WorktreeOnly,
     [switch]$SubtreeOnly,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$Docker
 )
 
 $ErrorActionPreference = "Stop"
@@ -69,6 +70,7 @@ Options:
   -WorktreeOnly      Run only git worktree tests
   -SubtreeOnly       Run only git subtree tests
   -SkipBuild         Skip build step (use previously built executable)
+  -Docker            Run tests using Docker backend
 
 Environment Variables:
   CS_ACCESS_TOKEN    CodeScene access token (required)
@@ -164,10 +166,20 @@ function Main {
         exit 0
     }
     
+    # Determine backend
+    $backend = "static"
+    if ($Docker) {
+        $backend = "docker"
+    }
+    
+    Write-Host "  Backend: $backend"
+    Write-Host ""
+    
     Check-Prerequisites
     
     $scriptDir = $PSScriptRoot
-    $testDir = Join-Path $scriptDir "tests" "integration"
+    $testDir = Join-Path $scriptDir "integration"
+    $repoRoot = Split-Path $scriptDir
     
     Push-Location $testDir
     
@@ -199,14 +211,14 @@ function Main {
         else {
             Write-Host "Running comprehensive test suite..."
             if ($Executable) {
-                python run_all_tests.py --executable $Executable
+                python run_all_tests.py --executable $Executable --backend $backend
             }
             elseif ($SkipBuild) {
                 # Try to find previously built executable
-                $builtExec = Join-Path (Split-Path $scriptDir) "cs_mcp_test_bin" "cs-mcp.exe"
+                $builtExec = Join-Path (Split-Path $repoRoot) "cs_mcp_test_bin" "cs-mcp.exe"
                 if (Test-Path $builtExec) {
                     Write-Host "Using previously built executable: $builtExec"
-                    python run_all_tests.py --executable $builtExec
+                    python run_all_tests.py --executable $builtExec --backend $backend
                 } else {
                     Write-Error-Message "No previously built executable found"
                     Write-Host "Run without -SkipBuild to build a new one"
@@ -214,7 +226,7 @@ function Main {
                 }
             }
             else {
-                python run_all_tests.py
+                python run_all_tests.py --backend $backend
             }
         }
         
