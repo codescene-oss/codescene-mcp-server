@@ -26,7 +26,6 @@ Usage:
 import argparse
 import os
 import sys
-import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -48,6 +47,7 @@ from test_utils import (
     print_header,
     print_summary,
     print_test,
+    safe_temp_directory,
 )
 from fixtures import get_sample_files, get_expected_scores
 
@@ -326,11 +326,12 @@ def build_executable() -> Path:
     Returns:
         Path to the built executable
     """
+    import shutil
     repo_root = Path(__file__).parent.parent.parent
     
     # Create build directory outside repo
-    with tempfile.TemporaryDirectory(prefix="cs_mcp_build_") as tmp:
-        build_dir = Path(tmp) / "build"
+    with safe_temp_directory(prefix="cs_mcp_build_") as tmp:
+        build_dir = tmp / "build"
         
         config = BuildConfig(
             repo_root=repo_root,
@@ -349,7 +350,6 @@ def build_executable() -> Path:
         final_path = test_bin_dir / executable_name
         
         # Copy instead of move to handle cross-device issues
-        import shutil
         shutil.copy2(binary_path, final_path)
         
         # Make executable on Unix-like systems
@@ -414,9 +414,7 @@ def run_all_tests_with_backend(backend: ServerBackend) -> int:
         Exit code (0 for success, 1 for failure)
     """
     # Create isolated test directory
-    with tempfile.TemporaryDirectory(prefix="cs_mcp_test_") as tmp:
-        # Resolve to real path (handles macOS /var -> /private/var symlink)
-        test_dir = Path(tmp).resolve()
+    with safe_temp_directory(prefix="cs_mcp_test_") as test_dir:
         print(f"\nTest directory: {test_dir}")
         
         # Create git repo with sample files

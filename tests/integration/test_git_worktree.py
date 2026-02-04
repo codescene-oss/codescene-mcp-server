@@ -9,7 +9,6 @@ which have special path resolution requirements.
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -24,6 +23,7 @@ from test_utils import (
     print_header,
     print_summary,
     print_test,
+    safe_temp_directory,
 )
 from fixtures import get_sample_files
 
@@ -88,9 +88,7 @@ def run_worktree_tests_with_backend(backend: ServerBackend) -> int:
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    with tempfile.TemporaryDirectory(prefix="cs_mcp_worktree_test_") as tmp:
-        # Resolve to real path (handles macOS /var -> /private/var symlink)
-        test_dir = Path(tmp).resolve()
+    with safe_temp_directory(prefix="cs_mcp_worktree_test_") as test_dir:
         print(f"\nTest directory: {test_dir}")
         
         # Create main git repo
