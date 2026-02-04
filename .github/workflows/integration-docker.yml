@@ -25,7 +25,7 @@ jobs:
   # - Linux Docker tests provide sufficient coverage for the Docker backend
   # - Static tests still run on macOS to validate core functionality
   docker-integration-linux:
-    runs-on: ubuntu-latest
+    runs-on: askos-linux
     name: Docker Integration Tests (Linux)
     steps:
       - name: Checkout code
