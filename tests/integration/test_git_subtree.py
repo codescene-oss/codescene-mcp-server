@@ -9,7 +9,6 @@ where external repositories are nested as subdirectories.
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Callable, NamedTuple
 
@@ -25,6 +24,7 @@ from test_utils import (
     print_header,
     print_summary,
     print_test,
+    safe_temp_directory,
 )
 from fixtures import get_sample_files
 
@@ -161,9 +161,7 @@ def run_subtree_tests_with_backend(backend: ServerBackend) -> int:
         print(f"\nGit subtree not available: {e}")
         return 0
     
-    with tempfile.TemporaryDirectory(prefix="cs_mcp_subtree_test_") as tmp:
-        # Resolve to real path (handles macOS /var -> /private/var symlink)
-        test_dir = Path(tmp).resolve()
+    with safe_temp_directory(prefix="cs_mcp_subtree_test_") as test_dir:
         print(f"\nTest directory: {test_dir}")
         
         print("\nCreating external library repository...")
