@@ -19,6 +19,7 @@ tests are skipped and only the absolute path test runs.
 import os
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -37,6 +38,22 @@ from test_utils import (
     safe_temp_directory,
 )
 from fixtures import get_sample_files
+
+
+@dataclass
+class ServerContext:
+    """Context for running MCP server tests."""
+    command: list[str]
+    env: dict
+    repo_dir: Path
+
+
+@dataclass
+class PathTestConfig:
+    """Configuration for a path test case."""
+    test_name: str
+    file_path: str
+    error_context: str
 
 
 def is_docker_backend(backend: ServerBackend) -> bool:
@@ -110,11 +127,20 @@ def run_relative_path_tests_with_backend(backend: ServerBackend) -> int:
         return print_summary(results)
 
 
-def test_relative_path_simple(command: list[str], env: dict, repo_dir: Path) -> bool:
-    """Test code_health_score with a simple relative path."""
-    print_header("Test: Simple Relative Path")
+def _run_path_test(ctx: ServerContext, config: PathTestConfig) -> bool:
+    """
+    Common test logic for path-based code health tests.
     
-    client = MCPClient(command, env=env, cwd=str(repo_dir))
+    Args:
+        ctx: Server context with command, env, and repo_dir
+        config: Test configuration with test_name, file_path, and error_context
+        
+    Returns:
+        True if test passed, False otherwise
+    """
+    print_header(f"Test: {config.test_name}")
+    
+    client = MCPClient(ctx.command, env=ctx.env, cwd=str(ctx.repo_dir))
     
     try:
         if not client.start():
@@ -124,13 +150,9 @@ def test_relative_path_simple(command: list[str], env: dict, repo_dir: Path) -> 
         print_test("Server started", True)
         client.initialize()
         
-        # Use relative path from repo root
-        relative_path = "src/utils/calculator.py"
+        print(f"\n  Testing path: {config.file_path}")
         
-        print(f"\n  Testing relative path: {relative_path}")
-        print(f"  Working directory: {repo_dir}")
-        
-        response = client.call_tool("code_health_score", {"file_path": relative_path}, timeout=60)
+        response = client.call_tool("code_health_score", {"file_path": config.file_path}, timeout=60)
         result_text = extract_result_text(response)
         score = extract_code_health_score(result_text)
         
@@ -147,220 +169,53 @@ def test_relative_path_simple(command: list[str], env: dict, repo_dir: Path) -> 
         return score is not None and no_subpath_error
         
     except Exception as e:
-        print_test("Relative path test", False, str(e))
+        print_test(f"{config.error_context} test", False, str(e))
         return False
     finally:
         client.stop()
+
+
+def test_relative_path_simple(command: list[str], env: dict, repo_dir: Path) -> bool:
+    """Test code_health_score with a simple relative path."""
+    ctx = ServerContext(command, env, repo_dir)
+    config = PathTestConfig("Simple Relative Path", "src/utils/calculator.py", "Relative path")
+    return _run_path_test(ctx, config)
 
 
 def test_relative_path_nested(command: list[str], env: dict, repo_dir: Path) -> bool:
     """Test code_health_score with a nested relative path."""
-    print_header("Test: Nested Relative Path")
-    
-    client = MCPClient(command, env=env, cwd=str(repo_dir))
-    
-    try:
-        if not client.start():
-            print_test("Server started", False)
-            return False
-        
-        print_test("Server started", True)
-        client.initialize()
-        
-        # Use deeply nested relative path
-        relative_path = "src/main/java/com/example/OrderProcessor.java"
-        
-        print(f"\n  Testing nested relative path: {relative_path}")
-        
-        response = client.call_tool("code_health_score", {"file_path": relative_path}, timeout=60)
-        result_text = extract_result_text(response)
-        score = extract_code_health_score(result_text)
-        
-        if score is None:
-            print_test("Code Health Score returned", False, f"Response: {result_text[:200]}")
-            return False
-        
-        print_test("Code Health Score returned", True, f"Score: {score}")
-        
-        no_subpath_error = "not in the subpath" not in result_text.lower()
-        print_test("No 'not in subpath' error", no_subpath_error)
-        
-        return score is not None and no_subpath_error
-        
-    except Exception as e:
-        print_test("Nested relative path test", False, str(e))
-        return False
-    finally:
-        client.stop()
+    ctx = ServerContext(command, env, repo_dir)
+    config = PathTestConfig("Nested Relative Path", "src/main/java/com/example/OrderProcessor.java", "Nested relative path")
+    return _run_path_test(ctx, config)
 
 
 def test_relative_path_dot_prefix(command: list[str], env: dict, repo_dir: Path) -> bool:
     """Test code_health_score with ./ prefix relative path."""
-    print_header("Test: Relative Path with ./ Prefix")
-    
-    client = MCPClient(command, env=env, cwd=str(repo_dir))
-    
-    try:
-        if not client.start():
-            print_test("Server started", False)
-            return False
-        
-        print_test("Server started", True)
-        client.initialize()
-        
-        # Use ./ prefix (common in shell usage)
-        relative_path = "./src/utils/calculator.py"
-        
-        print(f"\n  Testing ./ prefix path: {relative_path}")
-        
-        response = client.call_tool("code_health_score", {"file_path": relative_path}, timeout=60)
-        result_text = extract_result_text(response)
-        score = extract_code_health_score(result_text)
-        
-        if score is None:
-            print_test("Code Health Score returned", False, f"Response: {result_text[:200]}")
-            return False
-        
-        print_test("Code Health Score returned", True, f"Score: {score}")
-        
-        no_subpath_error = "not in the subpath" not in result_text.lower()
-        print_test("No 'not in subpath' error", no_subpath_error)
-        
-        return score is not None and no_subpath_error
-        
-    except Exception as e:
-        print_test("./ prefix path test", False, str(e))
-        return False
-    finally:
-        client.stop()
+    ctx = ServerContext(command, env, repo_dir)
+    config = PathTestConfig("Relative Path with ./ Prefix", "./src/utils/calculator.py", "./ prefix path")
+    return _run_path_test(ctx, config)
 
 
 def test_relative_path_from_subdir(command: list[str], env: dict, repo_dir: Path) -> bool:
     """Test code_health_score from a subdirectory using the repo root as context."""
-    print_header("Test: Relative Path from Subdirectory Context")
-    
-    # Note: The MCP server uses cwd from where it's launched, so we test
-    # that relative paths work when the server knows the repo root.
-    client = MCPClient(command, env=env, cwd=str(repo_dir))
-    
-    try:
-        if not client.start():
-            print_test("Server started", False)
-            return False
-        
-        print_test("Server started", True)
-        client.initialize()
-        
-        # Test accessing a file in another subdirectory
-        relative_path = "src/services/order_processor.py"
-        
-        print(f"\n  Testing path to sibling directory: {relative_path}")
-        
-        response = client.call_tool("code_health_score", {"file_path": relative_path}, timeout=60)
-        result_text = extract_result_text(response)
-        score = extract_code_health_score(result_text)
-        
-        if score is None:
-            print_test("Code Health Score returned", False, f"Response: {result_text[:200]}")
-            return False
-        
-        print_test("Code Health Score returned", True, f"Score: {score}")
-        
-        no_subpath_error = "not in the subpath" not in result_text.lower()
-        print_test("No 'not in subpath' error", no_subpath_error)
-        
-        return score is not None and no_subpath_error
-        
-    except Exception as e:
-        print_test("Subdir path test", False, str(e))
-        return False
-    finally:
-        client.stop()
+    ctx = ServerContext(command, env, repo_dir)
+    config = PathTestConfig("Relative Path from Subdirectory Context", "src/services/order_processor.py", "Subdir path")
+    return _run_path_test(ctx, config)
 
 
 def test_mixed_slashes(command: list[str], env: dict, repo_dir: Path) -> bool:
     """Test code_health_score with mixed forward/backslashes (Windows scenario)."""
-    print_header("Test: Mixed Path Slashes (Windows Compatibility)")
-    
-    client = MCPClient(command, env=env, cwd=str(repo_dir))
-    
-    try:
-        if not client.start():
-            print_test("Server started", False)
-            return False
-        
-        print_test("Server started", True)
-        client.initialize()
-        
-        # Use mixed slashes (common in Windows environments)
-        # Note: On Unix, backslash is a valid filename character, so this may not
-        # work exactly the same. The key is testing that it doesn't crash.
-        relative_path = "src/utils/calculator.py"  # Use forward slashes for portability
-        
-        print(f"\n  Testing path: {relative_path}")
-        
-        response = client.call_tool("code_health_score", {"file_path": relative_path}, timeout=60)
-        result_text = extract_result_text(response)
-        score = extract_code_health_score(result_text)
-        
-        if score is None:
-            print_test("Code Health Score returned", False, f"Response: {result_text[:200]}")
-            return False
-        
-        print_test("Code Health Score returned", True, f"Score: {score}")
-        
-        no_subpath_error = "not in the subpath" not in result_text.lower()
-        print_test("No 'not in subpath' error", no_subpath_error)
-        
-        return score is not None and no_subpath_error
-        
-    except Exception as e:
-        print_test("Mixed slashes test", False, str(e))
-        return False
-    finally:
-        client.stop()
+    ctx = ServerContext(command, env, repo_dir)
+    config = PathTestConfig("Mixed Path Slashes (Windows Compatibility)", "src/utils/calculator.py", "Mixed slashes")
+    return _run_path_test(ctx, config)
 
 
 def test_absolute_path(command: list[str], env: dict, repo_dir: Path) -> bool:
     """Test code_health_score with absolute path (baseline comparison)."""
-    print_header("Test: Absolute Path (Baseline)")
-    
-    client = MCPClient(command, env=env, cwd=str(repo_dir))
-    
-    try:
-        if not client.start():
-            print_test("Server started", False)
-            return False
-        
-        print_test("Server started", True)
-        client.initialize()
-        
-        # Use absolute path
-        test_file = repo_dir / "src/utils/calculator.py"
-        absolute_path = str(test_file)
-        
-        print(f"\n  Testing absolute path: {absolute_path}")
-        
-        response = client.call_tool("code_health_score", {"file_path": absolute_path}, timeout=60)
-        result_text = extract_result_text(response)
-        score = extract_code_health_score(result_text)
-        
-        if score is None:
-            print_test("Code Health Score returned", False, f"Response: {result_text[:200]}")
-            return False
-        
-        print_test("Code Health Score returned", True, f"Score: {score}")
-        
-        no_subpath_error = "not in the subpath" not in result_text.lower()
-        print_test("No 'not in subpath' error", no_subpath_error)
-        
-        return score is not None and no_subpath_error
-        
-    except Exception as e:
-        print_test("Absolute path test", False, str(e))
-        return False
-    finally:
-        client.stop()
+    ctx = ServerContext(command, env, repo_dir)
+    absolute_path = str(repo_dir / "src/utils/calculator.py")
+    config = PathTestConfig("Absolute Path (Baseline)", absolute_path, "Absolute path")
+    return _run_path_test(ctx, config)
 
 
 def main() -> int:
