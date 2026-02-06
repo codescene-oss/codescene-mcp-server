@@ -405,6 +405,25 @@ def create_backend(args) -> ServerBackend | None:
         return NuitkaBackend()
 
 
+def _run_test_module(module_name: str, run_func, backend: ServerBackend) -> tuple[str, bool]:
+    """
+    Run a test module and return its result.
+
+    Args:
+        module_name: Display name for the test module
+        run_func: Function to run tests, takes backend and returns exit code
+        backend: Server backend to use
+
+    Returns:
+        Tuple of (test_name, passed)
+    """
+    print("\n" + "=" * 70)
+    print(f"  Running {module_name}")
+    print("=" * 70)
+    result = run_func(backend)
+    return (module_name, result == 0)
+
+
 def run_all_tests_with_backend(backend: ServerBackend) -> int:
     """
     Run all integration tests using the specified backend.
@@ -469,32 +488,18 @@ def run_all_tests_with_backend(backend: ServerBackend) -> int:
                 )
             )
 
-        # Run git worktree tests - these need the backend approach too
-        print("\n" + "=" * 70)
-        print("  Running Git Worktree Tests")
-        print("=" * 70)
-        from test_git_worktree import run_worktree_tests_with_backend
-
-        worktree_result = run_worktree_tests_with_backend(backend)
-        all_results.append(("Git Worktree Tests", worktree_result == 0))
-
-        # Run git subtree tests
-        print("\n" + "=" * 70)
-        print("  Running Git Subtree Tests")
-        print("=" * 70)
+        # Run additional test modules
+        from test_bundled_docs import run_bundled_docs_tests_with_backend
+        from test_business_case import run_business_case_tests_with_backend
         from test_git_subtree import run_subtree_tests_with_backend
-
-        subtree_result = run_subtree_tests_with_backend(backend)
-        all_results.append(("Git Subtree Tests", subtree_result == 0))
-
-        # Run relative path tests (regression test for 'not in subpath' error)
-        print("\n" + "=" * 70)
-        print("  Running Relative Path Tests")
-        print("=" * 70)
+        from test_git_worktree import run_worktree_tests_with_backend
         from test_relative_paths import run_relative_path_tests_with_backend
 
-        relpath_result = run_relative_path_tests_with_backend(backend)
-        all_results.append(("Relative Path Tests", relpath_result == 0))
+        all_results.append(_run_test_module("Git Worktree Tests", run_worktree_tests_with_backend, backend))
+        all_results.append(_run_test_module("Git Subtree Tests", run_subtree_tests_with_backend, backend))
+        all_results.append(_run_test_module("Relative Path Tests", run_relative_path_tests_with_backend, backend))
+        all_results.append(_run_test_module("Business Case Tests", run_business_case_tests_with_backend, backend))
+        all_results.append(_run_test_module("Bundled Docs Tests", run_bundled_docs_tests_with_backend, backend))
 
         return print_summary(all_results)
 
