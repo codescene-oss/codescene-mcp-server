@@ -2,6 +2,7 @@ create-executable:
 	python3.13 -m nuitka --onefile \
 	--assume-yes-for-downloads \
 	--include-data-dir=./src/docs=src/docs \
+	--include-data-dir=./src/code_health_refactoring_business_case/s_curve/regression=code_health_refactoring_business_case/s_curve/regression \
 	--include-data-files=./cs=cs \
 	--output-filename=cs-mcp \
 	src/cs_mcp_server.py
@@ -38,3 +39,19 @@ test-all:
 	@echo ""
 	@echo "Running integration tests..."
 	./tests/run-integration-tests.sh
+
+.PHONY: lint
+lint:
+	ruff check .
+
+.PHONY: lint-fix
+lint-fix:
+	ruff check . --fix
+
+.PHONY: format
+format:
+	ruff format .
+
+.PHONY: format-check
+format-check:
+	ruff format . --check

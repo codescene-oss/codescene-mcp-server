@@ -1,5 +1,7 @@
-from typing import Callable, TypedDict
-from utils import run_cs_cli, code_health_from_cli_output, track, with_version_check
+from collections.abc import Callable
+from typing import TypedDict
+
+from utils import code_health_from_cli_output, run_cs_cli, track, with_version_check
 
 
 class CodeHealthScoreDeps(TypedDict):

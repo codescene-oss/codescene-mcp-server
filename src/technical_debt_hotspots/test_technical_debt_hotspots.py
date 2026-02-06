@@ -4,7 +4,9 @@ import unittest
 from unittest import mock
 
 from fastmcp import FastMCP
+
 from test_utils import mocked_requests_post
+
 from . import TechnicalDebtHotspots
 
 PROJECT_ID = 3
@@ -39,10 +41,10 @@ project_none_found = {
     "expected": {
         "hotspots": [],
         "description": f"Found 0 files with technical debt hotspots for project ID {PROJECT_ID}.",
-        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/technical-debt/system-map#hotspots"
+        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/technical-debt/system-map#hotspots",
     },
     "onprem": False,
-    "method": "project"
+    "method": "project",
 }
 
 # New scenario: project-level error handling
@@ -52,7 +54,7 @@ project_error = {
     "expected": "Error: Simulated API error",
     "onprem": False,
     "method": "project",
-    "is_error": True
+    "is_error": True,
 }
 project_single_hotspot_found = {
     "name": "project_some_found",
@@ -60,10 +62,10 @@ project_single_hotspot_found = {
     "expected": {
         "hotspots": [{"path": "some_path"}],
         "description": f"Found 1 files with technical debt hotspots for project ID {PROJECT_ID}.",
-        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/technical-debt/system-map#hotspots"
+        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/technical-debt/system-map#hotspots",
     },
     "onprem": False,
-    "method": "project"
+    "method": "project",
 }
 project_single_hotspot_found_onprem = {
     "name": "project_some_found_onprem",
@@ -71,10 +73,10 @@ project_single_hotspot_found_onprem = {
     "expected": {
         "hotspots": [{"path": "some_path"}],
         "description": f"Found 1 files with technical debt hotspots for project ID {PROJECT_ID}.",
-        "link": f"https://onprem-codescene.io/{PROJECT_ID}/analyses/latest/code/technical-debt/system-map#hotspots"
+        "link": f"https://onprem-codescene.io/{PROJECT_ID}/analyses/latest/code/technical-debt/system-map#hotspots",
     },
     "onprem": True,
-    "method": "project"
+    "method": "project",
 }
 
 # Now provide the variations on hotspots files to test:
@@ -84,10 +86,10 @@ file_none_found = {
     "expected": {
         "hotspot": {},
         "description": f"Found no technical debt hotspot for file {FILE_NAME} in project ID {PROJECT_ID}.",
-        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/technical-debt/system-map#hotspots"
+        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/technical-debt/system-map#hotspots",
     },
     "onprem": False,
-    "method": "file"
+    "method": "file",
 }
 file_single_hotspot_found = {
     "name": "file_some_found",
@@ -95,10 +97,10 @@ file_single_hotspot_found = {
     "expected": {
         "hotspot": {"path": FILE_NAME, "revisions": 55},
         "description": f"Found technical debt hotspot for file {FILE_NAME} in project ID {PROJECT_ID}.",
-        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/technical-debt/system-map#hotspots"
+        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/technical-debt/system-map#hotspots",
     },
     "onprem": False,
-    "method": "file"
+    "method": "file",
 }
 file_single_hotspot_found_onprem = {
     "name": "file_some_found_onprem",
@@ -106,10 +108,10 @@ file_single_hotspot_found_onprem = {
     "expected": {
         "hotspot": {"path": FILE_NAME, "revisions": 55},
         "description": f"Found technical debt hotspot for file {FILE_NAME} in project ID {PROJECT_ID}.",
-        "link": f"https://onprem-codescene.io/{PROJECT_ID}/analyses/latest/code/technical-debt/system-map#hotspots"
+        "link": f"https://onprem-codescene.io/{PROJECT_ID}/analyses/latest/code/technical-debt/system-map#hotspots",
     },
     "onprem": True,
-    "method": "file"
+    "method": "file",
 }
 
 # New scenario: file-level error handling
@@ -119,8 +121,9 @@ file_error = {
     "expected": "Error: Simulated file API error",
     "onprem": False,
     "method": "file",
-    "is_error": True
+    "is_error": True,
 }
+
 
 class TestTechnicalDebtHotspots(unittest.TestCase):
     def setUp(self):
@@ -129,7 +132,7 @@ class TestTechnicalDebtHotspots(unittest.TestCase):
         self.file_name = FILE_NAME
 
     def make_instance(self, query_api_list_fn):
-        return TechnicalDebtHotspots(FastMCP("Test"), {'query_api_list_fn': query_api_list_fn})
+        return TechnicalDebtHotspots(FastMCP("Test"), {"query_api_list_fn": query_api_list_fn})
 
     def assert_json_result(self, actual, expected):
         self.assertEqual(expected, json.loads(actual))
@@ -147,15 +150,15 @@ class TestTechnicalDebtHotspots(unittest.TestCase):
             if scenario.get("is_error"):
                 raise scenario["mock_return"]
             return scenario["mock_return"]
-        return TechnicalDebtHotspots(FastMCP("Test"), {'query_api_list_fn': mocked_query_api_list})
+
+        return TechnicalDebtHotspots(FastMCP("Test"), {"query_api_list_fn": mocked_query_api_list})
 
     def _execute_scenario(self, scenario):
-        with self._patch_environment(scenario):
-            with mock.patch('requests.post', side_effect=mocked_requests_post):
-                instance = self._make_mocked_instance(scenario)
-                if scenario["method"] == "project":
-                    return instance.list_technical_debt_hotspots_for_project(self.project_id)
-                return instance.list_technical_debt_hotspots_for_project_file(self.file_path, self.project_id)
+        with self._patch_environment(scenario), mock.patch("requests.post", side_effect=mocked_requests_post):
+            instance = self._make_mocked_instance(scenario)
+            if scenario["method"] == "project":
+                return instance.list_technical_debt_hotspots_for_project(self.project_id)
+            return instance.list_technical_debt_hotspots_for_project_file(self.file_path, self.project_id)
 
     def _assert_scenario(self, scenario):
         result = self._execute_scenario(scenario)
@@ -178,25 +181,25 @@ class TestTechnicalDebtHotspots(unittest.TestCase):
             file_single_hotspot_found,
             file_single_hotspot_found_onprem,
             project_error,  # Ensures error handling for project-level API is tested
-            file_error,     # Ensures error handling for file-level API is tested
+            file_error,  # Ensures error handling for file-level API is tested
         ]
         for scenario in all_scenarios:
             with self.subTest(scenario=scenario["name"]):
                 self._assert_scenario(scenario)
 
-    @mock.patch('technical_debt_hotspots.technical_debt_hotspots.get_relative_file_path_for_api')
-    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    @mock.patch("technical_debt_hotspots.technical_debt_hotspots.get_relative_file_path_for_api")
+    @mock.patch("requests.post", side_effect=mocked_requests_post)
     def test_file_hotspots_static_mode(self, mock_post, mock_get_path):
         """Test that file-level hotspots work in static executable mode (no CS_MOUNT_PATH)."""
         mock_get_path.return_value = "src/some_file.tsx"
-        
+
         def mocked_query_api_list(*args, **kwargs):
             return [{"path": "src/some_file.tsx", "revisions": 42, "code_health": 5.5}]
-        
-        instance = TechnicalDebtHotspots(FastMCP("Test"), {'query_api_list_fn': mocked_query_api_list})
+
+        instance = TechnicalDebtHotspots(FastMCP("Test"), {"query_api_list_fn": mocked_query_api_list})
         result = instance.list_technical_debt_hotspots_for_project_file("/some/git/repo/src/some_file.tsx", PROJECT_ID)
-        
+
         mock_get_path.assert_called_once_with("/some/git/repo/src/some_file.tsx")
         result_data = json.loads(result)
-        self.assertEqual(result_data['hotspot']['revisions'], 42)
-        self.assertIn("src/some_file.tsx", result_data['description'])
+        self.assertEqual(result_data["hotspot"]["revisions"], 42)
+        self.assertIn("src/some_file.tsx", result_data["description"])

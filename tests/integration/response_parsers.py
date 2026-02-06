@@ -7,16 +7,15 @@ including Code Health scores and other structured content.
 """
 
 import re
-from typing import Optional
 
 
 def extract_result_text(tool_response: dict) -> str:
     """
     Extract the actual result text from MCP response format.
-    
+
     Args:
         tool_response: The tool response dictionary
-        
+
     Returns:
         Extracted text content
     """
@@ -33,23 +32,23 @@ def extract_result_text(tool_response: dict) -> str:
     return structured.get("result", "")
 
 
-def extract_code_health_score(response_text: str) -> Optional[float]:
+def extract_code_health_score(response_text: str) -> float | None:
     """
     Extract Code Health score from response text.
-    
+
     Args:
         response_text: Response text from code_health_score or code_health_review tool
-        
+
     Returns:
         The score as a float, or None if not found
     """
     # Try different patterns
     patterns = [
-        r'code health score[:\s]+([0-9]+\.?[0-9]*)',
-        r'score[:\s]+([0-9]+\.?[0-9]*)',
-        r'health[:\s]+([0-9]+\.?[0-9]*)',
+        r"code health score[:\s]+([0-9]+\.?[0-9]*)",
+        r"score[:\s]+([0-9]+\.?[0-9]*)",
+        r"health[:\s]+([0-9]+\.?[0-9]*)",
     ]
-    
+
     text_lower = response_text.lower()
     for pattern in patterns:
         match = re.search(pattern, text_lower)
@@ -58,5 +57,5 @@ def extract_code_health_score(response_text: str) -> Optional[float]:
                 return float(match.group(1))
             except ValueError:
                 continue
-    
+
     return None

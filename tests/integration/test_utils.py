@@ -12,10 +12,12 @@ The actual implementations are in:
 """
 
 # Re-export from test_output
-from test_output import (
-    print_header,
-    print_test,
-    print_summary,
+# Re-export from file_utils
+from file_utils import (
+    cleanup_dir,
+    create_git_repo,
+    create_test_environment,
+    safe_temp_directory,
 )
 
 # Re-export from mcp_client
@@ -26,25 +28,22 @@ from mcp_client import (
 
 # Re-export from response_parsers
 from response_parsers import (
-    extract_result_text,
     extract_code_health_score,
+    extract_result_text,
 )
 
 # Re-export from server_backends
 from server_backends import (
-    ServerBackend,
     BuildConfig,
+    DockerBackend,
     ExecutableBuilder,
     NuitkaBackend,
-    DockerBackend,
+    ServerBackend,
 )
-
-# Re-export from file_utils
-from file_utils import (
-    create_test_environment,
-    create_git_repo,
-    cleanup_dir,
-    safe_temp_directory,
+from test_output import (
+    print_header,
+    print_summary,
+    print_test,
 )
 
 # Export all public names
@@ -71,4 +70,3 @@ __all__ = [
     "cleanup_dir",
     "safe_temp_directory",
 ]
-

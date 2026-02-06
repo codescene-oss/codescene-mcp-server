@@ -116,7 +116,7 @@ def validate_credit_card(card_info):
 '''
 
 # JavaScript code sample
-JAVASCRIPT_CODE = '''/**
+JAVASCRIPT_CODE = """/**
  * User authentication service
  */
 
@@ -179,10 +179,10 @@ class AuthService {
 }
 
 module.exports = AuthService;
-'''
+"""
 
 # Java code sample with nested complexity
-JAVA_CODE = '''package com.example.service;
+JAVA_CODE = """package com.example.service;
 
 import java.util.*;
 
@@ -248,13 +248,13 @@ public class OrderProcessor {
         return OrderResult.success(validItems, finalTotal);
     }
 }
-'''
+"""
 
 
 def get_sample_files() -> dict[str, str]:
     """
     Get a dictionary of sample files for testing.
-    
+
     Returns:
         Dictionary mapping file paths to content
     """
@@ -269,7 +269,7 @@ def get_sample_files() -> dict[str, str]:
 def get_expected_scores() -> dict[str, tuple[float, float]]:
     """
     Get expected Code Health score ranges for sample files.
-    
+
     Returns:
         Dictionary mapping file paths to (min_score, max_score) tuples
     """
@@ -279,4 +279,3 @@ def get_expected_scores() -> dict[str, tuple[float, float]]:
         "src/auth/AuthService.js": (7.0, 10.0),  # Good quality
         "src/main/java/com/example/OrderProcessor.java": (9.0, 10.0),  # High quality
     }
-

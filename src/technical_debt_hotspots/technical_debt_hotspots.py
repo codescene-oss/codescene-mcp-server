@@ -1,12 +1,20 @@
 import json
 import os
-from typing import Callable, TypedDict
+from collections.abc import Callable
+from typing import TypedDict
 
-from utils import get_relative_file_path_for_api, normalize_onprem_url, track, track_error, with_version_check
+from utils import (
+    get_relative_file_path_for_api,
+    normalize_onprem_url,
+    track,
+    track_error,
+    with_version_check,
+)
 
 
 class TechnicalDebtHotspotsDeps(TypedDict):
     query_api_list_fn: Callable[[str, dict, str], list]
+
 
 class TechnicalDebtHotspots:
     def __init__(self, mcp_instance, deps: TechnicalDebtHotspotsDeps):
@@ -34,20 +42,22 @@ class TechnicalDebtHotspots:
         """
         try:
             endpoint = f"v2/projects/{project_id}/analyses/latest/technical-debt"
-            params = {'page_size': 200, 'page': 1, 'refactoring_targets': "true"}
-            hotspots = self.deps["query_api_list_fn"](endpoint, params, 'result')
+            params = {"page_size": 200, "page": 1, "refactoring_targets": "true"}
+            hotspots = self.deps["query_api_list_fn"](endpoint, params, "result")
 
             if os.getenv("CS_ONPREM_URL"):
                 onprem_url = normalize_onprem_url(os.getenv("CS_ONPREM_URL"))
                 link = f"{onprem_url}/{project_id}/analyses/latest/code/technical-debt/system-map#hotspots"
             else:
                 link = f"https://codescene.io/projects/{project_id}/analyses/latest/code/technical-debt/system-map#hotspots"
-                
-            return json.dumps({
-                'hotspots': hotspots,
-                'description': f"Found {len(hotspots)} files with technical debt hotspots for project ID {project_id}.",
-                'link': link
-            })
+
+            return json.dumps(
+                {
+                    "hotspots": hotspots,
+                    "description": f"Found {len(hotspots)} files with technical debt hotspots for project ID {project_id}.",
+                    "link": link,
+                }
+            )
         except Exception as e:
             track_error("list-technical-debt-hotspots-for-project", e)
             return f"Error: {e}"
@@ -73,8 +83,11 @@ class TechnicalDebtHotspots:
         try:
             relative_file_path = get_relative_file_path_for_api(file_path)
             endpoint = f"/v2/projects/{project_id}/analyses/latest/technical-debt"
-            params = {'filter': f"file_name~{relative_file_path}", 'refactoring_targets': "true"}
-            hotspots = self.deps["query_api_list_fn"](endpoint, params, 'result')
+            params = {
+                "filter": f"file_name~{relative_file_path}",
+                "refactoring_targets": "true",
+            }
+            hotspots = self.deps["query_api_list_fn"](endpoint, params, "result")
             hotspot = hotspots[0] if hotspots else None
 
             if os.getenv("CS_ONPREM_URL"):
@@ -82,20 +95,23 @@ class TechnicalDebtHotspots:
                 link = f"{onprem_url}/{project_id}/analyses/latest/code/technical-debt/system-map#hotspots"
             else:
                 link = f"https://codescene.io/projects/{project_id}/analyses/latest/code/technical-debt/system-map#hotspots"
-                
 
             if hotspot is None:
-                return json.dumps({
-                    'hotspot': {},
-                    'description': f"Found no technical debt hotspot for file {relative_file_path} in project ID {project_id}.",
-                    'link': link
-                })
+                return json.dumps(
+                    {
+                        "hotspot": {},
+                        "description": f"Found no technical debt hotspot for file {relative_file_path} in project ID {project_id}.",
+                        "link": link,
+                    }
+                )
 
-            return json.dumps({
-                'hotspot': hotspot,
-                'description': f"Found technical debt hotspot for file {relative_file_path} in project ID {project_id}.",
-                'link': link
-            })
+            return json.dumps(
+                {
+                    "hotspot": hotspot,
+                    "description": f"Found technical debt hotspot for file {relative_file_path} in project ID {project_id}.",
+                    "link": link,
+                }
+            )
         except Exception as e:
             track_error("list-technical-debt-hotspots-for-project-file", e)
             return f"Error: {e}"

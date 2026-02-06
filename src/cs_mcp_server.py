@@ -1,30 +1,32 @@
 import argparse
 import os
 import signal
-import sys
+from pathlib import Path
+
 from fastmcp import FastMCP
 from fastmcp.resources import FileResource
-from pathlib import Path
 
 from code_health_auto_refactor import AutoRefactor
 from code_health_refactoring_business_case import CodeHealthRefactoringBusinessCase
 from code_health_review import CodeHealthReview
 from code_health_score import CodeHealthScore
+from code_ownership import CodeOwnership
 from pre_commit_code_health_safeguard import PreCommitCodeHealthSafeguard
 from select_project import SelectProject
 from technical_debt_goals import TechnicalDebtGoals
 from technical_debt_hotspots import TechnicalDebtHotspots
-from code_ownership import CodeOwnership
-from utils import query_api_list, analyze_code, run_local_tool, post_refactor
+from utils import analyze_code, post_refactor, query_api_list, run_local_tool
 from version import __version__
 
 mcp = FastMCP("CodeScene")
+
 
 def get_display_version():
     """Return version string for display, stripping the MCP- prefix if present."""
     if __version__.startswith("MCP-"):
         return __version__[4:]
     return __version__
+
 
 def get_resource_path(relative_path):
     base_path = Path(__file__).parent.absolute()
@@ -35,13 +37,14 @@ def get_resource_path(relative_path):
     return base_path / relative_path
 
 
-# Offer prompts that capture the key use cases. These prompts are more than a 
+# Offer prompts that capture the key use cases. These prompts are more than a
 # convenience; they also enable feature discoverability and guide users.
+
 
 @mcp.prompt
 def review_code_health(context: str | None = None) -> str:
     """
-    Review Code Health and assess code quality for the current open file. 
+    Review Code Health and assess code quality for the current open file.
     The file path needs to be sent to the code_health_review MCP tool when using this prompt.
     """
     return (
@@ -89,26 +92,31 @@ def plan_code_health_refactoring(context: str | None = None) -> str:
         "```"
     )
 
+
 # We want the MCP Server to explain its key concepts like Code Health.
+
 
 def read_documentation_content_for(md_doc_name):
     return get_resource_path(f"docs/code-health/{md_doc_name}").read_text(encoding="utf-8")
+
 
 @mcp.tool()
 def explain_code_health(context: str | None = None) -> str:
     """
     Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI.
     """
-    return read_documentation_content_for('how-it-works.md')
+    return read_documentation_content_for("how-it-works.md")
+
 
 @mcp.tool()
 def explain_code_health_productivity(context: str | None = None) -> str:
     """
-    Describes how to build a business case for Code Health improvements. 
-    Covers empirical data on how healthy code lets you ship faster with 
+    Describes how to build a business case for Code Health improvements.
+    Covers empirical data on how healthy code lets you ship faster with
     fewer defects.
     """
-    return read_documentation_content_for('business-case.md')
+    return read_documentation_content_for("business-case.md")
+
 
 def resource_title_from_md_heading_in(path: Path) -> str:
     """
@@ -119,97 +127,83 @@ def resource_title_from_md_heading_in(path: Path) -> str:
         first_line = f.readline()
         return first_line.lstrip("#").strip()
 
+
 def doc_to_file_resources(doc):
     doc_path = get_resource_path(f"docs/code-health/{doc['doc-path']}").resolve()
     doc_resource = FileResource(
         uri=f"file://codescene-docs/code-health/{doc['doc-path']}",
         path=doc_path,
         name=resource_title_from_md_heading_in(doc_path),
-        description=doc['description'],
+        description=doc["description"],
         mime_type="text/markdown",
-        tags={"documentation"}
-        )
+        tags={"documentation"},
+    )
     return doc_resource
+
 
 def add_as_mcp_resources(docs_to_expose):
     """
     Expose our static docs as MCP resources.
-    Use a table-driven approach for the implementation so that it is 
+    Use a table-driven approach for the implementation so that it is
     simple to add more docs. (We expect this list to grow).
     """
     for doc in docs_to_expose:
         doc_resource = doc_to_file_resources(doc)
         mcp.add_resource(doc_resource)
 
+
 def all_doc_resources_as_uris(docs_to_expose):
     """
-    Resources tend to be passive; they're only referenced via an URI. 
-    Some clients might call resources/list, but not all -> introduce a 
+    Resources tend to be passive; they're only referenced via an URI.
+    Some clients might call resources/list, but not all -> introduce a
     tool that helps the client discover our documentation resources.
     """
+
     def to_uri(doc):
         return f"file://codescene-docs/code-health/{doc['doc-path']}"
-    
+
     return [to_uri(doc) for doc in docs_to_expose]
+
 
 if __name__ == "__main__":
     # CLI args
     parser = argparse.ArgumentParser(description="CodeScene MCP Server")
 
-    parser.add_argument(
-        "-v", "--version",
-        action="version",
-        version=get_display_version()
-    )
+    parser.add_argument("-v", "--version", action="version", version=get_display_version())
 
     parser.parse_args()
 
     # resources
     docs_to_expose = [
-        {'doc-path': "how-it-works.md",
-         'description': "Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI."},
-        {'doc-path': "business-case.md",
-         'description': "Describes how to build a business case for Code Health improvements."}
+        {
+            "doc-path": "how-it-works.md",
+            "description": "Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI.",
+        },
+        {
+            "doc-path": "business-case.md",
+            "description": "Describes how to build a business case for Code Health improvements.",
+        },
     ]
     add_as_mcp_resources(docs_to_expose)
 
     # tools
-    PreCommitCodeHealthSafeguard(mcp, {
-        'run_local_tool_fn': run_local_tool
-    })
+    PreCommitCodeHealthSafeguard(mcp, {"run_local_tool_fn": run_local_tool})
 
-    CodeHealthRefactoringBusinessCase(mcp, {
-        'analyze_code_fn': analyze_code
-    })
+    CodeHealthRefactoringBusinessCase(mcp, {"analyze_code_fn": analyze_code})
 
-    CodeHealthScore(mcp, {
-        'analyze_code_fn': analyze_code
-    })
+    CodeHealthScore(mcp, {"analyze_code_fn": analyze_code})
 
-    CodeHealthReview(mcp, {
-        'analyze_code_fn': analyze_code
-    })
+    CodeHealthReview(mcp, {"analyze_code_fn": analyze_code})
 
-    SelectProject(mcp, {
-        'query_api_list_fn': query_api_list
-    })
+    SelectProject(mcp, {"query_api_list_fn": query_api_list})
 
-    TechnicalDebtGoals(mcp, {
-        'query_api_list_fn': query_api_list
-    })
+    TechnicalDebtGoals(mcp, {"query_api_list_fn": query_api_list})
 
-    TechnicalDebtHotspots(mcp, {
-        'query_api_list_fn': query_api_list
-    })
+    TechnicalDebtHotspots(mcp, {"query_api_list_fn": query_api_list})
 
-    CodeOwnership(mcp, {
-        'query_api_list_fn': query_api_list
-    })
+    CodeOwnership(mcp, {"query_api_list_fn": query_api_list})
 
-    AutoRefactor(mcp, {
-        'post_refactor_fn': post_refactor,
-        'run_local_tool_fn': run_local_tool
-    })
+    AutoRefactor(mcp, {"post_refactor_fn": post_refactor, "run_local_tool_fn": run_local_tool})
 
     def handle_shutdown(signum, frame):
         """Handle shutdown signals gracefully with immediate exit."""

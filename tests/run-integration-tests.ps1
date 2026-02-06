@@ -57,36 +57,34 @@ function Write-Header {
 
 # Show help
 function Show-Help {
-    Write-Host @"
-Run CodeScene MCP Server Integration Tests (Windows)
-
-Usage:
-  .\run-integration-tests.ps1 [OPTIONS]
-
-Options:
-  -Help              Show this help message
-  -Executable PATH   Use existing executable (skip build)
-  -PlatformOnly      Run only platform-specific tests
-  -WorktreeOnly      Run only git worktree tests
-  -SubtreeOnly       Run only git subtree tests
-  -SkipBuild         Skip build step (use previously built executable)
-  -Docker            Run tests using Docker backend
-
-Environment Variables:
-  CS_ACCESS_TOKEN    CodeScene access token (required)
-  CS_ONPREM_URL      CodeScene URL (optional, defaults to https://codescene.io)
-
-Examples:
-  # Run all tests (builds automatically)
-  .\run-integration-tests.ps1
-
-  # Run with existing executable
-  .\run-integration-tests.ps1 -Executable C:\path\to\cs-mcp.exe
-
-  # Run only platform tests
-  .\run-integration-tests.ps1 -PlatformOnly
-
-"@
+    Write-Host "Run CodeScene MCP Server Integration Tests (Windows)"
+    Write-Host ""
+    Write-Host "Usage:"
+    Write-Host "  .\run-integration-tests.ps1 [OPTIONS]"
+    Write-Host ""
+    Write-Host "Options:"
+    Write-Host "  -Help              Show this help message"
+    Write-Host "  -Executable PATH   Use existing executable (skip build)"
+    Write-Host "  -PlatformOnly      Run only platform-specific tests"
+    Write-Host "  -WorktreeOnly      Run only git worktree tests"
+    Write-Host "  -SubtreeOnly       Run only git subtree tests"
+    Write-Host "  -SkipBuild         Skip build step (use previously built executable)"
+    Write-Host "  -Docker            Run tests using Docker backend"
+    Write-Host ""
+    Write-Host "Environment Variables:"
+    Write-Host "  CS_ACCESS_TOKEN    CodeScene access token (required)"
+    Write-Host "  CS_ONPREM_URL      CodeScene URL (optional, defaults to https://codescene.io)"
+    Write-Host ""
+    Write-Host "Examples:"
+    Write-Host "  # Run all tests (builds automatically)"
+    Write-Host "  .\run-integration-tests.ps1"
+    Write-Host ""
+    Write-Host "  # Run with existing executable"
+    Write-Host "  .\run-integration-tests.ps1 -Executable C:\path\to\cs-mcp.exe"
+    Write-Host ""
+    Write-Host "  # Run only platform tests"
+    Write-Host "  .\run-integration-tests.ps1 -PlatformOnly"
+    Write-Host ""
 }
 
 # Check if a command exists
@@ -108,16 +106,16 @@ function Test-PythonVersion {
             $major = [int]$matches[1]
             $minor = [int]$matches[2]
             if ($major -ge 3 -and $minor -ge 10) {
-                Write-Success "✓ Python: $pythonVersion"
+                Write-Success "[OK] Python: $pythonVersion"
                 return $true
             }
-            Write-Error-Message "✗ Python 3.10+ required, found: $pythonVersion"
+            Write-Error-Message "[X] Python 3.10+ required, found: $pythonVersion"
             return $false
         }
-        Write-Success "✓ Python: $pythonVersion"
+        Write-Success "[OK] Python: $pythonVersion"
         return $true
     } catch {
-        Write-Error-Message "✗ Python not found"
+        Write-Error-Message "[X] Python not found"
         return $false
     }
 }
@@ -127,11 +125,11 @@ function Test-NuitkaInstalled {
     try {
         python -c "import nuitka" 2>$null
         if ($LASTEXITCODE -eq 0) {
-            Write-Success "✓ Nuitka is installed"
+            Write-Success "[OK] Nuitka is installed"
             return $true
         }
     } catch { }
-    Write-Warning-Message "! Nuitka not installed (required for static backend)"
+    Write-Warning-Message "[!] Nuitka not installed (required for static backend)"
     Write-Host "  Install with: pip install nuitka"
     return $false
 }
@@ -139,20 +137,20 @@ function Test-NuitkaInstalled {
 # Check Git is available
 function Test-GitInstalled {
     if (Test-CommandExists "git") {
-        Write-Success "✓ Git: $(git --version)"
+        Write-Success "[OK] Git: $(git --version)"
         return $true
     }
-    Write-Error-Message "✗ Git not found"
+    Write-Error-Message "[X] Git not found"
     return $false
 }
 
 # Check CS_ACCESS_TOKEN is set
 function Test-AccessToken {
     if ($env:CS_ACCESS_TOKEN) {
-        Write-Success "✓ CS_ACCESS_TOKEN is set"
+        Write-Success "[OK] CS_ACCESS_TOKEN is set"
         return $true
     }
-    Write-Error-Message "✗ CS_ACCESS_TOKEN not set"
+    Write-Error-Message "[X] CS_ACCESS_TOKEN not set"
     Write-Host "  Set it with: `$env:CS_ACCESS_TOKEN='your_token_here'"
     return $false
 }
@@ -160,10 +158,10 @@ function Test-AccessToken {
 # Check Docker is available
 function Test-DockerInstalled {
     if (Test-CommandExists "docker") {
-        Write-Success "✓ Docker: $(docker --version)"
+        Write-Success "[OK] Docker: $(docker --version)"
         return $true
     }
-    Write-Error-Message "✗ Docker not found (required for docker backend)"
+    Write-Error-Message "[X] Docker not found (required for docker backend)"
     return $false
 }
 
@@ -232,11 +230,11 @@ function Show-TestResults {
     Write-Host ""
     if ($ExitCode -eq 0) {
         Write-Success "======================================================================"
-        Write-Success "  All tests passed! ✓"
+        Write-Success "  All tests passed!"
         Write-Success "======================================================================"
     } else {
         Write-Error-Message "======================================================================"
-        Write-Error-Message "  Some tests failed ✗"
+        Write-Error-Message "  Some tests failed"
         Write-Error-Message "======================================================================"
     }
 }
