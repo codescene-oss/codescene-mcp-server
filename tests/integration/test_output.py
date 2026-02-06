@@ -49,27 +49,38 @@ def print_test(name: str, passed: bool, details: str = "") -> None:
         _print_details(details)
 
 
-def print_summary(results: list[tuple[str, bool]]) -> int:
+def print_summary(results: list[tuple[str, bool | str]]) -> int:
     """
     Print test summary and return exit code.
     
     Args:
-        results: List of (test_name, passed) tuples
+        results: List of (test_name, result) tuples where result is:
+                 - True: test passed
+                 - False: test failed
+                 - "SKIPPED": test was skipped
         
     Returns:
-        0 if all tests passed, 1 otherwise
+        0 if all non-skipped tests passed, 1 otherwise
     """
     print_header("Test Summary")
     
-    passed = [name for name, p in results if p]
-    failed = [name for name, p in results if not p]
+    passed = [name for name, p in results if p is True]
+    failed = [name for name, p in results if p is False]
+    skipped = [name for name, p in results if p == "SKIPPED"]
     
     print(f"  Total: {len(results)} tests")
     print(f"  \033[92mPassed: {len(passed)}\033[0m")
+    if skipped:
+        print(f"  \033[93mSkipped: {len(skipped)}\033[0m")
     if failed:
         print(f"  \033[91mFailed: {len(failed)}\033[0m")
         print("\n  Failed tests:")
         for name in failed:
+            print(f"    - {name}")
+    
+    if skipped:
+        print("\n  Skipped tests (not applicable for this backend):")
+        for name in skipped:
             print(f"    - {name}")
     
     return 0 if len(failed) == 0 else 1

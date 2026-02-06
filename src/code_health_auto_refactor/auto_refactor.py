@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from typing import Callable, TypedDict, Optional
 from utils import adapt_mounted_file_path_inside_docker, cs_cli_path, find_git_root, get_platform_details
+from utils.docker_path_adapter import get_relative_path_from_git_root
 
 class AutoRefactorError(Exception):
     pass
@@ -29,7 +30,7 @@ class AutoRefactor:
             return adapt_mounted_file_path_inside_docker(file_path)
         else:
             # Local environment - use relative path from git root
-            return str(Path(file_path).relative_to(git_root))
+            return get_relative_path_from_git_root(file_path, git_root)
         
     def _parse_fns(self, file_path: str, git_root: str) -> list[dict]:
         cli_path = self._get_cli_file_path(file_path, git_root)

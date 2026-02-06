@@ -458,6 +458,14 @@ def run_all_tests_with_backend(backend: ServerBackend) -> int:
         subtree_result = run_subtree_tests_with_backend(backend)
         all_results.append(("Git Subtree Tests", subtree_result == 0))
         
+        # Run relative path tests (regression test for 'not in subpath' error)
+        print("\n" + "="*70)
+        print("  Running Relative Path Tests")
+        print("="*70)
+        from test_relative_paths import run_relative_path_tests_with_backend
+        relpath_result = run_relative_path_tests_with_backend(backend)
+        all_results.append(("Relative Path Tests", relpath_result == 0))
+        
         return print_summary(all_results)
 
 

@@ -1,9 +1,14 @@
 import os
+import shutil
 import tempfile
 import unittest
 from unittest import mock
 from errors import CodeSceneCliError
-from .docker_path_adapter import adapt_mounted_file_path_inside_docker, get_relative_file_path_for_api
+from .docker_path_adapter import (
+    adapt_mounted_file_path_inside_docker,
+    get_relative_file_path_for_api,
+    get_relative_path_from_git_root,
+)
 
 
 def create_git_worktree_file(tmpdir: str, gitdir_content: str) -> str:
@@ -407,3 +412,128 @@ class TestGetRelativeFilePathForApi(unittest.TestCase):
         
         result = get_relative_file_path_for_api("src/foo.py")
         self.assertEqual(result, "src/foo.py")
+
+
+class TestGetRelativePathFromGitRoot(unittest.TestCase):
+    """Tests for get_relative_path_from_git_root - the fix for 'not in subpath' errors."""
+
+    def setUp(self):
+        # Use realpath to resolve symlinks (macOS /var -> /private/var)
+        self.temp_dir = os.path.realpath(tempfile.mkdtemp())
+        # Create git repo structure
+        os.makedirs(os.path.join(self.temp_dir, '.git'))
+        os.makedirs(os.path.join(self.temp_dir, 'src', 'utils'))
+        self.test_file = os.path.join(self.temp_dir, 'src', 'utils', 'file.py')
+        with open(self.test_file, 'w') as f:
+            f.write('# test')
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_absolute_path_returns_relative(self):
+        """Test that absolute path is correctly converted to relative."""
+        result = get_relative_path_from_git_root(self.test_file, self.temp_dir)
+        # Normalize path separators for cross-platform compatibility
+        self.assertEqual(result.replace('\\', '/'), 'src/utils/file.py')
+
+    def test_relative_path_resolved_correctly(self):
+        """Test that relative path is resolved before computing relative path.
+        
+        This is the core fix for the 'not in subpath' bug - when file_path is
+        relative but git_root is absolute, the resolution should handle this.
+        """
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(self.temp_dir)
+            # Use relative path from repo root
+            result = get_relative_path_from_git_root('src/utils/file.py', self.temp_dir)
+            self.assertEqual(result.replace('\\', '/'), 'src/utils/file.py')
+        finally:
+            os.chdir(old_cwd)
+
+    def test_relative_path_with_dot_prefix(self):
+        """Test relative path with ./ prefix (common shell usage)."""
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(self.temp_dir)
+            result = get_relative_path_from_git_root('./src/utils/file.py', self.temp_dir)
+            self.assertEqual(result.replace('\\', '/'), 'src/utils/file.py')
+        finally:
+            os.chdir(old_cwd)
+
+    def test_relative_path_from_subdirectory(self):
+        """Test relative path from a subdirectory with ../ references."""
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(os.path.join(self.temp_dir, 'src', 'utils'))
+            # Create another file in a sibling directory
+            services_dir = os.path.join(self.temp_dir, 'src', 'services')
+            os.makedirs(services_dir)
+            other_file = os.path.join(services_dir, 'other.py')
+            with open(other_file, 'w') as f:
+                f.write('# other')
+            
+            # Reference the file with ../ 
+            result = get_relative_path_from_git_root('../services/other.py', self.temp_dir)
+            self.assertEqual(result.replace('\\', '/'), 'src/services/other.py')
+        finally:
+            os.chdir(old_cwd)
+
+    def test_path_outside_git_root_raises_error(self):
+        """Test that file outside git root raises CodeSceneCliError with details."""
+        outside_file = '/tmp/outside.py'
+        with self.assertRaises(CodeSceneCliError) as context:
+            get_relative_path_from_git_root(outside_file, self.temp_dir)
+        
+        error_msg = str(context.exception)
+        self.assertIn('is not under git root', error_msg)
+        self.assertIn(outside_file, error_msg)
+
+    def test_windows_style_backslashes(self):
+        """Test handling of Windows-style backslashes in paths."""
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(self.temp_dir)
+            # Windows-style path with backslashes
+            windows_path = 'src\\utils\\file.py'
+            result = get_relative_path_from_git_root(windows_path, self.temp_dir)
+            # Should normalize to forward slashes or handle consistently
+            self.assertIn('file.py', result)
+            self.assertIn('src', result)
+            self.assertIn('utils', result)
+        finally:
+            os.chdir(old_cwd)
+
+    def test_mixed_slashes(self):
+        """Test handling of mixed forward/backslashes (common on Windows)."""
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(self.temp_dir)
+            # Mixed slashes
+            mixed_path = 'src\\utils/file.py'
+            result = get_relative_path_from_git_root(mixed_path, self.temp_dir)
+            self.assertIn('file.py', result)
+        finally:
+            os.chdir(old_cwd)
+
+    def test_git_root_with_trailing_slash(self):
+        """Test that trailing slash in git_root is handled."""
+        result = get_relative_path_from_git_root(
+            self.test_file, 
+            self.temp_dir + os.sep
+        )
+        self.assertEqual(result.replace('\\', '/'), 'src/utils/file.py')
+
+    def test_deeply_nested_path(self):
+        """Test deeply nested directory structures."""
+        deep_dir = os.path.join(self.temp_dir, 'src', 'main', 'java', 'com', 'example')
+        os.makedirs(deep_dir)
+        deep_file = os.path.join(deep_dir, 'Test.java')
+        with open(deep_file, 'w') as f:
+            f.write('// test')
+        
+        result = get_relative_path_from_git_root(deep_file, self.temp_dir)
+        self.assertEqual(
+            result.replace('\\', '/'), 
+            'src/main/java/com/example/Test.java'
+        )

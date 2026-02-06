@@ -5,7 +5,7 @@ import subprocess
 import sys
 import tempfile
 from errors import CodeSceneCliError
-from .docker_path_adapter import adapt_mounted_file_path_inside_docker
+from .docker_path_adapter import adapt_mounted_file_path_inside_docker, get_relative_path_from_git_root
 from .platform_details import get_platform_details, get_ssl_cli_args
 from .docker_path_adapter import get_worktree_gitdir
 
@@ -265,7 +265,7 @@ def analyze_code(file_path: str) -> str:
     else:
         # Local/Nuitka binary - find git root and use relative path
         git_root = find_git_root(file_path)
-        relative_path = str(Path(file_path).relative_to(git_root))
+        relative_path = get_relative_path_from_git_root(file_path, git_root)
         
         # Detect worktree and set GIT_DIR if needed (mirrors Docker mode logic)
         gitdir = get_worktree_gitdir(git_root)

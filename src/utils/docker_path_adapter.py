@@ -2,6 +2,43 @@ import os
 from pathlib import Path, PureWindowsPath
 from errors import CodeSceneCliError
 
+
+def get_relative_path_from_git_root(file_path: str, git_root: str) -> str:
+    """
+    Get the relative path of a file from the git root, handling path normalization.
+    
+    Both paths are resolved to handle:
+    - Relative vs absolute paths
+    - Symlinks
+    - Windows path quirks (case sensitivity, drive letters)
+    
+    This function fixes the "not in subpath" error that occurs when file_path
+    is relative but git_root is absolute (resolved), causing Path.relative_to()
+    to fail.
+    
+    Args:
+        file_path: Path to the file (can be relative or absolute)
+        git_root: Path to the git repository root
+        
+    Returns:
+        Relative path string from git_root to file_path
+        
+    Raises:
+        CodeSceneCliError: If file_path is not under git_root
+    """
+    resolved_file = Path(file_path).resolve()
+    resolved_root = Path(git_root).resolve()
+    
+    try:
+        return str(resolved_file.relative_to(resolved_root))
+    except ValueError:
+        # Provide detailed error message similar to Docker path handling
+        raise CodeSceneCliError(
+            f"File '{file_path}' (resolved: {resolved_file}) "
+            f"is not under git root '{git_root}' (resolved: {resolved_root}). "
+            f"Ensure the file exists within the repository."
+        )
+
 def _is_windows_drive_letter(path: str) -> bool:
     """
     True if the path starts with a Windows drive letter, e.g. 'C:\\...'
@@ -169,7 +206,7 @@ def get_relative_file_path_for_api(file_path: str) -> str:
     try:
         from .code_health_analysis import find_git_root
         git_root = find_git_root(file_path)
-        return str(path.relative_to(git_root))
+        return get_relative_path_from_git_root(file_path, git_root)
     except Exception:
         # Not in a git repo or git detection failed - return path as-is
         # The API will do pattern matching, so an absolute path may still work
