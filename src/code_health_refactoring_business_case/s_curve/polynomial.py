@@ -1,14 +1,11 @@
-from typing import Any
-
-import numpy as np
-
-
-def polynomial(x: Any, coeffs: Any) -> float:
-    y = 0
+def polynomial(x: float, coeffs: list[float]) -> float:
+    """Evaluate a polynomial at x using Horner's method."""
+    y = 0.0
     for c in coeffs:
         y = y * x + c
     return y
 
 
-def vectorized_polynomial(x: Any, coeffs: Any) -> Any:
-    return np.apply_along_axis(lambda c: polynomial(x, c), 1, coeffs)
+def vectorized_polynomial(x: float, coeffs: list[list[float]]) -> list[float]:
+    """Evaluate polynomial for each set of coefficients."""
+    return [polynomial(x, c) for c in coeffs]
