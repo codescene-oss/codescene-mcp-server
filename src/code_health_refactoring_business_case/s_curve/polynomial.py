@@ -1,5 +1,6 @@
-import numpy as np
 from typing import Any
+
+import numpy as np
 
 
 def polynomial(x: Any, coeffs: Any) -> float:
@@ -7,6 +8,7 @@ def polynomial(x: Any, coeffs: Any) -> float:
     for c in coeffs:
         y = y * x + c
     return y
+
 
 def vectorized_polynomial(x: Any, coeffs: Any) -> Any:
     return np.apply_along_axis(lambda c: polynomial(x, c), 1, coeffs)

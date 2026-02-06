@@ -1,2 +1,1 @@
-from . import metrics
-from . import polynomial
+from . import metrics, polynomial

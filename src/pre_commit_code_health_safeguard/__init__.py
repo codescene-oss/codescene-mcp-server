@@ -1,1 +1,4 @@
-from .delta_analyzer import PreCommitCodeHealthSafeguard, PreCommitCodeHealthSafeguardDeps
+from .delta_analyzer import (
+    PreCommitCodeHealthSafeguard,
+    PreCommitCodeHealthSafeguardDeps,
+)

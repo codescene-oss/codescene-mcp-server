@@ -21,7 +21,7 @@ def _needs_ascii_fallback() -> bool:
     encoding = sys.stdout.encoding
     if not encoding:
         return False
-    return encoding.lower() in ('cp1252', 'ascii')
+    return encoding.lower() in ("cp1252", "ascii")
 
 
 def _get_status_text(passed: bool, use_ascii: bool) -> str:
@@ -38,15 +38,15 @@ def _get_status_color(passed: bool) -> str:
 
 def _print_details(details: str) -> None:
     """Print test result details, limited to first 10 lines."""
-    for line in details.split('\n')[:10]:
+    for line in details.split("\n")[:10]:
         print(f"         {line}")
 
 
 def print_header(msg: str) -> None:
     """Print a formatted test section header."""
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  {msg}")
-    print(f"{'='*70}\n")
+    print(f"{'=' * 70}\n")
 
 
 def print_test(name: str, passed: bool, details: str = "") -> None:
@@ -61,10 +61,11 @@ def print_test(name: str, passed: bool, details: str = "") -> None:
 @dataclass
 class TestCounts:
     """Categorized test result counts."""
+
     passed: list[str]
     failed: list[str]
     skipped: list[str]
-    
+
     @classmethod
     def from_results(cls, results: list[tuple[str, bool | str]]) -> "TestCounts":
         """Categorize test results into passed, failed, and skipped."""
@@ -73,7 +74,7 @@ class TestCounts:
             failed=[name for name, result in results if result is False],
             skipped=[name for name, result in results if result == "SKIPPED"],
         )
-    
+
     @property
     def total(self) -> int:
         """Total number of tests."""
@@ -100,24 +101,24 @@ def _print_counts(counts: TestCounts) -> None:
 def print_summary(results: list[tuple[str, bool | str]]) -> int:
     """
     Print test summary and return exit code.
-    
+
     Args:
         results: List of (test_name, result) tuples where result is:
                  - True: test passed
                  - False: test failed
                  - "SKIPPED": test was skipped
-        
+
     Returns:
         0 if all non-skipped tests passed, 1 otherwise
     """
     print_header("Test Summary")
-    
+
     counts = TestCounts.from_results(results)
     _print_counts(counts)
-    
+
     if counts.failed:
         _print_test_list("Failed tests", counts.failed)
     if counts.skipped:
         _print_test_list("Skipped tests (not applicable for this backend)", counts.skipped)
-    
+
     return 0 if not counts.failed else 1

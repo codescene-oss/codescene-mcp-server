@@ -1,1 +1,4 @@
-from .business_impact_analyzer import CodeHealthRefactoringBusinessCase, CodeHealthRefactoringBusinessCaseDeps
+from .business_impact_analyzer import (
+    CodeHealthRefactoringBusinessCase,
+    CodeHealthRefactoringBusinessCaseDeps,
+)

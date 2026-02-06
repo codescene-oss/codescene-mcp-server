@@ -1,19 +1,22 @@
 import functools
+
 import requests
-from utils import get_api_url, get_api_request_headers
+
+from utils import get_api_request_headers, get_api_url
 
 
 def _send_track_event(event_type: str, event_properties: dict = None):
     """Send a tracking event to the analytics API.
-    
+
     Fails silently - analytics should never interrupt user workflow.
     """
     try:
-        payload = {
-            "event-type": event_type,
-            "event-properties": event_properties or {}
-        }
-        requests.post(f"{get_api_url()}/v2/analytics/track", headers=get_api_request_headers(), json=payload)
+        payload = {"event-type": event_type, "event-properties": event_properties or {}}
+        requests.post(
+            f"{get_api_url()}/v2/analytics/track",
+            headers=get_api_request_headers(),
+            json=payload,
+        )
     except Exception:
         pass
 

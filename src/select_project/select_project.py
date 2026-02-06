@@ -1,11 +1,14 @@
 import json
 import os
-from typing import TypedDict, Callable
+from collections.abc import Callable
+from typing import TypedDict
+
 from utils import track, track_error, with_version_check
 
 
 class SelectProjectDeps(TypedDict):
     query_api_list_fn: Callable[[str, dict, str], list]
+
 
 class SelectProject:
     def __init__(self, mcp_instance, deps: SelectProjectDeps):
@@ -25,28 +28,27 @@ class SelectProject:
             with the columns "Project Name" and "Project ID". If the output contains a
             `description` field, it indicates that a default project is being used from
             the `CS_DEFAULT_PROJECT_ID` environment variable, and the user cannot select a different project.
-            Explain this to the user. 
-            
+            Explain this to the user.
+
             Additionally, a `link` field is provided to guide the user to the
             Codescene projects page where the user can find more detailed information about each project.
             Make sure to include this link in the output, and explain its purpose clearly.
         """
         link = f"{os.getenv('CS_ONPREM_URL')}" if os.getenv("CS_ONPREM_URL") else "https://codescene.io/projects"
-        
+
         if os.getenv("CS_DEFAULT_PROJECT_ID"):
-            return json.dumps({
-                'id': int(os.getenv("CS_DEFAULT_PROJECT_ID")),
-                'name': 'Default Project (from CS_DEFAULT_PROJECT_ID env var)',
-                'description': 'Using default project from CS_DEFAULT_PROJECT_ID environment variable. If you want to be able to select a different project, unset this variable.',
-                'link': link
-            })
+            return json.dumps(
+                {
+                    "id": int(os.getenv("CS_DEFAULT_PROJECT_ID")),
+                    "name": "Default Project (from CS_DEFAULT_PROJECT_ID env var)",
+                    "description": "Using default project from CS_DEFAULT_PROJECT_ID environment variable. If you want to be able to select a different project, unset this variable.",
+                    "link": link,
+                }
+            )
         try:
             data = self.deps["query_api_list_fn"]("v2/projects", {}, "projects")
 
-            return json.dumps({
-                'projects': data,
-                'link': link
-            })
+            return json.dumps({"projects": data, "link": link})
         except Exception as e:
             track_error("select-project", e)
             return f"Error: {e}"

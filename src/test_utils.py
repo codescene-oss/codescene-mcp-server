@@ -9,9 +9,9 @@ def mocked_requests_post(*args, **kwargs):
 
         def json(self):
             return json.loads(self.json_data)
-    
+
     # Just return a successful response for analytics tracking
     if "analytics/track" in args[0]:
         return MockResponse(json.dumps({"success": True}), 200)
-    
+
     return MockResponse(json.dumps({}), 404)

@@ -4,7 +4,9 @@ import unittest
 from unittest import mock
 
 from fastmcp import FastMCP
+
 from test_utils import mocked_requests_post
+
 from . import TechnicalDebtGoals
 
 PROJECT_ID = 3
@@ -38,10 +40,10 @@ project_goals_none_found = {
     "expected": {
         "files": [],
         "description": f"Found 0 files with technical debt goals for project ID {PROJECT_ID}.",
-        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/biomarkers"
+        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/biomarkers",
     },
     "onprem": False,
-    "method": "project"
+    "method": "project",
 }
 project_goals_some_found = {
     "name": "project_goals_some_found",
@@ -49,10 +51,10 @@ project_goals_some_found = {
     "expected": {
         "files": [{"path": "some_path"}],
         "description": f"Found 1 files with technical debt goals for project ID {PROJECT_ID}.",
-        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/biomarkers"
+        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/biomarkers",
     },
     "onprem": False,
-    "method": "project"
+    "method": "project",
 }
 project_goals_some_found_onprem = {
     "name": "project_goals_some_found_onprem",
@@ -60,10 +62,10 @@ project_goals_some_found_onprem = {
     "expected": {
         "files": [{"path": "some_path"}],
         "description": f"Found 1 files with technical debt goals for project ID {PROJECT_ID}.",
-        "link": f"https://onprem-codescene.io/{PROJECT_ID}/analyses/latest/code/biomarkers"
+        "link": f"https://onprem-codescene.io/{PROJECT_ID}/analyses/latest/code/biomarkers",
     },
     "onprem": True,
-    "method": "project"
+    "method": "project",
 }
 project_goals_error = {
     "name": "project_goals_error",
@@ -71,7 +73,7 @@ project_goals_error = {
     "expected": "Error: Some error",
     "onprem": False,
     "method": "project",
-    "is_error": True
+    "is_error": True,
 }
 
 file_goals_none_found = {
@@ -80,10 +82,10 @@ file_goals_none_found = {
     "expected": {
         "goals": [],
         "description": f"Found 0 technical debt goals for file {FILE_NAME} in project ID {PROJECT_ID}.",
-        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/biomarkers?name={FILE_NAME}"
+        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/biomarkers?name={FILE_NAME}",
     },
     "onprem": False,
-    "method": "file"
+    "method": "file",
 }
 file_goals_some_found = {
     "name": "file_goals_some_found",
@@ -91,10 +93,10 @@ file_goals_some_found = {
     "expected": {
         "goals": [{"name": "some goal"}],
         "description": f"Found 1 technical debt goals for file {FILE_NAME} in project ID {PROJECT_ID}.",
-        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/biomarkers?name={FILE_NAME}"
+        "link": f"https://codescene.io/projects/{PROJECT_ID}/analyses/latest/code/biomarkers?name={FILE_NAME}",
     },
     "onprem": False,
-    "method": "file"
+    "method": "file",
 }
 file_goals_some_found_onprem = {
     "name": "file_goals_some_found_onprem",
@@ -102,10 +104,10 @@ file_goals_some_found_onprem = {
     "expected": {
         "goals": [{"name": "some goal"}],
         "description": f"Found 1 technical debt goals for file {FILE_NAME} in project ID {PROJECT_ID}.",
-        "link": f"https://onprem-codescene.io/{PROJECT_ID}/analyses/latest/code/biomarkers?name={FILE_NAME}"
+        "link": f"https://onprem-codescene.io/{PROJECT_ID}/analyses/latest/code/biomarkers?name={FILE_NAME}",
     },
     "onprem": True,
-    "method": "file"
+    "method": "file",
 }
 file_goals_error = {
     "name": "file_goals_error",
@@ -113,8 +115,9 @@ file_goals_error = {
     "expected": "Error: Some error",
     "onprem": False,
     "method": "file",
-    "is_error": True
+    "is_error": True,
 }
+
 
 class TestTechnicalDebtGoals(unittest.TestCase):
     def setUp(self):
@@ -135,16 +138,16 @@ class TestTechnicalDebtGoals(unittest.TestCase):
             if scenario.get("is_error"):
                 raise scenario["mock_return"]
             return scenario["mock_return"]
-        return TechnicalDebtGoals(FastMCP("Test"), {'query_api_list_fn': mocked_query_api_list})
+
+        return TechnicalDebtGoals(FastMCP("Test"), {"query_api_list_fn": mocked_query_api_list})
 
     def _execute_scenario(self, scenario):
-        with self._patch_environment(scenario):
-            with mock.patch('requests.post', side_effect=mocked_requests_post):
-                instance = self._make_mocked_instance(scenario)
-                if scenario["method"] == "project":
-                    return instance.list_technical_debt_goals_for_project(self.project_id)
-                
-                return instance.list_technical_debt_goals_for_project_file(self.file_path, self.project_id)
+        with self._patch_environment(scenario), mock.patch("requests.post", side_effect=mocked_requests_post):
+            instance = self._make_mocked_instance(scenario)
+            if scenario["method"] == "project":
+                return instance.list_technical_debt_goals_for_project(self.project_id)
+
+            return instance.list_technical_debt_goals_for_project_file(self.file_path, self.project_id)
 
     def _assert_scenario(self, scenario):
         result = self._execute_scenario(scenario)
@@ -168,19 +171,19 @@ class TestTechnicalDebtGoals(unittest.TestCase):
             with self.subTest(scenario=scenario["name"]):
                 self._assert_scenario(scenario)
 
-    @mock.patch('technical_debt_goals.technical_debt_goals.get_relative_file_path_for_api')
-    @mock.patch('requests.post', side_effect=mocked_requests_post)
+    @mock.patch("technical_debt_goals.technical_debt_goals.get_relative_file_path_for_api")
+    @mock.patch("requests.post", side_effect=mocked_requests_post)
     def test_file_goals_static_mode(self, mock_post, mock_get_path):
         """Test that file-level goals work in static executable mode (no CS_MOUNT_PATH)."""
         mock_get_path.return_value = "src/some_file.tsx"
-        
+
         def mocked_query_api_list(*args, **kwargs):
             return [{"path": "src/some_file.tsx", "goals": [{"name": "reduce complexity"}]}]
-        
-        instance = TechnicalDebtGoals(FastMCP("Test"), {'query_api_list_fn': mocked_query_api_list})
+
+        instance = TechnicalDebtGoals(FastMCP("Test"), {"query_api_list_fn": mocked_query_api_list})
         result = instance.list_technical_debt_goals_for_project_file("/some/git/repo/src/some_file.tsx", PROJECT_ID)
-        
+
         mock_get_path.assert_called_once_with("/some/git/repo/src/some_file.tsx")
         result_data = json.loads(result)
-        self.assertEqual(result_data['goals'], [{"name": "reduce complexity"}])
-        self.assertIn("src/some_file.tsx", result_data['description'])
+        self.assertEqual(result_data["goals"], [{"name": "reduce complexity"}])
+        self.assertIn("src/some_file.tsx", result_data["description"])

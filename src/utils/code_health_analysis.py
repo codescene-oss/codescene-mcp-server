@@ -1,39 +1,44 @@
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
-import tempfile
+from pathlib import Path
+
 from errors import CodeSceneCliError
-from .docker_path_adapter import adapt_mounted_file_path_inside_docker, get_relative_path_from_git_root
+
+from .docker_path_adapter import (
+    adapt_mounted_file_path_inside_docker,
+    get_relative_path_from_git_root,
+    get_worktree_gitdir,
+)
 from .platform_details import get_platform_details, get_ssl_cli_args
-from .docker_path_adapter import get_worktree_gitdir
+
 
 def find_git_root(file_path: str) -> str:
     """
     Finds the git repository root for a given file path.
-    
+
     Args:
         file_path (str): Path to a file in the repository
-        
+
     Returns:
         str: Path to the git repository root
-        
+
     Raises:
         CodeSceneCliError: If not in a git repository
     """
     current_path = Path(file_path).resolve()
-    
+
     # If it's a file, start from its parent directory
     if current_path.is_file():
         current_path = current_path.parent
-    
+
     # Walk up the directory tree looking for .git
     while current_path != current_path.parent:
-        if (current_path / '.git').exists():
+        if (current_path / ".git").exists():
             return str(current_path)
         current_path = current_path.parent
-    
+
     raise CodeSceneCliError(f"Not in a git repository: {file_path}")
 
 
@@ -51,13 +56,13 @@ def run_local_tool(command: list, cwd: str | None = None, extra_env: dict | None
     """
     # Start with a copy of the current environment
     env = os.environ.copy()
-    
+
     # Override/add MCP-specific variables
-    env['CS_CONTEXT'] = 'mcp-server'
-    env['CS_ACCESS_TOKEN'] = os.getenv("CS_ACCESS_TOKEN", "")
+    env["CS_CONTEXT"] = "mcp-server"
+    env["CS_ACCESS_TOKEN"] = os.getenv("CS_ACCESS_TOKEN", "")
 
     if os.getenv("CS_ONPREM_URL"):
-        env['CS_ONPREM_URL'] = os.getenv("CS_ONPREM_URL")
+        env["CS_ONPREM_URL"] = os.getenv("CS_ONPREM_URL")
 
     # Apply platform-specific environment configuration
     platform = get_platform_details()
@@ -78,10 +83,18 @@ def run_local_tool(command: list, cwd: str | None = None, extra_env: dict | None
 
     # Use 'replace' error handling to gracefully handle encoding issues on Windows
     # where the CLI may output text in CP1252 instead of UTF-8
-    result = subprocess.run(actual_command, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd, env=env)
+    result = subprocess.run(
+        actual_command,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=cwd,
+        env=env,
+    )
     if result.returncode != 0:
         raise CodeSceneCliError(f"CLI command failed: {result.stderr}")
-    
+
     return result.stdout
 
 
@@ -92,8 +105,8 @@ def _is_cs_cli_command(cmd: str) -> bool:
     # Check if command ends with 'cs' or 'cs.exe' (the CLI binary names)
     cmd_lower = cmd.lower()
     # Normalize path separators and get the basename
-    basename = cmd_lower.replace('\\', '/').split('/')[-1]
-    return basename in ('cs', 'cs.exe')
+    basename = cmd_lower.replace("\\", "/").split("/")[-1]
+    return basename in ("cs", "cs.exe")
 
 
 def run_cs_cli(cli_fn) -> str:
@@ -114,10 +127,10 @@ def run_cs_cli(cli_fn) -> str:
 def code_health_from_cli_output(cli_output) -> float:
     r = json.loads(cli_output)
 
-    if 'score' not in r:
-        raise CodeSceneCliError("CLI output does not contain a 'score' field: {}".format(cli_output))
+    if "score" not in r:
+        raise CodeSceneCliError(f"CLI output does not contain a 'score' field: {cli_output}")
 
-    return r['score']
+    return r["score"]
 
 
 def _ensure_executable(path: Path) -> str:
@@ -139,7 +152,7 @@ def _is_nuitka_environment() -> bool:
 def _get_nuitka_cli_locations(cli_binary_name: str) -> list[Path]:
     """
     Get list of potential CLI binary locations in Nuitka environment.
-    
+
     For onefile builds with --include-data-files, the cs binary location differs:
     - Linux: next to the executable (sys.executable.parent)
     - Windows: in the extraction root (traverse up from __file__ until we find it)
@@ -150,7 +163,7 @@ def _get_nuitka_cli_locations(cli_binary_name: str) -> list[Path]:
         # Alternative: relative to sys.argv[0]
         Path(sys.argv[0]).parent.absolute() / cli_binary_name,
     ]
-    
+
     # Windows: Walk up from __file__ to find the cs binary
     # On Windows, __file__ might be something like:
     # C:/Users/.../Temp/onefile_12345/.../src/utils/code_health_analysis.py
@@ -161,7 +174,7 @@ def _get_nuitka_cli_locations(cli_binary_name: str) -> list[Path]:
         if current.parent == current:  # Reached root
             break
         current = current.parent
-    
+
     return locations
 
 
@@ -176,27 +189,27 @@ def _find_existing_cli_binary(locations: list[Path]) -> str | None:
 def _try_nuitka_cli_path(cli_binary_name: str):
     """
     Try to find CLI binary in Nuitka compiled environment.
-    
+
     Returns:
         str: Path to CLI binary if found, None otherwise.
     """
     if not _is_nuitka_environment():
-        print(f"DEBUG: Not in Nuitka environment (__compiled__ not found)", file=sys.stderr)
+        print("DEBUG: Not in Nuitka environment (__compiled__ not found)", file=sys.stderr)
         return None
-    
+
     locations = _get_nuitka_cli_locations(cli_binary_name)
     cli_path = _find_existing_cli_binary(locations)
-    
+
     if not cli_path:
-        print(f"DEBUG Nuitka: cs binary not found in any location", file=sys.stderr)
-    
+        print("DEBUG Nuitka: cs binary not found in any location", file=sys.stderr)
+
     return cli_path
 
 
 def _try_bundled_cli_path(cli_binary_name: str):
     """
     Try to find CLI binary in source tree (development mode).
-    
+
     Returns:
         str: Path to CLI binary if found, None otherwise.
     """
@@ -207,13 +220,13 @@ def _try_bundled_cli_path(cli_binary_name: str):
     return None
 
 
-DOCKER_CLI_PATH = '/root/.local/bin/cs'
+DOCKER_CLI_PATH = "/root/.local/bin/cs"
 
 
 def cs_cli_path(platform_details):
     """
     Determine the path to the CodeScene CLI binary.
-    
+
     Resolution order:
     1. CS_CLI_PATH environment variable override
     2. Docker environment static path
@@ -246,10 +259,7 @@ def make_cs_cli_review_command_for(cli_command: str, file_path: str, platform_de
         platform_details = get_platform_details()
     cs_cli = cs_cli_path(platform_details)
 
-    if os.getenv("CS_MOUNT_PATH"):
-        mount_file_path = adapt_mounted_file_path_inside_docker(file_path)
-    else:
-        mount_file_path = file_path
+    mount_file_path = adapt_mounted_file_path_inside_docker(file_path) if os.getenv("CS_MOUNT_PATH") else file_path
 
     return [cs_cli, cli_command, mount_file_path, "--output-format=json"]
 
@@ -266,9 +276,9 @@ def analyze_code(file_path: str) -> str:
         # Local/Nuitka binary - find git root and use relative path
         git_root = find_git_root(file_path)
         relative_path = get_relative_path_from_git_root(file_path, git_root)
-        
+
         # Detect worktree and set GIT_DIR if needed (mirrors Docker mode logic)
         gitdir = get_worktree_gitdir(git_root)
         extra_env = {"GIT_DIR": gitdir} if gitdir else None
-        
+
         return run_local_tool(cs_cli_review_command_for(relative_path), cwd=git_root, extra_env=extra_env)

@@ -38,3 +38,19 @@ test-all:
 	@echo ""
 	@echo "Running integration tests..."
 	./tests/run-integration-tests.sh
+
+.PHONY: lint
+lint:
+	ruff check .
+
+.PHONY: lint-fix
+lint-fix:
+	ruff check . --fix
+
+.PHONY: format
+format:
+	ruff format .
+
+.PHONY: format-check
+format-check:
+	ruff format . --check

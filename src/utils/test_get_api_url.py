@@ -1,6 +1,7 @@
 import os
 import unittest
 from unittest import mock
+
 from .codescene_api_client import get_api_url
 
 

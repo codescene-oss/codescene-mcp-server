@@ -1,4 +1,6 @@
-from typing import Callable, TypedDict
+from collections.abc import Callable
+from typing import TypedDict
+
 from utils import run_cs_cli, track, with_version_check
 
 
@@ -18,7 +20,7 @@ class CodeHealthReview:
         """
         Calculates the code quality of the given file using the Code Health metric.
         Returns a score from 10.0 (optimal) down to 1.0 (worst).
-        
+
         The Code Health scores are interpreted as:
           * Optimal Code: a Code Health 10.0 is optimized for both human and AI comprehension
           * Green Code: high quality with a score of 9-9.9
