@@ -23,6 +23,17 @@ def mock_run_local_tool(command: list, cwd: str = None):
 
 
 class TestAutoRefactor(unittest.TestCase):
+    def _create_instance_and_refactor(self, post_refactor_fn, run_local_tool_fn, file_path, function_name):
+        """Helper to create AutoRefactor instance and call refactor."""
+        instance = AutoRefactor(
+            FastMCP("Test"),
+            {
+                "post_refactor_fn": post_refactor_fn,
+                "run_local_tool_fn": run_local_tool_fn,
+            },
+        )
+        return instance.code_health_auto_refactor(file_path, function_name)
+
     @mock.patch(
         "code_health_auto_refactor.auto_refactor.find_git_root",
         return_value="/some-path",
@@ -111,18 +122,8 @@ class TestAutoRefactor(unittest.TestCase):
     )
     @mock.patch.dict(os.environ, {"CS_ACE_ACCESS_TOKEN": "some-token", "CS_MOUNT_PATH": "/some-path"})
     def test_refactor_missing_function(self, mock_find_git_root):
-        self.instance = AutoRefactor(
-            FastMCP("Test"),
-            {
-                "post_refactor_fn": None,
-                "run_local_tool_fn": mock_run_local_tool,
-            },
-        )
-
-        expected = "Error: Couldn't find function: missingFunction"
-        result = self.instance.code_health_auto_refactor("/some-path/some-file.cpp", "missingFunction")
-
-        self.assertEqual(expected, result)
+        result = self._create_instance_and_refactor(None, mock_run_local_tool, "/some-path/some-file.cpp", "missingFunction")
+        self.assertEqual("Error: Couldn't find function: missingFunction", result)
 
     @mock.patch(
         "code_health_auto_refactor.auto_refactor.find_git_root",
@@ -130,18 +131,8 @@ class TestAutoRefactor(unittest.TestCase):
     )
     @mock.patch.dict(os.environ, {"CS_ACE_ACCESS_TOKEN": "some-token", "CS_MOUNT_PATH": "/some-path"})
     def test_refactor_no_code_smells(self, mock_find_git_root):
-        self.instance = AutoRefactor(
-            FastMCP("Test"),
-            {
-                "post_refactor_fn": None,
-                "run_local_tool_fn": mock_run_local_tool,
-            },
-        )
-
-        expected = "Error: No code smells were found in Document::isPerformingTransaction"
-        result = self.instance.code_health_auto_refactor("/some-path/some-file.cpp", "Document::isPerformingTransaction")
-
-        self.assertEqual(expected, result)
+        result = self._create_instance_and_refactor(None, mock_run_local_tool, "/some-path/some-file.cpp", "Document::isPerformingTransaction")
+        self.assertEqual("Error: No code smells were found in Document::isPerformingTransaction", result)
 
     @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path"})
     def test_refactor_no_token(self):
@@ -167,18 +158,8 @@ class TestAutoRefactor(unittest.TestCase):
         {"CS_ACE_ACCESS_TOKEN": "invalid-token", "CS_MOUNT_PATH": "/some-path"},
     )
     def test_refactor_invalid_token(self, mock_find_git_root):
-        self.instance = AutoRefactor(
-            FastMCP("Test"),
-            {
-                "post_refactor_fn": post_refactor,
-                "run_local_tool_fn": mock_run_local_tool,
-            },
-        )
-
-        expected = "Error: HttpClientError 401: The token is not valid."
-        result = self.instance.code_health_auto_refactor("/some-path/some-file.cpp", "Document::moveObject")
-
-        self.assertEqual(expected, result)
+        result = self._create_instance_and_refactor(post_refactor, mock_run_local_tool, "/some-path/some-file.cpp", "Document::moveObject")
+        self.assertEqual("Error: HttpClientError 401: The token is not valid.", result)
 
     @mock.patch(
         "code_health_auto_refactor.auto_refactor.find_git_root",
