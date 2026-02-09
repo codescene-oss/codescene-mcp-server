@@ -142,6 +142,58 @@ Manual configuration (replace `/path/to/your/code` with your actual code directo
 }
 ```
 
+### Cursor
+
+Add to your project-level `.cursor/mcp.json` file, or `~/.cursor/mcp.json` for global configuration (replace `/path/to/your/code` with your actual code directory path):
+
+**CodeScene Cloud:**
+
+```json
+{
+  "mcpServers": {
+    "codescene": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "CS_ACCESS_TOKEN",
+        "-e", "CS_MOUNT_PATH=/path/to/your/code",
+        "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
+        "codescene/codescene-mcp"
+      ],
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here"
+      }
+    }
+  }
+}
+```
+
+**CodeScene On-prem:**
+
+```json
+{
+  "mcpServers": {
+    "codescene": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "CS_ACCESS_TOKEN",
+        "-e", "CS_ONPREM_URL",
+        "-e", "CS_MOUNT_PATH=/path/to/your/code",
+        "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
+        "codescene/codescene-mcp"
+      ],
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ONPREM_URL": "https://your-codescene-instance.example.com"
+      }
+    }
+  }
+}
+```
+
+> **Note:** You can also add MCP servers via Cursor's UI: Settings > Cursor Settings > MCP > Add new global MCP server. See the [Cursor MCP documentation](https://docs.cursor.com/context/model-context-protocol) for more details.
+
 ### Kiro
 
 Create a `.kiro/settings/mcp.json` file in your workspace (replace `/path/to/your/code` with your actual code directory path):

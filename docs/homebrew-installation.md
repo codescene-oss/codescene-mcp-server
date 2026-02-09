@@ -93,6 +93,27 @@ Add to your VS Code `settings.json` or `.vscode/mcp.json`:
 
 For CodeScene On-prem, add `"CS_ONPREM_URL": "https://your-codescene-instance.example.com"` to the `env` section.
 
+### Cursor
+
+Add to your project-level `.cursor/mcp.json` file, or `~/.cursor/mcp.json` for global configuration:
+
+```json
+{
+  "mcpServers": {
+    "codescene": {
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here"
+      }
+    }
+  }
+}
+```
+
+For CodeScene On-prem, add `"CS_ONPREM_URL": "https://your-codescene-instance.example.com"` to the `env` section.
+
+> **Note:** You can also add MCP servers via Cursor's UI: Settings > Cursor Settings > MCP > Add new global MCP server. See the [Cursor MCP documentation](https://docs.cursor.com/context/model-context-protocol) for more details.
+
 ### Codex CLI
 
 Configure `~/.codex/config.toml`:
