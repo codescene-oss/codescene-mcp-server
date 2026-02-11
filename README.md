@@ -272,6 +272,52 @@ For detailed configuration examples, see:
 
 </details>
 
+<details>
+
+<summary>How do I disable the version update check?</summary>
+
+The MCP server periodically checks GitHub for newer releases and shows a "VERSION UPDATE AVAILABLE" banner when your version is outdated. This check runs in the background and never blocks tool responses, but in network-restricted environments you may want to disable it entirely.
+
+Set the `CS_DISABLE_VERSION_CHECK` environment variable to any non-empty value (e.g. `1`):
+
+**For the static binary (Homebrew/Windows):**
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_DISABLE_VERSION_CHECK": "1"
+      }
+    }
+  }
+}
+```
+
+**For Docker:**
+```json
+{
+  "command": "docker",
+  "args": [
+    "run", "-i", "--rm",
+    "-e", "CS_ACCESS_TOKEN",
+    "-e", "CS_DISABLE_VERSION_CHECK=1",
+    "-e", "CS_MOUNT_PATH=${input:CS_MOUNT_PATH}",
+    "--mount", "type=bind,src=${input:CS_MOUNT_PATH},dst=/mount/,ro",
+    "codescene/codescene-mcp"
+  ],
+  "env": {
+    "CS_ACCESS_TOKEN": "${input:CS_ACCESS_TOKEN}"
+  }
+}
+```
+
+When disabled, no network traffic is made to the version check endpoint and no version banner will appear.
+
+</details>
+
 ## Building Locally
 
 - [Building the Docker image locally](docs/building-docker-locally.md)

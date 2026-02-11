@@ -55,6 +55,7 @@ class BuildConfig:
     repo_root: Path
     build_dir: Path
     python_executable: str = "python3.13"
+    version: str = "MCP-0.0.0-test"
 
 
 class ExecutableBuilder:
@@ -190,6 +191,20 @@ class ExecutableBuilder:
             shutil.rmtree(docs_dest)
         shutil.copytree(self.config.repo_root / "src" / "docs", docs_dest)
 
+    def _inject_test_version(self) -> None:
+        """Replace __version__ = "dev" with a test version in the build copy.
+
+        This mirrors the version injection done by the CI workflow (sed in
+        build-exe.yml) so that the test binary behaves like a release build —
+        in particular, the version checker will perform real background fetches
+        instead of short-circuiting on the "dev" sentinel.
+        """
+        version_file = self.config.build_dir / "src" / "version.py"
+        content = version_file.read_text()
+        new_content = content.replace('__version__ = "dev"', f'__version__ = "{self.config.version}"')
+        version_file.write_text(new_content)
+        print(f"  Injected test version: {self.config.version}")
+
     def _ensure_cli_available(self) -> None:
         """Ensure the CodeScene CLI is available in the build directory."""
         cs_name = self._get_cli_name()
@@ -252,6 +267,7 @@ class ExecutableBuilder:
 
         self.config.build_dir.mkdir(parents=True, exist_ok=True)
         self._copy_source_files()
+        self._inject_test_version()
         self._ensure_cli_available()
 
         binary_path = self._run_nuitka_build()
@@ -320,18 +336,33 @@ class DockerBackend(ServerBackend):
 
     IMAGE_NAME = "codescene-mcp-test"
     CONTAINER_MOUNT_DEST = "/mount/"
+    TEST_VERSION = "MCP-0.0.0-test"
 
     def __init__(self, image_name: str | None = None):
         self.image_name = image_name or self.IMAGE_NAME
         self._built = False
 
     def prepare(self) -> None:
-        """Build the Docker image."""
+        """Build the Docker image with a non-dev version injected.
+
+        The Dockerfile accepts a VERSION build arg that replaces the default
+        "dev" sentinel in version.py.  Without this, the version checker
+        short-circuits on "dev" and never performs background fetches, which
+        would cause the version-check integration tests to fail.
+        """
         print_header("Building Docker Image")
         repo_root = Path(__file__).parent.parent.parent
 
         result = subprocess.run(
-            ["docker", "build", "-t", self.image_name, "."],
+            [
+                "docker",
+                "build",
+                "--build-arg",
+                f"VERSION={self.TEST_VERSION}",
+                "-t",
+                self.image_name,
+                ".",
+            ],
             cwd=str(repo_root),
             text=True,
         )
@@ -361,6 +392,11 @@ class DockerBackend(ServerBackend):
             f"CS_MOUNT_PATH={working_dir}",
             "-e",
             "CS_ONPREM_URL",
+            "-e",
+            "CS_VERSION_CHECK_URL",
+            "-e",
+            "CS_DISABLE_VERSION_CHECK",
+            "--add-host=host.docker.internal:host-gateway",
             "--mount",
             f"type=bind,src={working_dir},dst={self.CONTAINER_MOUNT_DEST}",
             self.image_name,

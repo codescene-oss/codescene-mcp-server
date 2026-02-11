@@ -494,12 +494,14 @@ def run_all_tests_with_backend(backend: ServerBackend) -> int:
         from test_git_subtree import run_subtree_tests_with_backend
         from test_git_worktree import run_worktree_tests_with_backend
         from test_relative_paths import run_relative_path_tests_with_backend
+        from test_version_check import run_version_check_tests_with_backend
 
         all_results.append(_run_test_module("Git Worktree Tests", run_worktree_tests_with_backend, backend))
         all_results.append(_run_test_module("Git Subtree Tests", run_subtree_tests_with_backend, backend))
         all_results.append(_run_test_module("Relative Path Tests", run_relative_path_tests_with_backend, backend))
         all_results.append(_run_test_module("Business Case Tests", run_business_case_tests_with_backend, backend))
         all_results.append(_run_test_module("Bundled Docs Tests", run_bundled_docs_tests_with_backend, backend))
+        all_results.append(_run_test_module("Version Check Tests", run_version_check_tests_with_backend, backend))
 
         return print_summary(all_results)
 

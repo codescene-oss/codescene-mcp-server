@@ -44,7 +44,7 @@ jobs:
           pip install -r src/requirements.txt
 
       - name: Build Docker image
-        run: docker build -t codescene-mcp-test .
+        run: docker build --build-arg VERSION=MCP-0.0.0-test -t codescene-mcp-test .
 
       - name: Run Docker integration tests
         run: ./tests/run-integration-tests.sh --docker
