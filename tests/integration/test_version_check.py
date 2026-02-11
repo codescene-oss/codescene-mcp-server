@@ -49,7 +49,12 @@ FAKE_LATEST_VERSION = "MCP-99.99.99"
 class _FakeGitHubHandler(BaseHTTPRequestHandler):
     """Minimal handler that mimics the GitHub releases/latest endpoint."""
 
+    request_count = 0
+    request_count_lock = threading.Lock()
+
     def do_GET(self):
+        with self.request_count_lock:
+            _FakeGitHubHandler.request_count += 1
         body = json.dumps({"tag_name": FAKE_LATEST_VERSION}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -60,6 +65,18 @@ class _FakeGitHubHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         """Suppress request logging to keep test output clean."""
         pass
+
+    @classmethod
+    def reset_request_count(cls):
+        """Reset the shared request counter to zero."""
+        with cls.request_count_lock:
+            cls.request_count = 0
+
+    @classmethod
+    def get_request_count(cls) -> int:
+        """Return the current request count (thread-safe)."""
+        with cls.request_count_lock:
+            return cls.request_count
 
 
 def run_version_check_tests(executable: Path) -> int:
@@ -107,6 +124,14 @@ def run_version_check_tests_with_backend(backend: ServerBackend) -> int:
             (
                 "Version Check - Version info appears after background fetch",
                 test_version_info_appears_after_background_fetch(backend, repo_dir),
+            ),
+            (
+                "Version Check - Disabled: no banner despite newer version",
+                test_disabled_version_check_no_banner(backend, repo_dir),
+            ),
+            (
+                "Version Check - Disabled: no network traffic",
+                test_disabled_version_check_no_network_traffic(backend, repo_dir),
             ),
         ]
 
@@ -267,6 +292,8 @@ def test_version_info_appears_after_background_fetch(backend: ServerBackend, rep
     # back to the host; 127.0.0.1 otherwise for tighter security in native runs.
     bind_host = "0.0.0.0" if is_docker else "127.0.0.1"
 
+    _FakeGitHubHandler.reset_request_count()
+
     # Start a local HTTP server on an ephemeral port
     server = HTTPServer((bind_host, 0), _FakeGitHubHandler)
     port = server.server_address[1]
@@ -334,6 +361,155 @@ def test_version_info_appears_after_background_fetch(backend: ServerBackend, rep
 
     except Exception as e:
         print_test("Version info appears after background fetch", False, str(e))
+        return False
+    finally:
+        client.stop()
+        server.shutdown()
+
+
+def test_disabled_version_check_no_banner(backend: ServerBackend, repo_dir: Path) -> bool:
+    """
+    Test that CS_DISABLE_VERSION_CHECK suppresses the VERSION UPDATE AVAILABLE
+    banner even when a newer version is available.
+
+    Starts a local HTTP server that would report a newer version, sets the
+    disable flag, and verifies no version banner ever appears across multiple
+    tool calls.
+    """
+    print_header("Test: Disabled Version Check — No Banner")
+
+    is_docker = isinstance(backend, DockerBackend)
+    bind_host = "0.0.0.0" if is_docker else "127.0.0.1"
+
+    server = HTTPServer((bind_host, 0), _FakeGitHubHandler)
+    port = server.server_address[1]
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+
+    url_host = "host.docker.internal" if is_docker else "127.0.0.1"
+    local_url = f"http://{url_host}:{port}/releases/latest"
+    print(f"  Local version server at {local_url}")
+
+    env = backend.get_env(os.environ.copy(), repo_dir)
+    env["CS_VERSION_CHECK_URL"] = local_url
+    env["CS_DISABLE_VERSION_CHECK"] = "1"
+    command = backend.get_command(repo_dir)
+
+    client = MCPClient(command, env=env, cwd=str(repo_dir))
+
+    try:
+        if not client.start():
+            print_test("Server started", False)
+            return False
+
+        print_test("Server started", True)
+        client.initialize()
+
+        test_file = repo_dir / "src/utils/calculator.py"
+
+        # First call: validate we get a valid score, and no banner
+        print("\n  Call 1...")
+        response = client.call_tool("code_health_score", {"file_path": str(test_file)}, timeout=60)
+        result_text = extract_result_text(response)
+        has_banner = "VERSION UPDATE AVAILABLE" in result_text
+        print_test("Call 1: no VERSION UPDATE AVAILABLE", not has_banner)
+
+        score = extract_code_health_score(result_text)
+        print_test("Call 1: valid Code Health score", score is not None, f"Score: {score}")
+        if score is None or has_banner:
+            return False
+
+        time.sleep(1)
+
+        # Subsequent calls: verify banner stays suppressed
+        all_clean = True
+        for i in range(2, 4):
+            print(f"\n  Call {i}...")
+            response = client.call_tool("code_health_score", {"file_path": str(test_file)}, timeout=60)
+            result_text = extract_result_text(response)
+
+            has_banner = "VERSION UPDATE AVAILABLE" in result_text
+            print_test(f"Call {i}: no VERSION UPDATE AVAILABLE", not has_banner)
+            all_clean = all_clean and not has_banner
+
+            time.sleep(1)
+
+        print_test("Version banner suppressed on all calls", all_clean)
+        return all_clean
+
+    except Exception as e:
+        print_test("Disabled version check — no banner", False, str(e))
+        return False
+    finally:
+        client.stop()
+        server.shutdown()
+
+
+def test_disabled_version_check_no_network_traffic(backend: ServerBackend, repo_dir: Path) -> bool:
+    """
+    Test that CS_DISABLE_VERSION_CHECK prevents all network traffic to the
+    version check endpoint.
+
+    Starts a local HTTP server and counts incoming requests. With the version
+    check disabled, zero requests should arrive.
+    """
+    print_header("Test: Disabled Version Check — No Network Traffic")
+
+    is_docker = isinstance(backend, DockerBackend)
+    bind_host = "0.0.0.0" if is_docker else "127.0.0.1"
+
+    _FakeGitHubHandler.reset_request_count()
+
+    server = HTTPServer((bind_host, 0), _FakeGitHubHandler)
+    port = server.server_address[1]
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+
+    url_host = "host.docker.internal" if is_docker else "127.0.0.1"
+    local_url = f"http://{url_host}:{port}/releases/latest"
+    print(f"  Local version server at {local_url}")
+
+    env = backend.get_env(os.environ.copy(), repo_dir)
+    env["CS_VERSION_CHECK_URL"] = local_url
+    env["CS_DISABLE_VERSION_CHECK"] = "1"
+    command = backend.get_command(repo_dir)
+
+    client = MCPClient(command, env=env, cwd=str(repo_dir))
+
+    try:
+        if not client.start():
+            print_test("Server started", False)
+            return False
+
+        print_test("Server started", True)
+        client.initialize()
+
+        test_file = repo_dir / "src/utils/calculator.py"
+
+        # Make several tool calls
+        for i in range(1, 4):
+            print(f"\n  Call {i}...")
+            response = client.call_tool("code_health_score", {"file_path": str(test_file)}, timeout=60)
+            result_text = extract_result_text(response)
+
+            score = extract_code_health_score(result_text)
+            print_test(f"Call {i}: valid Code Health score", score is not None, f"Score: {score}")
+
+        # Brief pause to allow any stray background requests to arrive
+        time.sleep(2)
+
+        request_count = _FakeGitHubHandler.get_request_count()
+        no_traffic = request_count == 0
+        print_test(
+            "Zero requests to version endpoint",
+            no_traffic,
+            f"Requests received: {request_count}",
+        )
+
+        return no_traffic
+
+    except Exception as e:
+        print_test("Disabled version check — no network traffic", False, str(e))
         return False
     finally:
         client.stop()

@@ -8,6 +8,9 @@ check is kicked off in the background and the tool responds immediately.
 Subsequent calls use the cached result once the background fetch completes.
 Failed fetches (e.g. in network-restricted environments) are also cached
 to avoid repeated timeout penalties.
+
+Set CS_DISABLE_VERSION_CHECK to any non-empty value to suppress all
+version-check network traffic entirely.
 """
 
 import logging
@@ -39,6 +42,16 @@ def _get_version_check_url() -> str:
     to mock network calls.
     """
     return os.environ.get("CS_VERSION_CHECK_URL", _DEFAULT_API_URL)
+
+
+def _is_version_check_disabled() -> bool:
+    """Return True when the user has opted out of version checks.
+
+    Setting the CS_DISABLE_VERSION_CHECK environment variable to any
+    non-empty value (e.g. "1", "true") disables all network traffic
+    related to version checking.
+    """
+    return bool(os.environ.get("CS_DISABLE_VERSION_CHECK"))
 
 
 @dataclass
@@ -160,6 +173,30 @@ class VersionChecker:
         self._fetch_thread = thread
         thread.start()
 
+    def _get_skip_reason(self) -> str | None:
+        """Return a reason string if version checking should be skipped, else None."""
+        if _is_version_check_disabled():
+            return "Version check disabled"
+        if __version__ == "dev":
+            return "Running development version"
+        return None
+
+    def _ensure_cached_skip_result(self, message: str) -> VersionInfo:
+        """Cache and return a VersionInfo for skipped checks (disabled / dev).
+
+        Must be called under self._lock.
+        """
+        if not self._is_cache_valid():
+            self._store_result(
+                VersionInfo(
+                    current=__version__,
+                    latest=None,
+                    outdated=False,
+                    message=message,
+                )
+            )
+        return self._cache  # type: ignore[return-value]
+
     def get_cached_or_trigger_fetch(self) -> VersionInfo | None:
         """Return cached version info if available, otherwise trigger a background fetch.
 
@@ -170,20 +207,10 @@ class VersionChecker:
             When None is returned, a background fetch has been started and
             subsequent calls will return the result once it completes.
         """
-        current_version = __version__
-
-        if current_version == "dev":
+        skip_reason = self._get_skip_reason()
+        if skip_reason is not None:
             with self._lock:
-                if not self._is_cache_valid():
-                    self._store_result(
-                        VersionInfo(
-                            current=current_version,
-                            latest=None,
-                            outdated=False,
-                            message="Running development version",
-                        )
-                    )
-                return self._cache
+                return self._ensure_cached_skip_result(skip_reason)
 
         with self._lock:
             if self._is_cache_valid():

@@ -1,3 +1,4 @@
+import os
 import threading
 import time
 import unittest
@@ -262,6 +263,62 @@ class TestBuildVersionInfo(unittest.TestCase):
         info = checker._build_version_info("MCP-2.0.0")
         self.assertTrue(info.outdated)
         self.assertIn("outdated", info.message.lower())
+
+
+class TestDisableVersionCheck(unittest.TestCase):
+    """Tests for CS_DISABLE_VERSION_CHECK support."""
+
+    @patch("utils.version_checker.__version__", "MCP-1.0.0")
+    @patch.dict(os.environ, {"CS_DISABLE_VERSION_CHECK": "1"})
+    @patch.object(VersionChecker, "get_latest_version")
+    def test_disabled_returns_immediately_without_fetching(self, mock_get_latest):
+        """When disabled, should return a result immediately and never fetch."""
+        checker = VersionChecker()
+        result = checker.get_cached_or_trigger_fetch()
+
+        self.assertIsNotNone(result)
+        self.assertFalse(result.outdated)
+        self.assertIsNone(result.latest)
+        self.assertIn("disabled", result.message.lower())
+        mock_get_latest.assert_not_called()
+
+    @patch("utils.version_checker.__version__", "MCP-1.0.0")
+    @patch.dict(os.environ, {"CS_DISABLE_VERSION_CHECK": "true"})
+    def test_disabled_does_not_start_background_thread(self):
+        """When disabled, no background thread should be spawned."""
+        checker = VersionChecker()
+        checker.get_cached_or_trigger_fetch()
+
+        self.assertIsNone(checker._fetch_thread)
+
+    @patch("utils.version_checker.__version__", "MCP-1.0.0")
+    @patch.dict(os.environ, {"CS_DISABLE_VERSION_CHECK": "1"})
+    def test_disabled_decorator_returns_plain_result(self):
+        """The decorator should return tool output as-is when version check is disabled."""
+
+        @with_version_check
+        def sample_tool():
+            return "Tool result"
+
+        result = sample_tool()
+        self.assertEqual(result, "Tool result")
+        self.assertNotIn("VERSION UPDATE AVAILABLE", result)
+
+    @patch("utils.version_checker.__version__", "MCP-1.0.0")
+    @patch.dict(os.environ, {}, clear=False)
+    @patch.object(VersionChecker, "get_latest_version")
+    def test_empty_env_var_does_not_disable(self, mock_get_latest):
+        """An empty CS_DISABLE_VERSION_CHECK value should not disable the check."""
+        os.environ.pop("CS_DISABLE_VERSION_CHECK", None)
+        mock_get_latest.return_value = "MCP-2.0.0"
+
+        checker = VersionChecker()
+        result = checker.get_cached_or_trigger_fetch()
+
+        # Should behave normally: first call returns None and triggers a fetch
+        self.assertIsNone(result)
+        checker._fetch_thread.join(timeout=2)
+        mock_get_latest.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -73,7 +73,7 @@ jobs:
   # Comprehensive Integration Tests - Windows
   # =============================================================================
   integration-windows:
-    runs-on: amd64-windows-8core
+    runs-on: windows-latest
     name: Integration Tests (Windows)
     steps:
       - name: Checkout code

@@ -394,6 +394,8 @@ class DockerBackend(ServerBackend):
             "CS_ONPREM_URL",
             "-e",
             "CS_VERSION_CHECK_URL",
+            "-e",
+            "CS_DISABLE_VERSION_CHECK",
             "--add-host=host.docker.internal:host-gateway",
             "--mount",
             f"type=bind,src={working_dir},dst={self.CONTAINER_MOUNT_DEST}",
