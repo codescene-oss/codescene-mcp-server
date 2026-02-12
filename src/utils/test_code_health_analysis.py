@@ -192,6 +192,28 @@ class TestRunLocalTool(unittest.TestCase):
         call_kwargs = mock_run.call_args[1]
         self.assertEqual("https://onprem.example.com", call_kwargs["env"]["CS_ONPREM_URL"])
 
+    @mock.patch("utils.code_health_analysis.subprocess.run")
+    @mock.patch("utils.code_health_analysis.get_platform_details")
+    def test_run_local_tool_always_disables_cli_version_check(self, mock_platform, mock_run):
+        # Ensure it's NOT set in the environment — the MCP server should
+        # unconditionally disable the CLI's own version check.
+        os.environ.pop("CS_DISABLE_VERSION_CHECK", None)
+
+        mock_platform_instance = mock.MagicMock()
+        mock_platform_instance.get_java_options.return_value = ""
+        mock_platform_instance.configure_environment.side_effect = lambda x: x
+        mock_platform.return_value = mock_platform_instance
+
+        mock_result = mock.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "output"
+        mock_run.return_value = mock_result
+
+        run_local_tool(["echo", "test"])
+
+        call_kwargs = mock_run.call_args[1]
+        self.assertEqual("1", call_kwargs["env"]["CS_DISABLE_VERSION_CHECK"])
+
     @mock.patch("utils.code_health_analysis.get_platform_details")
     def test_run_local_tool_handles_utf8_output(self, mock_platform):
         """Test that CLI output containing UTF-8 characters is handled correctly.
