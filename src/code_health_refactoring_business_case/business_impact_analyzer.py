@@ -1,3 +1,4 @@
+import json
 from collections.abc import Callable
 from typing import TypedDict
 
@@ -18,7 +19,7 @@ class CodeHealthRefactoringBusinessCase:
 
     @with_version_check
     @track("code-health-refactoring-business-case")
-    def code_health_refactoring_business_case(self, file_path: str) -> dict:
+    def code_health_refactoring_business_case(self, file_path: str) -> str:
         """
         Generate a data-driven business case for refactoring a source file.
 
@@ -41,4 +42,4 @@ class CodeHealthRefactoringBusinessCase:
         """
         current_code_health = code_health_from_cli_output(self.deps["analyze_code_fn"](file_path))
 
-        return make_business_case_for(current_code_health)
+        return json.dumps(make_business_case_for(current_code_health))
