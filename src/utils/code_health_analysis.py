@@ -64,6 +64,10 @@ def run_local_tool(command: list, cwd: str | None = None, extra_env: dict | None
     if os.getenv("CS_ONPREM_URL"):
         env["CS_ONPREM_URL"] = os.getenv("CS_ONPREM_URL")
 
+    # Always disable the CLI's own version check — the MCP server
+    # handles version checking independently.
+    env["CS_DISABLE_VERSION_CHECK"] = "1"
+
     # Apply platform-specific environment configuration
     platform = get_platform_details()
     env = platform.configure_environment(env)
