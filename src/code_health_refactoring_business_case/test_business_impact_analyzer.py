@@ -17,7 +17,7 @@ class TestCodeHealthRefactoringBusinessCase(unittest.TestCase):
 
         result = self.instance.code_health_refactoring_business_case("test.tsx")
 
-        self.assertTrue(result["outcome"]["title"].startswith("Business"))
+        self.assertTrue(json.loads(result)["outcome"]["title"].startswith("Business"))
 
     def test_code_health_refactoring_business_case_no_score(self):
         def mock_analyze_code(file_path: str):
