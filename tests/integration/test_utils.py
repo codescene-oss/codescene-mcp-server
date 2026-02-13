@@ -41,6 +41,8 @@ from server_backends import (
     ServerBackend,
 )
 from test_output import (
+    capture_stdout,
+    print_boxed,
     print_header,
     print_summary,
     print_test,
@@ -49,6 +51,8 @@ from test_output import (
 # Export all public names
 __all__ = [
     # test_output
+    "capture_stdout",
+    "print_boxed",
     "print_header",
     "print_test",
     "print_summary",

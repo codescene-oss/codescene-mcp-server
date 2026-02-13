@@ -40,9 +40,11 @@ from test_utils import (
     MCPClient,
     NuitkaBackend,
     ServerBackend,
+    capture_stdout,
     create_git_repo,
     extract_code_health_score,
     extract_result_text,
+    print_boxed,
     print_header,
     print_summary,
     print_test,
@@ -409,6 +411,9 @@ def _run_test_module(module_name: str, run_func, backend: ServerBackend) -> tupl
     """
     Run a test module and return its result.
 
+    All module output is captured and reprinted inside a bordered box so that
+    module boundaries are visually obvious in the overall test run.
+
     Args:
         module_name: Display name for the test module
         run_func: Function to run tests, takes backend and returns exit code
@@ -417,10 +422,10 @@ def _run_test_module(module_name: str, run_func, backend: ServerBackend) -> tupl
     Returns:
         Tuple of (test_name, passed)
     """
-    print("\n" + "=" * 70)
-    print(f"  Running {module_name}")
-    print("=" * 70)
-    result = run_func(backend)
+    with capture_stdout() as lines:
+        result = run_func(backend)
+
+    print_boxed(lines, title=module_name)
     return (module_name, result == 0)
 
 
@@ -449,44 +454,47 @@ def run_all_tests_with_backend(backend: ServerBackend) -> int:
 
         all_results = []
 
-        # Run tests using backend command
-        all_results.append(
-            (
-                "Server Startup",
-                test_server_startup_with_backend(command, base_env, test_dir),
-            )
-        )
-
-        score_results = test_code_health_score_with_backend(command, base_env, test_dir, repo_dir)
-        all_results.extend(score_results)
-
-        all_results.append(
-            (
-                "Code Health Review",
-                test_code_health_review_with_backend(command, base_env, test_dir, repo_dir),
-            )
-        )
-        all_results.append(
-            (
-                "Pre-commit Safeguard",
-                test_pre_commit_safeguard_with_backend(command, base_env, test_dir, repo_dir),
-            )
-        )
-        all_results.append(
-            (
-                "Outside Git Repo",
-                test_outside_git_repo_with_backend(command, base_env, test_dir),
-            )
-        )
-
-        # Note: For Nuitka backend, also test no bundled CLI interference
-        if isinstance(backend, NuitkaBackend):
+        # Run core tests (boxed together)
+        with capture_stdout() as lines:
             all_results.append(
                 (
-                    "No Bundled CLI",
-                    test_no_bundled_cli_interference_with_backend(command, base_env, test_dir),
+                    "Server Startup",
+                    test_server_startup_with_backend(command, base_env, test_dir),
                 )
             )
+
+            score_results = test_code_health_score_with_backend(command, base_env, test_dir, repo_dir)
+            all_results.extend(score_results)
+
+            all_results.append(
+                (
+                    "Code Health Review",
+                    test_code_health_review_with_backend(command, base_env, test_dir, repo_dir),
+                )
+            )
+            all_results.append(
+                (
+                    "Pre-commit Safeguard",
+                    test_pre_commit_safeguard_with_backend(command, base_env, test_dir, repo_dir),
+                )
+            )
+            all_results.append(
+                (
+                    "Outside Git Repo",
+                    test_outside_git_repo_with_backend(command, base_env, test_dir),
+                )
+            )
+
+            # Note: For Nuitka backend, also test no bundled CLI interference
+            if isinstance(backend, NuitkaBackend):
+                all_results.append(
+                    (
+                        "No Bundled CLI",
+                        test_no_bundled_cli_interference_with_backend(command, base_env, test_dir),
+                    )
+                )
+
+        print_boxed(lines, title="Core Tests")
 
         # Run additional test modules
         from test_analytics_tracking import run_analytics_tracking_tests_with_backend
@@ -495,6 +503,7 @@ def run_all_tests_with_backend(backend: ServerBackend) -> int:
         from test_git_subtree import run_subtree_tests_with_backend
         from test_git_worktree import run_worktree_tests_with_backend
         from test_relative_paths import run_relative_path_tests_with_backend
+        from test_technical_debt import run_technical_debt_tests_with_backend
         from test_version_check import run_version_check_tests_with_backend
 
         all_results.append(_run_test_module("Git Worktree Tests", run_worktree_tests_with_backend, backend))
@@ -504,8 +513,9 @@ def run_all_tests_with_backend(backend: ServerBackend) -> int:
         all_results.append(_run_test_module("Bundled Docs Tests", run_bundled_docs_tests_with_backend, backend))
         all_results.append(_run_test_module("Version Check Tests", run_version_check_tests_with_backend, backend))
         all_results.append(_run_test_module("Analytics Tracking Tests", run_analytics_tracking_tests_with_backend, backend))
+        all_results.append(_run_test_module("Technical Debt Tests", run_technical_debt_tests_with_backend, backend))
 
-        return print_summary(all_results)
+        return print_summary(all_results, title="Final Summary — All Test Modules")
 
 
 def main() -> int:
