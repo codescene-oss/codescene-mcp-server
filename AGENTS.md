@@ -15,19 +15,16 @@
 
 ## 1️⃣ Safeguard All AI-Generated or Modified Code (Mandatory)
 
-For any AI-touched code:
+Two tools enforce Code Health at different scopes:
 
-1. Run `pre_commit_code_health_safeguard`.
-2. Run `code_health_review` for detailed analysis if the safeguard reports a regression.
-3. If Code Health regresses or fails quality gates:
-   - Highlight the issue.
-   - Refactor before suggesting commit.
-   - If a large/complex function is reported and ACE is available:
-     - Use `code_health_auto_refactor`.
-     - Then refine incrementally.
-   - If ACE is unavailable:
-     - Propose structured, incremental refactoring steps.
-4. Do **not** mark changes as ready unless risks are explicitly accepted.
+- **`pre_commit_code_health_safeguard`** — uncommitted/staged files only. Run before each commit.
+- **`analyze_change_set`** — full branch vs base ref (PR pre-flight). Run before opening a PR.
+
+If either reports a regression:
+
+1. Run `code_health_review` for details.
+2. Refactor until Code Health is restored. Use `code_health_auto_refactor` (ACE) if available.
+3. Do **not** mark changes as ready unless risks are explicitly accepted.
 
 ---
 
