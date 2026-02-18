@@ -316,6 +316,11 @@ class NuitkaBackend(ServerBackend):
         """Return environment without CS_MOUNT_PATH for native execution."""
         env = base_env.copy()
         env.pop("CS_MOUNT_PATH", None)
+        # Disable the version check by default so non-version-check tests
+        # don't make real HTTP calls to GitHub and don't get the "VERSION
+        # UPDATE AVAILABLE" banner prepended to tool responses.
+        # test_version_check.py overrides this after calling get_env().
+        env.setdefault("CS_DISABLE_VERSION_CHECK", "1")
         return env
 
     def cleanup(self) -> None:
@@ -408,7 +413,13 @@ class DockerBackend(ServerBackend):
 
     def get_env(self, base_env: dict[str, str], working_dir: Path) -> dict[str, str]:
         """Return environment for Docker execution."""
-        return base_env.copy()
+        env = base_env.copy()
+        # Disable the version check by default so non-version-check tests
+        # don't make real HTTP calls to GitHub and don't get the "VERSION
+        # UPDATE AVAILABLE" banner prepended to tool responses.
+        # test_version_check.py overrides this after calling get_env().
+        env.setdefault("CS_DISABLE_VERSION_CHECK", "1")
+        return env
 
     def cleanup(self) -> None:
         """No cleanup needed - containers use --rm."""
