@@ -6,6 +6,7 @@ from pathlib import Path
 from fastmcp import FastMCP
 from fastmcp.resources import FileResource
 
+from analyze_change_set import AnalyzeChangeSet
 from code_health_auto_refactor import AutoRefactor
 from code_health_refactoring_business_case import CodeHealthRefactoringBusinessCase
 from code_health_review import CodeHealthReview
@@ -188,6 +189,8 @@ if __name__ == "__main__":
 
     # tools
     PreCommitCodeHealthSafeguard(mcp, {"run_local_tool_fn": run_local_tool})
+
+    AnalyzeChangeSet(mcp, {"run_local_tool_fn": run_local_tool})
 
     CodeHealthRefactoringBusinessCase(mcp, {"analyze_code_fn": analyze_code})
 
