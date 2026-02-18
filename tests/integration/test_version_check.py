@@ -105,6 +105,9 @@ def run_version_check_tests_with_backend(backend: ServerBackend) -> int:
         command = backend.get_command(repo_dir)
         env = backend.get_env(os.environ.copy(), repo_dir)
 
+        # These tests need the version checker active, so remove the default
+        # disable that get_env() sets for non-version-check tests.
+        env.pop("CS_DISABLE_VERSION_CHECK", None)
         # Point version check at an unreachable address
         env["CS_VERSION_CHECK_URL"] = UNREACHABLE_VERSION_CHECK_URL
 
@@ -308,6 +311,9 @@ def test_version_info_appears_after_background_fetch(backend: ServerBackend, rep
 
     # Build env with the local URL override
     env = backend.get_env(os.environ.copy(), repo_dir)
+    # This test needs the version checker active, so remove the default
+    # disable that get_env() sets for non-version-check tests.
+    env.pop("CS_DISABLE_VERSION_CHECK", None)
     env["CS_VERSION_CHECK_URL"] = local_url
     command = backend.get_command(repo_dir)
 

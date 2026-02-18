@@ -67,6 +67,39 @@ class TestDeltaAnalysis(unittest.TestCase):
         self.assertEqual(result["results"], [])
         self.assertQualityGatesPass(result)
 
+    def test_degraded_with_findings_preserved(self):
+        """Real-world output: a file degrades from 10.0 to 9.68 with a Complex Conditional finding."""
+        output = json.dumps(
+            [
+                {
+                    "name": "analysis/src/analysis/codescene/analysis/analyses/exportable_analytical_units.clj",
+                    "findings": [
+                        {
+                            "category": "Complex Conditional",
+                            "change-type": "introduced",
+                            "new-pp": 1.0,
+                            "change-details": [
+                                {
+                                    "change-type": "introduced",
+                                    "description": "extract has 1 complex conditionals with 2 branches, threshold = 2",
+                                    "value": 2,
+                                    "locations": [{"start-line": 12, "end-line": 13, "function": "extract"}],
+                                }
+                            ],
+                            "threshold": 2,
+                        }
+                    ],
+                    "old-score": 10.0,
+                    "new-score": 9.68,
+                }
+            ]
+        )
+        result = analyze_delta_output(output)
+
+        self.assertCodeHealthDegraded(result, filename="analysis/src/analysis/codescene/analysis/analyses/exportable_analytical_units.clj")
+        self.assertQualityGatesFail(result)
+        self.assertFindingIntroduced(result, category="Complex Conditional")
+
     # Clarify the intent via custom assertions:
     #
     def assertCodeHealthImproved(self, result, filename=None):
@@ -94,6 +127,12 @@ class TestDeltaAnalysis(unittest.TestCase):
 
     def assertQualityGatesFail(self, result):
         self.assertEqual(result["quality_gates"], "failed")
+
+    def assertFindingIntroduced(self, result, category, filename=None):
+        entry = self._result_matching(filename, result)
+        self.assertIsNotNone(entry, f"No result entry found for filename: {filename}")
+        matching = [f for f in entry.get("findings", []) if f.get("category") == category and f.get("change-type") == "introduced"]
+        self.assertTrue(matching, f"No introduced finding with category '{category}' found")
 
     def _result_matching(self, filename, result):
         return next(
