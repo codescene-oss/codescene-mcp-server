@@ -246,72 +246,66 @@ def _setup_repo_with_new_file(test_dir: Path, subdir: str, file_path: str, conte
     return repo_dir
 
 
-def test_passes_on_clean_branch(command: list[str], env: dict, test_dir: Path) -> bool:
-    """Test that analyze_change_set passes when the branch has no code health decline."""
-    print_header("Test: Change Set Passes on Clean Branch")
-
-    repo_dir = _setup_repo_with_branch(test_dir, "clean", CLEAN_ADDITION)
+def _assert_quality_gates_passed(
+    command: list[str], env: dict, repo_dir: Path, pass_reason: str,
+) -> bool:
+    """Run analysis and verify quality gates passed with meaningful content."""
     result_text, quality_gates = _run_change_set_analysis(command, env, repo_dir)
 
     has_content = len(result_text) > 10
     print_test("Tool returned content", has_content, f"Length: {len(result_text)} chars")
 
     gates_passed = quality_gates == "passed"
-    print_test("Quality gates passed (no degradation)", gates_passed, f"quality_gates: {quality_gates}")
+    print_test(f"Quality gates passed ({pass_reason})", gates_passed, f"quality_gates: {quality_gates}")
 
     return has_content and gates_passed
 
 
-def test_fails_on_degraded_branch(command: list[str], env: dict, test_dir: Path) -> bool:
-    """Test that analyze_change_set fails when a commit introduces a code health decline."""
-    print_header("Test: Change Set Fails on Degraded Branch")
-
-    repo_dir = _setup_repo_with_branch(test_dir, "degraded", DEGRADING_ADDITION)
+def _assert_quality_gates_failed(
+    command: list[str], env: dict, repo_dir: Path, expected_file: str,
+) -> bool:
+    """Run analysis and verify quality gates failed with findings referencing the expected file."""
     result_text, quality_gates = _run_change_set_analysis(command, env, repo_dir)
 
     gates_failed = quality_gates == "failed"
     print_test("Quality gates failed (degradation detected)", gates_failed, f"quality_gates: {quality_gates}")
 
-    has_findings = "calculator.py" in result_text
-    print_test("Findings reference the degraded file", has_findings)
+    has_findings = expected_file in result_text
+    print_test(f"Findings reference {expected_file}", has_findings)
 
     return gates_failed and has_findings
+
+
+def test_passes_on_clean_branch(command: list[str], env: dict, test_dir: Path) -> bool:
+    """Test that analyze_change_set passes when the branch has no code health decline."""
+    print_header("Test: Change Set Passes on Clean Branch")
+    repo_dir = _setup_repo_with_branch(test_dir, "clean", CLEAN_ADDITION)
+    return _assert_quality_gates_passed(command, env, repo_dir, "no degradation")
+
+
+def test_fails_on_degraded_branch(command: list[str], env: dict, test_dir: Path) -> bool:
+    """Test that analyze_change_set fails when a commit introduces a code health decline."""
+    print_header("Test: Change Set Fails on Degraded Branch")
+    repo_dir = _setup_repo_with_branch(test_dir, "degraded", DEGRADING_ADDITION)
+    return _assert_quality_gates_failed(command, env, repo_dir, "calculator.py")
 
 
 def test_fails_on_new_file_with_degraded_health(command: list[str], env: dict, test_dir: Path) -> bool:
     """Test that analyze_change_set fails when a new file on the branch has code health issues."""
     print_header("Test: Change Set Fails on New File with Degraded Health")
-
     repo_dir = _setup_repo_with_new_file(
         test_dir, "new_file_degraded", "src/validation/validator.py", DEGRADING_NEW_FILE
     )
-    result_text, quality_gates = _run_change_set_analysis(command, env, repo_dir)
-
-    gates_failed = quality_gates == "failed"
-    print_test("Quality gates failed (new file degradation detected)", gates_failed, f"quality_gates: {quality_gates}")
-
-    has_findings = "validator.py" in result_text
-    print_test("Findings reference the new degraded file", has_findings)
-
-    return gates_failed and has_findings
+    return _assert_quality_gates_failed(command, env, repo_dir, "validator.py")
 
 
 def test_passes_on_new_file_with_clean_health(command: list[str], env: dict, test_dir: Path) -> bool:
     """Test that analyze_change_set passes when a new file on the branch has clean code health."""
     print_header("Test: Change Set Passes on New File with Clean Health")
-
     repo_dir = _setup_repo_with_new_file(
         test_dir, "new_file_clean", "src/stats/statistics.py", CLEAN_NEW_FILE
     )
-    result_text, quality_gates = _run_change_set_analysis(command, env, repo_dir)
-
-    has_content = len(result_text) > 10
-    print_test("Tool returned content", has_content, f"Length: {len(result_text)} chars")
-
-    gates_passed = quality_gates == "passed"
-    print_test("Quality gates passed (new clean file has no degradation)", gates_passed, f"quality_gates: {quality_gates}")
-
-    return has_content and gates_passed
+    return _assert_quality_gates_passed(command, env, repo_dir, "new clean file has no degradation")
 
 
 def run_analyze_change_set_tests(executable: Path) -> int:
