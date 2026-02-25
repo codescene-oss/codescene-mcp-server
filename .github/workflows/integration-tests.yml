@@ -21,7 +21,7 @@ jobs:
   # Comprehensive Integration Tests - Linux
   # =============================================================================
   integration-linux:
-    runs-on: askos-linux
+    runs-on: ubuntu-22.04
     name: Integration Tests (Linux)
     steps:
       - name: Checkout code
@@ -47,7 +47,7 @@ jobs:
   # Comprehensive Integration Tests - macOS (Apple Silicon)
   # =============================================================================
   integration-macos:
-    runs-on: askos-mac
+    runs-on: macos-latest
     name: Integration Tests (macOS)
     steps:
       - name: Checkout code
