@@ -58,6 +58,57 @@ class TestDeltaAnalysis(unittest.TestCase):
         self.assertCodeHealthUnknown(result)
         self.assertQualityGatesPass(result)
 
+    def test_new_file_with_findings_is_degraded(self):
+        """A new file (old-score: null, new-score present) with findings should be treated as degraded."""
+        output = json.dumps(
+            [
+                {
+                    "name": "src/utils/new_validator.py",
+                    "findings": [
+                        {
+                            "category": "Complex Conditional",
+                            "change-type": "introduced",
+                            "new-pp": 11.0,
+                            "change-details": [
+                                {
+                                    "change-type": "introduced",
+                                    "description": "validate_order has 2 complex conditionals with 22 branches, threshold = 2",
+                                    "value": 44,
+                                    "locations": [{"start-line": 8, "end-line": 19, "function": "validate_order"}],
+                                }
+                            ],
+                            "threshold": 2,
+                        }
+                    ],
+                    "old-score": None,
+                    "new-score": 6.89,
+                }
+            ]
+        )
+        result = analyze_delta_output(output)
+        self.assertCodeHealthDegraded(result, filename="src/utils/new_validator.py")
+        self.assertQualityGatesFail(result)
+        self.assertFindingIntroduced(result, category="Complex Conditional")
+
+    def test_new_file_without_old_score_but_with_new_score_is_degraded(self):
+        """A new file that omits old-score entirely (not present in JSON) should be degraded when new-score exists."""
+        output = json.dumps([{"name": "new_file.py", "new-score": 8.5, "findings": []}])
+        result = analyze_delta_output(output)
+        self.assertCodeHealthDegraded(result, filename="new_file.py")
+
+    def test_new_file_mixed_with_modified_file(self):
+        """A branch with both a new file (degraded) and an improved existing file should fail quality gates."""
+        output = json.dumps(
+            [
+                {"name": "new_file.py", "old-score": None, "new-score": 6.0, "findings": [{"category": "Complex Method", "change-type": "introduced"}]},
+                {"name": "existing.py", "old-score": 7.0, "new-score": 8.0, "findings": []},
+            ]
+        )
+        result = analyze_delta_output(output)
+        self.assertCodeHealthDegraded(result, filename="new_file.py")
+        self.assertCodeHealthImproved(result, filename="existing.py")
+        self.assertQualityGatesFail(result)
+
     def test_invalid_json(self):
         with self.assertRaises(DeltaAnalysisError):
             analyze_delta_output("not a json string")

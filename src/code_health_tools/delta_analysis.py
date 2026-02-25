@@ -57,6 +57,10 @@ def _evaluate_files(files):
 
 def _get_verdict(file):
     old_score, new_score = file.get("old-score"), file.get("new-score")
+    if old_score is None and new_score is not None:
+        # New file: the CLI only reports new files when they have findings,
+        # so any new file in the output has introduced code health issues.
+        return "degraded"
     if old_score is None or new_score is None:
         return "unknown"
     return "improved" if new_score > old_score else "degraded" if new_score < old_score else "stable"

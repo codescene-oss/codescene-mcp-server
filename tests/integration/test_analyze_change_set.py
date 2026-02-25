@@ -5,6 +5,8 @@ Integration tests for the analyze_change_set MCP tool.
 Tests that branch-level Code Health analysis correctly:
 - Passes when no code health decline exists on the current branch vs base_ref
 - Fails when a commit on the current branch introduces a code health decline
+- Fails when a new file on the branch introduces code health issues
+- Passes when a new file on the branch has clean code health
 """
 
 import json
@@ -65,6 +67,58 @@ def validate_order(order, customer, inventory, config):
     return False
 '''
 
+# A brand-new file with code health issues (Complex Conditional smell).
+# Used for testing that new files added on a branch are detected by analyze_change_set.
+DEGRADING_NEW_FILE = '''"""
+Validation module with complex business rules.
+"""
+
+
+def validate_order(order, customer, inventory, config):
+    """Validate an order with complex business rules."""
+    if (order is not None and customer is not None and inventory is not None
+            and config is not None and order.get("items") and customer.get("id")
+            and inventory.get("stock") and config.get("enabled")
+            and order.get("total") > 0 and customer.get("active")
+            and not customer.get("banned") and config.get("allow_orders")):
+        return True
+    if (order is not None and order.get("priority") and customer is not None
+            and customer.get("vip") and inventory is not None
+            and inventory.get("reserved") and config is not None
+            and config.get("vip_enabled") and order.get("total") > 100
+            and not order.get("flagged") and customer.get("verified")
+            and config.get("allow_vip")):
+        return True
+    return False
+'''
+
+# A brand-new file with clean code health.
+CLEAN_NEW_FILE = '''"""
+Simple statistics utility module.
+"""
+
+
+def calculate_median(items: list[float]) -> float:
+    """Calculate the median of all items."""
+    if not items:
+        return 0.0
+    sorted_items = sorted(items)
+    mid = len(sorted_items) // 2
+    if len(sorted_items) % 2 == 0:
+        return (sorted_items[mid - 1] + sorted_items[mid]) / 2
+    return sorted_items[mid]
+
+
+def calculate_mode(items: list[float]) -> float:
+    """Calculate the mode of all items."""
+    if not items:
+        return 0.0
+    counts: dict[float, int] = {}
+    for item in items:
+        counts[item] = counts.get(item, 0) + 1
+    return max(counts, key=counts.get)
+'''
+
 
 def create_feature_branch_with_file_change(repo_dir: Path, file_path: str, additional_code: str) -> None:
     """
@@ -89,6 +143,38 @@ def create_feature_branch_with_file_change(repo_dir: Path, file_path: str, addit
     subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
     subprocess.run(
         ["git", "commit", "-m", "Feature branch change"],
+        cwd=repo_dir,
+        check=True,
+        capture_output=True,
+    )
+
+
+def create_feature_branch_with_new_file(repo_dir: Path, file_path: str, content: str) -> None:
+    """
+    Create a feature branch and commit a brand-new file.
+
+    Unlike create_feature_branch_with_file_change which modifies an existing file,
+    this creates a file that does not exist on the base branch.
+
+    Args:
+        repo_dir: Path to the git repository
+        file_path: Relative path for the new file
+        content: Full content of the new file
+    """
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=repo_dir,
+        check=True,
+        capture_output=True,
+    )
+
+    full_path = repo_dir / file_path
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_text(content)
+
+    subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "Add new file on feature branch"],
         cwd=repo_dir,
         check=True,
         capture_output=True,
@@ -148,36 +234,78 @@ def _setup_repo_with_branch(test_dir: Path, subdir: str, code_change: str) -> Pa
     return repo_dir
 
 
-def test_passes_on_clean_branch(command: list[str], env: dict, test_dir: Path) -> bool:
-    """Test that analyze_change_set passes when the branch has no code health decline."""
-    print_header("Test: Change Set Passes on Clean Branch")
+def _setup_repo_with_new_file(test_dir: Path, subdir: str, file_path: str, content: str) -> Path:
+    """
+    Create a git repo and a feature branch with a brand-new file.
 
-    repo_dir = _setup_repo_with_branch(test_dir, "clean", CLEAN_ADDITION)
+    Returns:
+        Path to the repository on the feature branch.
+    """
+    repo_dir = create_git_repo(test_dir / subdir, get_sample_files())
+    create_feature_branch_with_new_file(repo_dir, file_path, content)
+    return repo_dir
+
+
+def _assert_quality_gates_passed(
+    command: list[str], env: dict, repo_dir: Path, pass_reason: str,
+) -> bool:
+    """Run analysis and verify quality gates passed with meaningful content."""
     result_text, quality_gates = _run_change_set_analysis(command, env, repo_dir)
 
     has_content = len(result_text) > 10
     print_test("Tool returned content", has_content, f"Length: {len(result_text)} chars")
 
     gates_passed = quality_gates == "passed"
-    print_test("Quality gates passed (no degradation)", gates_passed, f"quality_gates: {quality_gates}")
+    print_test(f"Quality gates passed ({pass_reason})", gates_passed, f"quality_gates: {quality_gates}")
 
     return has_content and gates_passed
 
 
-def test_fails_on_degraded_branch(command: list[str], env: dict, test_dir: Path) -> bool:
-    """Test that analyze_change_set fails when a commit introduces a code health decline."""
-    print_header("Test: Change Set Fails on Degraded Branch")
-
-    repo_dir = _setup_repo_with_branch(test_dir, "degraded", DEGRADING_ADDITION)
+def _assert_quality_gates_failed(
+    command: list[str], env: dict, repo_dir: Path, expected_file: str,
+) -> bool:
+    """Run analysis and verify quality gates failed with findings referencing the expected file."""
     result_text, quality_gates = _run_change_set_analysis(command, env, repo_dir)
 
     gates_failed = quality_gates == "failed"
     print_test("Quality gates failed (degradation detected)", gates_failed, f"quality_gates: {quality_gates}")
 
-    has_findings = "calculator.py" in result_text
-    print_test("Findings reference the degraded file", has_findings)
+    has_findings = expected_file in result_text
+    print_test(f"Findings reference {expected_file}", has_findings)
 
     return gates_failed and has_findings
+
+
+def test_passes_on_clean_branch(command: list[str], env: dict, test_dir: Path) -> bool:
+    """Test that analyze_change_set passes when the branch has no code health decline."""
+    print_header("Test: Change Set Passes on Clean Branch")
+    repo_dir = _setup_repo_with_branch(test_dir, "clean", CLEAN_ADDITION)
+    return _assert_quality_gates_passed(command, env, repo_dir, "no degradation")
+
+
+def test_fails_on_degraded_branch(command: list[str], env: dict, test_dir: Path) -> bool:
+    """Test that analyze_change_set fails when a commit introduces a code health decline."""
+    print_header("Test: Change Set Fails on Degraded Branch")
+    repo_dir = _setup_repo_with_branch(test_dir, "degraded", DEGRADING_ADDITION)
+    return _assert_quality_gates_failed(command, env, repo_dir, "calculator.py")
+
+
+def test_fails_on_new_file_with_degraded_health(command: list[str], env: dict, test_dir: Path) -> bool:
+    """Test that analyze_change_set fails when a new file on the branch has code health issues."""
+    print_header("Test: Change Set Fails on New File with Degraded Health")
+    repo_dir = _setup_repo_with_new_file(
+        test_dir, "new_file_degraded", "src/validation/validator.py", DEGRADING_NEW_FILE
+    )
+    return _assert_quality_gates_failed(command, env, repo_dir, "validator.py")
+
+
+def test_passes_on_new_file_with_clean_health(command: list[str], env: dict, test_dir: Path) -> bool:
+    """Test that analyze_change_set passes when a new file on the branch has clean code health."""
+    print_header("Test: Change Set Passes on New File with Clean Health")
+    repo_dir = _setup_repo_with_new_file(
+        test_dir, "new_file_clean", "src/stats/statistics.py", CLEAN_NEW_FILE
+    )
+    return _assert_quality_gates_passed(command, env, repo_dir, "new clean file has no degradation")
 
 
 def run_analyze_change_set_tests(executable: Path) -> int:
@@ -213,6 +341,8 @@ def run_analyze_change_set_tests_with_backend(backend: ServerBackend) -> int:
         results = [
             ("Clean Branch Passes", test_passes_on_clean_branch(command, env, test_dir)),
             ("Degraded Branch Fails", test_fails_on_degraded_branch(command, env, test_dir)),
+            ("New File Degraded Fails", test_fails_on_new_file_with_degraded_health(command, env, test_dir)),
+            ("New File Clean Passes", test_passes_on_new_file_with_clean_health(command, env, test_dir)),
         ]
 
         return print_summary(results)
