@@ -181,6 +181,29 @@ The simplest existing tool to reference is `src/code_health_score/`. It demonstr
 
 Refer to `src/code_health_score/score_calculator.py` as the minimal template.
 
+### 8. Validate Code Health and fix any issues
+
+After the tool is implemented, tested, and registered, run the CodeScene Code Health tools to ensure the new code meets quality standards. **Do not consider the tool complete until Code Health passes without regressions.**
+
+Choose the appropriate scope:
+
+| Scope | Tool | When to use |
+|---|---|---|
+| Single file | `code_health_review` | Quick check on a specific file you just created or modified |
+| Staged + unstaged changes | `pre_commit_code_health_safeguard` | Before committing — reviews all uncommitted changes in the repo |
+| Full branch vs base | `analyze_change_set` | Before opening a PR — reviews all committed + staged + unstaged changes against a base ref |
+
+Recommended workflow:
+
+1. Run `code_health_review` on each new/modified file (at minimum `src/<tool_name>/<tool_name>.py`).
+2. If any code smells or regressions are reported:
+   - Refactor the flagged code to resolve the issues.
+   - Re-run `code_health_review` after each fix to confirm improvement.
+3. Before committing, run `pre_commit_code_health_safeguard` to catch anything across all changed files.
+4. Before opening a PR, run `analyze_change_set` against the target branch to ensure no regressions across the full change set.
+
+**Target: Code Health 10.0.** Scores of 9+ are not "good enough" — aim for optimal.
+
 ## Checklist
 
 Before considering the tool complete:
@@ -194,3 +217,6 @@ Before considering the tool complete:
 - [ ] Tests cover success and error paths using mocked deps
 - [ ] Tool imported and instantiated in `src/cs_mcp_server.py`
 - [ ] Run tests with `python -m pytest src/<tool_name>/`
+- [ ] `code_health_review` passes on all new/modified files with no code smells
+- [ ] `pre_commit_code_health_safeguard` reports no regressions before commit
+- [ ] `analyze_change_set` reports no regressions before opening a PR

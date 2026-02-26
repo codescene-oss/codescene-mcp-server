@@ -295,6 +295,29 @@ Run the full integration test suite to verify your new test is picked up and pas
 
 Both scripts accept `--help` (bash) / `-Help` (PowerShell) for additional options, including `--executable` / `-Executable` to skip the build step during iterative development.
 
+## Validate Code Health and Fix Any Issues
+
+After the test is written and passing, run the CodeScene Code Health tools to ensure the new test code meets quality standards. **Do not consider the test complete until Code Health passes without regressions.**
+
+Choose the appropriate scope:
+
+| Scope | Tool | When to use |
+|---|---|---|
+| Single file | `code_health_review` | Quick check on the specific test file you just created or modified |
+| Staged + unstaged changes | `pre_commit_code_health_safeguard` | Before committing — reviews all uncommitted changes in the repo |
+| Full branch vs base | `analyze_change_set` | Before opening a PR — reviews all committed + staged + unstaged changes against a base ref |
+
+Recommended workflow:
+
+1. Run `code_health_review` on each new/modified file (at minimum `tests/integration/test_<feature>.py` and `fixtures.py` if modified).
+2. If any code smells or regressions are reported:
+   - Refactor the flagged code to resolve the issues.
+   - Re-run `code_health_review` after each fix to confirm improvement.
+3. Before committing, run `pre_commit_code_health_safeguard` to catch anything across all changed files.
+4. Before opening a PR, run `analyze_change_set` against the target branch to ensure no regressions across the full change set.
+
+**Target: Code Health 10.0.** Scores of 9+ are not "good enough" — aim for optimal.
+
 ## Checklist
 
 Before considering the test complete:
@@ -312,3 +335,6 @@ Before considering the test complete:
 - [ ] Fixtures added to `fixtures.py` if new code samples are needed
 - [ ] Full suite passes with Docker: `./tests/run-integration-tests.sh --docker`
 - [ ] Full suite passes with static: `./tests/run-integration-tests.sh`
+- [ ] `code_health_review` passes on all new/modified files with no code smells
+- [ ] `pre_commit_code_health_safeguard` reports no regressions before commit
+- [ ] `analyze_change_set` reports no regressions before opening a PR
