@@ -12,12 +12,29 @@ Comprehensive integration test suite for the CodeScene MCP server. These tests v
 ```
 tests/integration/
 ├── README.md                       # This file
+│
+│   # Infrastructure
 ├── run_all_tests.py               # Main test runner (builds and runs all tests)
-├── test_utils.py                  # Shared utilities (MCPClient, backends, helpers)
+├── test_utils.py                  # Re-exports from all infrastructure modules
+├── mcp_client.py                  # MCPClient class (JSON-RPC over stdio)
+├── server_backends.py             # ServerBackend ABC, NuitkaBackend, DockerBackend, BuildConfig
+├── file_utils.py                  # create_git_repo(), safe_temp_directory(), etc.
+├── response_parsers.py            # extract_result_text(), extract_code_health_score()
+├── test_output.py                 # print_header(), print_test(), print_summary()
 ├── fixtures.py                    # Test code samples with known Code Health characteristics
-├── test_platform_specific.py      # Platform-specific path handling tests
-├── test_git_worktree.py          # Git worktree-specific tests
-└── test_git_subtree.py           # Git subtree-specific tests
+│
+│   # Test suites (run by run_all_tests.py)
+├── test_git_worktree.py           # Git worktree-specific tests
+├── test_git_subtree.py            # Git subtree-specific tests
+├── test_relative_paths.py         # Relative path resolution tests
+├── test_business_case.py          # Refactoring business case tool tests
+├── test_bundled_docs.py           # Bundled documentation tool tests
+├── test_version_check.py          # Version check endpoint tests
+├── test_analytics_tracking.py     # Analytics tracking non-blocking tests
+├── test_analyze_change_set.py     # Branch-level change set analysis tests
+│
+│   # Standalone-only test suite (not in run_all_tests.py)
+└── test_platform_specific.py      # Platform-specific path handling tests
 ```
 
 ## Backends
@@ -124,7 +141,7 @@ python test_git_worktree.py C:\path\to\cs-mcp.exe
 
 ## What Gets Tested
 
-### 1. Main Test Suite (`run_all_tests.py`)
+### 1. Core Tests (inline in `run_all_tests.py`)
 
 - **Server Startup**: Verifies the MCP server starts and responds to initialization
 - **Code Health Score**: Tests `code_health_score` tool with multiple code samples
@@ -133,24 +150,67 @@ python test_git_worktree.py C:\path\to\cs-mcp.exe
 - **Code Health Review**: Tests `code_health_review` tool for detailed analysis
 - **Pre-commit Safeguard**: Tests `pre_commit_code_health_safeguard` with modified files
 - **Outside Git Repo**: Tests tool behavior with files outside git repositories
-- **No Bundled CLI Interference**: Validates test environment isolation
+- **No Bundled CLI Interference**: Validates test environment isolation (Nuitka backend only)
 
-### 2. Platform-Specific Tests (`test_platform_specific.py`)
-
-- **Absolute Paths**: Tests platform-specific absolute path handling
-  - Windows: `C:\Users\...`
-  - Linux/Unix: `/home/...`
-- **Relative Paths**: Tests relative path resolution
-- **Symlinks**: Tests symlink handling (Unix-like systems only)
-- **Spaces in Paths**: Tests paths with spaces (e.g., `"My Documents/file.py"`)
-- **Unicode in Paths**: Tests Unicode characters in file/directory names
-
-### 3. Git Worktree Tests (`test_git_worktree.py`)
+### 2. Git Worktree Tests (`test_git_worktree.py`)
 
 - **Code Health Score in Worktree**: Validates CLI invocation in worktrees
 - **Code Health Review in Worktree**: Validates analysis tools work correctly
 - **Pre-commit in Worktree**: Tests safeguard in worktree context
 - **Relative Path Resolution**: Tests path resolution in worktree directories
+
+### 3. Git Subtree Tests (`test_git_subtree.py`)
+
+- **Code Health in Subtree**: Validates analysis on files inside nested subtree directories
+- **Pre-commit in Subtree**: Tests safeguard when subtree files are modified
+- **Path Resolution**: Ensures git root detection works correctly with subtrees
+
+### 4. Relative Path Tests (`test_relative_paths.py`)
+
+- **Relative Path Resolution**: Tests that relative file paths are handled correctly
+- **Prevents "not in subpath" Regression**: Validates the fix for `find_git_root()` path resolution
+- **Docker Skipping**: Relative paths are only supported in native/Nuitka mode; Docker tests are skipped
+
+### 5. Business Case Tests (`test_business_case.py`)
+
+- **Refactoring Business Case**: Tests `code_health_refactoring_business_case` tool
+- **Bundled Data Files**: Validates that `s_curve/regression/*.json` files are properly included in the build
+- **Prevents "No such file or directory" Regression**: Ensures `defects.json` and `time.json` are accessible at runtime
+
+### 6. Bundled Documentation Tests (`test_bundled_docs.py`)
+
+- **Explain Code Health**: Tests `explain_code_health` tool returns meaningful content
+- **Explain Code Health Productivity**: Tests `explain_code_health_productivity` tool
+- **Bundled Docs Path Resolution**: Validates the `src/docs` directory is accessible at runtime
+
+### 7. Version Check Tests (`test_version_check.py`)
+
+- **Unreachable Endpoint**: Tool calls complete without being blocked by version check timeouts
+- **Reachable Endpoint (Mock)**: Version info becomes available on subsequent calls after background fetch completes
+- **No Noise**: No "VERSION UPDATE AVAILABLE" output when the check cannot reach GitHub
+
+### 8. Analytics Tracking Tests (`test_analytics_tracking.py`)
+
+- **Non-blocking Analytics**: Tool calls complete promptly when the analytics endpoint is unreachable
+- **No Timeout Penalty**: Response times are not inflated by analytics timeout
+- **Delivery When Reachable**: Analytics events are still delivered when the endpoint is reachable
+
+### 9. Analyze Change Set Tests (`test_analyze_change_set.py`)
+
+- **No Decline (Pass)**: Quality gate passes when no code health decline exists on the branch
+- **Introduced Decline (Fail)**: Quality gate fails when a commit introduces code health regression
+- **New File with Issues (Fail)**: Quality gate fails when a new file has code health issues
+- **New Clean File (Pass)**: Quality gate passes when a new file has clean code health
+
+### 10. Platform-Specific Tests (`test_platform_specific.py`) -- standalone only
+
+> **Note:** This test suite is **not** registered in `run_all_tests.py`. It must be run standalone with a pre-built executable.
+
+- **Absolute Paths**: Tests platform-specific absolute path handling (Windows `C:\` / Unix `/home/`)
+- **Relative Paths**: Tests relative path resolution
+- **Symlinks**: Tests symlink handling (Unix-like systems only)
+- **Spaces in Paths**: Tests paths with spaces (e.g., `"My Documents/file.py"`)
+- **Unicode in Paths**: Tests Unicode characters in file/directory names
 
 ## Test Fixtures
 
@@ -159,9 +219,9 @@ The test suite uses sample code files with known Code Health characteristics:
 | File | Language | Expected Score | Description |
 |------|----------|----------------|-------------|
 | `src/utils/calculator.py` | Python | 8.5-10.0 | Simple, high-quality code |
-| `src/services/order_processor.py` | Python | 3.0-6.5 | Complex code with issues |
+| `src/services/order_processor.py` | Python | 7.0-9.0 | Medium complexity code |
 | `src/auth/AuthService.js` | JavaScript | 7.0-10.0 | Good quality JS class |
-| `src/main/java/com/example/OrderProcessor.java` | Java | 6.0-9.0 | Medium complexity Java |
+| `src/main/java/com/example/OrderProcessor.java` | Java | 9.0-10.0 | High quality Java |
 
 ## How It Works
 
@@ -232,8 +292,8 @@ Test directory: /tmp/cs_mcp_test_abc
          Actual score: 9.5
 
   Testing: src/services/order_processor.py
-  ✓ PASS: Score in expected range (3.0-6.5)
-         Actual score: 4.2
+  ✓ PASS: Score in expected range (7.0-9.0)
+         Actual score: 7.8
 
 [... more tests ...]
 
@@ -303,55 +363,15 @@ xcode-select --install
 
 ## Adding New Tests
 
-### 1. Add to Existing Test Suite
+See the detailed skill guide at [`.agents/skills/create-integration-test/SKILL.md`](../../.agents/skills/create-integration-test/SKILL.md). It covers:
 
-```python
-def test_new_feature(executable: Path, repo_dir: Path) -> bool:
-    """Test description."""
-    print_header("Test: New Feature")
-    
-    env = create_test_environment()
-    client = MCPClient([str(executable)], env=env, cwd=str(repo_dir))
-    
-    try:
-        client.start()
-        client.initialize()
-        
-        # Your test logic here
-        response = client.call_tool("tool_name", {"arg": "value"})
-        result_text = extract_result_text(response)
-        
-        # Validate response
-        passed = validate_response(result_text)
-        print_test("Test passed", passed, "Details...")
-        
-        return passed
-    finally:
-        client.stop()
-```
+- File structure and boilerplate
+- Backend abstraction (`ServerBackend` protocol)
+- `MCPClient` usage and lifecycle
+- How to register tests in `run_all_tests.py`
+- Fixtures and verification checklist
 
-### 2. Add to Test Runner
-
-Edit `run_all_tests.py`:
-
-```python
-def run_all_tests(executable: Path) -> int:
-    # ... existing code ...
-    
-    all_results.append(("New Feature", test_new_feature(executable, test_dir, repo_dir)))
-    
-    return print_summary(all_results)
-```
-
-### 3. Add New Test File
-
-For a new test category:
-
-1. Create `test_your_feature.py`
-2. Import utilities from `test_utils.py`
-3. Implement test functions
-4. Add main runner
-5. Update this README
+The simplest existing test to use as a template is `test_business_case.py`.
 
 ## CI/CD Integration
 
@@ -401,7 +421,7 @@ When CodeScene's analysis improves or changes:
 
 When adding new MCP tools:
 
-1. Add test cases in appropriate test file
+1. Add test cases following the [integration test skill guide](../../.agents/skills/create-integration-test/SKILL.md)
 2. Add fixtures if needed for specific test scenarios
 3. Update this README with new test descriptions
 
