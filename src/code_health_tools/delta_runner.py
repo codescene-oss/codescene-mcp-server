@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from collections.abc import Callable
 
@@ -9,6 +10,8 @@ from utils import (
     run_cs_cli,
 )
 from utils.docker_path_adapter import get_worktree_gitdir
+
+logger = logging.getLogger(__name__)
 
 
 def run_delta_cli(
@@ -52,8 +55,45 @@ def _run_on_docker(
         None,
         extra_env,
     )
+
+    # Normalize the git index to the container's git format.
+    # When the host git (e.g. 2.50+) writes index extensions that the
+    # container's older git doesn't understand, cs delta fails with
+    # "index uses <ext> extension, which we do not understand".
+    # Running `git update-index --refresh` forces the container's git
+    # to re-read and rewrite the index, stripping unknown extensions.
+    # The command may return non-zero when file stats differ (expected
+    # with bind mounts), so we ignore failures.
+    _refresh_git_index(run_local_tool_fn, docker_path, extra_env)
+
     output = run_local_tool_fn(cli_command, docker_path, extra_env)
     return json.dumps(analyze_delta_output(output))
+
+
+def _refresh_git_index(
+    run_local_tool_fn: Callable,
+    docker_path: str,
+    extra_env: dict | None,
+) -> None:
+    """
+    Force the container's git to re-read and rewrite the index.
+
+    This normalizes any index extensions written by a newer host git that
+    the container's older git may not understand.  The command may return
+    non-zero when file stat info differs across the bind mount boundary,
+    which is harmless — we only need the side effect of rewriting the index.
+    """
+    try:
+        run_local_tool_fn(
+            ["git", "update-index", "--refresh"],
+            docker_path,
+            extra_env,
+        )
+    except Exception:
+        # Non-zero exit is expected when stat info differs across the
+        # Docker bind mount (mtime, ctime, etc.).  The index is still
+        # rewritten, which is all we need.
+        logger.debug("git update-index --refresh returned non-zero (expected with bind mounts)")
 
 
 def _run_on_local(

@@ -21,6 +21,7 @@ from .docker_path_adapter import (
     adapt_worktree_gitdir_for_docker,
     get_relative_file_path_for_api,
 )
+from .license import is_standalone_license, is_standalone_token
 from .platform_details import PlatformDetails, get_platform_details, get_ssl_cli_args
 from .track import track, track_error
 from .version_checker import (

@@ -62,6 +62,15 @@ def create_git_repo(base_dir: Path, sample_files: dict[str, str]) -> Path:
         check=True,
         capture_output=True,
     )
+    # Force index format v2 for cross-version compatibility.
+    # Newer host git versions (2.50+) may write index extensions that
+    # older git versions inside Docker containers cannot read.
+    subprocess.run(
+        ["git", "config", "index.version", "2"],
+        cwd=repo_dir,
+        check=True,
+        capture_output=True,
+    )
 
     # Create sample files
     for file_path, content in sample_files.items():

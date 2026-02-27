@@ -43,8 +43,8 @@ class TestRunDeltaCliDocker(unittest.TestCase):
 
         run_delta_cli(SAMPLE_CLI_COMMAND, "/my/git/path", mock_run_local_tool)
 
-        # First call should be git config safe.directory
-        self.assertEqual(len(captured_calls), 2)
+        # Calls: git config safe.directory, git update-index --refresh, cs delta
+        self.assertEqual(len(captured_calls), 3)
         self.assertEqual(captured_calls[0]["command"][0], "git")
         self.assertIn("safe.directory", captured_calls[0]["command"])
 
@@ -54,6 +54,38 @@ class TestRunDeltaCliDocker(unittest.TestCase):
 
         self.assertTrue(result.startswith("Error:"))
         self.assertIn("Invalid JSON input", result)
+
+    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/my/git/path"})
+    def test_docker_refreshes_git_index(self):
+        captured_calls = []
+
+        def mock_run_local_tool(cli_command, path, extra_env=None):
+            captured_calls.append({"command": cli_command, "path": path})
+            return SINGLE_FILE_OUTPUT
+
+        run_delta_cli(SAMPLE_CLI_COMMAND, "/my/git/path", mock_run_local_tool)
+
+        # Second call should be git update-index --refresh
+        self.assertEqual(captured_calls[1]["command"], ["git", "update-index", "--refresh"])
+        self.assertEqual(captured_calls[1]["path"], "/mount")
+
+    @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/my/git/path"})
+    def test_docker_tolerates_refresh_failure(self):
+        """git update-index --refresh may fail with bind mounts; cs delta should still run."""
+        call_count = 0
+
+        def mock_run_local_tool(cli_command, path, extra_env=None):
+            nonlocal call_count
+            call_count += 1
+            if cli_command == ["git", "update-index", "--refresh"]:
+                raise RuntimeError("non-zero exit: stat info differs")
+            return SINGLE_FILE_OUTPUT
+
+        result = run_delta_cli(SAMPLE_CLI_COMMAND, "/my/git/path", mock_run_local_tool)
+
+        self.assertEqual(json.dumps(SINGLE_FILE_EXPECTED), result)
+        # safe.directory + refresh (failed) + cs delta = 3 calls
+        self.assertEqual(call_count, 3)
 
 
 class TestRunDeltaCliLocal(unittest.TestCase):
