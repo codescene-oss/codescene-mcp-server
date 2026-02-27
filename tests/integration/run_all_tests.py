@@ -496,6 +496,7 @@ def run_all_tests_with_backend(backend: ServerBackend) -> int:
         from test_git_subtree import run_subtree_tests_with_backend
         from test_git_worktree import run_worktree_tests_with_backend
         from test_relative_paths import run_relative_path_tests_with_backend
+        from test_standalone_license import run_standalone_license_tests_with_backend
         from test_version_check import run_version_check_tests_with_backend
 
         all_results.append(_run_test_module("Git Worktree Tests", run_worktree_tests_with_backend, backend))
@@ -506,6 +507,7 @@ def run_all_tests_with_backend(backend: ServerBackend) -> int:
         all_results.append(_run_test_module("Version Check Tests", run_version_check_tests_with_backend, backend))
         all_results.append(_run_test_module("Analytics Tracking Tests", run_analytics_tracking_tests_with_backend, backend))
         all_results.append(_run_test_module("Analyze Change Set Tests", run_analyze_change_set_tests_with_backend, backend))
+        all_results.append(_run_test_module("Standalone License Tests", run_standalone_license_tests_with_backend, backend))
 
         return print_summary(all_results)
 
