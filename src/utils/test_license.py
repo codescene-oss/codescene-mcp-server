@@ -63,6 +63,12 @@ class TestIsStandaloneLicense(unittest.TestCase):
     def test_four_dots_returns_false(self):
         self.assertFalse(is_standalone_license("a.b.c.d.e"))
 
+    @mock.patch("utils.license.JsonWebToken")
+    def test_unexpected_exception_returns_false(self, mock_jwt_cls):
+        """The generic except branch (fail-safe) returns False for unknown errors."""
+        mock_jwt_cls.return_value.decode.side_effect = RuntimeError("unexpected")
+        self.assertFalse(is_standalone_license("a.b.c"))
+
 
 class TestIsStandaloneToken(unittest.TestCase):
     """Tests for is_standalone_token() which reads CS_ACCESS_TOKEN from env."""
