@@ -16,7 +16,7 @@ from pre_commit_code_health_safeguard import PreCommitCodeHealthSafeguard
 from select_project import SelectProject
 from technical_debt_goals import TechnicalDebtGoals
 from technical_debt_hotspots import TechnicalDebtHotspots
-from utils import analyze_code, post_refactor, query_api_list, run_local_tool
+from utils import analyze_code, is_standalone_token, post_refactor, query_api_list, run_local_tool
 from version import __version__
 
 mcp = FastMCP("CodeScene")
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     ]
     add_as_mcp_resources(docs_to_expose)
 
-    # tools
+    # CLI-based tools — always available
     PreCommitCodeHealthSafeguard(mcp, {"run_local_tool_fn": run_local_tool})
 
     AnalyzeChangeSet(mcp, {"run_local_tool_fn": run_local_tool})
@@ -198,14 +198,20 @@ if __name__ == "__main__":
 
     CodeHealthReview(mcp, {"analyze_code_fn": analyze_code})
 
-    SelectProject(mcp, {"query_api_list_fn": query_api_list})
+    # API-based tools — require a CodeScene cloud/on-prem account.
+    # Standalone MCP users (identified by an Ed25519-signed JWT license)
+    # do not have access to the CodeScene API, so these tools are not registered.
+    standalone = is_standalone_token()
+    if not standalone:
+        SelectProject(mcp, {"query_api_list_fn": query_api_list})
 
-    TechnicalDebtGoals(mcp, {"query_api_list_fn": query_api_list})
+        TechnicalDebtGoals(mcp, {"query_api_list_fn": query_api_list})
 
-    TechnicalDebtHotspots(mcp, {"query_api_list_fn": query_api_list})
+        TechnicalDebtHotspots(mcp, {"query_api_list_fn": query_api_list})
 
-    CodeOwnership(mcp, {"query_api_list_fn": query_api_list})
+        CodeOwnership(mcp, {"query_api_list_fn": query_api_list})
 
+    # Hybrid tool — ACE access is independently gated by CS_ACE_ACCESS_TOKEN
     AutoRefactor(mcp, {"post_refactor_fn": post_refactor, "run_local_tool_fn": run_local_tool})
 
     def handle_shutdown(signum, frame):
