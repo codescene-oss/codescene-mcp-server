@@ -122,15 +122,12 @@ def _check_tools_membership(tool_names: set[str], expected: frozenset, should_be
 
 
 def _run_tool_visibility_test(
-    header: str,
     server: ServerParams,
     env: dict,
     tools_to_check: frozenset,
     should_be_present: bool,
 ) -> bool:
-    """Generic test: start server with given env then verify tool visibility."""
-    print_header(header)
-
+    """Start server with given env then verify tool visibility."""
     try:
         tool_names = _get_tool_names(server, env)
         if tool_names is None:
@@ -140,14 +137,14 @@ def _run_tool_visibility_test(
         return _check_tools_membership(tool_names, tools_to_check, should_be_present)
 
     except Exception as e:
-        print_test(header, False, str(e))
+        print_test("Tool visibility check", False, str(e))
         return False
 
 
 def test_standalone_hides_api_tools(server: ServerParams, env: dict) -> bool:
     """With a standalone JWT, API tools must not appear in tools/list."""
+    print_header("Test: Standalone JWT Hides API Tools")
     return _run_tool_visibility_test(
-        "Test: Standalone JWT Hides API Tools",
         server, _make_standalone_env(env),
         API_TOOLS, should_be_present=False,
     )
@@ -155,8 +152,8 @@ def test_standalone_hides_api_tools(server: ServerParams, env: dict) -> bool:
 
 def test_standalone_keeps_cli_tools(server: ServerParams, env: dict) -> bool:
     """With a standalone JWT, CLI tools must still appear in tools/list."""
+    print_header("Test: Standalone JWT Keeps CLI Tools")
     return _run_tool_visibility_test(
-        "Test: Standalone JWT Keeps CLI Tools",
         server, _make_standalone_env(env),
         CLI_TOOLS, should_be_present=True,
     )
@@ -164,8 +161,8 @@ def test_standalone_keeps_cli_tools(server: ServerParams, env: dict) -> bool:
 
 def test_pat_exposes_all_tools(server: ServerParams, env: dict) -> bool:
     """With a regular PAT, all tools (API + CLI) must appear in tools/list."""
+    print_header("Test: PAT Exposes All Tools")
     return _run_tool_visibility_test(
-        "Test: PAT Exposes All Tools",
         server, _make_pat_env(env),
         API_TOOLS | CLI_TOOLS, should_be_present=True,
     )
