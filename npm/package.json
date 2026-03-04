@@ -7,8 +7,8 @@
     "cs-mcp": "./bin/cs-mcp.js"
   },
   "scripts": {
-    "test": "c8 node --experimental-test-module-mocks --test test/*.test.js",
-    "test:ci": "c8 --reporter=cobertura --reporter=text node --experimental-test-module-mocks --test test/*.test.js"
+    "test": "c8 node --experimental-test-module-mocks --test tests/*.test.js",
+    "test:ci": "c8 --reporter=cobertura --reporter=text node --experimental-test-module-mocks --test tests/*.test.js"
   },
   "files": [
     "bin/",
