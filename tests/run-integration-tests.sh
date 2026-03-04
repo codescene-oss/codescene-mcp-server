@@ -83,6 +83,17 @@ check_prerequisites() {
             echo -e "${GREEN}✓ Docker is available${NC}"
         fi
     fi
+
+    # Check Node.js (only required for npm backend)
+    if [ "$BACKEND" = "npm" ]; then
+        if ! command -v node &> /dev/null; then
+            echo -e "${RED}✗ Node.js not found (required for npm backend)${NC}"
+            missing=1
+        else
+            local node_version=$(node --version)
+            echo -e "${GREEN}✓ Node.js: $node_version${NC}"
+        fi
+    fi
     
     if [ $missing -eq 1 ]; then
         echo ""
@@ -109,6 +120,7 @@ Options:
   --subtree-only      Run only git subtree tests
   --skip-build        Skip build step (use previously built executable)
   --docker            Run tests using Docker backend
+  --npm               Run tests using npm wrapper backend
 
 Environment Variables:
   CS_ACCESS_TOKEN     CodeScene access token (required)
@@ -162,6 +174,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --docker)
             BACKEND="docker"
+            shift
+            ;;
+        --npm)
+            BACKEND="npm"
             shift
             ;;
         *)

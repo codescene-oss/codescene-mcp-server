@@ -37,6 +37,7 @@ from server_backends import (
     BuildConfig,
     DockerBackend,
     ExecutableBuilder,
+    NpmBackend,
     NuitkaBackend,
     ServerBackend,
 )
@@ -63,6 +64,7 @@ __all__ = [
     "BuildConfig",
     "ExecutableBuilder",
     "NuitkaBackend",
+    "NpmBackend",
     "DockerBackend",
     # file_utils
     "create_test_environment",

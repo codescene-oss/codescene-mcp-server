@@ -37,6 +37,16 @@ test-integration-worktree:
 		./tests/run-integration-tests.sh --worktree-only --executable ../cs_mcp_test_bin/cs-mcp; \
 	fi
 
+.PHONY: test-npm-package
+test-npm-package:
+	@echo "Running npm wrapper integration tests..."
+	@if [ ! -f "../cs_mcp_test_bin/cs-mcp" ]; then \
+		echo "No executable found. Building first..."; \
+		./tests/run-integration-tests.sh --npm; \
+	else \
+		./tests/run-integration-tests.sh --npm --executable ../cs_mcp_test_bin/cs-mcp; \
+	fi
+
 .PHONY: test-all
 test-all:
 	@echo "Running unit tests..."
