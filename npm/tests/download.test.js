@@ -1,12 +1,10 @@
-import { describe, it, beforeEach, afterEach, before, after } from "node:test";
+import {
+  describe, it, beforeEach, afterEach, before, after, mock,
+} from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import {
-  mkdirSync,
-  writeFileSync,
-  rmSync,
-  existsSync,
-  readFileSync,
+  mkdirSync, writeFileSync, rmSync, existsSync, readFileSync,
 } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,7 +30,7 @@ function createZipWithBinary(zipPath, binaryName, binaryContent) {
 
 /**
  * Starts a local HTTP server that serves files based on configured routes.
- * Returns the server and a function to add routes.
+ * Returns the server and helper functions for adding routes.
  */
 function createTestServer() {
   const routes = new Map();
@@ -80,13 +78,46 @@ function createTestServer() {
   };
 }
 
-/**
- * Clean up any cached binaries created during tests.
- */
+/** Clean up any cached binaries created during tests. */
 function cleanCache() {
   if (existsSync(CACHE_BASE)) {
     rmSync(CACHE_BASE, { recursive: true });
   }
+}
+
+/** Returns the platform-specific binary name for zip entries. */
+function getPlatformBinaryName() {
+  const osName = process.platform === "darwin" ? "macos" : "linux";
+  const archName = process.arch === "arm64" ? "aarch64" : "amd64";
+  return `cs-mcp-${osName}-${archName}`;
+}
+
+/**
+ * Saves and replaces stderr and env state for download tests.
+ * Returns an object with captured output and a restore function.
+ */
+function captureStderrAndEnv(serverBaseUrl) {
+  const saved = {
+    stderrWrite: process.stderr.write,
+    baseUrl: process.env.CS_MCP_DOWNLOAD_BASE_URL,
+  };
+  const state = { output: "" };
+  process.stderr.write = (chunk) => {
+    state.output += chunk;
+    return true;
+  };
+  process.env.CS_MCP_DOWNLOAD_BASE_URL = serverBaseUrl;
+  return {
+    get stderrOutput() { return state.output; },
+    restore() {
+      process.stderr.write = saved.stderrWrite;
+      if (saved.baseUrl === undefined) {
+        delete process.env.CS_MCP_DOWNLOAD_BASE_URL;
+      } else {
+        process.env.CS_MCP_DOWNLOAD_BASE_URL = saved.baseUrl;
+      }
+    },
+  };
 }
 
 describe("getCachedBinaryPath", () => {
@@ -108,9 +139,7 @@ describe("getCachedBinaryPath", () => {
 describe("ensureBinary", () => {
   let testServer;
   let baseUrl;
-  let originalBaseUrl;
-  let originalStderrWrite;
-  let stderrOutput;
+  let ctx;
 
   before(async () => {
     testServer = createTestServer();
@@ -123,65 +152,40 @@ describe("ensureBinary", () => {
 
   beforeEach(() => {
     cleanCache();
-    originalBaseUrl = process.env.CS_MCP_DOWNLOAD_BASE_URL;
-    process.env.CS_MCP_DOWNLOAD_BASE_URL = baseUrl;
-
-    stderrOutput = "";
-    originalStderrWrite = process.stderr.write;
-    process.stderr.write = (chunk) => {
-      stderrOutput += chunk;
-      return true;
-    };
+    ctx = captureStderrAndEnv(baseUrl);
   });
 
   afterEach(() => {
-    process.stderr.write = originalStderrWrite;
-    if (originalBaseUrl === undefined) {
-      delete process.env.CS_MCP_DOWNLOAD_BASE_URL;
-    } else {
-      process.env.CS_MCP_DOWNLOAD_BASE_URL = originalBaseUrl;
-    }
+    ctx.restore();
     cleanCache();
     testServer.routes.clear();
   });
 
   it("downloads and extracts a compressed binary", async () => {
-    const version = "9.0.1";
-    const binaryPath = getCachedBinaryPath(version);
-    const binaryName = binaryPath.endsWith(".exe")
-      ? "cs-mcp-windows-amd64.exe"
-      : `cs-mcp-${process.platform === "darwin" ? "macos" : "linux"}-${process.arch === "arm64" ? "aarch64" : "amd64"}`;
-
-    // Skip this test on Windows where we don't have the `zip` command
     if (process.platform === "win32") return;
 
-    // Create a zip containing the binary
+    const version = "9.0.1";
+    const binaryName = getPlatformBinaryName();
     const zipDir = join(CACHE_BASE, "_test_assets");
     mkdirSync(zipDir, { recursive: true });
     const zipPath = join(zipDir, "test.zip");
     createZipWithBinary(zipPath, binaryName, "#!/bin/sh\necho hello\n");
 
-    // Determine the expected asset name via platform info
     const { getPlatformInfo } = await import("../lib/platform.js");
     const platformInfo = getPlatformInfo();
-    const tag = `MCP-${version}`;
-
-    testServer.addFileRoute(`/${tag}/${platformInfo.asset}`, zipPath);
+    testServer.addFileRoute(`/MCP-${version}/${platformInfo.asset}`, zipPath);
 
     const result = await ensureBinary(version);
 
     assert.ok(existsSync(result), `Binary should exist at ${result}`);
-    assert.ok(stderrOutput.includes("downloading"));
-    assert.ok(stderrOutput.includes("Ready:"));
+    assert.ok(ctx.stderrOutput.includes("downloading"));
+    assert.ok(ctx.stderrOutput.includes("Ready:"));
   });
 
   it("returns cached binary on second call without re-downloading", async () => {
-    if (process.platform === "win32") return;
-
     const version = "9.0.2";
     const binaryPath = getCachedBinaryPath(version);
 
-    // Pre-populate cache
     const cacheDir = dirname(binaryPath);
     mkdirSync(cacheDir, { recursive: true });
     writeFileSync(binaryPath, "fake-binary", { mode: 0o755 });
@@ -207,14 +211,11 @@ describe("ensureBinary", () => {
     const platformInfo = getPlatformInfo();
     const tag = `MCP-${version}`;
 
-    // Create the zip asset
     const zipDir = join(CACHE_BASE, "_test_redirect");
     mkdirSync(zipDir, { recursive: true });
     const zipPath = join(zipDir, "test.zip");
-    const binaryName = `cs-mcp-${process.platform === "darwin" ? "macos" : "linux"}-${process.arch === "arm64" ? "aarch64" : "amd64"}`;
-    createZipWithBinary(zipPath, binaryName, "#!/bin/sh\necho redirect\n");
+    createZipWithBinary(zipPath, getPlatformBinaryName(), "#!/bin/sh\necho r\n");
 
-    // Primary URL redirects to /actual-file
     testServer.addRedirect(
       `/${tag}/${platformInfo.asset}`,
       `${baseUrl}/actual-file`
@@ -229,9 +230,8 @@ describe("ensureBinary", () => {
     const version = "9.0.4";
     const { getPlatformInfo } = await import("../lib/platform.js");
     const platformInfo = getPlatformInfo();
-    const tag = `MCP-${version}`;
 
-    testServer.addRoute(`/${tag}/${platformInfo.asset}`, (_req, res) => {
+    testServer.addRoute(`/MCP-${version}/${platformInfo.asset}`, (_req, res) => {
       res.writeHead(403);
       res.end("Forbidden");
     });
@@ -247,21 +247,156 @@ describe("ensureBinary", () => {
     const version = "9.0.5";
     const { getPlatformInfo } = await import("../lib/platform.js");
     const platformInfo = getPlatformInfo();
-    const tag = `MCP-${version}`;
 
     const zipDir = join(CACHE_BASE, "_test_progress");
     mkdirSync(zipDir, { recursive: true });
     const zipPath = join(zipDir, "test.zip");
-    const binaryName = `cs-mcp-${process.platform === "darwin" ? "macos" : "linux"}-${process.arch === "arm64" ? "aarch64" : "amd64"}`;
-    createZipWithBinary(zipPath, binaryName, "x".repeat(1024));
+    createZipWithBinary(zipPath, getPlatformBinaryName(), "x".repeat(1024));
 
-    testServer.addFileRoute(`/${tag}/${platformInfo.asset}`, zipPath);
+    testServer.addFileRoute(`/MCP-${version}/${platformInfo.asset}`, zipPath);
 
     await ensureBinary(version);
 
     assert.ok(
-      stderrOutput.includes("Downloading") || stderrOutput.includes("Ready"),
+      ctx.stderrOutput.includes("Downloading") ||
+        ctx.stderrOutput.includes("Ready"),
       "Should report progress or completion"
     );
+  });
+
+  it("rejects when file write fails during download", async () => {
+    if (process.platform === "win32") return;
+
+    const version = "9.0.8";
+    const { getPlatformInfo } = await import("../lib/platform.js");
+    const platformInfo = getPlatformInfo();
+
+    const zipDir = join(CACHE_BASE, "_test_write_err");
+    mkdirSync(zipDir, { recursive: true });
+    const zipPath = join(zipDir, "test.zip");
+    createZipWithBinary(zipPath, getPlatformBinaryName(), "data");
+    testServer.addFileRoute(`/MCP-${version}/${platformInfo.asset}`, zipPath);
+
+    // Create a directory where the zip file would be written, causing EISDIR
+    const cacheDir = join(PACKAGE_ROOT, ".cache", version);
+    mkdirSync(join(cacheDir, platformInfo.asset), { recursive: true });
+
+    await assert.rejects(() => ensureBinary(version), (err) => {
+      assert.ok(err.code === "EISDIR" || err.message.includes("EISDIR"));
+      return true;
+    });
+  });
+
+  it("rejects when zip contains no cs-mcp binary", async () => {
+    if (process.platform === "win32") return;
+
+    const version = "9.0.6";
+    const { getPlatformInfo } = await import("../lib/platform.js");
+    const platformInfo = getPlatformInfo();
+
+    const zipDir = join(CACHE_BASE, "_test_no_binary");
+    mkdirSync(zipDir, { recursive: true });
+    const zipPath = join(zipDir, "test.zip");
+    createZipWithBinary(zipPath, "wrong-binary-name", "not the right file");
+
+    testServer.addFileRoute(`/MCP-${version}/${platformInfo.asset}`, zipPath);
+
+    await assert.rejects(() => ensureBinary(version), {
+      message: /Binary not found after download/,
+    });
+  });
+
+  it("handles chunked delivery at non-boundary progress", async () => {
+    if (process.platform === "win32") return;
+
+    const version = "9.0.7";
+    const { getPlatformInfo } = await import("../lib/platform.js");
+    const platformInfo = getPlatformInfo();
+
+    const zipDir = join(CACHE_BASE, "_test_chunks");
+    mkdirSync(zipDir, { recursive: true });
+    const zipPath = join(zipDir, "test.zip");
+    createZipWithBinary(
+      zipPath, getPlatformBinaryName(), "x".repeat(4096)
+    );
+
+    const zipContent = readFileSync(zipPath);
+    testServer.addRoute(`/MCP-${version}/${platformInfo.asset}`, (_req, res) => {
+      res.writeHead(200, { "Content-Length": zipContent.length });
+      const chunkSize = Math.ceil(zipContent.length / 7);
+      let offset = 0;
+      const interval = setInterval(() => {
+        const end = Math.min(offset + chunkSize, zipContent.length);
+        res.write(zipContent.subarray(offset, end));
+        offset = end;
+        if (offset >= zipContent.length) {
+          clearInterval(interval);
+          res.end();
+        }
+      }, 5);
+    });
+
+    const result = await ensureBinary(version);
+    assert.ok(existsSync(result));
+  });
+});
+
+describe("ensureBinary with uncompressed asset", () => {
+  let testServer;
+  let baseUrl;
+  let ctx;
+
+  before(async () => {
+    testServer = createTestServer();
+    baseUrl = await testServer.listen();
+  });
+
+  after(async () => {
+    await testServer.close();
+    mock.restoreAll();
+  });
+
+  beforeEach(() => {
+    cleanCache();
+    ctx = captureStderrAndEnv(baseUrl);
+  });
+
+  afterEach(() => {
+    ctx.restore();
+    cleanCache();
+    testServer.routes.clear();
+    mock.restoreAll();
+  });
+
+  it("downloads bare binary when asset is not compressed", async () => {
+    mock.module("../lib/platform.js", {
+      namedExports: {
+        getPlatformInfo: () => ({
+          asset: "cs-mcp-windows-amd64.exe",
+          binary: "cs-mcp.exe",
+          compressed: false,
+        }),
+        getDownloadUrl: (version, asset) => {
+          const base = process.env.CS_MCP_DOWNLOAD_BASE_URL;
+          return `${base}/MCP-${version}/${asset}`;
+        },
+      },
+    });
+
+    const mod = await import(`../lib/download.js?v=${Date.now()}`);
+    const version = "9.1.0";
+
+    const binaryContent = "#!/bin/sh\necho bare\n";
+    testServer.addRoute(`/MCP-${version}/cs-mcp-windows-amd64.exe`, (_req, res) => {
+      res.writeHead(200, { "Content-Length": Buffer.byteLength(binaryContent) });
+      res.end(binaryContent);
+    });
+
+    const result = await mod.ensureBinary(version);
+    assert.ok(existsSync(result), `Binary should exist at ${result}`);
+    assert.ok(result.endsWith("cs-mcp.exe"));
+
+    const content = readFileSync(result, "utf8");
+    assert.equal(content, binaryContent);
   });
 });
