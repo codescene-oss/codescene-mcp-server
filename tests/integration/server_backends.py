@@ -435,8 +435,9 @@ class NpmBackend(ServerBackend):
     3. Installs the tarball into a temp directory with `npm install`
     4. Starts a local HTTP server that serves the binary as a zip,
        matching the GitHub releases URL pattern (/{tag}/{asset})
-    5. Invokes the package via `npx @codescene/codehealth-mcp` with
-       CS_MCP_DOWNLOAD_BASE_URL pointing at the local server
+    5. Runs the package via the node_modules/.bin/cs-mcp symlink
+       (the same file npx resolves to) with CS_MCP_DOWNLOAD_BASE_URL
+       pointing at the local server
 
     This exercises the download, extraction, caching, and launch pipeline
     end-to-end, without hitting GitHub.
@@ -466,13 +467,6 @@ class NpmBackend(ServerBackend):
         if not npm_path:
             raise RuntimeError("npm not found in PATH.")
         return npm_path
-
-    def _find_npx(self) -> str:
-        """Find the npx binary on PATH."""
-        npx_path = shutil.which("npx")
-        if not npx_path:
-            raise RuntimeError("npx not found in PATH.")
-        return npx_path
 
     def _read_package_version(self) -> str:
         """Read the version from npm/package.json."""
@@ -660,16 +654,22 @@ class NpmBackend(ServerBackend):
                 f"Installed bin entry point not found: {entry_point}"
             )
         print(f"  Entry point: {entry_point}")
+
+        # Verify the bin symlink was created by npm install
+        bin_script = self._install_dir / "node_modules" / ".bin" / "cs-mcp"
+        if not bin_script.exists():
+            raise FileNotFoundError(
+                f"Bin symlink not found: {bin_script}. "
+                "Check that the 'bin' field in package.json is correct."
+            )
+        print(f"  Bin symlink: {bin_script}")
         print(f"\n\033[92mnpm backend ready\033[0m")
 
     def get_command(self, working_dir: Path) -> list[str]:
-        """Return command to invoke the package via npx, matching real user experience."""
+        """Return the installed bin symlink, testing npm's bin field registration."""
         assert self._install_dir is not None, "prepare() must be called first"
-        npx = self._find_npx()
-        return [
-            npx, "--yes", "--prefix", str(self._install_dir),
-            "@codescene/codehealth-mcp",
-        ]
+        bin_script = self._install_dir / "node_modules" / ".bin" / "cs-mcp"
+        return [str(bin_script)]
 
     def get_env(self, base_env: dict[str, str], working_dir: Path) -> dict[str, str]:
         """Return environment pointing at the local download server."""
