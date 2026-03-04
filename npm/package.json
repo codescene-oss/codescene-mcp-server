@@ -6,6 +6,10 @@
   "bin": {
     "cs-mcp": "./bin/cs-mcp.js"
   },
+  "scripts": {
+    "test": "c8 node --experimental-test-module-mocks --test test/*.test.js",
+    "test:ci": "c8 --reporter=cobertura --reporter=text node --experimental-test-module-mocks --test test/*.test.js"
+  },
   "files": [
     "bin/",
     "lib/"
@@ -36,5 +40,8 @@
     "model-context-protocol",
     "ai",
     "code-quality"
-  ]
+  ],
+  "devDependencies": {
+    "c8": "^11.0.0"
+  }
 }

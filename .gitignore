@@ -1,3 +1,6 @@
 .venv
 __pycache__
 .DS_Store
+npm/node_modules/
+npm/coverage/
+npm/.cache/

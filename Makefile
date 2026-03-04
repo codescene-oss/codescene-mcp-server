@@ -52,6 +52,9 @@ test-all:
 	@echo "Running unit tests..."
 	python3 -m pytest src/
 	@echo ""
+	@echo "Running npm unit tests..."
+	cd npm && npm test
+	@echo ""
 	@echo "Running integration tests..."
 	./tests/run-integration-tests.sh
 
