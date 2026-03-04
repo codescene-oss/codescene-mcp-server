@@ -435,7 +435,7 @@ class NpmBackend(ServerBackend):
     3. Installs the tarball into a temp directory with `npm install`
     4. Starts a local HTTP server that serves the binary as a zip,
        matching the GitHub releases URL pattern (/{tag}/{asset})
-    5. Runs the installed package's bin entry point with
+    5. Invokes the package via `npx @codescene/codehealth-mcp` with
        CS_MCP_DOWNLOAD_BASE_URL pointing at the local server
 
     This exercises the download, extraction, caching, and launch pipeline
@@ -466,6 +466,13 @@ class NpmBackend(ServerBackend):
         if not npm_path:
             raise RuntimeError("npm not found in PATH.")
         return npm_path
+
+    def _find_npx(self) -> str:
+        """Find the npx binary on PATH."""
+        npx_path = shutil.which("npx")
+        if not npx_path:
+            raise RuntimeError("npx not found in PATH.")
+        return npx_path
 
     def _read_package_version(self) -> str:
         """Read the version from npm/package.json."""
@@ -656,18 +663,13 @@ class NpmBackend(ServerBackend):
         print(f"\n\033[92mnpm backend ready\033[0m")
 
     def get_command(self, working_dir: Path) -> list[str]:
-        """Return command to run the installed npm package's bin entry point."""
+        """Return command to invoke the package via npx, matching real user experience."""
         assert self._install_dir is not None, "prepare() must be called first"
-        node = self._find_node()
-        entry_point = (
-            self._install_dir
-            / "node_modules"
-            / "@codescene"
-            / "codehealth-mcp"
-            / "bin"
-            / "cs-mcp.js"
-        )
-        return [node, str(entry_point)]
+        npx = self._find_npx()
+        return [
+            npx, "--yes", "--prefix", str(self._install_dir),
+            "@codescene/codehealth-mcp",
+        ]
 
     def get_env(self, base_env: dict[str, str], working_dir: Path) -> dict[str, str]:
         """Return environment pointing at the local download server."""
