@@ -17,15 +17,6 @@ env:
   CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
 
 jobs:
-  # =============================================================================
-  # NPM Integration Tests - Linux
-  # =============================================================================
-  # Tests the full npm wrapper package flow end-to-end:
-  # 1. Builds the Nuitka binary
-  # 2. Packs the npm package with `npm pack`
-  # 3. Installs the tarball into an isolated temp directory
-  # 4. Starts a local HTTP server simulating GitHub releases
-  # 5. Runs the npm wrapper entry point with the local download URL
   npm-integration-linux:
     runs-on: ubuntu-22.04
     name: NPM Integration Tests (Linux)

@@ -9,6 +9,7 @@ This module provides:
 - BuildConfig and ExecutableBuilder for building executables
 """
 
+import json
 import os
 import platform
 import shutil
@@ -470,8 +471,6 @@ class NpmBackend(ServerBackend):
 
     def _read_package_version(self) -> str:
         """Read the version from npm/package.json."""
-        import json
-
         pkg_path = self._repo_root / "npm" / "package.json"
         with open(pkg_path) as f:
             return json.load(f)["version"]
@@ -532,8 +531,6 @@ class NpmBackend(ServerBackend):
         install_dir = Path(tempfile.mkdtemp(prefix="cs_mcp_npm_install_"))
 
         # Create a minimal package.json so npm install works
-        import json
-
         init_pkg = {"name": "npm-backend-test", "version": "0.0.0", "private": True}
         (install_dir / "package.json").write_text(json.dumps(init_pkg))
 
