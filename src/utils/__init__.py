@@ -1,4 +1,17 @@
 from .ace_api_client import post_refactor
+from .config import (
+    CONFIG_OPTIONS,
+    apply_config_to_env,
+    delete_config_value,
+    get_config_dir,
+    get_config_value,
+    get_effective_value,
+    is_client_env_var,
+    load_config,
+    mask_sensitive_value,
+    save_config,
+    set_config_value,
+)
 from .code_health_analysis import (
     analyze_code,
     code_health_from_cli_output,
