@@ -12,11 +12,19 @@ from code_health_refactoring_business_case import CodeHealthRefactoringBusinessC
 from code_health_review import CodeHealthReview
 from code_health_score import CodeHealthScore
 from code_ownership import CodeOwnership
+from configure import Configure
 from pre_commit_code_health_safeguard import PreCommitCodeHealthSafeguard
 from select_project import SelectProject
 from technical_debt_goals import TechnicalDebtGoals
 from technical_debt_hotspots import TechnicalDebtHotspots
-from utils import analyze_code, is_standalone_token, post_refactor, query_api_list, run_local_tool
+from utils import (
+    analyze_code,
+    apply_config_to_env,
+    is_standalone_token,
+    post_refactor,
+    query_api_list,
+    run_local_tool,
+)
 from version import __version__
 
 mcp = FastMCP("CodeScene")
@@ -167,6 +175,10 @@ def all_doc_resources_as_uris(docs_to_expose):
 
 
 if __name__ == "__main__":
+    # Load config file values into the environment before anything reads
+    # them.  Environment variables set by the MCP client take precedence.
+    apply_config_to_env()
+
     # CLI args
     parser = argparse.ArgumentParser(description="CodeScene MCP Server")
 
@@ -213,6 +225,9 @@ if __name__ == "__main__":
 
     # Hybrid tool — ACE access is independently gated by CS_ACE_ACCESS_TOKEN
     AutoRefactor(mcp, {"post_refactor_fn": post_refactor, "run_local_tool_fn": run_local_tool})
+
+    # Configuration tool — always available
+    Configure(mcp, {})
 
     def handle_shutdown(signum, frame):
         """Handle shutdown signals gracefully with immediate exit."""
