@@ -38,6 +38,7 @@ from test_utils import (
     DockerBackend,
     ExecutableBuilder,
     MCPClient,
+    NpmBackend,
     NuitkaBackend,
     ServerBackend,
     create_git_repo,
@@ -397,10 +398,14 @@ def create_backend(args) -> ServerBackend | None:
         if not args.executable.exists():
             print(f"\n\033[91mError:\033[0m Executable not found: {args.executable}")
             return None
+        if args.backend == "npm":
+            return NpmBackend(executable=args.executable)
         return NuitkaBackend(executable=args.executable)
 
     if args.backend == "docker":
         return DockerBackend()
+    elif args.backend == "npm":
+        return NpmBackend()
     else:
         return NuitkaBackend()
 
@@ -521,7 +526,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--backend",
-        choices=["static", "docker"],
+        choices=["static", "docker", "npm"],
         default="static",
         help="Backend to use for running the server (default: static)",
     )

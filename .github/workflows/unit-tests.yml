@@ -64,9 +64,31 @@ jobs:
             
             _Note: Coverage excludes `__init__.py` and test files as configured in `.coveragerc`_
 
+  test-npm:
+    runs-on: ubuntu-latest
+    name: NPM Wrapper Unit Tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+        working-directory: npm
+      - name: Run npm unit tests with coverage
+        run: npm run test:ci
+        working-directory: npm
+      - name: Upload npm coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-coverage-report
+          path: npm/coverage/cobertura-coverage.xml
+
   cs-coverage-check:
     runs-on: ubuntu-24.04
-    needs: [test]
+    needs: [test, test-npm]
     if: always()
     steps:
       - uses: actions/checkout@v4
@@ -83,4 +105,4 @@ jobs:
           access-token: ${{ secrets.CODESCENE_CODE_COVERAGE_API_TOKEN }}
           project-url: "https://api.codescene.io/v2/projects/72556"
           # Include coverage files from all the artifacts (jobs)
-          coverage-files: "**/coverage.xml"
+          coverage-files: "**/*coverage.xml"

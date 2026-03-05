@@ -1,0 +1,46 @@
+name: NPM Integration Tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: integration-npm-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+
+jobs:
+  npm-integration-linux:
+    runs-on: ubuntu-22.04
+    name: NPM Integration Tests (Linux)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r src/requirements.txt
+          pip install Nuitka
+
+      - name: Run NPM integration tests
+        run: ./tests/run-integration-tests.sh --npm

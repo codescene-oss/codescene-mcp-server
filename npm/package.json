@@ -1,0 +1,47 @@
+{
+  "name": "@codescene/codehealth-mcp",
+  "version": "0.2.1",
+  "description": "CodeScene MCP Server — Code Health analysis for AI coding agents",
+  "type": "module",
+  "bin": {
+    "cs-mcp": "./bin/cs-mcp.js"
+  },
+  "scripts": {
+    "test": "c8 node --experimental-test-module-mocks --test tests/*.test.js",
+    "test:ci": "c8 --reporter=cobertura --reporter=text node --experimental-test-module-mocks --test tests/*.test.js"
+  },
+  "files": [
+    "bin/",
+    "lib/"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codescene-oss/codescene-mcp-server.git",
+    "directory": "npm"
+  },
+  "homepage": "https://codescene.com",
+  "keywords": [
+    "codescene",
+    "code-health",
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "code-quality"
+  ],
+  "devDependencies": {
+    "c8": "^11.0.0"
+  }
+}

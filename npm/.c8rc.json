@@ -1,0 +1,6 @@
+{
+  "all": true,
+  "src": ["lib"],
+  "exclude": ["tests/**"],
+  "report-dir": "coverage"
+}

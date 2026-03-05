@@ -9,6 +9,7 @@ This module provides:
 - BuildConfig and ExecutableBuilder for building executables
 """
 
+import json
 import os
 import platform
 import shutil
@@ -424,3 +425,277 @@ class DockerBackend(ServerBackend):
     def cleanup(self) -> None:
         """No cleanup needed - containers use --rm."""
         pass
+
+
+class NpmBackend(ServerBackend):
+    """Backend that tests the full npm package installation and binary download flow.
+
+    Simulates real-world user experience:
+    1. Builds the Nuitka binary (or uses a pre-built one)
+    2. Packs the npm package with `npm pack`
+    3. Installs the tarball into a temp directory with `npm install`
+    4. Starts a local HTTP server that serves the binary as a zip,
+       matching the GitHub releases URL pattern (/{tag}/{asset})
+    5. Runs the package via the node_modules/.bin/cs-mcp symlink
+       (the same file npx resolves to) with CS_MCP_DOWNLOAD_BASE_URL
+       pointing at the local server
+
+    This exercises the download, extraction, caching, and launch pipeline
+    end-to-end, without hitting GitHub.
+    """
+
+    def __init__(self, executable: Path | None = None):
+        self._nuitka_backend = NuitkaBackend(executable=executable)
+        self._repo_root = Path(__file__).parent.parent.parent
+        self._install_dir: Path | None = None
+        self._http_server: subprocess.Popen | None = None
+        self._http_port: int | None = None
+        self._serve_dir: Path | None = None
+
+    def _find_node(self) -> str:
+        """Find the Node.js binary on PATH."""
+        node_path = shutil.which("node")
+        if not node_path:
+            raise RuntimeError(
+                "Node.js not found in PATH. "
+                "Install Node.js >= 18 to run npm backend tests."
+            )
+        return node_path
+
+    def _find_npm(self) -> str:
+        """Find the npm binary on PATH."""
+        npm_path = shutil.which("npm")
+        if not npm_path:
+            raise RuntimeError("npm not found in PATH.")
+        return npm_path
+
+    def _read_package_version(self) -> str:
+        """Read the version from npm/package.json."""
+        pkg_path = self._repo_root / "npm" / "package.json"
+        with open(pkg_path) as f:
+            return json.load(f)["version"]
+
+    # Maps platform.system() to (os_label, is_zipped)
+    _PLATFORM_OS_MAP: dict[str, tuple[str, bool]] = {
+        "Darwin": ("macos", True),
+        "Linux": ("linux", True),
+        "Windows": ("windows", False),
+    }
+
+    def _get_platform_asset_info(self) -> tuple[str, str]:
+        """Return (asset_filename, binary_name_inside_zip) for the current platform.
+
+        Mirrors the naming convention from the GitHub release pipeline.
+        """
+        system = platform.system()
+        machine = platform.machine().lower()
+
+        entry = self._PLATFORM_OS_MAP.get(system)
+        if entry is None:
+            raise RuntimeError(f"Unsupported platform: {system} {machine}")
+
+        os_label, is_zipped = entry
+        arch = "aarch64" if machine in ("arm64", "aarch64") else "amd64"
+        binary_name = f"cs-mcp-{os_label}-{arch}"
+
+        if is_zipped:
+            return f"{binary_name}.zip", binary_name
+        return f"{binary_name}.exe", f"{binary_name}.exe"
+
+    def _pack_npm_package(self) -> Path:
+        """Run `npm pack` in the npm/ directory and return the tarball path."""
+        npm = self._find_npm()
+        npm_dir = self._repo_root / "npm"
+
+        result = subprocess.run(
+            [npm, "pack", "--pack-destination", str(npm_dir)],
+            cwd=str(npm_dir),
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"npm pack failed:\n{result.stderr}")
+
+        # npm pack prints the tarball filename to stdout
+        tarball_name = result.stdout.strip().splitlines()[-1]
+        tarball_path = npm_dir / tarball_name
+        if not tarball_path.exists():
+            raise FileNotFoundError(f"Expected tarball not found: {tarball_path}")
+
+        print(f"  Packed: {tarball_path}")
+        return tarball_path
+
+    def _install_tarball(self, tarball: Path) -> Path:
+        """Install the tarball into an isolated directory, return the install dir."""
+        npm = self._find_npm()
+        install_dir = Path(tempfile.mkdtemp(prefix="cs_mcp_npm_install_"))
+
+        # Create a minimal package.json so npm install works
+        init_pkg = {"name": "npm-backend-test", "version": "0.0.0", "private": True}
+        (install_dir / "package.json").write_text(json.dumps(init_pkg))
+
+        result = subprocess.run(
+            [npm, "install", str(tarball)],
+            cwd=str(install_dir),
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"npm install failed:\n{result.stderr}")
+
+        print(f"  Installed into: {install_dir}")
+        return install_dir
+
+    def _prepare_serve_directory(self, binary_path: Path) -> Path:
+        """Create a directory structure matching GitHub release URLs and return it.
+
+        Produces: {serve_dir}/MCP-{version}/{asset}
+        On macOS/Linux the asset is a zip containing the platform-named binary.
+        On Windows the asset is the bare .exe.
+        """
+        version = self._read_package_version()
+        tag = f"MCP-{version}"
+        asset_name, inner_binary_name = self._get_platform_asset_info()
+
+        serve_dir = Path(tempfile.mkdtemp(prefix="cs_mcp_npm_serve_"))
+        tag_dir = serve_dir / tag
+        tag_dir.mkdir()
+
+        if asset_name.endswith(".zip"):
+            # Create a zip containing the binary with the platform-specific name
+            zip_path = tag_dir / asset_name
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.write(binary_path, inner_binary_name)
+            print(f"  Prepared zip: {zip_path} (contains {inner_binary_name})")
+        else:
+            # Windows: serve the bare exe
+            shutil.copy2(binary_path, tag_dir / asset_name)
+            print(f"  Prepared binary: {tag_dir / asset_name}")
+
+        return serve_dir
+
+    def _start_http_server(self, serve_dir: Path) -> int:
+        """Start a Python HTTP server serving serve_dir, return the port."""
+        # Use port 0 to let the OS assign a free port, then read it back
+        self._http_server = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import http.server, socketserver, sys, os\n"
+                    "os.chdir(sys.argv[1])\n"
+                    "handler = http.server.SimpleHTTPRequestHandler\n"
+                    "with socketserver.TCPServer(('127.0.0.1', 0), handler) as s:\n"
+                    "    port = s.server_address[1]\n"
+                    "    print(port, flush=True)\n"
+                    "    s.serve_forever()\n"
+                ),
+                str(serve_dir),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        # Read the port from the server's stdout
+        assert self._http_server.stdout is not None
+        port_line = self._http_server.stdout.readline().strip()
+        if not port_line.isdigit():
+            assert self._http_server.stderr is not None
+            stderr = self._http_server.stderr.read()
+            raise RuntimeError(f"Failed to start HTTP server: {stderr}")
+
+        port = int(port_line)
+        print(f"  HTTP server listening on 127.0.0.1:{port}")
+        return port
+
+    def prepare(self) -> None:
+        """Build binary, pack npm package, install it, and start the file server."""
+        print_header("Preparing npm Backend")
+
+        # 1. Build the Nuitka binary
+        self._nuitka_backend.prepare()
+        binary_path = self._nuitka_backend.executable
+        assert binary_path is not None, "Nuitka backend did not produce a binary"
+
+        # 2. Verify Node.js
+        node = self._find_node()
+        print(f"\n  Node.js: {node}")
+
+        # 3. Pack the npm package
+        tarball = self._pack_npm_package()
+
+        try:
+            # 4. Install into isolated directory
+            self._install_dir = self._install_tarball(tarball)
+
+            # 5. Prepare the serve directory with the zipped binary
+            self._serve_dir = self._prepare_serve_directory(binary_path)
+
+            # 6. Start the local HTTP server
+            self._http_port = self._start_http_server(self._serve_dir)
+        finally:
+            # Clean up the tarball
+            tarball.unlink(missing_ok=True)
+
+        # Verify the bin entry point exists in the installed package
+        entry_point = (
+            self._install_dir
+            / "node_modules"
+            / "@codescene"
+            / "codehealth-mcp"
+            / "bin"
+            / "cs-mcp.js"
+        )
+        if not entry_point.exists():
+            raise FileNotFoundError(
+                f"Installed bin entry point not found: {entry_point}"
+            )
+        print(f"  Entry point: {entry_point}")
+
+        # Verify the bin symlink was created by npm install
+        bin_script = self._install_dir / "node_modules" / ".bin" / "cs-mcp"
+        if not bin_script.exists():
+            raise FileNotFoundError(
+                f"Bin symlink not found: {bin_script}. "
+                "Check that the 'bin' field in package.json is correct."
+            )
+        print(f"  Bin symlink: {bin_script}")
+        print(f"\n\033[92mnpm backend ready\033[0m")
+
+    def get_command(self, working_dir: Path) -> list[str]:
+        """Return the installed bin symlink, testing npm's bin field registration."""
+        assert self._install_dir is not None, "prepare() must be called first"
+        bin_script = self._install_dir / "node_modules" / ".bin" / "cs-mcp"
+        return [str(bin_script)]
+
+    def get_env(self, base_env: dict[str, str], working_dir: Path) -> dict[str, str]:
+        """Return environment pointing at the local download server."""
+        env = base_env.copy()
+        env.pop("CS_MOUNT_PATH", None)
+        # Point the npm wrapper at our local HTTP server instead of GitHub
+        env["CS_MCP_DOWNLOAD_BASE_URL"] = (
+            f"http://127.0.0.1:{self._http_port}"
+        )
+        # Remove any CS_MCP_BINARY_PATH so the wrapper goes through the download path
+        env.pop("CS_MCP_BINARY_PATH", None)
+        # Disable version check by default
+        env.setdefault("CS_DISABLE_VERSION_CHECK", "1")
+        return env
+
+    def cleanup(self) -> None:
+        """Stop the HTTP server and clean up temp directories."""
+        if self._http_server:
+            self._http_server.terminate()
+            try:
+                self._http_server.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._http_server.kill()
+            self._http_server = None
+
+        if self._install_dir and self._install_dir.exists():
+            shutil.rmtree(self._install_dir, ignore_errors=True)
+
+        if self._serve_dir and self._serve_dir.exists():
+            shutil.rmtree(self._serve_dir, ignore_errors=True)
+
+        self._nuitka_backend.cleanup()
