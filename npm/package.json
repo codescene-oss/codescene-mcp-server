@@ -1,6 +1,6 @@
 {
   "name": "@codescene/codehealth-mcp",
-  "version": "0.2.1",
+  "version": "0.0.0",
   "description": "CodeScene MCP Server — Code Health analysis for AI coding agents",
   "type": "module",
   "bin": {
