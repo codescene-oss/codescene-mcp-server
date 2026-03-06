@@ -10,6 +10,7 @@ from test_utils import mocked_requests_post
 from . import SelectProject
 
 
+@mock.patch.dict(os.environ, {"CS_ACCESS_TOKEN": "test-token"})
 class TestSelectProject(unittest.TestCase):
     @mock.patch("requests.post", side_effect=mocked_requests_post)
     def test_select_project_none_found(self, mock_post):

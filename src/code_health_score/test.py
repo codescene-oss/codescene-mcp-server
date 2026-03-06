@@ -1,11 +1,14 @@
 import json
+import os
 import unittest
+from unittest import mock
 
 from fastmcp import FastMCP
 
 from .score_calculator import CodeHealthScore
 
 
+@mock.patch.dict(os.environ, {"CS_ACCESS_TOKEN": "test-token"})
 class TestCodeHealthScore(unittest.TestCase):
     def test_calculate_code_health_score_some(self):
         def mock_analyze_code(file_path: str):

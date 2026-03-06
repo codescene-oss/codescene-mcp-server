@@ -9,6 +9,7 @@ from fastmcp import FastMCP
 from .change_set_analyzer import AnalyzeChangeSet
 
 
+@mock.patch.dict(os.environ, {"CS_ACCESS_TOKEN": "test-token"})
 class TestAnalyzeChangeSet(unittest.TestCase):
     @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/my/git/path"})
     def test_analyze_change_set_docker(self):
@@ -97,6 +98,7 @@ Input: string output"""
         self.assertEqual(json.dumps(expected), result)
 
 
+@mock.patch.dict(os.environ, {"CS_ACCESS_TOKEN": "test-token"})
 class TestAnalyzeChangeSetWorktree(unittest.TestCase):
     """Tests for analyze_change_set git worktree support."""
 

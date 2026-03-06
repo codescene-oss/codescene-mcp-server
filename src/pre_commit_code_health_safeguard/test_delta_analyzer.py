@@ -9,6 +9,7 @@ from fastmcp import FastMCP
 from .delta_analyzer import PreCommitCodeHealthSafeguard
 
 
+@mock.patch.dict(os.environ, {"CS_ACCESS_TOKEN": "test-token"})
 class TestPreCommitCodeHealthSafeguard(unittest.TestCase):
     @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/my/git/path"})
     def test_pre_commit_code_health_safeguard(self):
@@ -64,6 +65,7 @@ Input: string output"""
         self.assertEqual(captured_path[-1], "/my/local/git/path")
 
 
+@mock.patch.dict(os.environ, {"CS_ACCESS_TOKEN": "test-token"})
 class TestPreCommitCodeHealthSafeguardWorktree(unittest.TestCase):
     """Tests for pre-commit safeguard git worktree support in static mode."""
 

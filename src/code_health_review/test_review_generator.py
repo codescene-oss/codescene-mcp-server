@@ -1,4 +1,5 @@
 import json
+import os
 import unittest
 from unittest import mock
 
@@ -9,6 +10,7 @@ from test_utils import mocked_requests_post
 from .review_generator import CodeHealthReview
 
 
+@mock.patch.dict(os.environ, {"CS_ACCESS_TOKEN": "test-token"})
 class TestCodeHealthReview(unittest.TestCase):
     @mock.patch("requests.post", side_effect=mocked_requests_post)
     def test_calculate_code_health_review_json(self, mock_post):

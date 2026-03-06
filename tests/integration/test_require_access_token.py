@@ -14,6 +14,7 @@ This test suite validates:
 
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -34,6 +35,18 @@ from test_utils import (
 _TOKEN_MISSING_MARKER = "No access token configured"
 
 
+@dataclass
+class TokenGuardTestCase:
+    """Describes a single token-guard test scenario."""
+
+    name: str
+    tool_name: str
+    args: dict
+    expect_blocked: bool
+    remove_token: bool
+    timeout: int = 30
+
+
 # --- Helpers ---
 
 
@@ -44,217 +57,105 @@ def _make_no_token_env(base_env: dict) -> dict:
     return env
 
 
-def _start_client(command: list[str], env: dict, cwd: str) -> MCPClient | None:
-    """Start and initialize an MCPClient, returning None on failure."""
-    client = MCPClient(command, env=env, cwd=cwd)
+def _run_single_test(
+    command: list[str], env: dict, cwd: str, case: TokenGuardTestCase,
+) -> bool:
+    """Run one token-guard test case and return pass/fail."""
+    print_header(f"Test: {case.name}")
+
+    effective_env = _make_no_token_env(env) if case.remove_token else env
+    client = MCPClient(command, env=effective_env, cwd=cwd)
+
     if not client.start():
         print_test("Server started", False, client.get_stderr())
-        return None
+        return False
     print_test("Server started", True)
-    client.initialize()
-    return client
-
-
-# --- Test functions ---
-
-
-def test_guarded_tool_blocked_without_token(
-    command: list[str], env: dict, cwd: str, repo_dir: Path,
-) -> bool:
-    """Without CS_ACCESS_TOKEN, a guarded tool returns the token-missing message."""
-    print_header("Test: Guarded Tool Blocked Without Token")
-
-    no_token_env = _make_no_token_env(env)
-    client = _start_client(command, no_token_env, cwd)
-    if client is None:
-        return False
 
     try:
-        test_file = repo_dir / "hello.py"
-        print(f"\n  Calling code_health_score on: {test_file}")
+        client.initialize()
+        print(f"\n  Calling {case.tool_name}...")
 
-        response = client.call_tool(
-            "code_health_score",
-            {"file_path": str(test_file)},
-            timeout=30,
-        )
+        response = client.call_tool(case.tool_name, case.args, timeout=case.timeout)
         result_text = extract_result_text(response)
 
-        has_marker = _TOKEN_MISSING_MARKER in result_text
-        print_test(
-            "Response contains token-missing message",
-            has_marker,
-            f"Response preview: {result_text[:200]}",
-        )
-
-        has_set_config_hint = "set_config" in result_text
-        print_test("Response mentions set_config", has_set_config_hint)
-
-        return has_marker and has_set_config_hint
+        if case.expect_blocked:
+            return _verify_blocked(result_text)
+        return _verify_not_blocked(result_text, case.tool_name)
 
     except Exception as e:
-        print_test("Guarded tool blocked", False, str(e))
+        print_test(case.name, False, str(e))
         return False
     finally:
         client.stop()
 
 
-def test_explain_tool_blocked_without_token(
-    command: list[str], env: dict, cwd: str,
-) -> bool:
-    """Without CS_ACCESS_TOKEN, explain tools also return the token-missing message."""
-    print_header("Test: Explain Tool Blocked Without Token")
-
-    no_token_env = _make_no_token_env(env)
-    client = _start_client(command, no_token_env, cwd)
-    if client is None:
-        return False
-
-    try:
-        print("\n  Calling explain_code_health...")
-
-        response = client.call_tool(
-            "explain_code_health",
-            {},
-            timeout=30,
-        )
-        result_text = extract_result_text(response)
-
-        has_marker = _TOKEN_MISSING_MARKER in result_text
-        print_test(
-            "explain_code_health returns token-missing message",
-            has_marker,
-            f"Response preview: {result_text[:200]}",
-        )
-
-        return has_marker
-
-    except Exception as e:
-        print_test("Explain tool blocked", False, str(e))
-        return False
-    finally:
-        client.stop()
+def _verify_blocked(result_text: str) -> bool:
+    """Assert the response is the token-missing guard message."""
+    has_marker = _TOKEN_MISSING_MARKER in result_text
+    print_test(
+        "Response contains token-missing message",
+        has_marker,
+        f"Response preview: {result_text[:200]}",
+    )
+    has_hint = "set_config" in result_text
+    print_test("Response mentions set_config", has_hint)
+    return has_marker and has_hint
 
 
-def test_get_config_works_without_token(
-    command: list[str], env: dict, cwd: str,
-) -> bool:
-    """Without CS_ACCESS_TOKEN, get_config still works (not guarded)."""
-    print_header("Test: get_config Works Without Token")
-
-    no_token_env = _make_no_token_env(env)
-    client = _start_client(command, no_token_env, cwd)
-    if client is None:
-        return False
-
-    try:
-        print("\n  Calling get_config...")
-
-        response = client.call_tool(
-            "get_config",
-            {},
-            timeout=30,
-        )
-        result_text = extract_result_text(response)
-
-        not_blocked = _TOKEN_MISSING_MARKER not in result_text
-        print_test(
-            "get_config NOT blocked by token guard",
-            not_blocked,
-            f"Response preview: {result_text[:200]}",
-        )
-
-        has_content = len(result_text) > 0
-        print_test("get_config returned content", has_content)
-
-        return not_blocked and has_content
-
-    except Exception as e:
-        print_test("get_config without token", False, str(e))
-        return False
-    finally:
-        client.stop()
+def _verify_not_blocked(result_text: str, tool_name: str) -> bool:
+    """Assert the response is NOT blocked and contains real content."""
+    not_blocked = _TOKEN_MISSING_MARKER not in result_text
+    print_test(
+        f"{tool_name} NOT blocked by token guard",
+        not_blocked,
+        f"Response preview: {result_text[:200]}",
+    )
+    has_content = len(result_text) > 0
+    print_test(f"{tool_name} returned content", has_content)
+    return not_blocked and has_content
 
 
-def test_set_config_works_without_token(
-    command: list[str], env: dict, cwd: str,
-) -> bool:
-    """Without CS_ACCESS_TOKEN, set_config still works (not guarded)."""
-    print_header("Test: set_config Works Without Token")
-
-    no_token_env = _make_no_token_env(env)
-    client = _start_client(command, no_token_env, cwd)
-    if client is None:
-        return False
-
-    try:
-        print("\n  Calling set_config with a test value...")
-
-        response = client.call_tool(
-            "set_config",
-            {"key": "onprem_url", "value": "https://test.example.com"},
-            timeout=30,
-        )
-        result_text = extract_result_text(response)
-
-        not_blocked = _TOKEN_MISSING_MARKER not in result_text
-        print_test(
-            "set_config NOT blocked by token guard",
-            not_blocked,
-            f"Response preview: {result_text[:200]}",
-        )
-
-        has_content = len(result_text) > 0
-        print_test("set_config returned content", has_content)
-
-        return not_blocked and has_content
-
-    except Exception as e:
-        print_test("set_config without token", False, str(e))
-        return False
-    finally:
-        client.stop()
-
-
-def test_guarded_tool_works_with_token(
-    command: list[str], env: dict, cwd: str, repo_dir: Path,
-) -> bool:
-    """With CS_ACCESS_TOKEN set, guarded tools work normally (sanity check)."""
-    print_header("Test: Guarded Tool Works With Token")
-
-    # env already has CS_ACCESS_TOKEN from the real environment
-    client = _start_client(command, env, cwd)
-    if client is None:
-        return False
-
-    try:
-        test_file = repo_dir / "hello.py"
-        print(f"\n  Calling code_health_score on: {test_file}")
-
-        response = client.call_tool(
-            "code_health_score",
-            {"file_path": str(test_file)},
+def _build_test_cases(repo_dir: Path) -> list[TokenGuardTestCase]:
+    """Build the full list of test cases for the token guard."""
+    test_file = str(repo_dir / "hello.py")
+    return [
+        TokenGuardTestCase(
+            name="Guarded Tool Blocked Without Token",
+            tool_name="code_health_score",
+            args={"file_path": test_file},
+            expect_blocked=True,
+            remove_token=True,
+        ),
+        TokenGuardTestCase(
+            name="Explain Tool Blocked Without Token",
+            tool_name="explain_code_health",
+            args={},
+            expect_blocked=True,
+            remove_token=True,
+        ),
+        TokenGuardTestCase(
+            name="get_config Works Without Token",
+            tool_name="get_config",
+            args={},
+            expect_blocked=False,
+            remove_token=True,
+        ),
+        TokenGuardTestCase(
+            name="set_config Works Without Token",
+            tool_name="set_config",
+            args={"key": "onprem_url", "value": "https://test.example.com"},
+            expect_blocked=False,
+            remove_token=True,
+        ),
+        TokenGuardTestCase(
+            name="Guarded Tool Works With Token",
+            tool_name="code_health_score",
+            args={"file_path": test_file},
+            expect_blocked=False,
+            remove_token=False,
             timeout=60,
-        )
-        result_text = extract_result_text(response)
-
-        not_blocked = _TOKEN_MISSING_MARKER not in result_text
-        print_test(
-            "Response does NOT contain token-missing message",
-            not_blocked,
-            f"Response preview: {result_text[:200]}",
-        )
-
-        has_content = len(result_text) > 0
-        print_test("Tool returned content", has_content)
-
-        return not_blocked and has_content
-
-    except Exception as e:
-        print_test("Guarded tool with token", False, str(e))
-        return False
-    finally:
-        client.stop()
+        ),
+    ]
 
 
 # --- Runner ---
@@ -274,7 +175,6 @@ def run_require_access_token_tests_with_backend(backend: ServerBackend) -> int:
     with safe_temp_directory(prefix="cs_mcp_token_guard_test_") as test_dir:
         print(f"\nTest directory: {test_dir}")
 
-        # Minimal git repo needed for server startup
         sample_files = {"hello.py": "def hello():\n    return 'world'\n"}
         repo_dir = create_git_repo(test_dir, sample_files)
         print(f"Repository: {repo_dir}")
@@ -284,31 +184,13 @@ def run_require_access_token_tests_with_backend(backend: ServerBackend) -> int:
 
         command = backend.get_command(repo_dir)
         base_env = backend.get_env(os.environ.copy(), repo_dir)
-        # Use an isolated config dir so set_config tests don't pollute real config
         base_env["CS_CONFIG_DIR"] = str(config_dir)
         cwd = str(repo_dir)
 
+        cases = _build_test_cases(repo_dir)
         results: list[tuple[str, bool | str]] = [
-            (
-                "Guarded tool blocked without token",
-                test_guarded_tool_blocked_without_token(command, base_env, cwd, repo_dir),
-            ),
-            (
-                "Explain tool blocked without token",
-                test_explain_tool_blocked_without_token(command, base_env, cwd),
-            ),
-            (
-                "get_config works without token",
-                test_get_config_works_without_token(command, base_env, cwd),
-            ),
-            (
-                "set_config works without token",
-                test_set_config_works_without_token(command, base_env, cwd),
-            ),
-            (
-                "Guarded tool works with token",
-                test_guarded_tool_works_with_token(command, base_env, cwd, repo_dir),
-            ),
+            (case.name, _run_single_test(command, base_env, cwd, case))
+            for case in cases
         ]
 
         return print_summary(results)

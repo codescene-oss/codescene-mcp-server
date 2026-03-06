@@ -10,6 +10,7 @@ from test_utils import mocked_requests_post
 from . import CodeOwnership
 
 
+@mock.patch.dict(os.environ, {"CS_ACCESS_TOKEN": "test-token"})
 class TestCodeOwnership(unittest.TestCase):
     @mock.patch.dict(os.environ, {"CS_MOUNT_PATH": "/some-path"})
     @mock.patch("requests.post", side_effect=mocked_requests_post)
