@@ -1,17 +1,4 @@
 from .ace_api_client import post_refactor
-from .config import (
-    CONFIG_OPTIONS,
-    apply_config_to_env,
-    delete_config_value,
-    get_config_dir,
-    get_config_value,
-    get_effective_value,
-    is_client_env_var,
-    load_config,
-    mask_sensitive_value,
-    save_config,
-    set_config_value,
-)
 from .code_health_analysis import (
     analyze_code,
     code_health_from_cli_output,
@@ -29,6 +16,19 @@ from .codescene_api_client import (
     query_api,
     query_api_list,
 )
+from .config import (
+    CONFIG_OPTIONS,
+    apply_config_to_env,
+    delete_config_value,
+    get_config_dir,
+    get_config_value,
+    get_effective_value,
+    is_client_env_var,
+    load_config,
+    mask_sensitive_value,
+    save_config,
+    set_config_value,
+)
 from .docker_path_adapter import (
     adapt_mounted_file_path_inside_docker,
     adapt_worktree_gitdir_for_docker,
@@ -36,6 +36,7 @@ from .docker_path_adapter import (
 )
 from .license import is_standalone_license, is_standalone_token
 from .platform_details import PlatformDetails, get_platform_details, get_ssl_cli_args
+from .require_access_token import require_access_token
 from .track import track, track_error
 from .version_checker import (
     VersionChecker,

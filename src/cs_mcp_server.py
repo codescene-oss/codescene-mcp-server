@@ -23,6 +23,7 @@ from utils import (
     is_standalone_token,
     post_refactor,
     query_api_list,
+    require_access_token,
     run_local_tool,
 )
 from version import __version__
@@ -110,6 +111,7 @@ def read_documentation_content_for(md_doc_name):
 
 
 @mcp.tool()
+@require_access_token
 def explain_code_health(context: str | None = None) -> str:
     """
     Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI.
@@ -118,6 +120,7 @@ def explain_code_health(context: str | None = None) -> str:
 
 
 @mcp.tool()
+@require_access_token
 def explain_code_health_productivity(context: str | None = None) -> str:
     """
     Describes how to build a business case for Code Health improvements.

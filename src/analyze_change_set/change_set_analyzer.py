@@ -5,6 +5,7 @@ from code_health_tools.delta_runner import run_delta_cli
 from utils import (
     cs_cli_path,
     get_platform_details,
+    require_access_token,
     track,
     with_version_check,
 )
@@ -20,6 +21,7 @@ class AnalyzeChangeSet:
 
         mcp_instance.tool(self.analyze_change_set)
 
+    @require_access_token
     @track("analyze-change-set")
     @with_version_check
     def analyze_change_set(self, base_ref: str, git_repository_path: str) -> str:

@@ -6,6 +6,7 @@ from typing import TypedDict
 from utils import (
     get_relative_file_path_for_api,
     normalize_onprem_url,
+    require_access_token,
     track,
     track_error,
     with_version_check,
@@ -23,6 +24,7 @@ class TechnicalDebtGoals:
         mcp_instance.tool(self.list_technical_debt_goals_for_project)
         mcp_instance.tool(self.list_technical_debt_goals_for_project_file)
 
+    @require_access_token
     @track("list-technical-debt-goals-for-project")
     @with_version_check
     def list_technical_debt_goals_for_project(self, project_id: int) -> str:
@@ -66,6 +68,7 @@ class TechnicalDebtGoals:
             track_error("list-technical-debt-goals-for-project", e)
             return f"Error: {e}"
 
+    @require_access_token
     @track("list-technical-debt-goals-for-project-file")
     @with_version_check
     def list_technical_debt_goals_for_project_file(self, file_path: str, project_id: int) -> str:

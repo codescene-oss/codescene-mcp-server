@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import TypedDict
 
-from utils import run_cs_cli, track, with_version_check
+from utils import require_access_token, run_cs_cli, track, with_version_check
 
 
 class CodeHealthReviewDeps(TypedDict):
@@ -14,6 +14,7 @@ class CodeHealthReview:
 
         mcp_instance.tool(self.code_health_review)
 
+    @require_access_token
     @with_version_check
     @track("code-health-review")
     def code_health_review(self, file_path: str) -> str:
