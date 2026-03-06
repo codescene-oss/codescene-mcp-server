@@ -15,6 +15,20 @@ from utils import (
 )
 from utils.config import ConfigOption
 
+_DOCS_BASE_URL = "https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md"
+
+# Keys that have a corresponding section in the configuration docs.
+_DOCUMENTED_KEYS = frozenset(
+    {
+        "access_token",
+        "onprem_url",
+        "ace_access_token",
+        "default_project_id",
+        "disable_version_check",
+        "ca_bundle",
+    }
+)
+
 
 # --- Display helpers ---
 
@@ -28,10 +42,29 @@ def display_value(value: str | None, sensitive: bool) -> str:
     return value
 
 
+def doc_url(key: str) -> str | None:
+    """Return the full documentation URL for *key*, or ``None``."""
+    if key not in _DOCUMENTED_KEYS:
+        return None
+    return f"{_DOCS_BASE_URL}#{key}"
+
+
+def _doc_link(key: str) -> str:
+    """Return a markdown doc-link suffix for *key*, or empty string."""
+    url = doc_url(key)
+    if url is None:
+        return ""
+    return f"\n  [Documentation]({url})"
+
+
 def format_option_row(key: str, option: ConfigOption, value: str | None, source: str) -> str:
     """Format a single option as a human-readable summary line."""
     display = display_value(value, option.sensitive)
-    return f"- **{key}** ({option.env_var}): {display}  [source: {source}]\n  {option.description}"
+    return (
+        f"- **{key}** ({option.env_var}): {display}  [source: {source}]"
+        f"\n  {option.description}"
+        f"{_doc_link(key)}"
+    )
 
 
 def format_all_options(options: dict[str, ConfigOption]) -> str:

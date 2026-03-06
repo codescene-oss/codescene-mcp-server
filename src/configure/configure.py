@@ -60,18 +60,22 @@ class Configure:
         - "access_token" (token, API token, PAT, CodeScene access token)
           → env var CS_ACCESS_TOKEN
           CodeScene API access token or license key.
+          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#access_token
 
         - "onprem_url" (URL, instance URL, on-prem URL, CodeScene URL)
           → env var CS_ONPREM_URL
           Base URL for a self-hosted CodeScene instance.
+          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#onprem_url
 
         - "ace_access_token" (ACE token, refactoring token)
           → env var CS_ACE_ACCESS_TOKEN
           Token for the CodeScene ACE auto-refactoring API.
+          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#ace_access_token
 
         - "default_project_id" (project ID, project)
           → env var CS_DEFAULT_PROJECT_ID
           Pre-selects a CodeScene project by ID.
+          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#default_project_id
 
         - "disable_tracking" (tracking, analytics)
           → env var CS_DISABLE_TRACKING
@@ -80,16 +84,19 @@ class Configure:
         - "disable_version_check" (version check, update check)
           → env var CS_DISABLE_VERSION_CHECK
           Set to "true" to suppress version-check network traffic.
+          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#disable_version_check
 
         - "ca_bundle" (SSL cert, CA certificate, certificate)
           → env var REQUESTS_CA_BUNDLE
           Path to a custom PEM CA certificate file.
+          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#ca_bundle
 
         Args:
             key: Optional config key to query. Omit to list all options.
         Returns:
-            A formatted string describing configuration values and their
-            sources. Present this information to the user as-is.
+            A formatted string with configuration values and sources.
+            Always include the relevant Docs links from above in your
+            response so the user can click through to the documentation.
         """
         if key is not None:
             return self._get_single(key)
@@ -126,18 +133,22 @@ class Configure:
         - "access_token" (token, API token, PAT, CodeScene access token)
           → env var CS_ACCESS_TOKEN
           CodeScene API access token or license key.
+          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#access_token
 
         - "onprem_url" (URL, instance URL, on-prem URL, CodeScene URL)
           → env var CS_ONPREM_URL
           Base URL for a self-hosted CodeScene instance.
+          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#onprem_url
 
         - "ace_access_token" (ACE token, refactoring token)
           → env var CS_ACE_ACCESS_TOKEN
           Token for the CodeScene ACE auto-refactoring API.
+          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#ace_access_token
 
         - "default_project_id" (project ID, project)
           → env var CS_DEFAULT_PROJECT_ID
           Pre-selects a CodeScene project by ID.
+          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#default_project_id
 
         - "disable_tracking" (tracking, analytics)
           → env var CS_DISABLE_TRACKING
@@ -146,10 +157,12 @@ class Configure:
         - "disable_version_check" (version check, update check)
           → env var CS_DISABLE_VERSION_CHECK
           Set to "true" to suppress version-check network traffic.
+          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#disable_version_check
 
         - "ca_bundle" (SSL cert, CA certificate, certificate)
           → env var REQUESTS_CA_BUNDLE
           Path to a custom PEM CA certificate file.
+          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#ca_bundle
 
         Args:
             key: The configuration key to set (see list above).
@@ -157,6 +170,8 @@ class Configure:
                    key from the config file.
         Returns:
             A confirmation message describing what was changed.
+            Always include the relevant Docs links from above in your
+            response so the user can click through to the documentation.
         """
         option = CONFIG_OPTIONS.get(key)
         if option is None:
