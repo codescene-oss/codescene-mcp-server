@@ -42,47 +42,55 @@ class ConfigOption:
     sensitive: bool
     hidden: bool = False
     api_only: bool = False
+    aliases: tuple[str, ...] = ()
 
 
 CONFIG_OPTIONS: dict[str, ConfigOption] = {
     "access_token": ConfigOption(
         env_var="CS_ACCESS_TOKEN",
-        description="CodeScene API access token (Personal Access Token or license key).",
+        description="CodeScene Access Token or MCP Standalone Access Token.",
         sensitive=True,
+        aliases=("token", "API token", "PAT", "CodeScene access token"),
     ),
     "onprem_url": ConfigOption(
         env_var="CS_ONPREM_URL",
         description="Base URL for a self-hosted CodeScene instance (e.g. https://codescene.mycompany.com).",
         sensitive=False,
         api_only=True,
+        aliases=("URL", "instance URL", "on-prem URL", "CodeScene URL"),
     ),
     "ace_access_token": ConfigOption(
         env_var="CS_ACE_ACCESS_TOKEN",
-        description="Token for the CodeScene ACE auto-refactoring API.",
+        description="CodeScene ACE access token.",
         sensitive=True,
+        aliases=("ACE token", "refactoring token"),
     ),
     "default_project_id": ConfigOption(
         env_var="CS_DEFAULT_PROJECT_ID",
         description="Pre-selects a CodeScene project by ID, skipping interactive selection.",
         sensitive=False,
         api_only=True,
+        aliases=("project ID", "project"),
     ),
     "disable_tracking": ConfigOption(
         env_var="CS_DISABLE_TRACKING",
         description='Set to "true" to opt out of anonymous analytics tracking.',
         sensitive=False,
         hidden=True,
+        aliases=("tracking", "analytics"),
     ),
     "disable_version_check": ConfigOption(
         env_var="CS_DISABLE_VERSION_CHECK",
-        description='Set to "true" to suppress version-check network traffic.',
+        description='Set to "true" to disable automatic version checking.',
         sensitive=False,
         hidden=True,
+        aliases=("version check", "update check"),
     ),
     "ca_bundle": ConfigOption(
         env_var="REQUESTS_CA_BUNDLE",
         description="Path to a custom PEM-format CA certificate bundle for SSL verification.",
         sensitive=False,
+        aliases=("SSL cert", "CA certificate", "certificate"),
     ),
 }
 

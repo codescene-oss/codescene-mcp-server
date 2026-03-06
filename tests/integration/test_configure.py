@@ -248,7 +248,7 @@ def test_invalid_key(command: list[str], env: dict, cwd: str) -> bool:
         text = extract_result_text(resp)
 
         has_error = "unknown" in text.lower()
-        has_valid_keys = "valid keys" in text.lower() or "access_token" in text
+        has_valid_keys = "valid_keys" in text or "access_token" in text
         print_test("Error mentions unknown key", has_error, text[:120])
         print_test("Error lists valid keys", has_valid_keys)
 
@@ -294,7 +294,7 @@ def test_delete_value(command: list[str], env: dict, cwd: str) -> bool:
             timeout=30,
         )
         get_text = extract_result_text(get_resp)
-        is_unset = "not set" in get_text.lower()
+        is_unset = "null" in get_text.lower() or "not set" in get_text.lower()
         print_test("Value no longer set", is_unset, get_text[:120])
 
         return removed_ok and is_unset

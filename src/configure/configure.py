@@ -5,6 +5,7 @@ manage persistent configuration through natural-language conversation
 instead of editing JSON files by hand.
 """
 
+import json
 import os
 from typing import TypedDict
 
@@ -21,9 +22,10 @@ from utils import (
 from utils.config import ConfigOption
 
 from .helpers import (
+    doc_url,
     env_override_warning,
     format_all_options,
-    format_option_row,
+    format_option_dict,
     get_listable_options,
     restart_warning,
     unknown_key_message,
@@ -55,48 +57,15 @@ class Configure:
         When called with a specific key, returns details for that option
         only.  Sensitive values (tokens) are masked in the output.
 
-        Available configuration keys (and common ways users refer to them):
-
-        - "access_token" (token, API token, PAT, CodeScene access token)
-          → env var CS_ACCESS_TOKEN
-          CodeScene API access token or license key.
-          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#access_token
-
-        - "onprem_url" (URL, instance URL, on-prem URL, CodeScene URL)
-          → env var CS_ONPREM_URL
-          Base URL for a self-hosted CodeScene instance.
-          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#onprem_url
-
-        - "ace_access_token" (ACE token, refactoring token)
-          → env var CS_ACE_ACCESS_TOKEN
-          Token for the CodeScene ACE auto-refactoring API.
-          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#ace_access_token
-
-        - "default_project_id" (project ID, project)
-          → env var CS_DEFAULT_PROJECT_ID
-          Pre-selects a CodeScene project by ID.
-          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#default_project_id
-
-        - "disable_tracking" (tracking, analytics)
-          → env var CS_DISABLE_TRACKING
-          Set to "true" to opt out of analytics.
-
-        - "disable_version_check" (version check, update check)
-          → env var CS_DISABLE_VERSION_CHECK
-          Set to "true" to suppress version-check network traffic.
-          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#disable_version_check
-
-        - "ca_bundle" (SSL cert, CA certificate, certificate)
-          → env var REQUESTS_CA_BUNDLE
-          Path to a custom PEM CA certificate file.
-          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#ca_bundle
-
         Args:
             key: Optional config key to query. Omit to list all options.
         Returns:
-            A formatted string with configuration values and sources.
-            Always include the relevant Docs links from above in your
-            response so the user can click through to the documentation.
+            A JSON string. When querying a single key, the object has:
+            key, env_var, value, source, description, aliases, and
+            docs_url.  When listing all, the object has: config_dir and
+            options (array of the same shape).  Use the aliases array
+            to match user intent to the correct key.  Present the data
+            clearly and always include docs_url links.
         """
         if key is not None:
             return self._get_single(key)
@@ -108,11 +77,14 @@ class Configure:
             return unknown_key_message(key)
 
         value, source = get_effective_value(key)
-        return format_option_row(key, option, value, source)
+        return json.dumps(format_option_dict(key, option, value, source))
 
     def _get_all(self) -> str:
-        header = f"CodeScene MCP Server configuration (stored in {get_config_dir()}):\n\n"
-        return header + format_all_options(get_listable_options())
+        result = {
+            "config_dir": str(get_config_dir()),
+            "options": format_all_options(get_listable_options()),
+        }
+        return json.dumps(result)
 
     @with_version_check
     @track("set-config")
@@ -128,50 +100,18 @@ class Configure:
         Desktop config), the environment variable takes precedence at
         runtime.
 
-        Available configuration keys (and common ways users refer to them):
-
-        - "access_token" (token, API token, PAT, CodeScene access token)
-          → env var CS_ACCESS_TOKEN
-          CodeScene API access token or license key.
-          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#access_token
-
-        - "onprem_url" (URL, instance URL, on-prem URL, CodeScene URL)
-          → env var CS_ONPREM_URL
-          Base URL for a self-hosted CodeScene instance.
-          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#onprem_url
-
-        - "ace_access_token" (ACE token, refactoring token)
-          → env var CS_ACE_ACCESS_TOKEN
-          Token for the CodeScene ACE auto-refactoring API.
-          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#ace_access_token
-
-        - "default_project_id" (project ID, project)
-          → env var CS_DEFAULT_PROJECT_ID
-          Pre-selects a CodeScene project by ID.
-          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#default_project_id
-
-        - "disable_tracking" (tracking, analytics)
-          → env var CS_DISABLE_TRACKING
-          Set to "true" to opt out of analytics.
-
-        - "disable_version_check" (version check, update check)
-          → env var CS_DISABLE_VERSION_CHECK
-          Set to "true" to suppress version-check network traffic.
-          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#disable_version_check
-
-        - "ca_bundle" (SSL cert, CA certificate, certificate)
-          → env var REQUESTS_CA_BUNDLE
-          Path to a custom PEM CA certificate file.
-          Docs: https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#ca_bundle
+        Call get_config first (without a key) to discover available keys,
+        their aliases, and docs_url links.
 
         Args:
-            key: The configuration key to set (see list above).
+            key: The configuration key to set.
             value: The value to store. Pass an empty string to remove the
                    key from the config file.
         Returns:
-            A confirmation message describing what was changed.
-            Always include the relevant Docs links from above in your
-            response so the user can click through to the documentation.
+            A JSON string with status ("saved" or "removed"), key,
+            config_dir, and optional warning, restart_required, and
+            docs_url fields.  Present the data clearly and always
+            include docs_url links.
         """
         option = CONFIG_OPTIONS.get(key)
         if option is None:
@@ -186,11 +126,28 @@ class Configure:
         delete_config_value(key)
         if not is_client_env_var(option.env_var):
             os.environ.pop(option.env_var, None)
-        return f"Removed '{key}' from config file."
+        result: dict = {"status": "removed", "key": key}
+        url = doc_url(key)
+        if url:
+            result["docs_url"] = url
+        return json.dumps(result)
 
     def _set_key(self, key: str, value: str, option: ConfigOption) -> str:
         set_config_value(key, value)
         if not is_client_env_var(option.env_var):
             os.environ[option.env_var] = value
-        confirmation = f"Saved '{key}' to config file at {get_config_dir()}."
-        return confirmation + env_override_warning(key) + restart_warning(key)
+        result: dict = {
+            "status": "saved",
+            "key": key,
+            "config_dir": str(get_config_dir()),
+        }
+        warning = env_override_warning(key)
+        if warning:
+            result["warning"] = warning
+        restart = restart_warning(key)
+        if restart:
+            result["restart_required"] = restart
+        url = doc_url(key)
+        if url:
+            result["docs_url"] = url
+        return json.dumps(result)

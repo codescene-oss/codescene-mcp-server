@@ -160,54 +160,75 @@ class TestGetConfigTool(_ConfigDirMixin, unittest.TestCase):
         os.environ.pop("CS_ONPREM_URL", None)
         set_config_value("onprem_url", "https://cs.example.com")
 
-        result = self.tool.get_config(key="onprem_url")
-        self.assertIn("onprem_url", result)
-        self.assertIn("https://cs.example.com", result)
-        self.assertIn("config file", result)
+        result = json.loads(self.tool.get_config(key="onprem_url"))
+        self.assertEqual(result["key"], "onprem_url")
+        self.assertEqual(result["value"], "https://cs.example.com")
+        self.assertEqual(result["source"], "config file")
 
     def test_get_unknown_key(self):
-        result = self.tool.get_config(key="bogus")
-        self.assertIn("Unknown configuration key", result)
-        self.assertIn("bogus", result)
+        result = json.loads(self.tool.get_config(key="bogus"))
+        self.assertIn("error", result)
+        self.assertIn("bogus", result["error"])
+        self.assertIn("valid_keys", result)
 
     def test_get_all(self):
-        result = self.tool.get_config()
-        visible_keys = ["access_token", "ace_access_token", "ca_bundle"]
-        for key in visible_keys:
-            self.assertIn(key, result)
+        result = json.loads(self.tool.get_config())
+        self.assertIn("config_dir", result)
+        self.assertIsInstance(result["options"], list)
+        keys = [opt["key"] for opt in result["options"]]
+        for key in ["access_token", "ace_access_token", "ca_bundle"]:
+            self.assertIn(key, keys)
 
     @patch("configure.helpers.is_standalone_token", return_value=False)
     def test_get_all_shows_api_only_for_non_standalone(self, _mock):
-        result = self.tool.get_config()
-        self.assertIn("onprem_url", result)
-        self.assertIn("default_project_id", result)
+        result = json.loads(self.tool.get_config())
+        keys = [opt["key"] for opt in result["options"]]
+        self.assertIn("onprem_url", keys)
+        self.assertIn("default_project_id", keys)
 
     @patch("configure.helpers.is_standalone_token", return_value=True)
     def test_get_all_hides_api_only_for_standalone(self, _mock):
-        result = self.tool.get_config()
-        self.assertNotIn("onprem_url", result)
-        self.assertNotIn("default_project_id", result)
+        result = json.loads(self.tool.get_config())
+        keys = [opt["key"] for opt in result["options"]]
+        self.assertNotIn("onprem_url", keys)
+        self.assertNotIn("default_project_id", keys)
 
     def test_get_all_hides_hidden_options(self):
-        result = self.tool.get_config()
-        self.assertNotIn("disable_tracking", result)
-        self.assertNotIn("disable_version_check", result)
+        result = json.loads(self.tool.get_config())
+        keys = [opt["key"] for opt in result["options"]]
+        self.assertNotIn("disable_tracking", keys)
+        self.assertNotIn("disable_version_check", keys)
 
     def test_hidden_option_accessible_by_explicit_key(self):
         os.environ.pop("CS_DISABLE_TRACKING", None)
         set_config_value("disable_tracking", "true")
 
-        result = self.tool.get_config(key="disable_tracking")
-        self.assertIn("disable_tracking", result)
-        self.assertIn("true", result)
+        result = json.loads(self.tool.get_config(key="disable_tracking"))
+        self.assertEqual(result["key"], "disable_tracking")
+        self.assertEqual(result["value"], "true")
 
     def test_sensitive_value_is_masked(self):
         os.environ["CS_ACCESS_TOKEN"] = "super-secret-token-xyz789"
         _snapshot_client_env_vars()
 
-        result = self.tool.get_config(key="access_token")
-        self.assertNotIn("super-secret-token-xyz789", result)
-        self.assertIn("...xyz789", result)
+        result = json.loads(self.tool.get_config(key="access_token"))
+        self.assertNotEqual(result["value"], "super-secret-token-xyz789")
+        self.assertEqual(result["value"], "...xyz789")
+
+    def test_get_single_includes_docs_url(self):
+        os.environ.pop("CS_ONPREM_URL", None)
+        set_config_value("onprem_url", "https://cs.example.com")
+
+        result = json.loads(self.tool.get_config(key="onprem_url"))
+        self.assertIn("docs_url", result)
+        self.assertIn("onprem_url", result["docs_url"])
+
+    def test_get_single_no_docs_url_for_undocumented(self):
+        os.environ.pop("CS_DISABLE_TRACKING", None)
+        set_config_value("disable_tracking", "true")
+
+        result = json.loads(self.tool.get_config(key="disable_tracking"))
+        self.assertNotIn("docs_url", result)
 
 
 class TestSetConfigTool(_ConfigDirMixin, unittest.TestCase):
@@ -229,40 +250,49 @@ class TestSetConfigTool(_ConfigDirMixin, unittest.TestCase):
         self.assertEqual(os.environ.get("CS_ONPREM_URL"), "https://cs.example.com")
 
     def test_set_returns_confirmation(self):
-        result = self.tool.set_config(key="onprem_url", value="https://cs.example.com")
-        self.assertIn("Saved", result)
-        self.assertIn("onprem_url", result)
+        result = json.loads(self.tool.set_config(key="onprem_url", value="https://cs.example.com"))
+        self.assertEqual(result["status"], "saved")
+        self.assertEqual(result["key"], "onprem_url")
+        self.assertIn("config_dir", result)
 
     def test_set_unknown_key(self):
-        result = self.tool.set_config(key="bogus", value="anything")
-        self.assertIn("Unknown configuration key", result)
+        result = json.loads(self.tool.set_config(key="bogus", value="anything"))
+        self.assertIn("error", result)
+        self.assertIn("bogus", result["error"])
 
     def test_set_empty_value_deletes(self):
         set_config_value("onprem_url", "https://cs.example.com")
         _snapshot_client_env_vars()
         os.environ["CS_ONPREM_URL"] = "https://cs.example.com"
 
-        result = self.tool.set_config(key="onprem_url", value="")
-        self.assertIn("Removed", result)
+        result = json.loads(self.tool.set_config(key="onprem_url", value=""))
+        self.assertEqual(result["status"], "removed")
         self.assertIsNone(get_config_value("onprem_url"))
         self.assertNotIn("CS_ONPREM_URL", os.environ)
 
     def test_set_warns_about_env_override(self):
         os.environ["CS_ONPREM_URL"] = "https://from-env.example.com"
         _snapshot_client_env_vars()
-        result = self.tool.set_config(key="onprem_url", value="https://from-file.example.com")
-        self.assertIn("environment variable", result)
-        self.assertIn("precedence", result)
+        result = json.loads(self.tool.set_config(key="onprem_url", value="https://from-file.example.com"))
+        self.assertIn("warning", result)
+        self.assertIn("environment variable", result["warning"])
+        self.assertIn("precedence", result["warning"])
 
     def test_set_access_token_warns_about_restart(self):
         os.environ.pop("CS_ACCESS_TOKEN", None)
-        result = self.tool.set_config(key="access_token", value="new-token")
-        self.assertIn("restart", result)
+        result = json.loads(self.tool.set_config(key="access_token", value="new-token"))
+        self.assertIn("restart_required", result)
+        self.assertIn("restart", result["restart_required"])
 
     def test_set_hidden_option_succeeds(self):
-        result = self.tool.set_config(key="disable_version_check", value="true")
-        self.assertIn("Saved", result)
+        result = json.loads(self.tool.set_config(key="disable_version_check", value="true"))
+        self.assertEqual(result["status"], "saved")
         self.assertEqual(get_config_value("disable_version_check"), "true")
+
+    def test_set_includes_docs_url(self):
+        result = json.loads(self.tool.set_config(key="onprem_url", value="https://cs.example.com"))
+        self.assertIn("docs_url", result)
+        self.assertIn("onprem_url", result["docs_url"])
 
 
 class TestListableOptions(_ConfigDirMixin, unittest.TestCase):
