@@ -31,13 +31,12 @@ The first run automatically downloads the correct platform-specific binary for y
 
 After installing, configure your AI assistant to use `npx @codescene/codehealth-mcp` as the command.
 
+> **Tip:** Once connected, you can configure your access token and other settings by simply asking your AI assistant — for example, *"Set my CodeScene access token to cs_abc123"*. See [Configuration Options](configuration-options.md) for all available settings.
+
 ### Claude Code
 
-Set your token and add the MCP server:
-
 ```bash
-export CS_ACCESS_TOKEN="your-token-here"
-claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN -- npx @codescene/codehealth-mcp
+claude mcp add codescene -- npx @codescene/codehealth-mcp
 ```
 
 ### VS Code / GitHub Copilot
@@ -50,10 +49,7 @@ Add to your VS Code `settings.json` or `.vscode/mcp.json`:
     "codescene": {
       "type": "stdio",
       "command": "npx",
-      "args": ["@codescene/codehealth-mcp"],
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here"
-      }
+      "args": ["@codescene/codehealth-mcp"]
     }
   }
 }
@@ -68,10 +64,7 @@ Add to your project-level `.cursor/mcp.json` file, or `~/.cursor/mcp.json` for g
   "mcpServers": {
     "codescene": {
       "command": "npx",
-      "args": ["@codescene/codehealth-mcp"],
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here"
-      }
+      "args": ["@codescene/codehealth-mcp"]
     }
   }
 }
@@ -87,7 +80,6 @@ Configure `~/.codex/config.toml`:
 [mcp_servers.codescene]
 command = "npx"
 args = ["@codescene/codehealth-mcp"]
-env = { "CS_ACCESS_TOKEN" = "your-token-here" }
 ```
 
 ### Kiro
@@ -100,9 +92,6 @@ Create a `.kiro/settings/mcp.json` file:
     "codescene": {
       "command": "npx",
       "args": ["@codescene/codehealth-mcp"],
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here"
-      },
       "disabled": false
     }
   }
@@ -120,10 +109,7 @@ Claude Desktop is available for macOS and Windows. Add to your configuration fil
   "mcpServers": {
     "codescene": {
       "command": "npx",
-      "args": ["@codescene/codehealth-mcp"],
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here"
-      }
+      "args": ["@codescene/codehealth-mcp"]
     }
   }
 }
@@ -137,19 +123,9 @@ Claude Desktop is available for macOS and Windows. Add to your configuration fil
 q mcp add --name codescene-mcp --command npx --args '["@codescene/codehealth-mcp"]'
 ```
 
-Make sure `CS_ACCESS_TOKEN` is set in your environment.
-
 ## Configuration
 
 For additional configuration — including CodeScene on-prem, ACE auto-refactoring, custom SSL/TLS certificates, and more — see [Configuration Options](configuration-options.md).
-
-### Custom Binary Path
-
-If you have the `cs-mcp` binary installed elsewhere, you can skip the automatic download:
-
-```bash
-CS_MCP_BINARY_PATH=/path/to/cs-mcp npx @codescene/codehealth-mcp
-```
 
 ### Custom Download URL
 

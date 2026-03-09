@@ -56,13 +56,12 @@ brew untap codescene-oss/codescene-mcp-server
 
 After installing via Homebrew, configure your AI assistant to use the `cs-mcp` binary directly (no Docker required).
 
+> **Tip:** Once connected, you can configure your access token and other settings by simply asking your AI assistant — for example, *"Set my CodeScene access token to cs_abc123"*. See [Configuration Options](configuration-options.md) for all available settings.
+
 ### Claude Code
 
-Set your token and add the MCP server:
-
 ```bash
-export CS_ACCESS_TOKEN="your-token-here"
-claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN -- cs-mcp
+claude mcp add codescene -- cs-mcp
 ```
 
 ### VS Code / GitHub Copilot
@@ -74,10 +73,7 @@ Add to your VS Code `settings.json` or `.vscode/mcp.json`:
   "servers": {
     "codescene": {
       "type": "stdio",
-      "command": "cs-mcp",
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here"
-      }
+      "command": "cs-mcp"
     }
   }
 }
@@ -91,10 +87,7 @@ Add to your project-level `.cursor/mcp.json` file, or `~/.cursor/mcp.json` for g
 {
   "mcpServers": {
     "codescene": {
-      "command": "cs-mcp",
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here"
-      }
+      "command": "cs-mcp"
     }
   }
 }
@@ -109,7 +102,6 @@ Configure `~/.codex/config.toml`:
 ```toml
 [mcp_servers.codescene]
 command = "cs-mcp"
-env = { "CS_ACCESS_TOKEN" = "your-token-here" }
 ```
 
 ### Kiro
@@ -121,9 +113,6 @@ Create a `.kiro/settings/mcp.json` file:
   "mcpServers": {
     "codescene": {
       "command": "cs-mcp",
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here"
-      },
       "disabled": false
     }
   }
@@ -140,10 +129,7 @@ Claude Desktop is available for macOS and Windows. Add to your configuration fil
 {
   "mcpServers": {
     "codescene": {
-      "command": "cs-mcp",
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here"
-      }
+      "command": "cs-mcp"
     }
   }
 }
@@ -156,8 +142,6 @@ Claude Desktop is available for macOS and Windows. Add to your configuration fil
 ```bash
 q mcp add --name codescene-mcp --command cs-mcp
 ```
-
-Make sure `CS_ACCESS_TOKEN` is set in your environment.
 
 ## Configuration
 

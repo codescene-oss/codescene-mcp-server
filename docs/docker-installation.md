@@ -26,6 +26,8 @@ For additional environment variables (on-prem, ACE, SSL, proxy settings, etc.), 
 
 ## Integration with AI Assistants
 
+> **Note:** Docker containers cannot read the host's config file, so `CS_ACCESS_TOKEN` must be passed as an environment variable in the examples below. For other configuration options (on-prem, ACE, SSL, etc.), you can ask your AI assistant directly — for example, *"Set my CodeScene on-prem URL to https://my-instance.example.com"*. See [Configuration Options](configuration-options.md) for all available settings.
+
 ### Claude Code
 
 ```sh
