@@ -119,6 +119,7 @@ file_goals_error = {
 }
 
 
+@mock.patch.dict(os.environ, {"CS_ACCESS_TOKEN": "test-token"})
 class TestTechnicalDebtGoals(unittest.TestCase):
     def setUp(self):
         self.project_id = PROJECT_ID

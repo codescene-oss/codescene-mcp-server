@@ -9,6 +9,9 @@ from utils import (
     cs_cli_path,
     find_git_root,
     get_platform_details,
+    require_access_token,
+    track,
+    with_version_check,
 )
 from utils.docker_path_adapter import get_relative_path_from_git_root
 
@@ -80,6 +83,9 @@ class AutoRefactor:
         }
         return self.deps["post_refactor_fn"](payload)
 
+    @require_access_token
+    @with_version_check
+    @track("code-health-auto-refactor")
     def code_health_auto_refactor(self, file_path: str, function_name: str) -> str:
         """
         Refactor a single function to fix specific code health problems.

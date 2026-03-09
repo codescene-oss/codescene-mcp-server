@@ -1,5 +1,7 @@
 import json
+import os
 import unittest
+from unittest import mock
 
 from fastmcp import FastMCP
 
@@ -8,6 +10,7 @@ from errors import CodeSceneCliError
 from .business_impact_analyzer import CodeHealthRefactoringBusinessCase
 
 
+@mock.patch.dict(os.environ, {"CS_ACCESS_TOKEN": "test-token"})
 class TestCodeHealthRefactoringBusinessCase(unittest.TestCase):
     def test_code_health_refactoring_business_case(self):
         def mock_analyze_code(file_path: str):

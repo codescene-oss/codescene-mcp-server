@@ -7,6 +7,7 @@ from typing import TypedDict
 from utils import (
     get_relative_file_path_for_api,
     normalize_onprem_url,
+    require_access_token,
     track,
     track_error,
     with_version_check,
@@ -23,6 +24,7 @@ class CodeOwnership:
 
         mcp_instance.tool(self.code_ownership_for_path)
 
+    @require_access_token
     @track("code-ownership-for-path")
     @with_version_check
     def code_ownership_for_path(self, project_id: int, path: str) -> str:

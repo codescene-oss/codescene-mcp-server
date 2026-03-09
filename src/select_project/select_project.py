@@ -3,7 +3,7 @@ import os
 from collections.abc import Callable
 from typing import TypedDict
 
-from utils import track, track_error, with_version_check
+from utils import require_access_token, track, track_error, with_version_check
 
 
 class SelectProjectDeps(TypedDict):
@@ -16,6 +16,7 @@ class SelectProject:
 
         mcp_instance.tool(self.select_project)
 
+    @require_access_token
     @track("select-project")
     @with_version_check
     def select_project(self) -> str:

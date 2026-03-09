@@ -406,6 +406,8 @@ class DockerBackend(ServerBackend):
             "CS_TRACKING_URL",
             "-e",
             "CS_DISABLE_TRACKING",
+            "-e",
+            "CS_CONFIG_DIR",
             "--add-host=host.docker.internal:host-gateway",
             "--mount",
             f"type=bind,src={working_dir},dst={self.CONTAINER_MOUNT_DEST}",

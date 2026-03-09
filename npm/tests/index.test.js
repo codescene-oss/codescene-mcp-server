@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -219,6 +219,7 @@ describe("getPackageVersion", () => {
       const { main } = await importIndex();
       await main();
     });
-    assert.equal(tracker.ensureBinaryVersion, "0.2.1");
+    const pkg = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf8"));
+    assert.equal(tracker.ensureBinaryVersion, pkg.version);
   });
 });

@@ -1,4 +1,5 @@
 import json
+import os
 import unittest
 from unittest import mock
 
@@ -9,6 +10,7 @@ from test_utils import mocked_requests_post
 from .score_calculator import CodeHealthScore
 
 
+@mock.patch.dict(os.environ, {"CS_ACCESS_TOKEN": "test-token"})
 class TestCodeHealthScore(unittest.TestCase):
     @mock.patch("requests.post", side_effect=mocked_requests_post)
     def test_calculate_code_health_score_some(self, mock_post):

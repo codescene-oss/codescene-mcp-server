@@ -22,6 +22,7 @@ def mock_run_local_tool(command: list, cwd: str = None):
         return file.read()
 
 
+@mock.patch.dict(os.environ, {"CS_ACCESS_TOKEN": "test-token"})
 class TestAutoRefactor(unittest.TestCase):
     def _create_instance_and_refactor(self, post_refactor_fn, run_local_tool_fn, file_path, function_name):
         """Helper to create AutoRefactor instance and call refactor."""
