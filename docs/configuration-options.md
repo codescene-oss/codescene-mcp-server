@@ -19,12 +19,12 @@ Environment variables set by your MCP client always take precedence over values 
 | **Sensitive** | Yes (value is masked in tool output) |
 | **Required** | Yes, for most functionality |
 
-The primary authentication credential for the CodeScene MCP Server. This can be either a **Personal Access Token (PAT)** obtained from your CodeScene instance, or a **standalone license key**.
+The primary authentication credential for the CodeScene MCP Server. This can be either a **Personal Access Token (PAT)** obtained from your CodeScene instance, or a **standalone access token** (if you purchased MCP separately).
 
 The type of token determines which tools are available:
 
-- **Personal Access Token** -- Enables the full tool set, including project-level features such as technical debt hotspots, goals, and code ownership lookups.
-- **Standalone license key** -- Enables local Code Health analysis tools only (scoring, review, refactoring). Project-level and API-dependent features are not available.
+- **CodeScene Personal Access Token** -- Enables the full tool set, including project-level features such as technical debt hotspots, goals, and code ownership lookups.
+- **Standalone access token** -- Enables local Code Health analysis tools only (scoring, review, refactoring). Project-level and API-dependent features are not available.
 
 Changing this value may require a **server restart** for tool registration changes to take effect.
 
@@ -78,7 +78,7 @@ And the following code smells:
 | **Sensitive** | No |
 | **API-only** | Yes (hidden when using a standalone license) |
 
-Pre-selects a CodeScene project by its numeric ID, skipping the interactive project selection step. This is useful when you always work within a single project and want to avoid being prompted each time.
+Pre-selects a CodeScene project by its numeric ID, skipping the interactive project selection step. This is useful when you always work within a single project and want to avoid being prompted each time. This option is for CodeScene users only; standalone MCP users do not have projects.
 
 You can find your project ID by using the `select_project` tool, which lists all available projects with their IDs.
 
