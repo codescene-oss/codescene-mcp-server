@@ -4,24 +4,46 @@
 [![CodeScene Average Code Health](https://codescene.io/projects/72556/status-badges/average-code-health)](https://codescene.io/projects/72556)
 [![CodeScene System Mastery](https://codescene.io/projects/72556/status-badges/system-mastery)](https://codescene.io/projects/72556)
 
-The **CodeScene MCP Server** exposes CodeScene’s [Code Health](https://codescene.com/product/code-health) analysis as local AI-friendly tools.
+The **CodeScene MCP Server** exposes CodeScene's [Code Health](https://codescene.com/product/code-health) analysis as local AI-friendly tools.
 
 This server is designed to run in your local environment and lets AI assistants (like GitHub Copilot, Cursor, Claude code, etc.) request meaningful Code Health insights directly from your codebase. 
 The Code Health insights augment the AI prompts with rich content around code quality issues, maintainability problems, and technical debt in general.
 
 ## Getting Started with CodeScene MCP
 
-1. Get a `CS_ACCESS_TOKEN` for the MCP Server via your CodeScene instance — see [Getting a Personal Access Token](docs/getting-a-personal-access-token.md).
-2. Install the MCP Server as an executable ([Homebrew for Mac/Linux](#homebrew-macos--linux), [Windows](#windows), or [manual download](#manual-download)) or run the MCP inside [Docker](#docker).
-3. Add the MCP Server to your AI assistant. See the detailed instructions for your environment [here](#installation).
+1. Get an Access Token for the MCP Server — see [Getting a Personal Access Token](docs/getting-a-personal-access-token.md).
+2. Install the MCP Server using one of the [installation options](#installation) below.
+3. Add the MCP Server to your AI assistant. See the detailed instructions for your environment in the installation guide.
 4. Copy the file [AGENTS.md](AGENTS.md) to your repository. This file guides AI agents on how to use the MCP, e.g. rules to safeguard AI coding.
-   * ℹ️ If you use Amazon Q, then you want to copy our [.amazonq/rules](.amazonq/rules) to your repository instead.
+   * If you use Amazon Q, then you want to copy our [.amazonq/rules](.amazonq/rules) to your repository instead.
 
 ## Installation
 
 Choose the installation method that works best for your platform.
 
-### Homebrew (macOS / Linux)
+<details>
+<summary><b>NPM / npx (macOS, Linux, Windows)</b></summary>
+
+Run the MCP server directly with npx (no install needed):
+
+```bash
+npx @codescene/codehealth-mcp
+```
+
+Or install globally:
+
+```bash
+npm install -g @codescene/codehealth-mcp
+```
+
+The first run automatically downloads the correct platform-specific binary for your system and caches it for future use. Requires [Node.js](https://nodejs.org/) 18 or later.
+
+📖 **[Full installation & integration guide](docs/npm-installation.md)**
+
+</details>
+
+<details>
+<summary><b>Homebrew (macOS / Linux)</b></summary>
 
 ```bash
 brew tap codescene-oss/codescene-mcp-server https://github.com/codescene-oss/codescene-mcp-server
@@ -30,7 +52,10 @@ brew install cs-mcp
 
 📖 **[Full installation & integration guide](docs/homebrew-installation.md)**
 
-### Windows
+</details>
+
+<details>
+<summary><b>Windows</b></summary>
 
 Run this in PowerShell:
 
@@ -40,7 +65,10 @@ irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/in
 
 📖 **[Full installation & integration guide](docs/windows-installation.md)**
 
-### Manual Download
+</details>
+
+<details>
+<summary><b>Manual Download</b></summary>
 
 Download the latest binary for your platform from the [GitHub Releases page](https://github.com/codescene-oss/codescene-mcp-server/releases):
 
@@ -55,13 +83,20 @@ chmod +x cs-mcp-*
 mv cs-mcp-* /usr/local/bin/cs-mcp
 ```
 
-### Docker
+You can also [build a static executable from source](docs/building-executable-locally.md).
+
+</details>
+
+<details>
+<summary><b>Docker</b></summary>
 
 ```bash
 docker pull codescene/codescene-mcp
 ```
 
-📖 **[Full installation & integration guide](docs/docker-installation.md)**
+📖 **[Full installation & integration guide](docs/docker-installation.md)** | [Build the Docker image locally](docs/building-docker-locally.md)
+
+</details>
 
 ---
 
@@ -89,12 +124,12 @@ The result is a cooperative workflow where:
 
 🎗️ ACE is a **CodeScene add-on** and requires an additional license. You can [request access and more info here](https://codescene.com/contact-us-about-codescene-ace).
 
-#### 👉 Activate ACE in CodeScene MCP
+#### Activate ACE in CodeScene MCP
 
 To enable ACE, add one extra environment variable: `CS_ACE_ACCESS_TOKEN`, which you receive when you purchase the ACE add-on.
 The exact setup depends on your editor or AI assistant, but you simply need to pass this token into the MCP server.
 
-Here’s an example for VS Code, where the variable appears in both `args` and `env`:
+Here's an example for VS Code, where the variable appears in both `args` and `env`:
 ```json
 "codescene": {
   "command": "docker",
@@ -133,8 +168,10 @@ Use Code Health reviews to inform AI-driven summaries, diagnostics, or code tran
 
 <summary>Do I need a CodeScene account to use the MCP?</summary>
 
-Yes, the MCP Server requires a [CodeScene subscription](https://codescene.com/pricing). Use your CodeScene instance to create the `CS_ACCESS_TOKEN` which activates the MCP. 
+The full feature set — including hotspots, technical debt goals, and code ownership — requires a [CodeScene subscription](https://codescene.com/pricing). Use your CodeScene instance to create the `CS_ACCESS_TOKEN` which activates the MCP.
 The MCP supports both CodeScene Cloud and CodeScene on-prem.
+
+For local Code Health analysis without a CodeScene subscription, you can use the standalone [CodeScene Code Health MCP](https://codescene.com/product/codehealth-mcp-server).
 
 </details>
 
@@ -147,7 +184,7 @@ No source code or analysis data is sent to cloud providers, LLM vendors, or any 
 
 Analysis results (e.g. hotspots and technical debt goals) are fetched via REST from your own CodeScene account using a secure token.
 
-For complete details, please see CodeScene’s full [privacy and security documentation](https://codescene.com/policies).
+For complete details, please see CodeScene's full [privacy and security documentation](https://codescene.com/policies).
 
 </details>
 
@@ -172,40 +209,6 @@ Since you have to provide a mount path for Docker, you can either have a MCP con
 
 <details>
 
-<summary>Why are we mounting a directory in the Docker?</summary>
-
-Previously we had the MCP client pass the entire file contents to us in a JSON object, but with this we ran into a problem where if the file contents exceed your AI model's input or output token limit, we'd either get no data or incorrect data. 
-
-While this might work for small files and code snippets, we want to provide a solution that works on any file, no matter the size, and we achieve this by having the MCP client return a file path to us which we then read ourselves, thus bypassing the AI token limit issue entirely.
-
-To make this safe, we have you, the user, specify which path our MCP server should have access to. In addition, all the configuration examples provided in this README feature a mounting command that gives only read-only access to the mounted path, so we can't do anything to those files other than read them.
-
-In addition this now saves your AI budget by not spending precious tokens on file reading, which can add up pretty quickly.
-
-</details>
-
-<details>
-
-<summary>What is `CS_MOUNT_PATH`?</summary>
-
-The `CS_MOUNT_PATH` should be an absolute path to the directory whose code you want to analyse with CodeScene. It can be either just a singular project, say at `/home/john/Projects/MyProject`, in which case the MCP server only sees and is able to reason about the files in that particular project, or it could be a more global path like `/home/john/Projects`, in which case the MCP server sees all of your projects.
-
-The difference here really comes down to your preference. Do you want to give it more global access, but as such configure it just once, or do you want to give it more granular access, but then configure for each project / directory again each time.
-
-</details>
-
-<details>
-
-<summary>Why do we specify `CS_MOUNT_PATH` twice?</summary>
-
-Due to the limitation of not knowing the relative path to the file from within Docker, in order to read the correct file we need to know the full absolute path to your mounted directory, so that we could deduce a relative path to the internally mounted file by simply taking the absolute path to the file, the absolute path to the mounted directory, and replacing the mounted directory part with our internal mounted directory. 
-
-We pass the absolute path to the mounted directory to us via a environment variable `-e CS_MOUNT_PATH=<PATH>` so that we would know the absolute path, and then we need to pass that path again the second time via `--mount type=bind,src=<PATH>,dst=/mount/,ro` which then instructs Docker to actually mount `<PATH>` to our internal `/mount/` directory.
-
-</details>
-
-<details>
-
 <summary>Why does IntelliJ give a wrong path to the MCP server?</summary>
 
 In our testing we've seen that IntelliJ's AI Assistant sometimes gives a wrong path to the CodeScene MCP server. 
@@ -222,7 +225,7 @@ If your organization uses an internal CA (Certificate Authority), you need to co
 
 Set the `REQUESTS_CA_BUNDLE` environment variable to point to your CA certificate file (PEM format). This single variable configures SSL for both the Python MCP server and the embedded Java-based CodeScene CLI—the MCP server automatically converts the PEM certificate to a Java-compatible truststore at runtime.
 
-**For the static binary (Homebrew/Windows):**
+**For the static binary (Homebrew/Windows/npx):**
 ```json
 {
   "servers": {
@@ -266,6 +269,7 @@ Mount your certificate into the container and set `REQUESTS_CA_BUNDLE` to the pa
 The MCP also supports `SSL_CERT_FILE` and `CURL_CA_BUNDLE` as alternatives to `REQUESTS_CA_BUNDLE`.
 
 For detailed configuration examples, see:
+- [NPM/npx SSL configuration](docs/npm-installation.md#custom-ssltls-certificates)
 - [Docker SSL configuration](docs/docker-installation.md#custom-ssltls-certificates)
 - [Homebrew/static binary SSL configuration](docs/homebrew-installation.md#custom-ssltls-certificates)
 - [Windows SSL configuration](docs/windows-installation.md#custom-ssltls-certificates)
@@ -280,7 +284,7 @@ The MCP server periodically checks GitHub for newer releases and shows a "VERSIO
 
 Set the `CS_DISABLE_VERSION_CHECK` environment variable to any non-empty value (e.g. `1`):
 
-**For the static binary (Homebrew/Windows):**
+**For the static binary (Homebrew/Windows/npx):**
 ```json
 {
   "servers": {
@@ -317,8 +321,3 @@ Set the `CS_DISABLE_VERSION_CHECK` environment variable to any non-empty value (
 When disabled, no network traffic is made to the version check endpoint and no version banner will appear.
 
 </details>
-
-## Building Locally
-
-- [Building the Docker image locally](docs/building-docker-locally.md)
-- [Building a static executable locally](docs/building-executable-locally.md)
