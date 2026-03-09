@@ -21,17 +21,12 @@ docker pull codescene/codescene-mcp
 |----------|----------|-------------|
 | `CS_ACCESS_TOKEN` | Yes | Your CodeScene personal access token |
 | `CS_MOUNT_PATH` | Yes | Absolute path to your code directory |
-| `CS_ONPREM_URL` | Only for on-prem | URL to your CodeScene on-prem instance |
-| `CS_ACE_ACCESS_TOKEN` | Optional | Token for CodeScene ACE refactoring (requires license) |
-| `HTTPS_PROXY` | Optional | HTTPS proxy URL (e.g., `http://proxy.example.com:8080`) |
-| `HTTP_PROXY` | Optional | HTTP proxy URL |
-| `NO_PROXY` | Optional | Comma-separated list of hosts to bypass proxy |
+
+For additional environment variables (on-prem, ACE, SSL, proxy settings, etc.), see [Configuration Options](configuration-options.md).
 
 ## Integration with AI Assistants
 
 ### Claude Code
-
-**CodeScene Cloud:**
 
 ```sh
 export CS_ACCESS_TOKEN="<your token here>"
@@ -40,36 +35,15 @@ export PATH_TO_CODE="<your project dir here>"
 claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN -- docker run -i --rm -e CS_ACCESS_TOKEN -e CS_MOUNT_PATH=$PATH_TO_CODE --mount type=bind,src=$PATH_TO_CODE,dst=/mount/,ro codescene/codescene-mcp
 ```
 
-**CodeScene On-prem:**
-
-```sh
-export CS_ACCESS_TOKEN="<your token here>"
-export CS_ONPREM_URL="<your onprem url>"
-export PATH_TO_CODE="<your project dir here>"
-
-claude mcp add codescene --env CS_ACCESS_TOKEN=$CS_ACCESS_TOKEN --env CS_ONPREM_URL=$CS_ONPREM_URL -- docker run -i --rm -e CS_ACCESS_TOKEN -e CS_ONPREM_URL -e CS_MOUNT_PATH=$PATH_TO_CODE --mount type=bind,src=$PATH_TO_CODE,dst=/mount/,ro codescene/codescene-mcp
-```
-
 ### Codex CLI
 
 Configure `~/.codex/config.toml` (replace `/path/to/your/code` with your actual code directory path):
-
-**CodeScene Cloud:**
 
 ```toml
 [mcp_servers.codescene]
 command = "docker"
 args = ["run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "-e", "CS_MOUNT_PATH=/path/to/your/code", "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro", "codescene/codescene-mcp"]
 env = { "CS_ACCESS_TOKEN" = "your-token-here" }
-```
-
-**CodeScene On-prem:**
-
-```toml
-[mcp_servers.codescene]
-command = "docker"
-args = ["run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "-e", "CS_ONPREM_URL", "-e", "CS_MOUNT_PATH=/path/to/your/code", "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro", "codescene/codescene-mcp"]
-env = { "CS_ACCESS_TOKEN" = "your-token-here", "CS_ONPREM_URL" = "https://your-codescene-instance.example.com" }
 ```
 
 ### GitHub Copilot CLI
@@ -79,8 +53,7 @@ After starting Copilot CLI, run `/mcp add` and provide (replace `/path/to/your/c
 - Server Name: `codescene`
 - Server Type: `Local (Press 1)`
 - Command: `docker`
-- Arguments (Cloud): `run, --rm, -i, -e, CS_ACCESS_TOKEN, -e, CS_MOUNT_PATH=/path/to/your/code, --mount, "type=bind,src=/path/to/your/code,dst=/mount/,ro", codescene/codescene-mcp`
-- Arguments (On-prem): `run, --rm, -i, -e, CS_ACCESS_TOKEN, -e, CS_ONPREM_URL, -e, CS_MOUNT_PATH=/path/to/your/code, --mount, "type=bind,src=/path/to/your/code,dst=/mount/,ro", codescene/codescene-mcp`
+- Arguments: `run, --rm, -i, -e, CS_ACCESS_TOKEN, -e, CS_MOUNT_PATH=/path/to/your/code, --mount, "type=bind,src=/path/to/your/code,dst=/mount/,ro", codescene/codescene-mcp`
 
 ### GitHub Copilot Coding Agent
 
@@ -146,8 +119,6 @@ Manual configuration (replace `/path/to/your/code` with your actual code directo
 
 Add to your project-level `.cursor/mcp.json` file, or `~/.cursor/mcp.json` for global configuration (replace `/path/to/your/code` with your actual code directory path):
 
-**CodeScene Cloud:**
-
 ```json
 {
   "mcpServers": {
@@ -162,30 +133,6 @@ Add to your project-level `.cursor/mcp.json` file, or `~/.cursor/mcp.json` for g
       ],
       "env": {
         "CS_ACCESS_TOKEN": "your-token-here"
-      }
-    }
-  }
-}
-```
-
-**CodeScene On-prem:**
-
-```json
-{
-  "mcpServers": {
-    "codescene": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "-e", "CS_ACCESS_TOKEN",
-        "-e", "CS_ONPREM_URL",
-        "-e", "CS_MOUNT_PATH=/path/to/your/code",
-        "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
-        "codescene/codescene-mcp"
-      ],
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here",
-        "CS_ONPREM_URL": "https://your-codescene-instance.example.com"
       }
     }
   }
@@ -235,7 +182,7 @@ q mcp add --name codescene-mcp --command docker --args '["run", "--rm", "-i", "-
 3. Select `stdio` as the transport protocol
 4. Command: `docker`
 5. Arguments: `run`, `--rm`, `-i`, `-e`, `CS_ACCESS_TOKEN`, `-e`, `CS_MOUNT_PATH=/path/to/your/code`, `--mount`, `type=bind,src=/path/to/your/code,dst=/mount/,ro`, `codescene/codescene-mcp`
-6. Add environment variables for `CS_ACCESS_TOKEN` (and `CS_ONPREM_URL` if using on-prem)
+6. Add environment variable for `CS_ACCESS_TOKEN`
 
 ### Claude Desktop
 
@@ -243,7 +190,7 @@ Claude Desktop is available for macOS and Windows. Add to your configuration fil
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
-**CodeScene Cloud:**
+Replace `/path/to/your/code` with the actual absolute path to your code directory:
 
 ```json
 {
@@ -265,146 +212,15 @@ Claude Desktop is available for macOS and Windows. Add to your configuration fil
 }
 ```
 
-**CodeScene On-prem:**
+> **Note:** After saving the configuration, restart Claude Desktop.
 
-```json
-{
-  "mcpServers": {
-    "codescene": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "-e", "CS_ACCESS_TOKEN",
-        "-e", "CS_ONPREM_URL",
-        "-e", "CS_MOUNT_PATH=/path/to/your/code",
-        "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
-        "codescene/codescene-mcp"
-      ],
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here",
-        "CS_ONPREM_URL": "https://your-codescene-instance.example.com"
-      }
-    }
-  }
-}
-```
+## Configuration
 
-> **Note:** Replace `/path/to/your/code` with the actual absolute path to your code directory (e.g., `/Users/jane/projects/my-app` on macOS or `C:\Users\Jane\projects\my-app` on Windows). After saving the configuration, restart Claude Desktop.
-
-## Enabling CodeScene ACE
-
-[CodeScene ACE](https://codescene.com/product/integrations/ide-extensions/ai-refactoring) provides AI-powered refactoring capabilities. To enable it, add the `CS_ACE_ACCESS_TOKEN` environment variable (replace `/path/to/your/code` with your actual code directory path):
-
-```json
-{
-  "command": "docker",
-  "args": [
-    "run", "-i", "--rm",
-    "-e", "CS_ACCESS_TOKEN",
-    "-e", "CS_ACE_ACCESS_TOKEN",
-    "-e", "CS_MOUNT_PATH=/path/to/your/code",
-    "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
-    "codescene/codescene-mcp"
-  ],
-  "env": {
-    "CS_ACCESS_TOKEN": "your-token-here",
-    "CS_ACE_ACCESS_TOKEN": "your-ace-token-here"
-  }
-}
-```
+For additional configuration — including CodeScene on-prem, ACE auto-refactoring, custom SSL/TLS certificates, and more — see [Configuration Options](configuration-options.md).
 
 ## Building Docker Image Locally
 
 See [Building the Docker image locally](building-docker-locally.md) for instructions on building the image from source.
-
-## Custom SSL/TLS Certificates
-
-If your organization uses a corporate proxy or internal CA certificates for your on-premise CodeScene instance, you need to mount your CA certificate file into the container and configure the MCP server to use it.
-
-### Basic Configuration
-
-Mount your CA certificate and set `REQUESTS_CA_BUNDLE` to point to its location *inside* the container:
-
-```json
-{
-  "mcpServers": {
-    "codescene": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "-e", "CS_ACCESS_TOKEN",
-        "-e", "CS_ONPREM_URL",
-        "-e", "CS_MOUNT_PATH=/path/to/your/code",
-        "-e", "REQUESTS_CA_BUNDLE=/certs/ca-bundle.crt",
-        "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
-        "--mount", "type=bind,src=/path/to/your/ca-bundle.crt,dst=/certs/ca-bundle.crt,ro",
-        "codescene/codescene-mcp"
-      ],
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here",
-        "CS_ONPREM_URL": "https://your-codescene-instance.example.com"
-      }
-    }
-  }
-}
-```
-
-> **Note:** The `REQUESTS_CA_BUNDLE` value (`/certs/ca-bundle.crt`) must match the destination path in the mount (`dst=/certs/ca-bundle.crt`).
-```
-
-### Mounting a Certificate Directory
-
-If you have multiple certificates or a certificate bundle directory:
-
-```json
-{
-  "mcpServers": {
-    "codescene": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "-e", "CS_ACCESS_TOKEN",
-        "-e", "CS_ONPREM_URL",
-        "-e", "CS_MOUNT_PATH=/path/to/your/code",
-        "-e", "REQUESTS_CA_BUNDLE=/certs/company-ca.crt",
-        "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
-        "--mount", "type=bind,src=/etc/ssl/company-certs,dst=/certs,ro",
-        "codescene/codescene-mcp"
-      ],
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here",
-        "CS_ONPREM_URL": "https://your-codescene-instance.example.com"
-      }
-    }
-  }
-}
-```
-
-### Supported Environment Variables
-
-The following environment variables are checked in order of precedence:
-
-| Variable | Description |
-|----------|-------------|
-| `REQUESTS_CA_BUNDLE` | Standard Python/requests CA bundle path (recommended) |
-| `SSL_CERT_FILE` | Alternative CA certificate path |
-| `CURL_CA_BUNDLE` | curl-style CA bundle path |
-
-### How It Works
-
-The MCP server automatically handles SSL configuration for both its Python components and the embedded Java-based CodeScene CLI:
-
-1. **Python/requests**: Uses the certificate directly via `REQUESTS_CA_BUNDLE`
-2. **Java CLI**: The MCP server automatically converts the PEM certificate to a PKCS12 truststore at runtime and injects the appropriate Java SSL arguments (`-Djavax.net.ssl.trustStore`, `-Djavax.net.ssl.trustStoreType`, `-Djavax.net.ssl.trustStorePassword`)
-
-This means you only need to configure SSL once—the MCP server handles the rest.
-
-### Notes
-
-- The certificate file must be in PEM format (the standard format with `-----BEGIN CERTIFICATE-----` headers)
-- The mounted certificate path inside the container must match the `REQUESTS_CA_BUNDLE` value
-- If your certificate chain includes intermediate certificates, include them all in the same file
-- The certificate mount should be read-only (`:ro`) for security
 
 ## Frequently Asked Questions
 

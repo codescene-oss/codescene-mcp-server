@@ -124,36 +124,7 @@ The result is a cooperative workflow where:
 
 🎗️ ACE is a **CodeScene add-on** and requires an additional license. You can [request access and more info here](https://codescene.com/contact-us-about-codescene-ace).
 
-#### Activate ACE in CodeScene MCP
-
-To enable ACE, add one extra environment variable: `CS_ACE_ACCESS_TOKEN`, which you receive when you purchase the ACE add-on.
-The exact setup depends on your editor or AI assistant, but you simply need to pass this token into the MCP server.
-
-Here's an example for VS Code, where the variable appears in both `args` and `env`:
-```json
-"codescene": {
-  "command": "docker",
-  "args": [
-    "run",
-    "-i",
-    "--rm",
-    "-e", "CS_ACCESS_TOKEN",
-    "-e", "CS_ONPREM_URL",
-    "-e", "CS_ACE_ACCESS_TOKEN",
-    "-e", "CS_MOUNT_PATH=${input:CS_MOUNT_PATH}",
-    "--mount",
-    "type=bind,src=${input:CS_MOUNT_PATH},dst=/mount/,ro",
-    "codescene-mcp"
-  ],
-  "env": {
-    "CS_ACCESS_TOKEN":     "${input:CS_ACCESS_TOKEN}",
-    "CS_ONPREM_URL":       "${input:CS_ONPREM_URL}",
-    "CS_ACE_ACCESS_TOKEN": "${input:CS_ACE_ACCESS_TOKEN}"
-  },
-  "type": "stdio"
-}
-```
-Use the same principle for any other environment: just make sure `CS_ACE_ACCESS_TOKEN` is passed to the MCP server.
+To enable ACE, add the `CS_ACE_ACCESS_TOKEN` environment variable to your MCP configuration. See [Configuration Options](docs/configuration-options.md#ace_access_token) for setup details.
 
 ### Make Targeted Refactoring  
 AI tools can refactor code, but they lack direction on *what* to fix and *how to measure* if it helped.  
@@ -221,58 +192,11 @@ seems to hallucinate parts of the path some of the time. We're still investigati
 
 <summary>How do I configure custom SSL certificates?</summary>
 
-If your organization uses an internal CA (Certificate Authority), you need to configure the MCP server to trust that certificate.
+If your organization uses an internal CA (Certificate Authority), set the `REQUESTS_CA_BUNDLE` environment variable to point to your CA certificate file (PEM format). The MCP server automatically configures SSL for both its Python components and the embedded Java CLI — you only need to set it once.
 
-Set the `REQUESTS_CA_BUNDLE` environment variable to point to your CA certificate file (PEM format). This single variable configures SSL for both the Python MCP server and the embedded Java-based CodeScene CLI—the MCP server automatically converts the PEM certificate to a Java-compatible truststore at runtime.
+The MCP also supports `SSL_CERT_FILE` and `CURL_CA_BUNDLE` as alternatives.
 
-**For the static binary (Homebrew/Windows/npx):**
-```json
-{
-  "servers": {
-    "codescene": {
-      "type": "stdio",
-      "command": "cs-mcp",
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here",
-        "CS_ONPREM_URL": "https://your-codescene-instance.example.com",
-        "REQUESTS_CA_BUNDLE": "/path/to/your/internal-ca.crt"
-      }
-    }
-  }
-}
-```
-
-**For Docker:**
-Mount your certificate into the container and set `REQUESTS_CA_BUNDLE` to the path *inside* the container:
-```json
-{
-  "command": "docker",
-  "args": [
-    "run", "-i", "--rm",
-    "-e", "CS_ACCESS_TOKEN",
-    "-e", "CS_ONPREM_URL",
-    "-e", "REQUESTS_CA_BUNDLE=/certs/internal-ca.crt",
-    "-e", "CS_MOUNT_PATH=${input:CS_MOUNT_PATH}",
-    "--mount", "type=bind,src=${input:CS_MOUNT_PATH},dst=/mount/,ro",
-    "--mount", "type=bind,src=/path/to/your/certs/internal-ca.crt,dst=/certs/internal-ca.crt,ro",
-    "codescene/codescene-mcp"
-  ],
-  "env": {
-    "CS_ACCESS_TOKEN": "${input:CS_ACCESS_TOKEN}",
-    "CS_ONPREM_URL": "${input:CS_ONPREM_URL}"
-  }
-}
-```
-
-> **Note:** The `REQUESTS_CA_BUNDLE` value (`/certs/internal-ca.crt`) must match the destination path in the mount (`dst=/certs/internal-ca.crt`).
-
-The MCP also supports `SSL_CERT_FILE` and `CURL_CA_BUNDLE` as alternatives to `REQUESTS_CA_BUNDLE`.
-
-For detailed configuration examples, see:
-- [NPM/npx SSL configuration](docs/npm-installation.md#custom-ssltls-certificates)
-- [Docker SSL configuration](docs/docker-installation.md#custom-ssltls-certificates)
-- [Homebrew/static binary SSL configuration](docs/homebrew-installation.md#custom-ssltls-certificates)
-- [Windows SSL configuration](docs/windows-installation.md#custom-ssltls-certificates)
+For detailed configuration examples (including Docker certificate mounting), see [Configuration Options — SSL/TLS](docs/configuration-options.md#ca_bundle).
 
 </details>
 
@@ -282,42 +206,6 @@ For detailed configuration examples, see:
 
 The MCP server periodically checks GitHub for newer releases and shows a "VERSION UPDATE AVAILABLE" banner when your version is outdated. This check runs in the background and never blocks tool responses, but in network-restricted environments you may want to disable it entirely.
 
-Set the `CS_DISABLE_VERSION_CHECK` environment variable to any non-empty value (e.g. `1`):
-
-**For the static binary (Homebrew/Windows/npx):**
-```json
-{
-  "servers": {
-    "codescene": {
-      "type": "stdio",
-      "command": "cs-mcp",
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here",
-        "CS_DISABLE_VERSION_CHECK": "1"
-      }
-    }
-  }
-}
-```
-
-**For Docker:**
-```json
-{
-  "command": "docker",
-  "args": [
-    "run", "-i", "--rm",
-    "-e", "CS_ACCESS_TOKEN",
-    "-e", "CS_DISABLE_VERSION_CHECK=1",
-    "-e", "CS_MOUNT_PATH=${input:CS_MOUNT_PATH}",
-    "--mount", "type=bind,src=${input:CS_MOUNT_PATH},dst=/mount/,ro",
-    "codescene/codescene-mcp"
-  ],
-  "env": {
-    "CS_ACCESS_TOKEN": "${input:CS_ACCESS_TOKEN}"
-  }
-}
-```
-
-When disabled, no network traffic is made to the version check endpoint and no version banner will appear.
+Set the `CS_DISABLE_VERSION_CHECK` environment variable to any non-empty value (e.g. `1`). For setup details, see [Configuration Options — Version Check](docs/configuration-options.md#disable_version_check).
 
 </details>
