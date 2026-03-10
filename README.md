@@ -322,3 +322,4 @@ When disabled, no network traffic is made to the version check endpoint and no v
 
 - [Building the Docker image locally](docs/building-docker-locally.md)
 - [Building a static executable locally](docs/building-executable-locally.md)
+- [Building Linux executable in Docker (glibc 2.28)](docs/building-linux-executable-with-docker.md)

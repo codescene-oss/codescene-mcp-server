@@ -37,19 +37,13 @@ jobs:
           - os: ubuntu-22.04
             arch: amd64
             variant: linux-amd64
-            cli-url: https://downloads.codescene.io/enterprise/cli/cs-linux-amd64-latest.zip
             artifact-name: cs-mcp-linux-amd64
             output-path: cs-mcp
-            manylinux-image: quay.io/pypa/manylinux_2_28_x86_64
-            python-bin: /opt/python/cp313-cp313/bin/python
           - os: ubuntu-22.04-arm
             arch: aarch64
             variant: linux-aarch64
-            cli-url: https://downloads.codescene.io/enterprise/cli/cs-linux-aarch64-latest.zip
             artifact-name: cs-mcp-linux-aarch64
             output-path: cs-mcp
-            manylinux-image: quay.io/pypa/manylinux_2_28_aarch64
-            python-bin: /opt/python/cp313-cp313/bin/python
           - os: macos-14-large
             arch: amd64
             variant: macos-amd64
@@ -84,13 +78,13 @@ jobs:
           pip install Nuitka
 
       - name: Download CodeScene CLI
-        if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
         run: |
           wget ${{ matrix.cli-url }} -O codescene-cli.zip
           unzip codescene-cli.zip -d .
 
       - name: Inject version into version.py
-        if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
         run: |
           VERSION="${{ github.ref_name }}"
           sed -i.bak "s/__version__ = \"dev\"/__version__ = \"${VERSION}\"/" src/version.py
@@ -106,36 +100,21 @@ jobs:
       - name: Build Linux executable in manylinux (glibc 2.28)
         if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
         shell: bash
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
-          mkdir -p .home
-          docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            -e HOME=/work/.home \
-            -v "$PWD:/work" \
-            -w /work \
-            "${{ matrix.manylinux-image }}" \
-            /bin/bash -lc '
-              set -euo pipefail
-              "${{ matrix.python-bin }}" -m pip install --user -r src/requirements.txt Nuitka
-              export PATH="$HOME/.local/bin:$PATH"
-              "${{ matrix.python-bin }}" -m nuitka --onefile \
-                --assume-yes-for-downloads \
-                --static-libpython=no \
-                --lto=yes \
-                --noinclude-pytest-mode=nofollow \
-                --noinclude-unittest-mode=nofollow \
-                --noinclude-setuptools-mode=nofollow \
-                --noinclude-pydoc-mode=nofollow \
-                --include-data-dir=./src/docs=src/docs \
-                --include-data-dir=./src/code_health_refactoring_business_case/s_curve/regression=code_health_refactoring_business_case/s_curve/regression \
-                --include-data-files=./cs=cs \
-                --output-filename=cs-mcp \
-                src/cs_mcp_server.py
-            '
+          ./scripts/build-linux-exe.sh "${{ matrix.arch }}"
 
       - name: Rename binary to include platform info
-        if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
         run: mv ${{ matrix.output-path }} ${{ matrix.artifact-name }}
+
+      - name: Validate Linux GLIBC floor (max 2.28)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          chmod +x ./scripts/check_glibc_max.py
+          ./scripts/check_glibc_max.py --max 2.28 "${{ matrix.artifact-name }}" cs-linux-bundled
 
       - name: Verify Linux executable (optional)
         if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
@@ -298,6 +277,11 @@ jobs:
           chmod +x "$BIN"
           # Include binary and any checksum files in the zip
           zip "${BIN}.zip" "$BIN" ${BIN}.sha256 ${BIN}.sha256.asc 2>/dev/null || zip "${BIN}.zip" "$BIN" ${BIN}.sha256 2>/dev/null || zip "${BIN}.zip" "$BIN"
+
+      - name: Remove Linux bundled CLI copy
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
+        shell: bash
+        run: rm -f cs-linux-bundled
 
       - name: Upload Executable Artifact (zipped binary)
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
