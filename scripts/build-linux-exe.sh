@@ -27,6 +27,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BUILDER_IMAGE="codescene-mcp-linux-exe-builder:${ARCH}"
 
+mkdir -p "${REPO_ROOT}/.home" "${REPO_ROOT}/.cache/Nuitka"
+
 docker build \
   --platform "linux/${ARCH}" \
   -f "${REPO_ROOT}/docker/linux-exe-builder.Dockerfile" \
@@ -40,6 +42,8 @@ docker run --rm \
   --user "$(id -u):$(id -g)" \
   -v "${REPO_ROOT}:/work" \
   -w /work \
+  -e HOME=/work/.home \
+  -e NUITKA_CACHE_DIR=/work/.cache/Nuitka \
   -e ROOT_DIR=/work \
   -e PYTHON_BIN="${PYTHON_BIN}" \
   -e VERSION="${VERSION}" \
