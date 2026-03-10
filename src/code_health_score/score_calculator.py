@@ -38,18 +38,18 @@ class CodeHealthScore:
             - Returns only the score summary, not the full smell breakdown.
             - Requires a supported source file.
 
-        The Code Health scores are interpreted as:
-          * Optimal Code: Code Health 10.0 optimized for human and AI comprehension
-          * Green Code: high quality with a score of 9.0-9.9
-          * Yellow Code: problematic technical debt with a score of 4.0-8.9
-          * Red Code: severe technical debt with a score of 1.0-3.9
-
         Args:
             file_path: Absolute path to the source code file to analyze.
                 Use a concrete local file path.
 
         Returns:
             A string in the format "Code Health score: <score>".
+
+            The Code Health scores are interpreted as:
+              * Optimal Code: Code Health 10.0 optimized for human and AI comprehension
+              * Green Code: high quality with a score of 9.0-9.9
+              * Yellow Code: problematic technical debt with a score of 4.0-8.9
+              * Red Code: severe technical debt with a score of 1.0-3.9
 
         Example:
             Call with file_path="/repo/src/module.py" and compare the score
