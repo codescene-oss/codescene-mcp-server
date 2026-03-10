@@ -37,6 +37,7 @@ docker build \
 
 docker run --rm \
   --platform "linux/${ARCH}" \
+  --user "$(id -u):$(id -g)" \
   -v "${REPO_ROOT}:/work" \
   -w /work \
   -e ROOT_DIR=/work \
