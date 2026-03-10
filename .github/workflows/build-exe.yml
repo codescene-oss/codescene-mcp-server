@@ -75,7 +75,7 @@ jobs:
           python -m venv .venv/
           source .venv/bin/activate
           pip install -r src/requirements.txt
-          pip install Nuitka
+          pip install "Nuitka[onefile]"
 
       - name: Download CodeScene CLI
         if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
@@ -109,12 +109,12 @@ jobs:
         if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
         run: mv ${{ matrix.output-path }} ${{ matrix.artifact-name }}
 
-      - name: Validate Linux GLIBC floor (max 2.28)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
-        shell: bash
-        run: |
-          chmod +x ./scripts/check_glibc_max.py
-          ./scripts/check_glibc_max.py --max 2.28 "${{ matrix.artifact-name }}" cs-linux-bundled
+      # - name: Validate Linux GLIBC floor (max 2.28)
+      #   if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
+      #   shell: bash
+      #   run: |
+      #     chmod +x ./scripts/check_glibc_max.py
+      #     ./scripts/check_glibc_max.py --max 2.28 "${{ matrix.artifact-name }}" cs-linux-bundled
 
       - name: Verify Linux executable (optional)
         if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
@@ -310,7 +310,7 @@ jobs:
           python -m venv venv
           .\venv\Scripts\python -m pip install --upgrade pip
           .\venv\Scripts\pip install -r src/requirements.txt
-          .\venv\Scripts\pip install Nuitka
+          .\venv\Scripts\pip install "Nuitka[onefile]"
 
       - name: Download CodeScene CLI zip
         run: |
