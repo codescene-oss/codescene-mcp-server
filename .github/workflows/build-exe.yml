@@ -116,6 +116,11 @@ jobs:
             "${{ matrix.manylinux-image }}" \
             /bin/bash -lc '
               set -euo pipefail
+              if [ -f /opt/_internal/static-libs-for-embedding-only.tar.xz ]; then
+                cd /opt/_internal
+                tar xf static-libs-for-embedding-only.tar.xz
+                cd /work
+              fi
               "${{ matrix.python-bin }}" -m pip install --user -r src/requirements.txt Nuitka
               export PATH="$HOME/.local/bin:$PATH"
               "${{ matrix.python-bin }}" -m nuitka --onefile \
