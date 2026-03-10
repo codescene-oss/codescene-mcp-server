@@ -239,9 +239,8 @@ class TestSetConfigTool(_ConfigDirMixin, unittest.TestCase):
     def test_set_persists_to_file(self):
         self.tool.set_config(key="onprem_url", value="https://cs.example.com")
 
-        config = json.loads(
-            open(os.path.join(self._tmpdir, "config.json")).read()
-        )
+        with open(os.path.join(self._tmpdir, "config.json"), encoding="utf-8") as config_file:
+            config = json.loads(config_file.read())
         self.assertEqual(config["onprem_url"], "https://cs.example.com")
 
     def test_set_updates_env(self):

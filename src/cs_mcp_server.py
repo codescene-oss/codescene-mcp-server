@@ -115,6 +115,25 @@ def read_documentation_content_for(md_doc_name):
 def explain_code_health(context: str | None = None) -> str:
     """
     Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI.
+
+    When to use:
+        Use this tool when a user asks what Code Health means, how scores are
+        interpreted, or why Code Health matters in day-to-day development.
+
+    Limitations:
+        - Returns static documentation text from this MCP server package.
+        - Does not analyze a specific repository or file.
+
+    Args:
+        context: Optional context string from the MCP protocol.
+            This argument is not used to customize output.
+
+    Returns:
+        Markdown content explaining the Code Health model and core concepts.
+
+    Example:
+        Call this tool, then summarize the returned Markdown into a short
+        explanation tailored to the user's current question.
     """
     return read_documentation_content_for("how-it-works.md")
 
@@ -126,6 +145,26 @@ def explain_code_health_productivity(context: str | None = None) -> str:
     Describes how to build a business case for Code Health improvements.
     Covers empirical data on how healthy code lets you ship faster with
     fewer defects.
+
+    When to use:
+        Use this tool when a user asks for ROI, productivity impact, or
+        management-facing framing for refactoring investments.
+
+    Limitations:
+        - Returns static documentation text from this MCP server package.
+        - Does not compute project-specific forecasts.
+
+    Args:
+        context: Optional context string from the MCP protocol.
+            This argument is not used to customize output.
+
+    Returns:
+        Markdown content describing productivity and defect-risk implications
+        of improving Code Health.
+
+    Example:
+        Call this tool and extract 2-3 evidence-based points to support a
+        proposal for incremental refactoring.
     """
     return read_documentation_content_for("business-case.md")
 

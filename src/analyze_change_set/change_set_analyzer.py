@@ -26,29 +26,39 @@ class AnalyzeChangeSet:
     @with_version_check
     def analyze_change_set(self, base_ref: str, git_repository_path: str) -> str:
         """
-        Provides a branch-level Code Health review of all changes between the
-        current HEAD and the given base_ref. This is the equivalent of a local
-        PR pre-flight check: it analyzes every file that differs from the base
-        reference and reports Code Health improvements, degradations, and code
-        smells across the entire change set.
+        Run a branch-level Code Health review for all files that differ between
+        current HEAD and base_ref.
 
-        Use this tool before opening a pull request to catch Code Health
-        regressions early, while changes are still local.
+        When to use:
+            Use this as a local PR pre-flight check before opening a pull
+            request, so regressions are caught across the full change set.
+
+        Limitations:
+            - Requires a valid git repository path.
+            - base_ref must exist and be resolvable by git in that repository.
+            - Reviews only files that differ from base_ref.
+            - Output is JSON text from the CLI command.
+
+        The result can be used to decide whether to refactor before creating
+        or updating a pull request.
 
         Args:
-            base_ref: The git reference to compare against, typically the target
-                branch of the pull request (e.g. "main", "origin/main", "develop").
-            git_repository_path: The absolute path to the Git repository for the
-                current code base.
+            base_ref: Git reference to compare against, typically the target
+                branch of the pull request (for example "main" or "origin/main").
+            git_repository_path: Absolute path to the local git repository.
 
         Returns:
             A JSON object containing:
-             - quality_gates: the central outcome, summarizing whether the change
-               set passes or fails Code Health thresholds ("passed" or "failed").
-             - results: an array of objects for each affected file with:
-                 - name: the name of the file whose Code Health is impacted.
-                 - verdict: "improved", "degraded", or "stable".
-                 - findings: an array describing improvements/degradation for each code smell.
+              - quality_gates: the central outcome, summarizing whether the change
+                set passes or fails Code Health thresholds ("passed" or "failed").
+              - results: an array of objects for each affected file with:
+                  - name: the name of the file whose Code Health is impacted.
+                  - verdict: "improved", "degraded", or "stable".
+                  - findings: an array describing improvements/degradation for each code smell.
+
+        Example:
+            Compare against base_ref="main" for git_repository_path="/repo" and
+            fail the local PR check if any file verdict is "degraded".
         """
         cli_command = [
             cs_cli_path(get_platform_details()),

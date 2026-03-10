@@ -19,17 +19,29 @@ class CodeHealthReview:
     @track("code-health-review")
     def code_health_review(self, file_path: str) -> str:
         """
-        Calculates the code quality of the given file using the Code Health metric.
-        Returns a score from 10.0 (optimal) down to 1.0 (worst).
+        Review the Code Health of a single source file and return a detailed
+        CLI review output that includes the score and code smell findings.
 
-        The Code Health scores are interpreted as:
-          * Optimal Code: a Code Health 10.0 is optimized for both human and AI comprehension
-          * Green Code: high quality with a score of 9-9.9
-          * Yellow Code: problematic techncial debt with a score of 4-8.9
-          * Red Code: severe techncial debt, maintainability issues, and expensive onboarding with a score of 1.0-3.9
+        When to use:
+            Use this tool when you need actionable maintainability diagnostics
+            for one file (not just the score).
+
+        Limitations:
+            - Analyzes one file at a time.
+            - Requires a supported source file.
+            - Returns CLI review text, not a normalized JSON schema.
+
         Args:
-            file_path: The absolute path to the source code file to be analyzed.
+            file_path: Absolute path to the source code file to analyze.
+                Use a real file path in the local repository.
+
         Returns:
-            A string representing the Code Health score, 10.0->1.0
+            A review string from the CodeScene CLI. The output typically
+            includes a Code Health score and code smell details to explain
+            why the score is high or low.
+
+        Example:
+            Call with file_path="/repo/src/app.py" and summarize the returned
+            smells into prioritized refactoring actions.
         """
         return run_cs_cli(lambda: self.deps["analyze_code_fn"](file_path))
