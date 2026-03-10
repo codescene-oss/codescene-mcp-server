@@ -64,19 +64,19 @@ jobs:
             output-path: cs-mcp
             
     runs-on: ${{ matrix.os }}
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
     steps:
       - uses: actions/checkout@v4
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
         with:
           fetch-depth: 0
       
       - uses: actions/setup-python@v6
-        if: startsWith(matrix.os, 'macos')
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
         with:
           python-version: '3.13' 
 
       - name: Install deps
-        if: startsWith(matrix.os, 'macos')
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
         run: |
           python -m venv .venv/
           source .venv/bin/activate
@@ -84,11 +84,13 @@ jobs:
           pip install Nuitka
 
       - name: Download CodeScene CLI
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
         run: |
           wget ${{ matrix.cli-url }} -O codescene-cli.zip
           unzip codescene-cli.zip -d .
 
       - name: Inject version into version.py
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
         run: |
           VERSION="${{ github.ref_name }}"
           sed -i.bak "s/__version__ = \"dev\"/__version__ = \"${VERSION}\"/" src/version.py
@@ -96,13 +98,13 @@ jobs:
           cat src/version.py
 
       - name: Build Executable
-        if: startsWith(matrix.os, 'macos')
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
         run: |
           source .venv/bin/activate
           make create-executable
 
       - name: Build Linux executable in manylinux (glibc 2.28)
-        if: startsWith(matrix.os, 'ubuntu')
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
         shell: bash
         run: |
           mkdir -p .home
@@ -131,10 +133,11 @@ jobs:
             '
 
       - name: Rename binary to include platform info
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
         run: mv ${{ matrix.output-path }} ${{ matrix.artifact-name }}
 
       - name: Verify Linux executable (optional)
-        if: startsWith(matrix.os, 'ubuntu')
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
         shell: bash
         run: |
           BIN="${{ matrix.artifact-name }}"
@@ -142,14 +145,14 @@ jobs:
           ./"$BIN" --help >/dev/null 2>&1 || true
 
       - name: Generate checksum (Linux)
-        if: startsWith(matrix.os, 'ubuntu')
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
         shell: bash
         run: |
           BIN="${{ matrix.artifact-name }}"
           sha256sum "$BIN" > "${BIN}.sha256"
 
       - name: Check for Linux signing secrets
-        if: startsWith(matrix.os, 'ubuntu') && github.event_name == 'push'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu') && github.event_name == 'push'
         id: check-linux-secrets
         shell: bash
         run: |
@@ -162,7 +165,7 @@ jobs:
           fi
 
       - name: Import GPG key (Linux)
-        if: startsWith(matrix.os, 'ubuntu') && github.event_name == 'push' && steps.check-linux-secrets.outputs.can-sign == 'true'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu') && github.event_name == 'push' && steps.check-linux-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           LINUX_GPG_PRIVATE_KEY: ${{ secrets.LINUX_GPG_PRIVATE_KEY }}
@@ -170,7 +173,7 @@ jobs:
           echo "$LINUX_GPG_PRIVATE_KEY" | gpg --batch --import
 
       - name: Sign checksum (Linux)
-        if: startsWith(matrix.os, 'ubuntu') && github.event_name == 'push' && steps.check-linux-secrets.outputs.can-sign == 'true'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu') && github.event_name == 'push' && steps.check-linux-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           LINUX_GPG_KEY_ID: ${{ secrets.LINUX_GPG_KEY_ID }}
@@ -186,7 +189,7 @@ jobs:
 
         
       - name: Check for macOS signing secrets
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && github.event_name == 'push'
         id: check-mac-secrets
         shell: bash
         run: |
@@ -202,7 +205,7 @@ jobs:
           fi
 
       - name: Import Apple Developer Certificate (keychain)
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
@@ -228,7 +231,7 @@ jobs:
           rm -f certificate.p12
 
       - name: Codesign macOS executable
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
@@ -244,7 +247,7 @@ jobs:
           codesign --verify --verbose "$BIN"
 
       - name: Notarize macOS executable
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -262,7 +265,7 @@ jobs:
             --wait
 
       - name: Staple notarization ticket
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         run: |
           BIN="${{ matrix.artifact-name }}"
@@ -272,7 +275,7 @@ jobs:
           echo "Notarization is valid - Gatekeeper will verify online"
 
       - name: Clean up keychain
-        if: startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true' && always()
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true' && always()
         shell: bash
         run: |
           security default-keychain -s login.keychain
@@ -280,14 +283,14 @@ jobs:
           rm -f notarize-*.zip || true
 
       - name: Set executable permissions and zip (macOS)
-        if: startsWith(matrix.os, 'macos')
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
         shell: bash
         run: |
           chmod +x "${{ matrix.artifact-name }}"
           zip "${{ matrix.artifact-name }}.zip" "${{ matrix.artifact-name }}"
 
       - name: Zip binary with checksums (Linux)
-        if: startsWith(matrix.os, 'ubuntu')
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
         shell: bash
         run: |
           BIN="${{ matrix.artifact-name }}"
@@ -296,6 +299,7 @@ jobs:
           zip "${BIN}.zip" "$BIN" ${BIN}.sha256 ${BIN}.sha256.asc 2>/dev/null || zip "${BIN}.zip" "$BIN" ${BIN}.sha256 2>/dev/null || zip "${BIN}.zip" "$BIN"
 
       - name: Upload Executable Artifact (zipped binary)
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
