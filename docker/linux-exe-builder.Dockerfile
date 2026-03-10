@@ -9,7 +9,7 @@ COPY scripts/build-linux-exe-inner.sh /usr/local/bin/build-linux-exe-inner.sh
 
 RUN "${PYTHON_BIN}" -m pip install --upgrade pip \
     && if [ -f /opt/_internal/static-libs-for-embedding-only.tar.xz ]; then cd /opt/_internal && tar xf static-libs-for-embedding-only.tar.xz; fi \
-    && "${PYTHON_BIN}" -m pip install -r /tmp/requirements.txt Nuitka \
+    && "${PYTHON_BIN}" -m pip install -r /tmp/requirements.txt "Nuitka[onefile]" \
     && chmod +x /usr/local/bin/build-linux-exe-inner.sh
 
 WORKDIR /work
