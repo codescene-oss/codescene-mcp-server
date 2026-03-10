@@ -4,6 +4,20 @@ on:
   # pull_request:
   #   branches:
   #     - main
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: "Which executable variant to build"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - linux-amd64
+          - linux-aarch64
+          - macos-amd64
+          - macos-aarch64
+          - windows-amd64
   push:
     tags:
       - 'MCP-[0-9]+.[0-9]+.[0-9]+'
@@ -22,36 +36,47 @@ jobs:
         include:
           - os: ubuntu-22.04
             arch: amd64
+            variant: linux-amd64
             cli-url: https://downloads.codescene.io/enterprise/cli/cs-linux-amd64-latest.zip
             artifact-name: cs-mcp-linux-amd64
             output-path: cs-mcp
+            manylinux-image: quay.io/pypa/manylinux_2_28_x86_64
+            python-bin: /opt/python/cp313-cp313/bin/python
           - os: ubuntu-22.04-arm
             arch: aarch64
+            variant: linux-aarch64
             cli-url: https://downloads.codescene.io/enterprise/cli/cs-linux-aarch64-latest.zip
             artifact-name: cs-mcp-linux-aarch64
             output-path: cs-mcp
+            manylinux-image: quay.io/pypa/manylinux_2_28_aarch64
+            python-bin: /opt/python/cp313-cp313/bin/python
           - os: macos-14-large
             arch: amd64
+            variant: macos-amd64
             cli-url: https://downloads.codescene.io/enterprise/cli/cs-macos-amd64-latest.zip
             artifact-name: cs-mcp-macos-amd64
             output-path: cs-mcp
           - os: macos-latest
             arch: aarch64
+            variant: macos-aarch64
             cli-url: https://downloads.codescene.io/enterprise/cli/cs-macos-aarch64-latest.zip
             artifact-name: cs-mcp-macos-aarch64
             output-path: cs-mcp
             
     runs-on: ${{ matrix.os }}
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
       - uses: actions/setup-python@v6
+        if: startsWith(matrix.os, 'macos')
         with:
           python-version: '3.13' 
 
       - name: Install deps
+        if: startsWith(matrix.os, 'macos')
         run: |
           python -m venv .venv/
           source .venv/bin/activate
@@ -71,9 +96,39 @@ jobs:
           cat src/version.py
 
       - name: Build Executable
+        if: startsWith(matrix.os, 'macos')
         run: |
           source .venv/bin/activate
           make create-executable
+
+      - name: Build Linux executable in manylinux (glibc 2.28)
+        if: startsWith(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          mkdir -p .home
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/work/.home \
+            -v "$PWD:/work" \
+            -w /work \
+            "${{ matrix.manylinux-image }}" \
+            /bin/bash -lc '
+              set -euo pipefail
+              "${{ matrix.python-bin }}" -m pip install --user -r src/requirements.txt Nuitka
+              export PATH="$HOME/.local/bin:$PATH"
+              "${{ matrix.python-bin }}" -m nuitka --onefile \
+                --assume-yes-for-downloads \
+                --lto=yes \
+                --noinclude-pytest-mode=nofollow \
+                --noinclude-unittest-mode=nofollow \
+                --noinclude-setuptools-mode=nofollow \
+                --noinclude-pydoc-mode=nofollow \
+                --include-data-dir=./src/docs=src/docs \
+                --include-data-dir=./src/code_health_refactoring_business_case/s_curve/regression=code_health_refactoring_business_case/s_curve/regression \
+                --include-data-files=./cs=cs \
+                --output-filename=cs-mcp \
+                src/cs_mcp_server.py
+            '
 
       - name: Rename binary to include platform info
         run: mv ${{ matrix.output-path }} ${{ matrix.artifact-name }}
@@ -247,6 +302,7 @@ jobs:
           path: ${{ matrix.artifact-name }}.zip
 
   build-exe-windows-amd64:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == 'windows-amd64'
     runs-on: windows-latest
     permissions:
       contents: read
@@ -361,6 +417,7 @@ jobs:
   #         name: cs-mcp-aarch64.exe
         
   publish-to-release:
+    if: github.event_name == 'push'
     permissions:
       contents: write 
     needs: [build-exe-unix, build-exe-windows-amd64]
