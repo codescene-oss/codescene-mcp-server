@@ -40,6 +40,12 @@ class CodeHealthReview:
             includes a Code Health score and code smell details to explain
             why the score is high or low.
 
+            The Code Health scores are interpreted as:
+              * Optimal Code: a Code Health 10.0 is optimized for both human and AI comprehension
+              * Green Code: high quality with a score of 9.0-9.9
+              * Yellow Code: problematic technical debt with a score of 4.0-8.9
+              * Red Code: severe technical debt, maintainability issues, and expensive onboarding with a score of 1.0-3.9
+
         Example:
             Call with file_path="/repo/src/app.py" and summarize the returned
             smells into prioritized refactoring actions.
