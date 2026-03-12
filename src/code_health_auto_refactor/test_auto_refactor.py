@@ -145,7 +145,7 @@ class TestAutoRefactor(unittest.TestCase):
             },
         )
 
-        expected = "Error: This tool needs a token valid for CodeScene ACE in CS_ACE_ACCESS_TOKEN. See the ACE activation instructions in https://github.com/codescene-oss/codescene-mcp-server?tab=readme-ov-file#-activate-ace-in-codescene-mcp"
+        expected = "Error: This tool needs ACE access configured via set_config key \"ace_access_token\" (or CS_ACE_ACCESS_TOKEN). See https://github.com/codescene-oss/codescene-mcp-server?tab=readme-ov-file#-activate-ace-in-codescene-mcp"
         result = self.instance.code_health_auto_refactor("/some-path/some-file.cpp", "Document::isPerformingTransaction")
 
         self.assertEqual(expected, result)

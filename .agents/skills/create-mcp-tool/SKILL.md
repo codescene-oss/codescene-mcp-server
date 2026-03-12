@@ -101,7 +101,7 @@ Key rules:
 Conventions:
 - **Decorator order matters:** `@with_version_check` outermost, then `@track("event-name")`.
 - **Return type is always `str`.**
-- **The docstring is critical** -- it becomes the tool description that LLM clients see. Write it for an LLM audience: explain what the tool does, what arguments it needs, and how to present results.
+- **The docstring is critical** -- it becomes the tool description that LLM clients see. Follow `dev-docs/mcp-tool-description-guidelines.md` and include all six required components: Purpose, Guidelines, Limitations, Parameter Explanation, Length/Completeness, and Examples.
 - **Error handling:** Wrap API/CLI calls in try/except, use `track_error` to report failures, and return a user-friendly error string.
 
 ### 5. Create `__init__.py`
@@ -211,7 +211,7 @@ Before considering the tool complete:
 - [ ] Tool directory created under `src/` with `__init__.py`, implementation, and tests
 - [ ] `TypedDict` deps defined for dependency injection
 - [ ] Tool method(s) decorated with `@with_version_check` (outer) and `@track` (inner)
-- [ ] Docstring written for LLM consumption (describes purpose, args, return format)
+- [ ] Docstring follows `dev-docs/mcp-tool-description-guidelines.md` (all six components)
 - [ ] Return type is `str`
 - [ ] Error handling with `track_error` for failures
 - [ ] Tests cover success and error paths using mocked deps

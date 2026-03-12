@@ -26,21 +26,32 @@ class PreCommitCodeHealthSafeguard:
     @with_version_check
     def pre_commit_code_health_safeguard(self, git_repository_path: str) -> str:
         """
-        Performs a Code Health review on all modified and staged files in
-        the given git_repository_path, and returns a JSON object specifying
-        the code smells that will degrade the Code Health, should this code be committed.
-        This tool is ideal as a pre-commit safeguard for healthy code.
+        Review all modified and staged files in a repository and report
+        Code Health degradations before commit.
+
+        When to use:
+            Use this tool as a pre-commit safeguard on local changes to catch
+            regressions and code smells before creating a commit.
+
+        Limitations:
+            - Requires a valid git repository path.
+            - Evaluates current local modifications/staged changes only.
+            - Output is JSON text from the CLI command.
 
         Args:
-            git_repository_path: The absolute path to the Git repository for the current code base.
+            git_repository_path: Absolute path to the local git repository to analyze.
 
         Returns:
             A JSON object containing:
-             - quality_gates: the central outcome, summarizing whether the commit passes or fails Code Health thresholds for each file.
-             - files: an array of objects for each file with:
-                 - name: the name of the file whose Code Health is impacted (positively or negatively).
-                 - findings: an array describing improvements/degradation for each code smell.
-             - Each quality gate indicates if the file meets the required Code Health standards, helping teams enforce healthy code before commit.
+              - quality_gates: the central outcome, summarizing whether the commit passes or fails Code Health thresholds for each file.
+              - files: an array of objects for each file with:
+                  - name: the name of the file whose Code Health is impacted (positively or negatively).
+                  - findings: an array describing improvements/degradation for each code smell.
+              - Each quality gate indicates if the file meets the required Code Health standards, helping teams enforce healthy code before commit.
+
+        Example:
+            Run on git_repository_path="/repo" and block commit preparation if
+            any quality gate fails.
         """
         cli_command = [
             cs_cli_path(get_platform_details()),

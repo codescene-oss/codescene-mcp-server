@@ -54,10 +54,10 @@ class AutoRefactor:
         cli_command = ["review", "--output-format=json", cli_path]
         return self._run_cs_cli(cli_command, git_root)
 
-    def _get_function(self, functions: list[dict], function_name: str) -> dict:
-        return next((f for f in functions if f["name"] == function_name), False)
+    def _get_function(self, functions: list[dict], function_name: str) -> dict | None:
+        return next((f for f in functions if f["name"] == function_name), None)
 
-    def _get_code_smells(self, review: dict, function: dict) -> dict:
+    def _get_code_smells(self, review: dict, function: dict) -> list[dict]:
         return [
             {
                 "category": code_smell["category"],
@@ -89,9 +89,14 @@ class AutoRefactor:
     def code_health_auto_refactor(self, file_path: str, function_name: str) -> str:
         """
         Refactor a single function to fix specific code health problems.
-        Thie auto-refactor uses CodeScene ACE, and is intended as an initial
+        This auto-refactor uses CodeScene ACE, and is intended as an initial
         refactoring to increase the modularity of the code so that you as an
         AI agent can continue and iterate with more specific refactorings.
+
+        When to use:
+            Use this tool after a Code Health review has identified one of the
+            supported smells in a specific function.
+
         The code_health_auto_refactor tool is supported for these languages:
             - JavaScript/TypeScript
             - Java
@@ -103,15 +108,19 @@ class AutoRefactor:
             - Complex Method
             - Deep, Nested Complexity
             - Large Method
+
         IMPORTANT:
             - Only use this tool for functions shorter than 300 lines of code.
             - Insert any new functions close to the refactored function.
+            - Requires ACE access to be configured (use set_config with key "ace_access_token").
 
         Args:
-            file_path: The absolute path to the source code file containing the function to refactor.
-            function_name: The name of the function to refactor. If there is a class scope prefix, it needs to be included.
+            file_path: Absolute path to the source file that contains the target function.
+            function_name: Exact function name to refactor.
+                Include class scope prefix when relevant.
+
         Returns:
-            A JSON object describing the refactoring, with these properties
+            A JSON object describing the refactoring, with these properties:
               - code: The refactored function plus new extracted functions.
               - declarations: Optional (used for languages like C++). Declarations of additional functions introduced when refactoring.
                 When present, find the right include file and insert the declarations there. Note that some C++ refactorings result
@@ -121,10 +130,15 @@ class AutoRefactor:
                 refactoring and fix any introduced problems.
               - reasons: A list of strings describing the reasons for the assigned confidence level.
                 Use this list of strings to direct fixes of the refactored code.
+
+        Example:
+            Call with file_path="/repo/src/service.ts" and
+            function_name="OrderService.calculateTotal", then apply returned
+            code and declarations and re-run Code Health checks.
         """
         try:
             if os.getenv("CS_ACE_ACCESS_TOKEN") is None:
-                return "Error: This tool needs a token valid for CodeScene ACE in CS_ACE_ACCESS_TOKEN. See the ACE activation instructions in https://github.com/codescene-oss/codescene-mcp-server?tab=readme-ov-file#-activate-ace-in-codescene-mcp"
+                return "Error: This tool needs ACE access configured via set_config key \"ace_access_token\" (or CS_ACE_ACCESS_TOKEN). See https://github.com/codescene-oss/codescene-mcp-server?tab=readme-ov-file#-activate-ace-in-codescene-mcp"
 
             git_root = find_git_root(file_path)
             functions = self._parse_fns(file_path, git_root)

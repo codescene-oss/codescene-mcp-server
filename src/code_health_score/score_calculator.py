@@ -26,18 +26,33 @@ class CodeHealthScore:
     @track("code-health-score")
     def code_health_score(self, file_path: str) -> str:
         """
-        Calculates the code quality of the given file using the Code Health metric.
-        Returns a score from 10.0 (optimal) down to 1.0 (worst).
+        Calculate the Code Health score for a single source file.
+        The tool returns one numeric score from 10.0 (optimal) to 1.0 (worst).
 
-        The Code Health scores are interpreted as:
-          * Optimal Code: a Code Health 10.0 is optimized for both human and AI comprehension
-          * Green Code: high quality with a score of 9-9.9
-          * Yellow Code: problematic techncial debt with a score of 4-8.9
-          * Red Code: severe techncial debt, maintainability issues, and expensive onboarding with a score of 1.0-3.9
+        When to use:
+            Use this tool for quick triage, ranking files by maintainability,
+            or checking whether a refactoring improved file-level quality.
+
+        Limitations:
+            - Analyzes one file at a time.
+            - Returns only the score summary, not the full smell breakdown.
+            - Requires a supported source file.
 
         Args:
-            file_path: The absolute path to the source code file to be analyzed.
+            file_path: Absolute path to the source code file to analyze.
+                Use a concrete local file path.
+
         Returns:
-            A string representing the Code Health score, 10.0->1.0
+            A string in the format "Code Health score: <score>".
+
+            The Code Health scores are interpreted as:
+              * Optimal Code: Code Health 10.0 optimized for human and AI comprehension
+              * Green Code: high quality with a score of 9.0-9.9
+              * Yellow Code: problematic technical debt with a score of 4.0-8.9
+              * Red Code: severe technical debt with a score of 1.0-3.9
+
+        Example:
+            Call with file_path="/repo/src/module.py" and compare the score
+            before and after a refactoring.
         """
         return f"Code Health score: {self._calculate_code_health_score_for(file_path)}"

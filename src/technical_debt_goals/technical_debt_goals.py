@@ -31,8 +31,18 @@ class TechnicalDebtGoals:
         """
         Lists the technical debt goals for a project.
 
+        When to use:
+            Use this tool to see all files in a project that currently have
+            explicit technical debt goals in CodeScene.
+
+        Limitations:
+            - Requires a valid project_id.
+            - Returns goal data from the latest available analysis.
+            - Includes only files with non-empty goals.
+
         Args:
             project_id: The Project ID selected by the user.
+
         Returns:
             A JSON array containing the path of a file and its goals, or a string error message if no project was selected.
             Show the goals for each file in a structured format that is easy to read and explain
@@ -40,6 +50,10 @@ class TechnicalDebtGoals:
 
             Additionally, provide a link to the CodeScene Code Biomarkers page for the project technical debt goals.
             Explain that you can find more details about the technical debt goals on that page.
+
+        Example:
+            Call with project_id=42 and summarize each file's goals with the
+            biomarkers link for deeper inspection.
         """
         try:
             endpoint = f"v2/projects/{project_id}/analyses/latest/files"
@@ -51,8 +65,9 @@ class TechnicalDebtGoals:
             }
             files = self.deps["query_api_list_fn"](endpoint, params, "files")
 
-            if os.getenv("CS_ONPREM_URL"):
-                onprem_url = normalize_onprem_url(os.getenv("CS_ONPREM_URL"))
+            onprem_url_env = os.getenv("CS_ONPREM_URL")
+            if onprem_url_env:
+                onprem_url = normalize_onprem_url(onprem_url_env)
                 link = f"{onprem_url}/{project_id}/analyses/latest/code/biomarkers"
             else:
                 link = f"https://codescene.io/projects/{project_id}/analyses/latest/code/biomarkers"
@@ -75,9 +90,19 @@ class TechnicalDebtGoals:
         """
         Lists the technical debt goals for a specific file in a project.
 
+        When to use:
+            Use this tool when you need goal details for one file before
+            planning targeted refactoring work.
+
+        Limitations:
+            - Requires a valid project_id.
+            - Returns data from the latest available analysis only.
+            - A file may return zero goals, which is a valid outcome.
+
         Args:
             file_path: The absolute path to the source code file.
             project_id: The Project ID selected by the user.
+
         Returns:
             A JSON array containing the goals for the specified file, or a string error message if no project was selected.
             Show the goals in a structured format that is easy to read and explain
@@ -85,6 +110,10 @@ class TechnicalDebtGoals:
 
             Additionally, provide a link to the CodeScene Code Biomarkers page for the project file technical debt goals.
             Explain that you can find more details about the technical debt goals on that page.
+
+        Example:
+            Call with file_path="/repo/src/module.py" and project_id=42, then
+            use the goals and link to propose file-level improvements.
         """
         try:
             endpoint = f"v2/projects/{project_id}/analyses/latest/files"
@@ -93,8 +122,9 @@ class TechnicalDebtGoals:
             files = self.deps["query_api_list_fn"](endpoint, params, "files")
             goals = files[0].get("goals", []) if files else []
 
-            if os.getenv("CS_ONPREM_URL"):
-                onprem_url = normalize_onprem_url(os.getenv("CS_ONPREM_URL"))
+            onprem_url_env = os.getenv("CS_ONPREM_URL")
+            if onprem_url_env:
+                onprem_url = normalize_onprem_url(onprem_url_env)
                 link = f"{onprem_url}/{project_id}/analyses/latest/code/biomarkers?name={relative_file_path}"
             else:
                 link = f"https://codescene.io/projects/{project_id}/analyses/latest/code/biomarkers?name={relative_file_path}"

@@ -209,3 +209,9 @@ The MCP server periodically checks GitHub for newer releases and shows a "VERSIO
 Set the `CS_DISABLE_VERSION_CHECK` environment variable to any non-empty value (e.g. `1`). For setup details, see [Configuration Options — Version Check](docs/configuration-options.md#disable_version_check).
 
 </details>
+
+## Building Locally
+
+- [Building the Docker image locally](docs/building-docker-locally.md)
+- [Building a static executable locally](docs/building-executable-locally.md)
+- [Building Linux executable in Docker (glibc 2.28)](docs/building-linux-executable-with-docker.md)
