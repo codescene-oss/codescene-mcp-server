@@ -32,10 +32,6 @@ https://<your-cs-host><:port>/configuration/user/token
 
 ## Using Your Token
 
-Once you have your token, set it as the `CS_ACCESS_TOKEN` environment variable when configuring the MCP server. See the installation guides for your platform:
-
-- [Homebrew Installation (macOS / Linux)](homebrew-installation.md)
-- [Windows Installation](windows-installation.md)
-- [Docker Installation](docker-installation.md)
+Once you have your token, see [Configuration Options](configuration-options.md) for how to set it up with the MCP server.
 
 > ⚠️ **Keep your token secure!** Treat it like a password and never commit it to version control.

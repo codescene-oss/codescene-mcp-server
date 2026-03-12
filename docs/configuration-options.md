@@ -1,13 +1,35 @@
 # Configuration Options
 
-The CodeScene MCP Server can be configured through environment variables set in your MCP client configuration, or through a persistent JSON config file managed by the built-in `get_config` and `set_config` tools.
+The CodeScene MCP Server can be configured in three ways, listed from easiest to most involved:
 
-**Config file location** (OS-dependent):
+### 1. Ask your AI assistant (easiest)
+
+The simplest way to configure the MCP server is to ask your AI assistant directly. The MCP server has built-in `set_config` and `get_config` tools that the AI assistant can call on your behalf. Just tell it what you want in plain language:
+
+> "Set my CodeScene access token to cs_abc123def456"
+
+> "Connect to our on-prem CodeScene at https://codescene.mycompany.com"
+
+> "Enable CodeScene ACE with token ace_xyz789"
+
+> "Disable the CodeScene version update check"
+
+The AI will use the `set_config` tool to save the value persistently. You can verify any setting by asking:
+
+> "What is my current CodeScene configuration?"
+
+### 2. Environment variables in your MCP client config
+
+Set environment variables in your editor's MCP configuration file. This is the standard approach when you want settings checked into a project or shared across a team. Examples are shown for each option below.
+
+### 3. Config file (managed automatically)
+
+The `set_config` tool (option 1 above) persists values to a JSON config file at:
 - **macOS:** `~/Library/Application Support/codehealth-mcp/config.json`
 - **Linux:** `~/.config/codehealth-mcp/config.json`
 - **Windows:** `%LOCALAPPDATA%/codehealth-mcp/config.json`
 
-Environment variables set by your MCP client always take precedence over values stored in the config file. You can check the effective value and its source for any option by using the `get_config` tool.
+Environment variables set by your MCP client always take precedence over values stored in the config file.
 
 ---
 
@@ -48,6 +70,66 @@ https://codescene.mycompany.com
 
 When this option is not set, the MCP server connects to CodeScene Cloud by default.
 
+**Example — npx:**
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@codescene/codehealth-mcp"],
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ONPREM_URL": "https://codescene.mycompany.com"
+      }
+    }
+  }
+}
+```
+
+**Example — Static binary (Homebrew / Windows):**
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ONPREM_URL": "https://codescene.mycompany.com"
+      }
+    }
+  }
+}
+```
+
+**Example — Docker:**
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "CS_ACCESS_TOKEN",
+        "-e", "CS_ONPREM_URL",
+        "-e", "CS_MOUNT_PATH=/path/to/your/code",
+        "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
+        "codescene/codescene-mcp"
+      ],
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ONPREM_URL": "https://codescene.mycompany.com"
+      }
+    }
+  }
+}
+```
+
 ## `ace_access_token`
 
 | | |
@@ -56,6 +138,8 @@ When this option is not set, the MCP server connects to CodeScene Cloud by defau
 | **Sensitive** | Yes (value is masked in tool output) |
 
 Token for the [CodeScene ACE](https://codescene.com/product/integrations/ide-extensions/ai-refactoring) auto-refactoring API. When set, the `code_health_auto_refactor` tool becomes available, enabling automated refactoring of functions with code health issues.
+
+ACE is a **CodeScene add-on** and requires an additional license. You can [request access and more info here](https://codescene.com/contact-us-about-codescene-ace).
 
 ACE supports the following languages:
 - JavaScript / TypeScript
@@ -69,6 +153,66 @@ And the following code smells:
 - Complex Method
 - Deep, Nested Complexity
 - Large Method
+
+**Example — npx:**
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@codescene/codehealth-mcp"],
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ACE_ACCESS_TOKEN": "your-ace-token-here"
+      }
+    }
+  }
+}
+```
+
+**Example — Static binary (Homebrew / Windows):**
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ACE_ACCESS_TOKEN": "your-ace-token-here"
+      }
+    }
+  }
+}
+```
+
+**Example — Docker:**
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "CS_ACCESS_TOKEN",
+        "-e", "CS_ACE_ACCESS_TOKEN",
+        "-e", "CS_MOUNT_PATH=/path/to/your/code",
+        "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
+        "codescene/codescene-mcp"
+      ],
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ACE_ACCESS_TOKEN": "your-ace-token-here"
+      }
+    }
+  }
+}
+```
 
 ## `default_project_id`
 
@@ -94,6 +238,41 @@ Set to `"true"` to suppress the automatic version-check network request that the
 
 You may want to disable this in air-gapped environments or if the extra network call is undesirable.
 
+**Example — npx:**
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@codescene/codehealth-mcp"],
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_DISABLE_VERSION_CHECK": "1"
+      }
+    }
+  }
+}
+```
+
+**Example — Static binary (Homebrew / Windows):**
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_DISABLE_VERSION_CHECK": "1"
+      }
+    }
+  }
+}
+```
+
 ## `ca_bundle`
 
 | | |
@@ -103,12 +282,101 @@ You may want to disable this in air-gapped environments or if the extra network 
 
 Path to a custom PEM-format CA certificate bundle for SSL/TLS verification. Required when your organization uses a corporate proxy or internal certificate authority for your on-premise CodeScene instance.
 
-The MCP server automatically handles SSL configuration for both its Python components and the embedded Java-based CodeScene CLI -- you only need to configure this once.
+### Supported Environment Variables
 
-Example:
+The following environment variables are checked in order of precedence:
 
+| Variable | Description |
+|----------|-------------|
+| `REQUESTS_CA_BUNDLE` | Standard Python/requests CA bundle path (recommended) |
+| `SSL_CERT_FILE` | Alternative CA certificate path |
+| `CURL_CA_BUNDLE` | curl-style CA bundle path |
+
+### How It Works
+
+The MCP server automatically handles SSL configuration for both its Python components and the embedded Java-based CodeScene CLI:
+
+1. **Python/requests**: Uses the certificate directly via `REQUESTS_CA_BUNDLE`
+2. **Java CLI**: The MCP server automatically converts the PEM certificate to a PKCS12 truststore at runtime and injects the appropriate Java SSL arguments
+
+This means you only need to configure SSL once — the MCP server handles the rest.
+
+### Example — npx
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@codescene/codehealth-mcp"],
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ONPREM_URL": "https://your-codescene-instance.example.com",
+        "REQUESTS_CA_BUNDLE": "/path/to/your/internal-ca.crt"
+      }
+    }
+  }
+}
 ```
-/etc/ssl/certs/company-ca.crt
+
+### Example — Static Binary (Homebrew / Windows)
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ONPREM_URL": "https://your-codescene-instance.example.com",
+        "REQUESTS_CA_BUNDLE": "/path/to/your/internal-ca.crt"
+      }
+    }
+  }
+}
 ```
 
-If your certificate chain includes intermediate certificates, include them all in the same PEM file. See the [Homebrew Installation guide](homebrew-installation.md#custom-ssltls-certificates) for detailed setup instructions.
+### Example — Docker
+
+When using Docker, mount your certificate into the container and set `REQUESTS_CA_BUNDLE` to the path *inside* the container:
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "CS_ACCESS_TOKEN",
+        "-e", "CS_ONPREM_URL",
+        "-e", "REQUESTS_CA_BUNDLE=/certs/internal-ca.crt",
+        "-e", "CS_MOUNT_PATH=/path/to/your/code",
+        "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
+        "--mount", "type=bind,src=/path/to/your/certs/internal-ca.crt,dst=/certs/internal-ca.crt,ro",
+        "codescene/codescene-mcp"
+      ],
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ONPREM_URL": "https://your-codescene-instance.example.com"
+      }
+    }
+  }
+}
+```
+
+> **Note:** The `REQUESTS_CA_BUNDLE` value (`/certs/internal-ca.crt`) must match the destination path in the mount (`dst=/certs/internal-ca.crt`).
+
+If you have multiple certificates or a certificate bundle directory, mount the entire directory instead:
+
+```json
+"--mount", "type=bind,src=/etc/ssl/company-certs,dst=/certs,ro"
+```
+
+### Notes
+
+- The certificate file must be in PEM format (the standard format with `-----BEGIN CERTIFICATE-----` headers)
+- The path must be accessible to the MCP server process (or mounted into the container for Docker)
+- If your certificate chain includes intermediate certificates, include them all in the same file
