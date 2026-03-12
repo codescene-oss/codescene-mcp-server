@@ -24,23 +24,39 @@ class SelectProject:
         Lists all projects for an organization for selection by the user.
         The user can select the desired project by either its name or ID.
 
+        When to use:
+            Use this tool before project-scoped API tools so the user can pick
+            the project context explicitly.
+
+        Limitations:
+            - If default_project_id is configured, the server returns that
+              project and selection is effectively locked.
+
+        Args:
+            None.
+
         Returns:
             A JSON object with the project name and ID, formatted in a Markdown table
             with the columns "Project Name" and "Project ID". If the output contains a
-            `description` field, it indicates that a default project is being used from
-            the `CS_DEFAULT_PROJECT_ID` environment variable, and the user cannot select a different project.
+            `description` field, it indicates that a default project is configured
+            (`default_project_id`), and the user cannot select a different project.
             Explain this to the user.
 
             Additionally, a `link` field is provided to guide the user to the
             Codescene projects page where the user can find more detailed information about each project.
             Make sure to include this link in the output, and explain its purpose clearly.
+
+        Example:
+            Call without arguments. If default_project_id is configured,
+            explain that the returned project is fixed unless that config is changed via set_config.
         """
         link = f"{os.getenv('CS_ONPREM_URL')}" if os.getenv("CS_ONPREM_URL") else "https://codescene.io/projects"
 
-        if os.getenv("CS_DEFAULT_PROJECT_ID"):
+        default_project_id = os.getenv("CS_DEFAULT_PROJECT_ID")
+        if default_project_id:
             return json.dumps(
                 {
-                    "id": int(os.getenv("CS_DEFAULT_PROJECT_ID")),
+                    "id": int(default_project_id),
                     "name": "Default Project (from CS_DEFAULT_PROJECT_ID env var)",
                     "description": "Using default project from CS_DEFAULT_PROJECT_ID environment variable. If you want to be able to select a different project, unset this variable.",
                     "link": link,

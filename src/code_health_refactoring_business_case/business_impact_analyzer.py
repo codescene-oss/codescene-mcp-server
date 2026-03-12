@@ -24,10 +24,14 @@ class CodeHealthRefactoringBusinessCase:
         """
         Generate a data-driven business case for refactoring a source file.
 
-        This tool analyzes the file's current Code Health and estimates the
-        business impact of improving it. The result includes quantified
-        predictions for development speed and defect reduction based on
-        CodeScene's empirical research.
+        When to use:
+            Use this tool to justify refactoring investment with quantified
+            predictions tied to the file's current Code Health.
+
+        Limitations:
+            - Estimates are model-based projections, not guarantees.
+            - Evaluates one file at a time.
+            - Requires an analyzable source file.
 
         Args:
             file_path: Absolute path to the source code file to analyze.
@@ -40,6 +44,10 @@ class CodeHealthRefactoringBusinessCase:
                 - pessimistic_outcome: Lower bound estimate for improvements.
                 - confidence_interval: The optimistic → pessimistic range,
                   representing a 90% confidence interval for the expected impact.
+
+        Example:
+            Call with file_path="/repo/src/service.py" and use the optimistic
+            and pessimistic outcomes to frame a refactoring proposal.
         """
         current_code_health = code_health_from_cli_output(self.deps["analyze_code_fn"](file_path))
 

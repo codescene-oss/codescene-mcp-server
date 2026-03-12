@@ -31,8 +31,18 @@ class TechnicalDebtHotspots:
         """
         Lists the technical debt hotspots for a project.
 
+        When to use:
+            Use this tool to identify high-impact technical debt hotspots across
+            a project and prioritize refactoring targets.
+
+        Limitations:
+            - Requires a valid project_id.
+            - Returns hotspots from the latest available project analysis.
+            - Uses the API's hotspot filtering and pagination behavior.
+
         Args:
             project_id: The Project ID selected by the user.
+
         Returns:
             A JSON array containing the path of a file, code health score, revisions count and lines of code count.
             Describe the hotspots for each file in a structured format that is easy to read and explain.
@@ -41,14 +51,19 @@ class TechnicalDebtHotspots:
             Additionally, a `link` field is provided to guide the user to the
             Codescene technical debt hotspots page for the project where the user can find more detailed information about each hotspot.
             Make sure to include this link in the output, and explain its purpose clearly.
+
+        Example:
+            Call with project_id=42 and rank returned hotspots by code health
+            and revision frequency before proposing refactoring work.
         """
         try:
             endpoint = f"v2/projects/{project_id}/analyses/latest/technical-debt"
             params = {"page_size": 200, "page": 1, "refactoring_targets": "true"}
             hotspots = self.deps["query_api_list_fn"](endpoint, params, "result")
 
-            if os.getenv("CS_ONPREM_URL"):
-                onprem_url = normalize_onprem_url(os.getenv("CS_ONPREM_URL"))
+            onprem_url_env = os.getenv("CS_ONPREM_URL")
+            if onprem_url_env:
+                onprem_url = normalize_onprem_url(onprem_url_env)
                 link = f"{onprem_url}/{project_id}/analyses/latest/code/technical-debt/system-map#hotspots"
             else:
                 link = f"https://codescene.io/projects/{project_id}/analyses/latest/code/technical-debt/system-map#hotspots"
@@ -70,9 +85,20 @@ class TechnicalDebtHotspots:
     def list_technical_debt_hotspots_for_project_file(self, file_path: str, project_id: int) -> str:
         """
         Lists the technical debt hotspots for a specific file in a project.
+
+        When to use:
+            Use this tool to inspect hotspot metrics for one file before
+            deciding if it should be a refactoring candidate.
+
+        Limitations:
+            - Requires a valid project_id.
+            - Returns at most one hotspot object for the filtered file path.
+            - If no hotspot exists for the file, returns an empty hotspot object.
+
         Args:
             file_path: The absolute path to the source code file.
             project_id: The Project ID selected by the user.
+
         Returns:
             A JSON array containing the code health score, revisions count and lines of code count for the specified file,
             or a string error message if no project was selected.
@@ -82,6 +108,10 @@ class TechnicalDebtHotspots:
             Additionally, a `link` field is provided to guide the user to the
             Codescene technical debt hotspots page for the project where the user can find more detailed information about each hotspot.
             Make sure to include this link in the output, and explain its purpose clearly.
+
+        Example:
+            Call with file_path="/repo/src/module.py" and project_id=42. If
+            hotspot is empty, report that the file is not currently a hotspot.
         """
         try:
             relative_file_path = get_relative_file_path_for_api(file_path)
@@ -93,8 +123,9 @@ class TechnicalDebtHotspots:
             hotspots = self.deps["query_api_list_fn"](endpoint, params, "result")
             hotspot = hotspots[0] if hotspots else None
 
-            if os.getenv("CS_ONPREM_URL"):
-                onprem_url = normalize_onprem_url(os.getenv("CS_ONPREM_URL"))
+            onprem_url_env = os.getenv("CS_ONPREM_URL")
+            if onprem_url_env:
+                onprem_url = normalize_onprem_url(onprem_url_env)
                 link = f"{onprem_url}/{project_id}/analyses/latest/code/technical-debt/system-map#hotspots"
             else:
                 link = f"https://codescene.io/projects/{project_id}/analyses/latest/code/technical-debt/system-map#hotspots"

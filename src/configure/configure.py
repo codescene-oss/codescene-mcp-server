@@ -49,6 +49,15 @@ class Configure:
     def get_config(self, key: str | None = None) -> str:
         """Read current CodeScene MCP Server configuration values.
 
+        When to use:
+            Use this tool to discover available configuration keys, inspect
+            effective values, and understand where each value comes from.
+
+        Limitations:
+            - Returns JSON text only; callers must format it for display.
+            - Sensitive values (tokens) are masked.
+            - Effective values can be overridden by client-provided env vars.
+
         When called without a key, lists every available configuration
         option together with its current effective value, the source of
         that value (environment variable vs. config file), and a short
@@ -66,6 +75,10 @@ class Configure:
             options (array of the same shape).  Use the aliases array
             to match user intent to the correct key.  Present the data
             clearly and always include docs_url links.
+
+        Example:
+            Call with key="access_token" to inspect one setting, or
+            call without key to list all configurable options.
         """
         if key is not None:
             return self._get_single(key)
@@ -91,6 +104,16 @@ class Configure:
     def set_config(self, key: str, value: str) -> str:
         """Write a CodeScene MCP Server configuration value.
 
+        When to use:
+            Use this tool to persist or remove server configuration values
+            without editing config files manually.
+
+        Limitations:
+            - Unknown keys are rejected.
+            - Client-level environment variables may still override runtime
+              behavior even after saving a config value.
+            - Some changes may require an MCP client restart.
+
         Persists the value to the config file and applies it to the
         running session immediately.  To remove a value, pass an empty
         string as the value.
@@ -112,6 +135,10 @@ class Configure:
             config_dir, and optional warning, restart_required, and
             docs_url fields.  Present the data clearly and always
             include docs_url links.
+
+        Example:
+            Call with key="access_token" and value="..." to save,
+            or pass an empty value to remove that key from config.
         """
         option = CONFIG_OPTIONS.get(key)
         if option is None:
