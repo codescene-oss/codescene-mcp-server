@@ -11,6 +11,7 @@
     {
       "registryType": "npm",
       "identifier": "@codescene/codehealth-mcp",
+      "version": "0.3.1",
       "transport": {
         "type": "stdio"
       }
