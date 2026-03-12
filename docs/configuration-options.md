@@ -12,7 +12,7 @@ The simplest way to configure the MCP server is to ask your AI assistant directl
 
 > "Enable CodeScene ACE with token ace_xyz789"
 
-> "Disable the version update check"
+> "Disable the CodeScene version update check"
 
 The AI will use the `set_config` tool to save the value persistently. You can verify any setting by asking:
 
