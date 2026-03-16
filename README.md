@@ -142,7 +142,7 @@ Use Code Health reviews to inform AI-driven summaries, diagnostics, or code tran
 The full feature set — including hotspots, technical debt goals, and code ownership — requires a [CodeScene subscription](https://codescene.com/pricing). Use your CodeScene instance to create the `CS_ACCESS_TOKEN` which activates the MCP.
 The MCP supports both CodeScene Cloud and CodeScene on-prem.
 
-For local Code Health analysis without a CodeScene subscription, you can use the standalone [CodeScene Code Health MCP](https://codescene.com/product/codehealth-mcp-server).
+For local Code Health analysis without a CodeScene subscription, you can use the standalone [CodeScene Code Health MCP](https://codescene.com/early-access-codescene-mcp-server).
 
 </details>
 
