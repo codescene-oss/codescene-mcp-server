@@ -60,4 +60,4 @@ typing-inspection==0.4.1
 typing_extensions==4.15.0
 urllib3==2.5.0
 uvicorn==0.37.0
-Werkzeug==3.1.1
+Werkzeug==3.1.6
