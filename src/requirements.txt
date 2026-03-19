@@ -7,7 +7,7 @@ cffi==2.0.0
 charset-normalizer==3.4.3
 click==8.3.0
 cryptography==46.0.5
-cyclopts==3.24.0
+cyclopts==4.10.0
 dnspython==2.8.0
 docstring_parser==0.17.0
 docutils==0.22.2
@@ -26,7 +26,7 @@ jsonschema-specifications==2025.9.1
 lazy-object-proxy==1.12.0
 markdown-it-py==4.0.0
 MarkupSafe==3.0.2
-mcp==1.23.0
+mcp==1.26.0
 mdurl==0.1.2
 more-itertools==10.8.0
 openapi-core==0.19.5
@@ -36,11 +36,14 @@ openapi-spec-validator==0.7.2
 parse==1.20.2
 pathable==0.4.4
 platformdirs==4.9.2
+py-key-value-aio==0.3.0
 pycparser==2.23
 pydantic==2.11.9
 pydantic-settings==2.11.0
 pydantic_core==2.33.2
+pydocket==0.18.2
 Pygments==2.19.2
+PyJWT==2.12.1
 pyperclip==1.10.0
 python-dotenv==1.1.1
 python-multipart==0.0.22
@@ -61,3 +64,4 @@ typing_extensions==4.15.0
 urllib3==2.6.3
 uvicorn==0.37.0
 Werkzeug==3.1.6
+websockets==16.0
