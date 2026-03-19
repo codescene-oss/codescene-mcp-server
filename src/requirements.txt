@@ -20,8 +20,8 @@ httpx==0.28.1
 httpx-sse==0.4.1
 idna==3.10
 isodate==0.7.2
-jsonschema==4.25.1
-jsonschema-path==0.3.4
+jsonschema==4.24.0
+jsonschema-path==0.4.5
 jsonschema-specifications==2025.9.1
 lazy-object-proxy==1.12.0
 markdown-it-py==4.0.0
@@ -29,12 +29,12 @@ MarkupSafe==3.0.2
 mcp==1.26.0
 mdurl==0.1.2
 more-itertools==10.8.0
-openapi-core==0.19.5
+openapi-core==0.23.0
 openapi-pydantic==0.5.1
-openapi-schema-validator==0.6.3
-openapi-spec-validator==0.7.2
+openapi-schema-validator==0.8.1
+openapi-spec-validator==0.8.4
 parse==1.20.2
-pathable==0.4.4
+pathable==0.5.0
 platformdirs==4.9.2
 py-key-value-aio==0.3.0
 pycparser==2.23
@@ -48,7 +48,7 @@ pyperclip==1.10.0
 python-dotenv==1.1.1
 python-multipart==0.0.22
 PyYAML==6.0.3
-referencing==0.36.2
+referencing==0.37.0
 requests==2.32.5
 rfc3339-validator==0.1.4
 rich==14.1.0
