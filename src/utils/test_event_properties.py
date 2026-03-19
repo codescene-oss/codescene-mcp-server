@@ -20,6 +20,41 @@ from utils.event_properties import (
 from utils.hashing import hash_value
 
 
+# -- Shared fixture builders --
+
+
+def _delta_result(gate: str, files: list[dict]) -> str:
+    """Build a JSON delta-analysis result string."""
+    return json.dumps({"quality_gates": gate, "results": files})
+
+
+def _file_entry(name: str, verdict: str, categories: list[str] | None = None) -> dict:
+    """Build a single file entry for delta results."""
+    findings = [{"category": c, "change-type": "introduced"} for c in (categories or [])]
+    return {"name": name, "verdict": verdict, "findings": findings}
+
+
+def _review_result(score: float, categories: list[str]) -> str:
+    """Build a JSON review result string with the given categories."""
+    review = [{"category": c, "indication": 2} for c in categories]
+    return json.dumps({"score": score, "review": review})
+
+
+# -- Shared assertion helpers --
+
+
+def _assert_categories(test: unittest.TestCase, props: dict, expected: list[str]) -> None:
+    """Assert that props contain the expected sorted categories and count."""
+    test.assertEqual(props["categories"], expected)
+    test.assertEqual(props["category-count"], len(expected))
+
+
+def _assert_no_categories(test: unittest.TestCase, props: dict) -> None:
+    """Assert that props contain no category fields."""
+    test.assertNotIn("categories", props)
+    test.assertNotIn("category-count", props)
+
+
 class TestCodeHealthScoreProperties(unittest.TestCase):
     def test_extracts_score_and_file_hash(self):
         result = "Code Health score: 9.5"
@@ -58,17 +93,9 @@ class TestCodeHealthReviewProperties(unittest.TestCase):
         self.assertEqual(props["score"], 7.5)
 
     def test_extracts_categories_from_json_review(self):
-        result = json.dumps({
-            "score": 3.2,
-            "review": [
-                {"category": "Complex Method", "indication": 2},
-                {"category": "Bumpy Road Ahead", "indication": 3},
-                {"category": "Large Method", "indication": 2},
-            ],
-        })
+        result = _review_result(3.2, ["Complex Method", "Bumpy Road Ahead", "Large Method"])
         props = code_health_review_properties(result, file_path="/repo/f.py")
-        self.assertEqual(props["categories"], ["Bumpy Road Ahead", "Complex Method", "Large Method"])
-        self.assertEqual(props["category-count"], 3)
+        _assert_categories(self, props, ["Bumpy Road Ahead", "Complex Method", "Large Method"])
 
     def test_categories_are_deduplicated_and_sorted(self):
         result = json.dumps({
@@ -80,21 +107,19 @@ class TestCodeHealthReviewProperties(unittest.TestCase):
             ],
         })
         props = code_health_review_properties(result, file_path="/repo/f.py")
-        self.assertEqual(props["categories"], ["Complex Method", "Large Method"])
-        self.assertEqual(props["category-count"], 2)
+        _assert_categories(self, props, ["Complex Method", "Large Method"])
 
     def test_empty_review_array_has_no_categories(self):
         result = json.dumps({"score": 10.0, "review": []})
         props = code_health_review_properties(result, file_path="/repo/f.py")
-        self.assertNotIn("categories", props)
-        self.assertNotIn("category-count", props)
+        _assert_no_categories(self, props)
         self.assertEqual(props["score"], 10.0)
 
     def test_json_without_review_key_returns_score_only(self):
         result = json.dumps({"score": 8.0})
         props = code_health_review_properties(result, file_path="/repo/f.py")
         self.assertEqual(props["score"], 8.0)
-        self.assertNotIn("categories", props)
+        _assert_no_categories(self, props)
 
     def test_json_array_result_returns_only_file_hash(self):
         result = json.dumps([{"category": "Complex Method"}])
@@ -111,8 +136,7 @@ class TestCodeHealthReviewProperties(unittest.TestCase):
             ],
         })
         props = code_health_review_properties(result, file_path="/repo/f.py")
-        self.assertEqual(props["categories"], ["Complex Method"])
-        self.assertEqual(props["category-count"], 1)
+        _assert_categories(self, props, ["Complex Method"])
 
 
 class TestPreCommitProperties(unittest.TestCase):
@@ -125,57 +149,35 @@ class TestPreCommitProperties(unittest.TestCase):
         self.assertEqual(list(props.keys()), ["repo-hash"])
 
     def test_extracts_quality_gates_passed(self):
-        result = json.dumps({"quality_gates": "passed", "results": []})
+        result = _delta_result("passed", [])
         props = pre_commit_properties(result, git_repository_path="/repo")
         self.assertEqual(props["quality-gates"], "passed")
         self.assertEqual(props["file-count"], 0)
 
     def test_extracts_quality_gates_failed_with_verdicts(self):
-        result = json.dumps({
-            "quality_gates": "failed",
-            "results": [
-                {"name": "a.py", "verdict": "degraded", "findings": [{"category": "Complex Method"}]},
-                {"name": "b.py", "verdict": "improved", "findings": []},
-            ],
-        })
+        result = _delta_result("failed", [
+            _file_entry("a.py", "degraded", ["Complex Method"]),
+            _file_entry("b.py", "improved"),
+        ])
         props = pre_commit_properties(result, git_repository_path="/repo")
         self.assertEqual(props["quality-gates"], "failed")
         self.assertEqual(props["file-count"], 2)
         self.assertEqual(props["verdicts"], {"degraded": 1, "improved": 1})
-        self.assertEqual(props["categories"], ["Complex Method"])
-        self.assertEqual(props["category-count"], 1)
+        _assert_categories(self, props, ["Complex Method"])
 
-    def test_extracts_categories_from_findings(self):
-        result = json.dumps({
-            "quality_gates": "failed",
-            "results": [
-                {
-                    "name": "x.py",
-                    "verdict": "degraded",
-                    "findings": [
-                        {"category": "Large Method", "change-type": "introduced"},
-                        {"category": "Complex Conditional", "change-type": "introduced"},
-                    ],
-                },
-                {
-                    "name": "y.py",
-                    "verdict": "degraded",
-                    "findings": [
-                        {"category": "Large Method", "change-type": "introduced"},
-                    ],
-                },
-            ],
-        })
+    def test_extracts_categories_from_multiple_files(self):
+        result = _delta_result("failed", [
+            _file_entry("x.py", "degraded", ["Large Method", "Complex Conditional"]),
+            _file_entry("y.py", "degraded", ["Large Method"]),
+        ])
         props = pre_commit_properties(result, git_repository_path="/repo")
-        self.assertEqual(props["categories"], ["Complex Conditional", "Large Method"])
-        self.assertEqual(props["category-count"], 2)
+        _assert_categories(self, props, ["Complex Conditional", "Large Method"])
 
     def test_empty_results_has_no_verdicts_or_categories(self):
-        result = json.dumps({"quality_gates": "passed", "results": []})
+        result = _delta_result("passed", [])
         props = pre_commit_properties(result, git_repository_path="/repo")
         self.assertNotIn("verdicts", props)
-        self.assertNotIn("categories", props)
-        self.assertNotIn("category-count", props)
+        _assert_no_categories(self, props)
 
 
 class TestAnalyzeChangeSetProperties(unittest.TestCase):
@@ -189,59 +191,37 @@ class TestAnalyzeChangeSetProperties(unittest.TestCase):
         self.assertEqual(sorted(props.keys()), ["base-ref-hash", "repo-hash"])
 
     def test_extracts_quality_gates_passed(self):
-        result = json.dumps({"quality_gates": "passed", "results": []})
+        result = _delta_result("passed", [])
         props = analyze_change_set_properties(result, base_ref="main", git_repository_path="/repo")
         self.assertEqual(props["quality-gates"], "passed")
         self.assertEqual(props["file-count"], 0)
 
     def test_extracts_quality_gates_failed_with_verdicts(self):
-        result = json.dumps({
-            "quality_gates": "failed",
-            "results": [
-                {"name": "a.py", "verdict": "degraded", "findings": [{"category": "Complex Method"}]},
-                {"name": "b.py", "verdict": "stable", "findings": []},
-                {"name": "c.py", "verdict": "degraded", "findings": [{"category": "Large Method"}]},
-            ],
-        })
+        result = _delta_result("failed", [
+            _file_entry("a.py", "degraded", ["Complex Method"]),
+            _file_entry("b.py", "stable"),
+            _file_entry("c.py", "degraded", ["Large Method"]),
+        ])
         props = analyze_change_set_properties(result, base_ref="develop", git_repository_path="/repo")
         self.assertEqual(props["quality-gates"], "failed")
         self.assertEqual(props["file-count"], 3)
         self.assertEqual(props["verdicts"], {"degraded": 2, "stable": 1})
-        self.assertEqual(props["categories"], ["Complex Method", "Large Method"])
-        self.assertEqual(props["category-count"], 2)
+        _assert_categories(self, props, ["Complex Method", "Large Method"])
         self.assertEqual(props["base-ref-hash"], hash_value("develop"))
 
     def test_extracts_categories_across_multiple_files(self):
-        result = json.dumps({
-            "quality_gates": "failed",
-            "results": [
-                {
-                    "name": "x.py",
-                    "verdict": "degraded",
-                    "findings": [
-                        {"category": "Bumpy Road Ahead", "change-type": "introduced"},
-                        {"category": "Complex Conditional", "change-type": "introduced"},
-                    ],
-                },
-                {
-                    "name": "y.py",
-                    "verdict": "degraded",
-                    "findings": [
-                        {"category": "Bumpy Road Ahead", "change-type": "introduced"},
-                    ],
-                },
-            ],
-        })
+        result = _delta_result("failed", [
+            _file_entry("x.py", "degraded", ["Bumpy Road Ahead", "Complex Conditional"]),
+            _file_entry("y.py", "degraded", ["Bumpy Road Ahead"]),
+        ])
         props = analyze_change_set_properties(result, base_ref="main", git_repository_path="/repo")
-        self.assertEqual(props["categories"], ["Bumpy Road Ahead", "Complex Conditional"])
-        self.assertEqual(props["category-count"], 2)
+        _assert_categories(self, props, ["Bumpy Road Ahead", "Complex Conditional"])
 
     def test_empty_results_has_no_verdicts_or_categories(self):
-        result = json.dumps({"quality_gates": "passed", "results": []})
+        result = _delta_result("passed", [])
         props = analyze_change_set_properties(result, base_ref="main", git_repository_path="/repo")
         self.assertNotIn("verdicts", props)
-        self.assertNotIn("categories", props)
-        self.assertNotIn("category-count", props)
+        _assert_no_categories(self, props)
 
 
 class TestAutoRefactorProperties(unittest.TestCase):
