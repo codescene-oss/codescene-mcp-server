@@ -329,6 +329,8 @@ jobs:
           .\venv\Scripts\python -m nuitka --onefile `
             --assume-yes-for-downloads `
             --lto=yes `
+            --company-name="CodeScene AB" `
+            --product-name="CodeHealth MCP" `
             --noinclude-pytest-mode=nofollow `
             --noinclude-unittest-mode=nofollow `
             --noinclude-setuptools-mode=nofollow `
@@ -395,6 +397,8 @@ jobs:
   #       run: |
   #         .\venv\Scripts\python -m nuitka --onefile `
   #           --assume-yes-for-downloads `
+  #           --company-name="CodeScene AB" `
+  #           --product-name="CodeHealth MCP" `
   #           --include-data-dir=./src/docs=src/docs `
   #           --include-data-files=./cs.exe=cs `
   #           --output-filename=cs-mcp.exe `

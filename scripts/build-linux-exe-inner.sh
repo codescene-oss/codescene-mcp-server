@@ -62,6 +62,8 @@ PY
 "${PYTHON_BIN}" -m nuitka --onefile \
   --assume-yes-for-downloads \
   --lto=yes \
+  --company-name="CodeScene AB" \
+  --product-name="CodeHealth MCP" \
   --noinclude-pytest-mode=nofollow \
   --noinclude-unittest-mode=nofollow \
   --noinclude-setuptools-mode=nofollow \

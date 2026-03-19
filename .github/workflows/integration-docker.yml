@@ -17,6 +17,14 @@ env:
   CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
 
 jobs:
+  check-secrets:
+    runs-on: ubuntu-latest
+    outputs:
+      has-token: ${{ steps.check.outputs.has-token }}
+    steps:
+      - id: check
+        run: echo "has-token=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+
   # =============================================================================
   # Docker Integration Tests - Linux
   # =============================================================================
@@ -25,6 +33,8 @@ jobs:
   # - Linux Docker tests provide sufficient coverage for the Docker backend
   # - Static tests still run on macOS to validate core functionality
   docker-integration-linux:
+    needs: check-secrets
+    if: needs.check-secrets.outputs.has-token == 'true'
     runs-on: ubuntu-22.04
     name: Docker Integration Tests (Linux)
     steps:
