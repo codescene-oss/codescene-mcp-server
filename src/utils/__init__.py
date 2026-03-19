@@ -23,6 +23,7 @@ from .config import (
     get_config_dir,
     get_config_value,
     get_effective_value,
+    get_or_create_instance_id,
     is_client_env_var,
     load_config,
     mask_sensitive_value,
@@ -34,6 +35,22 @@ from .docker_path_adapter import (
     adapt_worktree_gitdir_for_docker,
     get_relative_file_path_for_api,
 )
+from .environment import get_environment
+from .event_properties import (
+    analyze_change_set_properties,
+    auto_refactor_properties,
+    business_case_properties,
+    code_health_review_properties,
+    code_health_score_properties,
+    code_ownership_properties,
+    goals_for_file_properties,
+    goals_for_project_properties,
+    hotspots_for_file_properties,
+    hotspots_for_project_properties,
+    pre_commit_properties,
+    select_project_properties,
+)
+from .hashing import hash_value
 from .license import is_standalone_license, is_standalone_token
 from .platform_details import PlatformDetails, get_platform_details, get_ssl_cli_args
 from .require_access_token import require_access_token

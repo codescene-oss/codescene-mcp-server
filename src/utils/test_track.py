@@ -3,154 +3,172 @@ import time
 import unittest
 from unittest.mock import patch
 
+FAKE_COMMON_PROPERTIES = {
+    "instance-id": "test-instance-id",
+    "environment": "source",
+    "version": "test-version",
+}
+
+FAKE_API_URL = "https://api.example.com"
+FAKE_HEADERS = {"Authorization": "Bearer token"}
+
+# Shared decorator stack applied to every test that exercises the HTTP POST path.
+_common_patches = [
+    patch("utils.track._get_common_properties", return_value=FAKE_COMMON_PROPERTIES),
+    patch("utils.track.requests.post"),
+    patch("utils.track.get_api_url", return_value=FAKE_API_URL),
+    patch("utils.track.get_api_request_headers", return_value=FAKE_HEADERS),
+]
+
+
+def _apply_common_patches(fn):
+    """Apply the four standard mocks expected by every tracking test."""
+    for p in reversed(_common_patches):
+        fn = p(fn)
+    return fn
+
+
+def _expected_post_call(event_type, extra_properties=None):
+    """Return the expected ``requests.post(...)`` kwargs for a tracking call."""
+    props = {**FAKE_COMMON_PROPERTIES, **(extra_properties or {})}
+    return dict(
+        args=(f"{FAKE_API_URL}/v2/analytics/track",),
+        kwargs=dict(
+            headers=FAKE_HEADERS,
+            json={"event-type": f"mcp-{event_type}", "event-properties": props},
+            timeout=5,
+        ),
+    )
+
 
 class TestTrack(unittest.TestCase):
-    def _invoke_tracked_method(self, event_type, event_properties=None, return_value="result"):
-        """Create a tool class with a tracked method, invoke it, and wait for the background thread."""
+    # -- helpers ----------------------------------------------------------
+
+    @staticmethod
+    def _invoke(event_type, property_extractor=None, return_value="result"):
+        """Create, invoke, and drain a tracked tool method."""
         from utils.track import _wait_for_pending, track
 
-        class MyTool:
-            @track(event_type, event_properties)
-            def my_method(self):
+        class Tool:
+            @track(event_type, property_extractor)
+            def run(self):
                 return return_value
 
-        tool = MyTool()
-        result = tool.my_method()
+        result = Tool().run()
         _wait_for_pending()
         return result
 
-    @patch("utils.track.requests.post")
-    @patch("utils.track.get_api_url", return_value="https://api.example.com")
-    @patch(
-        "utils.track.get_api_request_headers",
-        return_value={"Authorization": "Bearer token"},
-    )
-    def test_track_decorator_sends_event_on_success(self, mock_headers, mock_url, mock_post):
-        result = self._invoke_tracked_method("my-event", {"key": "value"})
+    @staticmethod
+    def _invoke_with_args(event_type, property_extractor, args, return_value="result"):
+        """Create, invoke with positional args, and drain a tracked tool method."""
+        from utils.track import _wait_for_pending, track
 
+        class Tool:
+            @track(event_type, property_extractor)
+            def run(self, file_path):
+                return return_value
+
+        result = Tool().run(*args)
+        _wait_for_pending()
+        return result
+
+    @staticmethod
+    def _assert_single_post(mock_post, event_type, extra_properties=None):
+        expected = _expected_post_call(event_type, extra_properties)
+        mock_post.assert_called_once_with(*expected["args"], **expected["kwargs"])
+
+    # -- tests ------------------------------------------------------------
+
+    @_apply_common_patches
+    def test_track_decorator_sends_event_with_common_properties(self, mock_headers, mock_url, mock_post, mock_common):
+        result = self._invoke("my-event")
         self.assertEqual(result, "result")
-        mock_post.assert_called_once_with(
-            "https://api.example.com/v2/analytics/track",
-            headers={"Authorization": "Bearer token"},
-            json={"event-type": "mcp-my-event", "event-properties": {"key": "value"}},
-            timeout=5,
-        )
+        self._assert_single_post(mock_post, "my-event")
 
-    @patch("utils.track.requests.post")
-    @patch("utils.track.get_api_url", return_value="https://api.example.com")
-    @patch(
-        "utils.track.get_api_request_headers",
-        return_value={"Authorization": "Bearer token"},
-    )
-    def test_track_decorator_with_no_properties(self, mock_headers, mock_url, mock_post):
-        self._invoke_tracked_method("simple-event", return_value="ok")
+    @_apply_common_patches
+    def test_track_decorator_with_no_extractor(self, mock_headers, mock_url, mock_post, mock_common):
+        self._invoke("simple-event", return_value="ok")
+        self._assert_single_post(mock_post, "simple-event")
 
-        mock_post.assert_called_once_with(
-            "https://api.example.com/v2/analytics/track",
-            headers={"Authorization": "Bearer token"},
-            json={"event-type": "mcp-simple-event", "event-properties": {}},
-            timeout=5,
-        )
+    @_apply_common_patches
+    def test_track_decorator_merges_extractor_properties(self, mock_headers, mock_url, mock_post, mock_common):
+        def my_extractor(result, **_kw):
+            return {"score": "9.5", "file-hash": "abc123"}
 
-    @patch("utils.track.requests.post")
-    @patch("utils.track.get_api_url", return_value="https://api.example.com")
-    @patch(
-        "utils.track.get_api_request_headers",
-        return_value={"Authorization": "Bearer token"},
-    )
-    def test_track_error_sends_error_event(self, mock_headers, mock_url, mock_post):
+        result = self._invoke("my-event", my_extractor)
+        self.assertEqual(result, "result")
+        self._assert_single_post(mock_post, "my-event", {"score": "9.5", "file-hash": "abc123"})
+
+    @_apply_common_patches
+    def test_track_decorator_extractor_receives_result_and_args(self, mock_headers, mock_url, mock_post, mock_common):
+        captured = {}
+
+        def capturing_extractor(result, file_path, **_kw):
+            captured["result"] = result
+            captured["file_path"] = file_path
+            return {"file-hash": "captured"}
+
+        self._invoke_with_args("my-event", capturing_extractor, args=("/path/to/file.py",), return_value="score: 10.0")
+        self.assertEqual(captured["result"], "score: 10.0")
+        self.assertEqual(captured["file_path"], "/path/to/file.py")
+
+    @_apply_common_patches
+    def test_track_decorator_silences_extractor_failure(self, mock_headers, mock_url, mock_post, mock_common):
+        def failing_extractor(result, **_kw):
+            raise RuntimeError("extractor broke")
+
+        result = self._invoke("my-event", failing_extractor)
+        self.assertEqual(result, "result")
+        self._assert_single_post(mock_post, "my-event")
+
+    @_apply_common_patches
+    def test_track_error_sends_error_event_with_common_properties(self, mock_headers, mock_url, mock_post, mock_common):
         from utils.track import _wait_for_pending, track_error
 
-        error = ValueError("Something went wrong")
-        track_error("my-event", error)
+        track_error("my-event", ValueError("Something went wrong"))
         _wait_for_pending()
+        self._assert_single_post(mock_post, "my-event-error", {"error": "Something went wrong"})
 
-        mock_post.assert_called_once_with(
-            "https://api.example.com/v2/analytics/track",
-            headers={"Authorization": "Bearer token"},
-            json={
-                "event-type": "mcp-my-event-error",
-                "event-properties": {"error": "Something went wrong"},
-            },
-            timeout=5,
-        )
-
-    @patch("utils.track.requests.post")
-    @patch("utils.track.get_api_url", return_value="https://api.example.com")
-    @patch(
-        "utils.track.get_api_request_headers",
-        return_value={"Authorization": "Bearer token"},
-    )
-    def test_track_error_appends_error_suffix_to_event_type(self, mock_headers, mock_url, mock_post):
+    @_apply_common_patches
+    def test_track_error_appends_error_suffix_to_event_type(self, mock_headers, mock_url, mock_post, mock_common):
         from utils.track import _wait_for_pending, track_error
 
         track_error("select-project", Exception("API failed"))
         _wait_for_pending()
 
-        call_args = mock_post.call_args
-        event_type = call_args[1]["json"]["event-type"]
+        event_type = mock_post.call_args[1]["json"]["event-type"]
         self.assertEqual(event_type, "mcp-select-project-error")
 
-    @patch("utils.track.requests.post")
-    @patch("utils.track.get_api_url", return_value="https://api.example.com")
-    @patch(
-        "utils.track.get_api_request_headers",
-        return_value={"Authorization": "Bearer token"},
-    )
-    def test_track_decorator_fails_silently_on_network_error(self, mock_headers, mock_url, mock_post):
-        from utils.track import _wait_for_pending, track
-
+    @_apply_common_patches
+    def test_track_decorator_fails_silently_on_network_error(self, mock_headers, mock_url, mock_post, mock_common):
         mock_post.side_effect = Exception("Network error")
-
-        class MyTool:
-            @track("my-event")
-            def my_method(self):
-                return "result"
-
-        tool = MyTool()
-        result = tool.my_method()
-        _wait_for_pending()
-
-        # Should return result normally despite tracking failure
+        result = self._invoke("my-event")
         self.assertEqual(result, "result")
 
-    @patch("utils.track.requests.post")
-    @patch("utils.track.get_api_url", return_value="https://api.example.com")
-    @patch(
-        "utils.track.get_api_request_headers",
-        return_value={"Authorization": "Bearer token"},
-    )
-    def test_track_error_fails_silently_on_network_error(self, mock_headers, mock_url, mock_post):
+    @_apply_common_patches
+    def test_track_error_fails_silently_on_network_error(self, mock_headers, mock_url, mock_post, mock_common):
         from utils.track import _wait_for_pending, track_error
 
         mock_post.side_effect = Exception("Network error")
-
-        # Should not raise an exception
         track_error("my-event", ValueError("Some error"))
         _wait_for_pending()
 
-    @patch("utils.track.requests.post")
-    @patch("utils.track.get_api_url", return_value="https://api.example.com")
-    @patch(
-        "utils.track.get_api_request_headers",
-        return_value={"Authorization": "Bearer token"},
-    )
-    def test_track_does_not_block_on_slow_network(self, mock_headers, mock_url, mock_post):
-        from utils.track import _wait_for_pending, track
-
+    @_apply_common_patches
+    def test_track_does_not_block_on_slow_network(self, mock_headers, mock_url, mock_post, mock_common):
         def slow_post(*args, **kwargs):
             time.sleep(2)
 
         mock_post.side_effect = slow_post
+
+        from utils.track import _wait_for_pending, track
 
         class MyTool:
             @track("slow-event")
             def my_method(self):
                 return "fast"
 
-        tool = MyTool()
         start = time.monotonic()
-        result = tool.my_method()
+        result = MyTool().my_method()
         elapsed = time.monotonic() - start
 
         # The decorated method must return immediately (well under the 2s
@@ -158,9 +176,7 @@ class TestTrack(unittest.TestCase):
         self.assertEqual(result, "fast")
         self.assertLess(elapsed, 0.5, f"track decorator blocked for {elapsed:.2f}s; expected <0.5s")
 
-        # Clean up the background thread so it doesn't leak into other tests.
         _wait_for_pending()
-
 
     @patch("utils.track.get_api_url", return_value="https://api.default.com")
     def test_get_tracking_url_uses_env_override(self, mock_url):
@@ -174,49 +190,30 @@ class TestTrack(unittest.TestCase):
         from utils.track import _get_tracking_url
 
         with patch.dict(os.environ, {}, clear=False):
-            # Ensure CS_TRACKING_URL is not set
             os.environ.pop("CS_TRACKING_URL", None)
             self.assertEqual(_get_tracking_url(), "https://api.default.com")
 
-    @patch("utils.track.requests.post")
-    @patch("utils.track.get_api_url", return_value="https://api.example.com")
-    @patch(
-        "utils.track.get_api_request_headers",
-        return_value={"Authorization": "Bearer token"},
-    )
-    def test_disabled_tracking_skips_post_on_decorator(self, mock_headers, mock_url, mock_post):
+    @_apply_common_patches
+    def test_disabled_tracking_skips_post_on_decorator(self, mock_headers, mock_url, mock_post, mock_common):
         with patch.dict(os.environ, {"CS_DISABLE_TRACKING": "1"}):
-            result = self._invoke_tracked_method("my-event", {"key": "value"})
-
+            result = self._invoke("my-event")
         self.assertEqual(result, "result")
         mock_post.assert_not_called()
 
-    @patch("utils.track.requests.post")
-    @patch("utils.track.get_api_url", return_value="https://api.example.com")
-    @patch(
-        "utils.track.get_api_request_headers",
-        return_value={"Authorization": "Bearer token"},
-    )
-    def test_disabled_tracking_skips_post_on_track_error(self, mock_headers, mock_url, mock_post):
+    @_apply_common_patches
+    def test_disabled_tracking_skips_post_on_track_error(self, mock_headers, mock_url, mock_post, mock_common):
         from utils.track import _wait_for_pending, track_error
 
         with patch.dict(os.environ, {"CS_DISABLE_TRACKING": "1"}):
             track_error("my-event", ValueError("boom"))
             _wait_for_pending()
-
         mock_post.assert_not_called()
 
-    @patch("utils.track.requests.post")
-    @patch("utils.track.get_api_url", return_value="https://api.example.com")
-    @patch(
-        "utils.track.get_api_request_headers",
-        return_value={"Authorization": "Bearer token"},
-    )
-    def test_empty_disable_tracking_env_does_not_disable(self, mock_headers, mock_url, mock_post):
+    @_apply_common_patches
+    def test_empty_disable_tracking_env_does_not_disable(self, mock_headers, mock_url, mock_post, mock_common):
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("CS_DISABLE_TRACKING", None)
-            self._invoke_tracked_method("my-event")
-
+            self._invoke("my-event")
         mock_post.assert_called_once()
 
 

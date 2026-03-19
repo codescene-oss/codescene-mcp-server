@@ -5,6 +5,7 @@ from itertools import groupby
 from typing import TypedDict
 
 from utils import (
+    code_ownership_properties,
     get_relative_file_path_for_api,
     normalize_onprem_url,
     require_access_token,
@@ -25,7 +26,7 @@ class CodeOwnership:
         mcp_instance.tool(self.code_ownership_for_path)
 
     @require_access_token
-    @track("code-ownership-for-path")
+    @track("code-ownership-for-path", code_ownership_properties)
     @with_version_check
     def code_ownership_for_path(self, project_id: int, path: str) -> str:
         """

@@ -5,6 +5,7 @@ from code_health_tools.delta_runner import run_delta_cli
 from utils import (
     cs_cli_path,
     get_platform_details,
+    pre_commit_properties,
     require_access_token,
     track,
     with_version_check,
@@ -22,7 +23,7 @@ class PreCommitCodeHealthSafeguard:
         mcp_instance.tool(self.pre_commit_code_health_safeguard)
 
     @require_access_token
-    @track("pre-commit-code-health-safeguard")
+    @track("pre-commit-code-health-safeguard", pre_commit_properties)
     @with_version_check
     def pre_commit_code_health_safeguard(self, git_repository_path: str) -> str:
         """
