@@ -68,6 +68,7 @@ PY
   --noinclude-unittest-mode=nofollow \
   --noinclude-setuptools-mode=nofollow \
   --noinclude-pydoc-mode=nofollow \
+  --include-module=lupa.lua51 \
   --include-data-dir=./src/docs=src/docs \
   --include-data-dir=./src/code_health_refactoring_business_case/s_curve/regression=code_health_refactoring_business_case/s_curve/regression \
   --include-data-files="${CLI_STAGE_PATH}=cs" \

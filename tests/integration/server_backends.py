@@ -237,6 +237,7 @@ class ExecutableBuilder:
             "--onefile",
             "--assume-yes-for-downloads",
             "--show-progress",
+            "--include-module=lupa.lua51",
             "--include-data-dir=./src/docs=src/docs",
             "--include-data-dir=./src/code_health_refactoring_business_case/s_curve/regression=code_health_refactoring_business_case/s_curve/regression",
             f"--include-data-files=./{cs_data_file}={cs_data_file}",
