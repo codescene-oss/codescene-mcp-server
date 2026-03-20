@@ -28,3 +28,36 @@ pub fn platform_name() -> &'static str {
         "unknown"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cli_binary_name_on_current_platform() {
+        let name = cli_binary_name();
+        if cfg!(windows) {
+            assert_eq!(name, "cs.exe");
+        } else {
+            assert_eq!(name, "cs");
+        }
+    }
+
+    #[test]
+    fn is_windows_matches_cfg() {
+        assert_eq!(is_windows(), cfg!(windows));
+    }
+
+    #[test]
+    fn platform_name_is_known() {
+        let name = platform_name();
+        assert!(
+            ["macos", "linux", "windows", "unknown"].contains(&name),
+            "unexpected platform: {name}"
+        );
+        // On macOS (where this test runs):
+        if cfg!(target_os = "macos") {
+            assert_eq!(name, "macos");
+        }
+    }
+}

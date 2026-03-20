@@ -125,6 +125,8 @@ pub fn adapt_worktree_gitdir_for_docker(gitdir: &Path) -> PathBuf {
 mod tests {
     use super::*;
 
+    // ---- NormalizedPath::new ----
+
     #[test]
     fn strip_windows_drive_letter() {
         assert_eq!(NormalizedPath::new("C:/Users/foo").0, "/Users/foo");
@@ -132,9 +134,138 @@ mod tests {
     }
 
     #[test]
+    fn normalizes_backslashes() {
+        assert_eq!(NormalizedPath::new(r"C:\Users\foo\bar").0, "/Users/foo/bar");
+    }
+
+    #[test]
+    fn no_drive_letter_unix_path() {
+        assert_eq!(NormalizedPath::new("/home/user/project").0, "/home/user/project");
+    }
+
+    #[test]
+    fn lowercase_drive_letter() {
+        assert_eq!(NormalizedPath::new("d:/code/project").0, "/code/project");
+    }
+
+    #[test]
+    fn empty_string() {
+        assert_eq!(NormalizedPath::new("").0, "");
+    }
+
+    #[test]
+    fn single_char_no_colon() {
+        // "a" is only 1 char, no colon — should not strip
+        assert_eq!(NormalizedPath::new("a").0, "a");
+    }
+
+    // ---- NormalizedPath::strip_prefix ----
+
+    #[test]
     fn strip_prefix_works() {
         let path = NormalizedPath::new("/Users/foo/bar");
         let prefix = NormalizedPath::new("/Users/foo");
         assert_eq!(path.strip_prefix(&prefix), Some("bar".to_string()));
+    }
+
+    #[test]
+    fn strip_prefix_case_insensitive() {
+        let path = NormalizedPath::new("/USERS/FOO/bar");
+        let prefix = NormalizedPath::new("/users/foo");
+        assert_eq!(path.strip_prefix(&prefix), Some("bar".to_string()));
+    }
+
+    #[test]
+    fn strip_prefix_trailing_slash_on_prefix() {
+        let path = NormalizedPath::new("/Users/foo/bar");
+        let prefix = NormalizedPath::new("/Users/foo/");
+        assert_eq!(path.strip_prefix(&prefix), Some("bar".to_string()));
+    }
+
+    #[test]
+    fn strip_prefix_no_match() {
+        let path = NormalizedPath::new("/other/path");
+        let prefix = NormalizedPath::new("/Users/foo");
+        assert_eq!(path.strip_prefix(&prefix), None);
+    }
+
+    #[test]
+    fn strip_prefix_exact_match() {
+        let path = NormalizedPath::new("/Users/foo");
+        let prefix = NormalizedPath::new("/Users/foo");
+        assert_eq!(path.strip_prefix(&prefix), Some("".to_string()));
+    }
+
+    // ---- get_relative_file_path_for_api ----
+
+    #[test]
+    fn relative_path_strips_root() {
+        let result = get_relative_file_path_for_api("/repo/src/main.rs", "/repo");
+        assert_eq!(result, "src/main.rs");
+    }
+
+    #[test]
+    fn relative_path_no_match_returns_original() {
+        let result = get_relative_file_path_for_api("/other/file.rs", "/repo");
+        assert_eq!(result, "/other/file.rs");
+    }
+
+    #[test]
+    fn relative_path_windows_style() {
+        let result = get_relative_file_path_for_api(r"C:\repo\src\main.rs", r"C:\repo");
+        assert_eq!(result, "src/main.rs");
+    }
+
+    // ---- adapt_path_for_docker (non-Docker environment) ----
+
+    #[test]
+    fn adapt_path_for_docker_returns_unchanged_when_not_docker() {
+        // In non-Docker env, should return path unchanged
+        let result = adapt_path_for_docker("/some/path/file.rs");
+        assert_eq!(result, "/some/path/file.rs");
+    }
+
+    #[test]
+    fn adapt_path_from_docker_returns_unchanged_when_not_docker() {
+        let result = adapt_path_from_docker("/mount/src/file.rs");
+        assert_eq!(result, "/mount/src/file.rs");
+    }
+
+    // ---- get_worktree_gitdir ----
+
+    #[test]
+    fn get_worktree_gitdir_returns_none_for_normal_repo() {
+        let dir = tempfile::tempdir().unwrap();
+        let git_dir = dir.path().join(".git");
+        std::fs::create_dir_all(&git_dir).unwrap();
+        // .git is a directory → not a worktree
+        assert!(get_worktree_gitdir(dir.path()).is_none());
+    }
+
+    #[test]
+    fn get_worktree_gitdir_returns_path_for_worktree() {
+        let dir = tempfile::tempdir().unwrap();
+        let git_file = dir.path().join(".git");
+        std::fs::write(&git_file, "gitdir: /some/other/.git/worktrees/branch").unwrap();
+        let result = get_worktree_gitdir(dir.path());
+        assert_eq!(
+            result,
+            Some(PathBuf::from("/some/other/.git/worktrees/branch"))
+        );
+    }
+
+    #[test]
+    fn get_worktree_gitdir_returns_none_if_no_git() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(get_worktree_gitdir(dir.path()).is_none());
+    }
+
+    // ---- adapt_worktree_gitdir_for_docker (non-Docker) ----
+
+    #[test]
+    fn adapt_worktree_gitdir_for_docker_returns_unchanged_when_not_docker() {
+        let path = PathBuf::from("/some/gitdir");
+        let result = adapt_worktree_gitdir_for_docker(&path);
+        assert_eq!(result, path);
     }
 }

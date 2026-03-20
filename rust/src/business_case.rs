@@ -225,4 +225,120 @@ mod tests {
     fn test_no_scenario_at_perfect() {
         assert!(find_target_scenario(HealthScore(10.0)).is_none());
     }
+
+    // ---- make_business_case ----
+
+    #[test]
+    fn make_business_case_low_score() {
+        let bc = make_business_case(2.0).unwrap();
+        assert_eq!(bc.scenario, "industry average");
+        assert_eq!(bc.target_score, 5.15);
+        assert_eq!(bc.current_score, 2.0);
+        assert!(bc.optimistic_outcome.defect_reduction_percent < 0.0);
+        assert!(bc.pessimistic_outcome.defect_reduction_percent < 0.0);
+        assert!(bc.confidence_interval.contains("CI"));
+    }
+
+    #[test]
+    fn make_business_case_medium_score() {
+        let bc = make_business_case(6.0).unwrap();
+        assert_eq!(bc.scenario, "top 5%");
+        assert_eq!(bc.target_score, 9.1);
+    }
+
+    #[test]
+    fn make_business_case_high_score() {
+        let bc = make_business_case(9.5).unwrap();
+        assert_eq!(bc.scenario, "optimal");
+        assert_eq!(bc.target_score, 10.0);
+    }
+
+    #[test]
+    fn make_business_case_perfect_returns_none() {
+        assert!(make_business_case(10.0).is_none());
+    }
+
+    #[test]
+    fn make_business_case_above_all_scenarios_returns_none() {
+        // 10.0 is the highest scenario target, so anything >= 10.0 returns None
+        assert!(make_business_case(10.5).is_none());
+    }
+
+    // ---- percentile edge cases ----
+
+    #[test]
+    fn percentile_empty_returns_zero() {
+        assert_eq!(percentile(&mut [], 50.0), 0.0);
+    }
+
+    #[test]
+    fn percentile_single_value() {
+        assert_eq!(percentile(&mut [42.0], 50.0), 42.0);
+    }
+
+    #[test]
+    fn percentile_two_values() {
+        let p50 = percentile(&mut [10.0, 20.0], 50.0);
+        assert!((p50 - 15.0).abs() < 1e-10);
+    }
+
+    // ---- round2 ----
+
+    #[test]
+    fn round2_works() {
+        assert_eq!(round2(1.234), 1.23);
+        assert_eq!(round2(1.235), 1.24);
+        assert_eq!(round2(0.0), 0.0);
+    }
+
+    // ---- relative_change ----
+
+    #[test]
+    fn relative_change_simple() {
+        let baseline = vec![100.0, 200.0];
+        let target = vec![80.0, 250.0];
+        let changes = relative_change(&baseline, &target);
+        assert!((changes[0] - (-20.0)).abs() < 1e-10);
+        assert!((changes[1] - 25.0).abs() < 1e-10);
+    }
+
+    // ---- load_coefficients ----
+
+    #[test]
+    fn load_coefficients_parses_ndjson() {
+        let ndjson = r#"{"coeffs": [1.0, 2.0, 3.0]}
+{"coeffs": [4.0, 5.0]}
+"#;
+        let coeffs = load_coefficients(ndjson);
+        assert_eq!(coeffs.len(), 2);
+        assert_eq!(coeffs[0], vec![1.0, 2.0, 3.0]);
+        assert_eq!(coeffs[1], vec![4.0, 5.0]);
+    }
+
+    #[test]
+    fn load_coefficients_skips_empty_lines() {
+        let ndjson = "\n{\"coeffs\": [1.0]}\n\n";
+        let coeffs = load_coefficients(ndjson);
+        assert_eq!(coeffs.len(), 1);
+    }
+
+    #[test]
+    fn load_coefficients_skips_invalid_lines() {
+        let ndjson = "not json\n{\"coeffs\": [1.0]}\n{\"no_coeffs\": true}\n";
+        let coeffs = load_coefficients(ndjson);
+        assert_eq!(coeffs.len(), 1);
+    }
+
+    // ---- BusinessCase serialisation ----
+
+    #[test]
+    fn business_case_serializes() {
+        let bc = make_business_case(2.0).unwrap();
+        let json = serde_json::to_string(&bc).unwrap();
+        assert!(json.contains("\"scenario\""));
+        assert!(json.contains("\"target_score\""));
+        assert!(json.contains("\"optimistic_outcome\""));
+        assert!(json.contains("\"pessimistic_outcome\""));
+        assert!(json.contains("\"confidence_interval\""));
+    }
 }
