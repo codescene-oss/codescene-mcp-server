@@ -517,7 +517,7 @@ def _check_common_properties(props: dict) -> bool:
     has_instance_id = bool(props.get("instance-id"))
     print_test("Has instance-id", has_instance_id, f"Value: {props.get('instance-id', 'MISSING')}")
 
-    has_environment = props.get("environment") in ("docker", "nuitka", "source")
+    has_environment = props.get("environment") in ("docker", "nuitka", "source", "binary")
     print_test("Has valid environment", has_environment, f"Value: {props.get('environment', 'MISSING')}")
 
     has_version = bool(props.get("version"))

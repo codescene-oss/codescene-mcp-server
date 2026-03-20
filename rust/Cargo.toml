@@ -1,0 +1,57 @@
+[package]
+name = "cs-mcp"
+version = "1.0.0"
+edition = "2021"
+
+[[bin]]
+name = "cs-mcp"
+path = "src/main.rs"
+
+[dependencies]
+# MCP SDK
+rmcp = { version = "1", features = ["server", "macros", "transport-io"] }
+
+# Async runtime
+tokio = { version = "1", features = ["macros", "rt", "io-std", "sync", "time", "process", "fs"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi", "std"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# License verification (Ed25519 JWT)
+ed25519-dalek = { version = "2", features = ["std"] }
+base64 = "0.22"
+
+# HTTP client (API calls, version checks, analytics)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Cryptography (SHA-256 hashing)
+sha2 = "0.10"
+
+# File system paths
+dirs = "6"
+
+# UUID generation (instance ID)
+uuid = { version = "1", features = ["v4"] }
+
+# Zip extraction (embedded CLI)
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+# Temp files (CLI extraction)
+tempfile = "3"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
