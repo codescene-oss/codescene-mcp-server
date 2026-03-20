@@ -3,6 +3,7 @@ from typing import TypedDict
 
 from code_health_tools.delta_runner import run_delta_cli
 from utils import (
+    analyze_change_set_properties,
     cs_cli_path,
     get_platform_details,
     require_access_token,
@@ -22,7 +23,7 @@ class AnalyzeChangeSet:
         mcp_instance.tool(self.analyze_change_set)
 
     @require_access_token
-    @track("analyze-change-set")
+    @track("analyze-change-set", analyze_change_set_properties)
     @with_version_check
     def analyze_change_set(self, base_ref: str, git_repository_path: str) -> str:
         """

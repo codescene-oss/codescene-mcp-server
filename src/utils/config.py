@@ -16,6 +16,7 @@ Config directory resolution order:
 
 import json
 import os
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -224,3 +225,32 @@ def mask_sensitive_value(value: str) -> str:
     if len(value) <= _SENSITIVE_TAIL_LENGTH:
         return "***"
     return f"...{value[-_SENSITIVE_TAIL_LENGTH:]}"
+
+
+# --- Instance identity ---
+
+_INSTANCE_ID_KEY = "instance_id"
+
+_cached_instance_id: str | None = None
+
+
+def get_or_create_instance_id() -> str:
+    """Return a persistent, unique identifier for this MCP installation.
+
+    On the first call the ID is read from ``config.json``.  If it does not
+    exist yet a new UUID-4 is generated, persisted, and returned.  The value
+    is cached in-process so subsequent calls never touch the filesystem.
+    """
+    global _cached_instance_id
+    if _cached_instance_id is not None:
+        return _cached_instance_id
+
+    config = load_config()
+    instance_id = config.get(_INSTANCE_ID_KEY)
+    if not instance_id:
+        instance_id = str(uuid.uuid4())
+        config[_INSTANCE_ID_KEY] = instance_id
+        save_config(config)
+
+    _cached_instance_id = instance_id
+    return instance_id

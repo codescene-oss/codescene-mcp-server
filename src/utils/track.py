@@ -1,10 +1,27 @@
+"""Analytics event tracking for MCP tool invocations.
+
+Every event is sent asynchronously in a background daemon thread so that
+tool responses are never blocked — even when the analytics endpoint is
+slow or unreachable.
+
+Each event payload includes *common properties* (instance ID, runtime
+environment, server version) plus optional *tool-specific properties*
+computed by a ``property_extractor`` callback that receives the tool's
+return value and arguments.
+"""
+
 import functools
 import os
 import threading
+from collections.abc import Callable
+from typing import Any
 
 import requests
 
 from utils import get_api_request_headers, get_api_url
+from utils.config import get_or_create_instance_id
+from utils.environment import get_environment
+from version import __version__
 
 TRACK_TIMEOUT = 5  # seconds
 
@@ -31,6 +48,15 @@ def _get_tracking_url() -> str:
 
 _pending_threads: list[threading.Thread] = []
 _pending_lock = threading.Lock()
+
+
+def _get_common_properties() -> dict:
+    """Build the property dict that is included in every tracking event."""
+    return {
+        "instance-id": get_or_create_instance_id(),
+        "environment": get_environment(),
+        "version": __version__,
+    }
 
 
 def _send_track_event(event_type: str, event_properties: dict | None = None):
@@ -84,12 +110,30 @@ def _wait_for_pending():
         thread.join(timeout=TRACK_TIMEOUT)
 
 
-def track(event_type: str, event_properties: dict | None = None):
+def track(event_type: str, property_extractor: Callable[..., dict] | None = None):
+    """Decorator that fires an analytics event after a tool method returns.
+
+    Args:
+        event_type: Short kebab-case name (automatically prefixed with ``mcp-``).
+        property_extractor: Optional callback ``(result, *args, **kwargs) -> dict``
+            that derives tool-specific event properties from the method's return
+            value and arguments.  Exceptions in the extractor are silently
+            swallowed so they can never break a tool response.
+    """
+
     def wrapper(f):
         @functools.wraps(f)
         def wrapped(self, *f_args, **f_kwargs):
             result = f(self, *f_args, **f_kwargs)
-            _send_track_event_in_background(f"mcp-{event_type}", event_properties)
+
+            properties = _get_common_properties()
+            if property_extractor is not None:
+                try:
+                    properties.update(property_extractor(result, *f_args, **f_kwargs))
+                except Exception:
+                    pass
+
+            _send_track_event_in_background(f"mcp-{event_type}", properties)
             return result
 
         return wrapped
@@ -99,4 +143,6 @@ def track(event_type: str, event_properties: dict | None = None):
 
 def track_error(event_type: str, error: Exception):
     """Track an error event manually. Call this from exception handlers in tools."""
-    _send_track_event_in_background(f"mcp-{event_type}-error", {"error": str(error)})
+    properties = _get_common_properties()
+    properties["error"] = str(error)
+    _send_track_event_in_background(f"mcp-{event_type}-error", properties)

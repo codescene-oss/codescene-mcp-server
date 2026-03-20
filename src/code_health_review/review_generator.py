@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import TypedDict
 
-from utils import require_access_token, run_cs_cli, track, with_version_check
+from utils import code_health_review_properties, require_access_token, run_cs_cli, track, with_version_check
 
 
 class CodeHealthReviewDeps(TypedDict):
@@ -16,7 +16,7 @@ class CodeHealthReview:
 
     @require_access_token
     @with_version_check
-    @track("code-health-review")
+    @track("code-health-review", code_health_review_properties)
     def code_health_review(self, file_path: str) -> str:
         """
         Review the Code Health of a single source file and return a detailed

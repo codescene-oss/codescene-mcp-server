@@ -6,6 +6,7 @@ from typing import TypedDict
 
 from utils import (
     adapt_mounted_file_path_inside_docker,
+    auto_refactor_properties,
     cs_cli_path,
     find_git_root,
     get_platform_details,
@@ -85,7 +86,7 @@ class AutoRefactor:
 
     @require_access_token
     @with_version_check
-    @track("code-health-auto-refactor")
+    @track("code-health-auto-refactor", auto_refactor_properties)
     def code_health_auto_refactor(self, file_path: str, function_name: str) -> str:
         """
         Refactor a single function to fix specific code health problems.

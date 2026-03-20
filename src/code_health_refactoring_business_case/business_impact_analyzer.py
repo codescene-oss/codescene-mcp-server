@@ -2,7 +2,7 @@ import json
 from collections.abc import Callable
 from typing import TypedDict
 
-from utils import code_health_from_cli_output, require_access_token, track, with_version_check
+from utils import business_case_properties, code_health_from_cli_output, require_access_token, track, with_version_check
 
 from .business_case import make_business_case_for
 
@@ -19,7 +19,7 @@ class CodeHealthRefactoringBusinessCase:
 
     @require_access_token
     @with_version_check
-    @track("code-health-refactoring-business-case")
+    @track("code-health-refactoring-business-case", business_case_properties)
     def code_health_refactoring_business_case(self, file_path: str) -> str:
         """
         Generate a data-driven business case for refactoring a source file.

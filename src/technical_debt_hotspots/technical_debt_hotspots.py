@@ -5,6 +5,8 @@ from typing import TypedDict
 
 from utils import (
     get_relative_file_path_for_api,
+    hotspots_for_file_properties,
+    hotspots_for_project_properties,
     normalize_onprem_url,
     require_access_token,
     track,
@@ -25,7 +27,7 @@ class TechnicalDebtHotspots:
         mcp_instance.tool(self.list_technical_debt_hotspots_for_project_file)
 
     @require_access_token
-    @track("list-technical-debt-hotspots-for-project")
+    @track("list-technical-debt-hotspots-for-project", hotspots_for_project_properties)
     @with_version_check
     def list_technical_debt_hotspots_for_project(self, project_id: int) -> str:
         """
@@ -80,7 +82,7 @@ class TechnicalDebtHotspots:
             return f"Error: {e}"
 
     @require_access_token
-    @track("list-technical-debt-hotspots-for-project-file")
+    @track("list-technical-debt-hotspots-for-project-file", hotspots_for_file_properties)
     @with_version_check
     def list_technical_debt_hotspots_for_project_file(self, file_path: str, project_id: int) -> str:
         """

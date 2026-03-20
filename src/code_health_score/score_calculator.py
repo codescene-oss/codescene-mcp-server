@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import TypedDict
 
-from utils import code_health_from_cli_output, require_access_token, run_cs_cli, track, with_version_check
+from utils import code_health_from_cli_output, code_health_score_properties, require_access_token, run_cs_cli, track, with_version_check
 
 
 class CodeHealthScoreDeps(TypedDict):
@@ -23,7 +23,7 @@ class CodeHealthScore:
 
     @require_access_token
     @with_version_check
-    @track("code-health-score")
+    @track("code-health-score", code_health_score_properties)
     def code_health_score(self, file_path: str) -> str:
         """
         Calculate the Code Health score for a single source file.
