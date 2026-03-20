@@ -13,9 +13,6 @@ use uuid::Uuid;
 
 use crate::errors::ConfigError;
 
-/// Config directory override for testing.
-static CONFIG_DIR_OVERRIDE: OnceLock<Option<PathBuf>> = OnceLock::new();
-
 /// Env vars that were already set by the MCP client before startup.
 /// Captured once by `snapshot_client_env_vars()` so we can distinguish
 /// client-provided values from those applied from the config file.
@@ -119,10 +116,6 @@ pub struct ConfigData {
 
 /// Resolve the config directory path.
 pub fn config_dir() -> PathBuf {
-    if let Some(Some(dir)) = CONFIG_DIR_OVERRIDE.get() {
-        return dir.clone();
-    }
-
     if let Ok(dir) = std::env::var("CS_CONFIG_DIR") {
         return PathBuf::from(dir);
     }

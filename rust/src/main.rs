@@ -696,17 +696,7 @@ impl ServerHandler for CodeSceneServer {
         _context: RequestContext<RoleServer>,
     ) -> Result<ReadResourceResult, ErrorData> {
         let uri = request.uri.as_str();
-        let content = if uri == resources::HOW_IT_WORKS_URI {
-            resources::HOW_IT_WORKS
-        } else if uri == resources::BUSINESS_CASE_URI {
-            resources::BUSINESS_CASE
-        } else {
-            return Err(ErrorData::new(
-                rmcp::model::ErrorCode::INVALID_REQUEST,
-                format!("Unknown resource: {uri}"),
-                None,
-            ));
-        };
+        let content = resolve_resource_content(uri)?;
         Ok(ReadResourceResult::new(vec![ResourceContents::text(
             content, uri,
         )]))
@@ -748,17 +738,7 @@ impl ServerHandler for CodeSceneServer {
         request: GetPromptRequestParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<GetPromptResult, ErrorData> {
-        let text = match request.name.as_str() {
-            "review_code_health" => prompts::REVIEW_CODE_HEALTH,
-            "plan_code_health_refactoring" => prompts::PLAN_CODE_HEALTH_REFACTORING,
-            other => {
-                return Err(ErrorData::new(
-                    rmcp::model::ErrorCode::INVALID_REQUEST,
-                    format!("Unknown prompt: {other}"),
-                    None,
-                ))
-            }
-        };
+        let text = resolve_prompt_text(&request.name)?;
         Ok(GetPromptResult::new(vec![PromptMessage::new_text(
             PromptMessageRole::User,
             text,
@@ -769,6 +749,34 @@ impl ServerHandler for CodeSceneServer {
 // ---------------------------------------------------------------------------
 // Free helper functions
 // ---------------------------------------------------------------------------
+
+/// Resolve bundled resource content by URI.
+fn resolve_resource_content(uri: &str) -> Result<&'static str, ErrorData> {
+    if uri == resources::HOW_IT_WORKS_URI {
+        Ok(resources::HOW_IT_WORKS)
+    } else if uri == resources::BUSINESS_CASE_URI {
+        Ok(resources::BUSINESS_CASE)
+    } else {
+        Err(ErrorData::new(
+            rmcp::model::ErrorCode::INVALID_REQUEST,
+            format!("Unknown resource: {uri}"),
+            None,
+        ))
+    }
+}
+
+/// Look up a prompt template by name.
+fn resolve_prompt_text(name: &str) -> Result<&'static str, ErrorData> {
+    match name {
+        "review_code_health" => Ok(prompts::REVIEW_CODE_HEALTH),
+        "plan_code_health_refactoring" => Ok(prompts::PLAN_CODE_HEALTH_REFACTORING),
+        other => Err(ErrorData::new(
+            rmcp::model::ErrorCode::INVALID_REQUEST,
+            format!("Unknown prompt: {other}"),
+            None,
+        )),
+    }
+}
 
 /// Run `cs review` on a file and return the raw output.
 async fn run_review(file_path: &Path, cli: &dyn CliRunner) -> Result<String, errors::CliError> {
@@ -1193,6 +1201,54 @@ mod tests {
         // Should prepend current working directory
         assert!(result.ends_with("relative/file.rs"));
         assert!(Path::new(&result).is_absolute());
+    }
+
+    // -- resolve_resource_content --
+
+    #[test]
+    fn resolve_resource_content_how_it_works() {
+        let result = resolve_resource_content(resources::HOW_IT_WORKS_URI);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), resources::HOW_IT_WORKS);
+    }
+
+    #[test]
+    fn resolve_resource_content_business_case() {
+        let result = resolve_resource_content(resources::BUSINESS_CASE_URI);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), resources::BUSINESS_CASE);
+    }
+
+    #[test]
+    fn resolve_resource_content_unknown_uri() {
+        let result = resolve_resource_content("unknown://resource");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.message.contains("Unknown resource"));
+    }
+
+    // -- resolve_prompt_text --
+
+    #[test]
+    fn resolve_prompt_text_review() {
+        let result = resolve_prompt_text("review_code_health");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), prompts::REVIEW_CODE_HEALTH);
+    }
+
+    #[test]
+    fn resolve_prompt_text_refactoring() {
+        let result = resolve_prompt_text("plan_code_health_refactoring");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), prompts::PLAN_CODE_HEALTH_REFACTORING);
+    }
+
+    #[test]
+    fn resolve_prompt_text_unknown() {
+        let result = resolve_prompt_text("nonexistent_prompt");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.message.contains("Unknown prompt"));
     }
 
     // -- extract_md_title --

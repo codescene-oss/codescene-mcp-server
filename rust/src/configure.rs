@@ -456,4 +456,44 @@ mod tests {
             std::env::remove_var("CS_DISABLE_TRACKING");
         });
     }
+
+    // ---- save failure paths ----
+
+    /// Helper: run a closure with CS_CONFIG_DIR pointing to an unwritable
+    /// location so that `config::save()` will fail.
+    fn with_unwritable_config_dir<F, R>(f: F) -> R
+    where
+        F: FnOnce() -> R,
+    {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // /dev/null is a file, not a directory — create_dir_all will fail
+        std::env::set_var("CS_CONFIG_DIR", "/dev/null/impossible");
+        let result = f();
+        std::env::remove_var("CS_CONFIG_DIR");
+        result
+    }
+
+    #[test]
+    fn save_key_returns_error_when_save_fails() {
+        with_unwritable_config_dir(|| {
+            let result = set_value("ca_bundle", "/cert.pem");
+            assert!(
+                result.contains("Error saving config"),
+                "expected save error, got: {result}"
+            );
+        });
+    }
+
+    #[test]
+    fn delete_key_returns_error_when_save_fails() {
+        with_unwritable_config_dir(|| {
+            // First, set a value in ConfigData (won't persist since save fails)
+            // Then try deleting — delete_key also calls save
+            let result = set_value("ca_bundle", "");
+            assert!(
+                result.contains("Error saving config"),
+                "expected save error, got: {result}"
+            );
+        });
+    }
 }

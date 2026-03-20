@@ -124,20 +124,32 @@ fn parse_cli_output(output: Output) -> Result<String, CliError> {
 /// Extract the embedded CLI zip to a cache directory, returning the
 /// path to the extracted binary. Skips extraction if already cached.
 fn extract_embedded_cli() -> Result<PathBuf, CliError> {
-    let cache_dir = cli_cache_dir();
+    extract_zip_to_cache(&cli_cache_dir(), CLI_ZIP)
+}
+
+/// Core extraction logic: create cache dir, unzip, set permissions,
+/// and verify the binary exists. Accepts the cache directory and raw
+/// zip bytes so that tests can supply a temp dir and synthetic zip.
+fn extract_zip_to_cache(cache_dir: &Path, zip_data: &[u8]) -> Result<PathBuf, CliError> {
     let binary_path = cache_dir.join(CLI_BINARY_NAME);
 
     if binary_path.exists() {
         return Ok(binary_path);
     }
 
-    std::fs::create_dir_all(&cache_dir)?;
+    std::fs::create_dir_all(cache_dir)?;
 
-    let cursor = std::io::Cursor::new(CLI_ZIP);
+    let cursor = std::io::Cursor::new(zip_data);
     let mut archive = zip::ZipArchive::new(cursor)
         .map_err(|e| CliError::NotFound(format!("Invalid embedded CLI zip: {e}")))?;
 
-    extract_cli_binary(&mut archive, &cache_dir)?;
+    extract_cli_binary(&mut archive, cache_dir)?;
+
+    if !binary_path.exists() {
+        return Err(CliError::NotFound(format!(
+            "CLI binary '{CLI_BINARY_NAME}' not found in embedded zip"
+        )));
+    }
 
     // Set executable permission on Unix
     #[cfg(unix)]
@@ -147,13 +159,7 @@ fn extract_embedded_cli() -> Result<PathBuf, CliError> {
         std::fs::set_permissions(&binary_path, perms)?;
     }
 
-    if binary_path.exists() {
-        Ok(binary_path)
-    } else {
-        Err(CliError::NotFound(format!(
-            "CLI binary '{CLI_BINARY_NAME}' not found in embedded zip"
-        )))
-    }
+    Ok(binary_path)
 }
 
 /// Extract the `cs` binary from the zip archive.
@@ -369,6 +375,70 @@ mod tests {
         let path = result.unwrap();
         assert!(path.exists());
         assert!(path.to_string_lossy().contains("cs"));
+    }
+
+    // -- extract_zip_to_cache --
+
+    #[test]
+    fn extract_zip_to_cache_fresh_extraction() {
+        let zip_data = build_zip(&[(CLI_BINARY_NAME, b"test-binary-content")]);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join("fresh-cache");
+        // cache dir does not exist yet — extract_zip_to_cache must create it
+        let result = extract_zip_to_cache(&cache, &zip_data);
+        assert!(result.is_ok(), "extract_zip_to_cache failed: {result:?}");
+        let path = result.unwrap();
+        assert!(path.exists());
+        assert_eq!(path, cache.join(CLI_BINARY_NAME));
+    }
+
+    #[test]
+    fn extract_zip_to_cache_returns_cached_on_second_call() {
+        let zip_data = build_zip(&[(CLI_BINARY_NAME, b"binary-data")]);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join("reuse-cache");
+        // First call: fresh extraction
+        let first = extract_zip_to_cache(&cache, &zip_data).unwrap();
+        assert!(first.exists());
+        // Second call: should hit the early return (binary already exists)
+        let second = extract_zip_to_cache(&cache, &zip_data).unwrap();
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn extract_zip_to_cache_sets_executable_permission() {
+        let zip_data = build_zip(&[(CLI_BINARY_NAME, b"exec-binary")]);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join("perm-cache");
+        let path = extract_zip_to_cache(&cache, &zip_data).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+            assert_ne!(mode & 0o111, 0, "binary should be executable");
+        }
+    }
+
+    #[test]
+    fn extract_zip_to_cache_missing_binary_returns_error() {
+        // Zip with a file that is NOT the CLI binary name
+        let zip_data = build_zip(&[("not-cs", b"wrong-file")]);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join("missing-cache");
+        let result = extract_zip_to_cache(&cache, &zip_data);
+        assert!(result.is_err(), "should fail when binary is missing from zip");
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("not found"), "unexpected error: {msg}");
+    }
+
+    #[test]
+    fn extract_zip_to_cache_invalid_zip_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join("bad-zip");
+        let result = extract_zip_to_cache(&cache, b"this is not a zip");
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("Invalid embedded CLI zip"), "unexpected error: {msg}");
     }
 
     // -- extract_cli_binary (synthetic zip tests) --
