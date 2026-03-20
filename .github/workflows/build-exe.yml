@@ -75,7 +75,7 @@ jobs:
           python -m venv .venv/
           source .venv/bin/activate
           pip install -r src/requirements.txt
-          pip install "Nuitka[onefile]"
+          pip install Nuitka
 
       - name: Download CodeScene CLI
         if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
@@ -310,7 +310,7 @@ jobs:
           python -m venv venv
           .\venv\Scripts\python -m pip install --upgrade pip
           .\venv\Scripts\pip install -r src/requirements.txt
-          .\venv\Scripts\pip install "Nuitka[onefile]"
+          .\venv\Scripts\pip install Nuitka
 
       - name: Download CodeScene CLI zip
         run: |
