@@ -190,6 +190,7 @@ name = "cs-mcp"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "base64",
  "dirs",
  "ed25519-dalek",

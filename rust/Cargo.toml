@@ -27,6 +27,9 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 anyhow = "1"
 thiserror = "2"
 
+# Async trait (for testable HTTP/CLI abstractions)
+async-trait = "0.1"
+
 # License verification (Ed25519 JWT)
 ed25519-dalek = { version = "2", features = ["std"] }
 base64 = "0.22"

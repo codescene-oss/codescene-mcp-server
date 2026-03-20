@@ -38,6 +38,9 @@ pub enum ApiError {
     #[error("HTTP request failed: {0}")]
     Http(#[from] reqwest::Error),
 
+    #[error("HTTP transport error: {0}")]
+    Transport(String),
+
     #[error("API error {status}: {body}")]
     Status { status: u16, body: String },
 }

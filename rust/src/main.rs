@@ -10,6 +10,7 @@ mod environment;
 mod errors;
 mod event_properties;
 mod hashing;
+mod http;
 mod license;
 mod platform;
 mod prompts;
@@ -36,7 +37,9 @@ use rmcp::{ErrorData, ServerHandler, ServiceExt, tool, tool_handler, tool_router
 use serde_json::json;
 use tracing_subscriber::EnvFilter;
 
+use crate::cli::CliRunner;
 use crate::config::ConfigData;
+use crate::http::HttpClient;
 use crate::tools::{
     ChangeSetParam, FilePathParam, GetConfigParam, GitRepoParam, OptionalContext, OwnershipParam,
     ProjectFileParam, ProjectParam, RefactorParam, SetConfigParam,
@@ -81,6 +84,19 @@ fn inlined_schema_for<T: JsonSchema + 'static>() -> Arc<serde_json::Map<String, 
     }
 }
 
+/// Bundled dependencies for constructing a `CodeSceneServer`.
+///
+/// Groups the six constructor parameters into a single value so that
+/// `CodeSceneServer::new` stays within the four-argument limit.
+struct ServerDeps {
+    config_data: ConfigData,
+    instance_id: String,
+    is_standalone: bool,
+    version_checker: VersionChecker,
+    cli_runner: Arc<dyn CliRunner>,
+    http_client: Arc<dyn HttpClient>,
+}
+
 /// The CodeScene MCP server.
 #[derive(Clone)]
 struct CodeSceneServer {
@@ -89,6 +105,8 @@ struct CodeSceneServer {
     config_data: Arc<ConfigData>,
     instance_id: String,
     is_standalone: bool,
+    cli_runner: Arc<dyn CliRunner>,
+    http_client: Arc<dyn HttpClient>,
 }
 
 // ---------------------------------------------------------------------------
@@ -133,17 +151,12 @@ impl CodeSceneServer {
 
 #[tool_router]
 impl CodeSceneServer {
-    fn new(
-        config_data: ConfigData,
-        instance_id: String,
-        is_standalone: bool,
-        version_checker: VersionChecker,
-    ) -> Self {
+    fn new(deps: ServerDeps) -> Self {
         let mut router = Self::tool_router();
 
         // Standalone licenses don't have CodeScene API access —
         // remove API-only tools so they don't appear in tools/list.
-        if is_standalone {
+        if deps.is_standalone {
             for name in API_ONLY_TOOLS {
                 router.remove_route(name);
             }
@@ -151,10 +164,12 @@ impl CodeSceneServer {
 
         Self {
             tool_router: router,
-            version_checker,
-            config_data: Arc::new(config_data),
-            instance_id,
-            is_standalone,
+            version_checker: deps.version_checker,
+            config_data: Arc::new(deps.config_data),
+            instance_id: deps.instance_id,
+            is_standalone: deps.is_standalone,
+            cli_runner: deps.cli_runner,
+            http_client: deps.http_client,
         }
     }
 
@@ -202,8 +217,8 @@ impl CodeSceneServer {
             return Ok(r);
         }
         self.version_checker.check_in_background();
-        let file_path = docker::adapt_path_for_docker(&params.file_path);
-        let result = run_review(Path::new(&file_path)).await;
+        let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
+        let result = run_review(Path::new(&file_path), &*self.cli_runner).await;
         match &result {
             Ok(output) => {
                 let props = event_properties::review_properties(Path::new(&params.file_path), output);
@@ -228,8 +243,8 @@ impl CodeSceneServer {
             return Ok(r);
         }
         self.version_checker.check_in_background();
-        let file_path = docker::adapt_path_for_docker(&params.file_path);
-        let result = run_review(Path::new(&file_path)).await;
+        let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
+        let result = run_review(Path::new(&file_path), &*self.cli_runner).await;
         match result {
             Ok(output) => {
                 let score = extract_score(&output);
@@ -258,8 +273,8 @@ impl CodeSceneServer {
             return Ok(r);
         }
         self.version_checker.check_in_background();
-        let repo_path = docker::adapt_path_for_docker(&params.git_repository_path);
-        let result = run_delta(Path::new(&repo_path), None).await;
+        let repo_path = docker::adapt_path_for_docker(Path::new(&params.git_repository_path));
+        let result = run_delta(Path::new(&repo_path), None, &*self.cli_runner).await;
         match result {
             Ok(output) => {
                 let parsed = delta::analyze_delta_output(&output);
@@ -289,8 +304,8 @@ impl CodeSceneServer {
             return Ok(r);
         }
         self.version_checker.check_in_background();
-        let repo_path = docker::adapt_path_for_docker(&params.git_repository_path);
-        let result = run_delta(Path::new(&repo_path), Some(&params.base_ref)).await;
+        let repo_path = docker::adapt_path_for_docker(Path::new(&params.git_repository_path));
+        let result = run_delta(Path::new(&repo_path), Some(&params.base_ref), &*self.cli_runner).await;
         match result {
             Ok(output) => {
                 let parsed = delta::analyze_delta_output(&output);
@@ -321,8 +336,8 @@ impl CodeSceneServer {
             return Ok(r);
         }
         self.version_checker.check_in_background();
-        let file_path = docker::adapt_path_for_docker(&params.file_path);
-        let review_result = run_review(Path::new(&file_path)).await;
+        let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
+        let review_result = run_review(Path::new(&file_path), &*self.cli_runner).await;
         match review_result {
             Ok(output) => {
                 let score = extract_score(&output);
@@ -356,7 +371,7 @@ impl CodeSceneServer {
             return Ok(r);
         }
         self.version_checker.check_in_background();
-        let result = run_auto_refactor(Path::new(&params.file_path), &params.function_name).await;
+        let result = run_auto_refactor(Path::new(&params.file_path), &params.function_name, &*self.cli_runner, &*self.http_client).await;
         match &result {
             Ok(result_json) => {
                 let props = event_properties::refactor_properties(
@@ -390,7 +405,7 @@ impl CodeSceneServer {
             ));
         }
         self.version_checker.check_in_background();
-        let result = run_select_project().await;
+        let result = run_select_project(&*self.http_client).await;
         match &result {
             Ok(output) => {
                 let props = event_properties::select_project_properties();
@@ -422,7 +437,7 @@ impl CodeSceneServer {
         }
         self.version_checker.check_in_background();
         let endpoint = format!("v2/projects/{}/goals", params.project_id);
-        let result = api_client::query_api_list(&endpoint).await;
+        let result = api_client::query_api_list_with_client(&endpoint, &*self.http_client).await;
         match result {
             Ok(data) => {
                 let props = event_properties::goals_properties(params.project_id, data.len());
@@ -453,14 +468,14 @@ impl CodeSceneServer {
             ));
         }
         self.version_checker.check_in_background();
-        let file_path = docker::adapt_path_for_docker(&params.file_path);
+        let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
         let relative = make_relative_for_api(&file_path);
         let endpoint = format!(
             "v2/projects/{}/goals?file={}",
             params.project_id,
             urlencoded(&relative)
         );
-        let result = api_client::query_api_list(&endpoint).await;
+        let result = api_client::query_api_list_with_client(&endpoint, &*self.http_client).await;
         match result {
             Ok(data) => {
                 let props = event_properties::goals_file_properties(Path::new(&params.file_path));
@@ -492,7 +507,7 @@ impl CodeSceneServer {
         }
         self.version_checker.check_in_background();
         let endpoint = format!("v2/projects/{}/hotspots", params.project_id);
-        let result = api_client::query_api_list(&endpoint).await;
+        let result = api_client::query_api_list_with_client(&endpoint, &*self.http_client).await;
         match result {
             Ok(data) => {
                 let props =
@@ -524,14 +539,14 @@ impl CodeSceneServer {
             ));
         }
         self.version_checker.check_in_background();
-        let file_path = docker::adapt_path_for_docker(&params.file_path);
+        let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
         let relative = make_relative_for_api(&file_path);
         let endpoint = format!(
             "v2/projects/{}/hotspots?file={}",
             params.project_id,
             urlencoded(&relative)
         );
-        let result = api_client::query_api_list(&endpoint).await;
+        let result = api_client::query_api_list_with_client(&endpoint, &*self.http_client).await;
         match result {
             Ok(data) => {
                 let props = event_properties::hotspots_file_properties(Path::new(&params.file_path));
@@ -562,14 +577,14 @@ impl CodeSceneServer {
             ));
         }
         self.version_checker.check_in_background();
-        let path = docker::adapt_path_for_docker(&params.path);
+        let path = docker::adapt_path_for_docker(Path::new(&params.path));
         let relative = make_relative_for_api(&path);
         let endpoint = format!(
             "v2/projects/{}/ownership?path={}",
             params.project_id,
             urlencoded(&relative)
         );
-        let result = api_client::query_api_list(&endpoint).await;
+        let result = api_client::query_api_list_with_client(&endpoint, &*self.http_client).await;
         match result {
             Ok(data) => {
                 let props = event_properties::ownership_properties(
@@ -756,30 +771,33 @@ impl ServerHandler for CodeSceneServer {
 // ---------------------------------------------------------------------------
 
 /// Run `cs review` on a file and return the raw output.
-async fn run_review(file_path: &Path) -> Result<String, errors::CliError> {
+async fn run_review(file_path: &Path, cli: &dyn CliRunner) -> Result<String, errors::CliError> {
     let resolved = resolve_file_path(file_path);
     let git_root = cli::find_git_root(Path::new(&resolved));
     let cli_path = make_cli_path(&resolved, git_root.as_deref());
     let args = vec!["review", "--output-format=json", &cli_path];
-    cli::run_cli(&args, git_root.as_deref()).await
+    cli.run(&args, git_root.as_deref()).await
 }
 
 /// Run `cs delta` (pre-commit or branch diff).
 async fn run_delta(
     repo_path: &Path,
     base_ref: Option<&str>,
+    cli: &dyn CliRunner,
 ) -> Result<String, errors::CliError> {
     let mut args = vec!["delta", "--output-format=json"];
     if let Some(br) = base_ref {
         args.push(br);
     }
-    cli::run_cli(&args, Some(repo_path)).await
+    cli.run(&args, Some(repo_path)).await
 }
 
 /// Run the auto-refactor workflow: parse-fns → review → match → ACE API.
 async fn run_auto_refactor(
     file_path: &Path,
     function_name: &str,
+    cli: &dyn CliRunner,
+    http: &dyn HttpClient,
 ) -> Result<serde_json::Value, String> {
     if std::env::var("CS_ACE_ACCESS_TOKEN")
         .map(|v| v.is_empty())
@@ -794,23 +812,25 @@ async fn run_auto_refactor(
     }
 
     let file_str = file_path.to_string_lossy();
-    let docker_path = docker::adapt_path_for_docker(&file_str);
+    let docker_path = docker::adapt_path_for_docker(file_path);
     let git_root = cli::find_git_root(Path::new(&docker_path))
         .ok_or_else(|| format!("Error: Could not find git root for {}", file_str))?;
     let cli_path = make_cli_path(&docker_path, Some(&git_root));
 
-    let parse_output = cli::run_cli(&["parse-fns", "--path", &cli_path], Some(&git_root))
+    let parse_output = cli
+        .run(&["parse-fns", "--path", &cli_path], Some(&git_root))
         .await
         .map_err(|e| format!("Error: {e}"))?;
     let functions: serde_json::Value =
         serde_json::from_str(&parse_output).map_err(|e| format!("Error parsing functions: {e}"))?;
 
-    let review_output = cli::run_cli(
-        &["review", "--output-format=json", &cli_path],
-        Some(&git_root),
-    )
-    .await
-    .map_err(|e| format!("Error: {e}"))?;
+    let review_output = cli
+        .run(
+            &["review", "--output-format=json", &cli_path],
+            Some(&git_root),
+        )
+        .await
+        .map_err(|e| format!("Error: {e}"))?;
     let review: serde_json::Value =
         serde_json::from_str(&review_output).map_err(|e| format!("Error parsing review: {e}"))?;
 
@@ -830,7 +850,7 @@ async fn run_auto_refactor(
         .unwrap_or("");
     let payload = build_ace_payload(&function, &code_smells, ext);
 
-    let response = ace_client::refactor(&payload)
+    let response = ace_client::refactor_with_client(&payload, http)
         .await
         .map_err(|e| format!("Error: {e}"))?;
 
@@ -958,7 +978,7 @@ fn format_ace_response(response: &serde_json::Value) -> serde_json::Value {
 }
 
 /// Build the `select_project` response.
-async fn run_select_project() -> Result<serde_json::Value, String> {
+async fn run_select_project(http: &dyn HttpClient) -> Result<serde_json::Value, String> {
     let link = std::env::var("CS_ONPREM_URL")
         .ok()
         .filter(|u| !u.is_empty())
@@ -976,7 +996,7 @@ async fn run_select_project() -> Result<serde_json::Value, String> {
         }
     }
 
-    let data = api_client::query_api_list("v2/projects")
+    let data = api_client::query_api_list_with_client("v2/projects", http)
         .await
         .map_err(|e| format!("Error: {e}"))?;
 
@@ -992,10 +1012,10 @@ fn extract_score(review_output: &str) -> Option<f64> {
 /// Make a CLI-compatible file path (relative to git root or Docker-adapted).
 fn make_cli_path(file_path: &str, git_root: Option<&Path>) -> String {
     if environment::is_docker() {
-        return docker::adapt_path_for_docker(file_path);
+        return docker::adapt_path_for_docker(Path::new(file_path));
     }
     match git_root {
-        Some(root) => docker::get_relative_file_path_for_api(file_path, &root.to_string_lossy()),
+        Some(root) => docker::get_relative_file_path_for_api(Path::new(file_path), root),
         None => file_path.to_string(),
     }
 }
@@ -1029,7 +1049,7 @@ fn make_relative_for_api(file_path: &str) -> String {
     let git_root = cli::find_git_root(Path::new(file_path));
     match git_root {
         Some(root) => {
-            docker::get_relative_file_path_for_api(file_path, &root.to_string_lossy())
+            docker::get_relative_file_path_for_api(Path::new(file_path), &root)
         }
         None => file_path.to_string(),
     }
@@ -1276,6 +1296,13 @@ mod tests {
     }
 
     #[test]
+    fn matches_function_name_colon_with_non_digit_suffix() {
+        // Ends with a non-digit so strip_suffix returns None, falls through
+        // to the starts_with branch; suffix after ':' is not all digits.
+        assert!(!matches_function_name("myFunc:abc", "myFunc"));
+    }
+
+    #[test]
     fn matches_function_name_prefix_match_with_colon() {
         // Multi-digit suffix: strip_suffix only strips one char, so this
         // falls into the strip_suffix branch but doesn't match after trimming
@@ -1338,18 +1365,26 @@ mod tests {
 
     // -- extract_code_smells --
 
+    /// Build a single-category review JSON for `extract_code_smells` tests.
+    fn make_review_json(
+        category: &str,
+        title: &str,
+        start_line: Option<i64>,
+    ) -> serde_json::Value {
+        let mut func = json!({"title": title});
+        if let Some(line) = start_line {
+            func["start-line"] = json!(line);
+        }
+        json!({
+            "review": [
+                { "category": category, "functions": [func] }
+            ]
+        })
+    }
+
     #[test]
     fn extract_code_smells_matching() {
-        let review = json!({
-            "review": [
-                {
-                    "category": "Complex Method",
-                    "functions": [
-                        {"title": "myFunc", "start-line": 10}
-                    ]
-                }
-            ]
-        });
+        let review = make_review_json("Complex Method", "myFunc", Some(10));
         let function = json!({"name": "myFunc", "start-line": 5});
         let smells = extract_code_smells(&review, &function, "myFunc");
         assert_eq!(smells.len(), 1);
@@ -1360,16 +1395,7 @@ mod tests {
 
     #[test]
     fn extract_code_smells_no_match() {
-        let review = json!({
-            "review": [
-                {
-                    "category": "Complex Method",
-                    "functions": [
-                        {"title": "otherFunc", "start-line": 10}
-                    ]
-                }
-            ]
-        });
+        let review = make_review_json("Complex Method", "otherFunc", Some(10));
         let function = json!({"name": "myFunc", "start-line": 5});
         let smells = extract_code_smells(&review, &function, "myFunc");
         assert!(smells.is_empty());
@@ -1418,16 +1444,7 @@ mod tests {
 
     #[test]
     fn extract_code_smells_missing_start_line() {
-        let review = json!({
-            "review": [
-                {
-                    "category": "Complex Method",
-                    "functions": [
-                        {"title": "myFunc"}
-                    ]
-                }
-            ]
-        });
+        let review = make_review_json("Complex Method", "myFunc", None);
         let function = json!({"name": "myFunc"});
         let smells = extract_code_smells(&review, &function, "myFunc");
         assert_eq!(smells.len(), 1);
@@ -1579,6 +1596,1121 @@ mod tests {
         assert!(API_ONLY_TOOLS.contains(&"code_ownership_for_path"));
         assert_eq!(API_ONLY_TOOLS.len(), 6);
     }
+
+    // ======================================================================
+    // CodeSceneServer construction & helpers
+    // ======================================================================
+
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    use rmcp::handler::server::wrapper::Parameters;
+
+    static SERVER_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Build a `ServerDeps` with the given mock/production clients.
+    fn test_deps(
+        id: &str,
+        is_standalone: bool,
+        cli: Arc<dyn cli::CliRunner>,
+        http: Arc<dyn http::HttpClient>,
+    ) -> ServerDeps {
+        ServerDeps {
+            config_data: ConfigData {
+                instance_id: Some(id.to_string()),
+                values: HashMap::new(),
+            },
+            instance_id: id.to_string(),
+            is_standalone,
+            version_checker: VersionChecker::new("dev"),
+            cli_runner: cli,
+            http_client: http,
+        }
+    }
+
+    /// Build a `CodeSceneServer` for tests. Uses version "dev" to disable
+    /// background version checking, and an empty `ConfigData`.
+    fn make_server(is_standalone: bool) -> CodeSceneServer {
+        CodeSceneServer::new(test_deps(
+            "test-instance",
+            is_standalone,
+            Arc::new(cli::ProductionCliRunner),
+            Arc::new(http::ReqwestClient),
+        ))
+    }
+
+    /// Extract the text body from the first content item in a `CallToolResult`.
+    fn result_text(result: &CallToolResult) -> &str {
+        result
+            .content
+            .first()
+            .and_then(|c| c.as_text())
+            .map(|t| t.text.as_str())
+            .unwrap_or("")
+    }
+
+    /// Build a server whose `VersionChecker` already has cached version info.
+    async fn make_server_with_version(
+        current: &str,
+        latest: &str,
+        is_outdated: bool,
+    ) -> CodeSceneServer {
+        let vc = VersionChecker::new(current);
+        vc.set_cached_info(version_checker::VersionInfo {
+            latest: latest.to_string(),
+            current: current.to_string(),
+            is_outdated,
+        })
+        .await;
+        CodeSceneServer::new(ServerDeps {
+            config_data: ConfigData {
+                instance_id: Some("test".to_string()),
+                values: HashMap::new(),
+            },
+            instance_id: "test".to_string(),
+            is_standalone: false,
+            version_checker: vc,
+            cli_runner: Arc::new(cli::ProductionCliRunner),
+            http_client: Arc::new(http::ReqwestClient),
+        })
+    }
+
+    /// RAII guard that acquires `SERVER_ENV_LOCK`, sets `CS_ACCESS_TOKEN`,
+    /// and restores the environment when dropped.
+    struct TokenGuard<'a> {
+        _lock: std::sync::MutexGuard<'a, ()>,
+    }
+
+    impl Drop for TokenGuard<'_> {
+        fn drop(&mut self) {
+            std::env::remove_var("CS_ACCESS_TOKEN");
+        }
+    }
+
+    fn set_token(value: &str) -> TokenGuard<'static> {
+        let lock = SERVER_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("CS_ACCESS_TOKEN", value);
+        TokenGuard { _lock: lock }
+    }
+
+    fn clear_token() -> TokenGuard<'static> {
+        let lock = SERVER_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var("CS_ACCESS_TOKEN");
+        TokenGuard { _lock: lock }
+    }
+
+    // -- CodeSceneServer::new --
+
+    #[test]
+    fn new_api_mode_keeps_all_tools() {
+        let server = make_server(false);
+        assert!(!server.is_standalone);
+    }
+
+    #[test]
+    fn new_standalone_mode_sets_flag() {
+        let server = make_server(true);
+        assert!(server.is_standalone);
+    }
+
+    #[test]
+    fn new_stores_instance_id() {
+        let server = make_server(false);
+        assert_eq!(server.instance_id, "test-instance");
+    }
+
+    // -- get_info --
+
+    #[test]
+    fn get_info_returns_server_name() {
+        let server = make_server(false);
+        assert_eq!(server.get_info().server_info.name, "codescene-mcp-server");
+    }
+
+    #[test]
+    fn get_info_standalone_instructions_omit_api_tools() {
+        let info = make_server(true).get_info();
+        assert!(!info.instructions.as_deref().unwrap_or("").contains("select_project"));
+    }
+
+    #[test]
+    fn get_info_api_instructions_include_api_tools() {
+        let info = make_server(false).get_info();
+        assert!(info.instructions.as_deref().unwrap_or("").contains("select_project"));
+    }
+
+    #[test]
+    fn get_info_enables_tools_prompts_resources() {
+        let caps = &make_server(false).get_info().capabilities;
+        assert!(caps.tools.is_some());
+        assert!(caps.prompts.is_some());
+        assert!(caps.resources.is_some());
+    }
+
+    // -- require_token --
+
+    #[tokio::test]
+    async fn require_token_returns_error_when_missing() {
+        let _g = clear_token();
+        assert!(make_server(false).require_token().is_some());
+    }
+
+    #[tokio::test]
+    async fn require_token_returns_error_when_empty() {
+        let _g = set_token("");
+        assert!(make_server(false).require_token().is_some());
+    }
+
+    #[tokio::test]
+    async fn require_token_returns_none_when_set() {
+        let _g = set_token("some-token");
+        assert!(make_server(false).require_token().is_none());
+    }
+
+    // -- maybe_version_warning --
+
+    #[tokio::test]
+    async fn maybe_version_warning_returns_text_when_no_cache() {
+        assert_eq!(make_server(false).maybe_version_warning("hello").await, "hello");
+    }
+
+    #[tokio::test]
+    async fn maybe_version_warning_prepends_warning_when_outdated() {
+        let server = make_server_with_version("1.0.0", "2.0.0", true).await;
+        let result = server.maybe_version_warning("body text").await;
+        assert!(result.contains("VERSION UPDATE AVAILABLE"));
+        assert!(result.contains("body text"));
+    }
+
+    #[tokio::test]
+    async fn maybe_version_warning_no_warning_when_current() {
+        let server = make_server_with_version("2.0.0", "2.0.0", false).await;
+        assert_eq!(server.maybe_version_warning("body text").await, "body text");
+    }
+
+    // -- track / track_err (fire-and-forget, just verify no panic) --
+
+    #[tokio::test]
+    async fn track_does_not_panic() {
+        make_server(false).track("test-event", json!({"key": "value"}));
+    }
+
+    #[tokio::test]
+    async fn track_err_does_not_panic() {
+        make_server(false).track_err("test-tool", "some error");
+    }
+
+    // ======================================================================
+    // Tool handler tests (explain_* tools — static content)
+    // ======================================================================
+
+    #[tokio::test]
+    async fn explain_code_health_returns_content_when_token_set() {
+        let _g = set_token("test-token");
+        let result = make_server(false)
+            .explain_code_health(Parameters(OptionalContext { context: None }))
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+        assert!(!result.content.is_empty());
+    }
+
+    #[tokio::test]
+    async fn explain_code_health_returns_token_error_when_missing() {
+        let _g = clear_token();
+        let result = make_server(false)
+            .explain_code_health(Parameters(OptionalContext { context: None }))
+            .await
+            .unwrap();
+        assert!(result_text(&result).contains("No access token configured"));
+    }
+
+    #[tokio::test]
+    async fn explain_code_health_productivity_returns_content() {
+        let _g = set_token("test-token");
+        let result = make_server(false)
+            .explain_code_health_productivity(Parameters(OptionalContext { context: None }))
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+        assert!(!result.content.is_empty());
+    }
+
+    #[tokio::test]
+    async fn explain_code_health_productivity_token_error() {
+        let _g = clear_token();
+        let result = make_server(false)
+            .explain_code_health_productivity(Parameters(OptionalContext { context: None }))
+            .await
+            .unwrap();
+        assert!(result_text(&result).contains("No access token configured"));
+    }
+
+    // ======================================================================
+    // Tool handler tests (get_config / set_config)
+    // ======================================================================
+
+    #[tokio::test]
+    async fn get_config_lists_all_options() {
+        let result = make_server(false)
+            .get_config(Parameters(GetConfigParam { key: None }))
+            .await
+            .unwrap();
+        assert!(result_text(&result).contains("config_dir"));
+    }
+
+    #[tokio::test]
+    async fn get_config_single_key() {
+        let result = make_server(false)
+            .get_config(Parameters(GetConfigParam {
+                key: Some("access_token".to_string()),
+            }))
+            .await
+            .unwrap();
+        assert!(result_text(&result).contains("access_token"));
+    }
+
+    #[tokio::test]
+    async fn set_config_unknown_key_returns_error() {
+        let result = make_server(false)
+            .set_config(Parameters(SetConfigParam {
+                key: "nonexistent_key_xyz".to_string(),
+                value: "test".to_string(),
+            }))
+            .await
+            .unwrap();
+        let text = result_text(&result);
+        assert!(text.contains("error") || text.contains("unknown") || text.contains("Unknown"));
+    }
+
+    // ======================================================================
+    // Tool handler tests (standalone guard on API-only tools)
+    // ======================================================================
+
+    /// Assert that a tool result is an error mentioning standalone mode.
+    fn assert_standalone_error(result: &CallToolResult) {
+        assert_eq!(result.is_error, Some(true), "expected is_error=true");
+        assert!(
+            result_text(result).contains("standalone"),
+            "expected standalone mention in: {}",
+            result_text(result),
+        );
+    }
+
+    #[tokio::test]
+    async fn select_project_rejects_standalone_mode() {
+        let _g = set_token("test-token");
+        let result = make_server(true).select_project().await.unwrap();
+        assert_standalone_error(&result);
+    }
+
+    #[tokio::test]
+    async fn select_project_rejects_missing_token() {
+        let _g = clear_token();
+        let result = make_server(false).select_project().await.unwrap();
+        assert!(result_text(&result).contains("No access token configured"));
+    }
+
+    #[tokio::test]
+    async fn list_goals_rejects_standalone_mode() {
+        let _g = set_token("test-token");
+        let result = make_server(true)
+            .list_technical_debt_goals_for_project(Parameters(ProjectParam { project_id: 1 }))
+            .await
+            .unwrap();
+        assert_standalone_error(&result);
+    }
+
+    #[tokio::test]
+    async fn list_goals_file_rejects_standalone_mode() {
+        let _g = set_token("test-token");
+        let params = ProjectFileParam { project_id: 1, file_path: "/tmp/f.rs".to_string() };
+        let result = make_server(true)
+            .list_technical_debt_goals_for_project_file(Parameters(params))
+            .await
+            .unwrap();
+        assert_standalone_error(&result);
+    }
+
+    #[tokio::test]
+    async fn list_hotspots_rejects_standalone_mode() {
+        let _g = set_token("test-token");
+        let result = make_server(true)
+            .list_technical_debt_hotspots_for_project(Parameters(ProjectParam { project_id: 1 }))
+            .await
+            .unwrap();
+        assert_standalone_error(&result);
+    }
+
+    #[tokio::test]
+    async fn list_hotspots_file_rejects_standalone_mode() {
+        let _g = set_token("test-token");
+        let params = ProjectFileParam { project_id: 1, file_path: "/tmp/f.rs".to_string() };
+        let result = make_server(true)
+            .list_technical_debt_hotspots_for_project_file(Parameters(params))
+            .await
+            .unwrap();
+        assert_standalone_error(&result);
+    }
+
+    #[tokio::test]
+    async fn ownership_rejects_standalone_mode() {
+        let _g = set_token("test-token");
+        let params = OwnershipParam { project_id: 1, path: "/tmp/f.rs".to_string() };
+        let result = make_server(true)
+            .code_ownership_for_path(Parameters(params))
+            .await
+            .unwrap();
+        assert_standalone_error(&result);
+    }
+
+    // ======================================================================
+    // Token-missing tests for CLI-based tool handlers
+    // ======================================================================
+
+    fn assert_token_error(result: &CallToolResult) {
+        assert!(
+            result_text(result).contains("No access token configured"),
+            "expected token error, got: {}",
+            result_text(result),
+        );
+    }
+
+    #[tokio::test]
+    async fn code_health_review_rejects_missing_token() {
+        let _g = clear_token();
+        let params = FilePathParam { file_path: "/tmp/f.rs".to_string() };
+        let result = make_server(false).code_health_review(Parameters(params)).await.unwrap();
+        assert_token_error(&result);
+    }
+
+    #[tokio::test]
+    async fn code_health_score_rejects_missing_token() {
+        let _g = clear_token();
+        let params = FilePathParam { file_path: "/tmp/f.rs".to_string() };
+        let result = make_server(false).code_health_score(Parameters(params)).await.unwrap();
+        assert_token_error(&result);
+    }
+
+    #[tokio::test]
+    async fn pre_commit_safeguard_rejects_missing_token() {
+        let _g = clear_token();
+        let params = GitRepoParam { git_repository_path: "/tmp/repo".to_string() };
+        let result = make_server(false)
+            .pre_commit_code_health_safeguard(Parameters(params))
+            .await
+            .unwrap();
+        assert_token_error(&result);
+    }
+
+    #[tokio::test]
+    async fn analyze_change_set_rejects_missing_token() {
+        let _g = clear_token();
+        let params = ChangeSetParam {
+            base_ref: "main".to_string(),
+            git_repository_path: "/tmp/repo".to_string(),
+        };
+        let result = make_server(false).analyze_change_set(Parameters(params)).await.unwrap();
+        assert_token_error(&result);
+    }
+
+    #[tokio::test]
+    async fn business_case_rejects_missing_token() {
+        let _g = clear_token();
+        let params = FilePathParam { file_path: "/tmp/f.rs".to_string() };
+        let result = make_server(false)
+            .code_health_refactoring_business_case(Parameters(params))
+            .await
+            .unwrap();
+        assert_token_error(&result);
+    }
+
+    #[tokio::test]
+    async fn auto_refactor_rejects_missing_token() {
+        let _g = clear_token();
+        let params = RefactorParam {
+            file_path: "/tmp/f.rs".to_string(),
+            function_name: "foo".to_string(),
+        };
+        let result = make_server(false)
+            .code_health_auto_refactor(Parameters(params))
+            .await
+            .unwrap();
+        assert_token_error(&result);
+    }
+
+    // ======================================================================
+    // Token-missing tests for API-based tool handlers
+    // ======================================================================
+
+    #[tokio::test]
+    async fn list_goals_rejects_missing_token() {
+        let _g = clear_token();
+        let result = make_server(false)
+            .list_technical_debt_goals_for_project(Parameters(ProjectParam { project_id: 1 }))
+            .await
+            .unwrap();
+        assert_token_error(&result);
+    }
+
+    #[tokio::test]
+    async fn list_goals_file_rejects_missing_token() {
+        let _g = clear_token();
+        let params = ProjectFileParam { project_id: 1, file_path: "/tmp/f.rs".to_string() };
+        let result = make_server(false)
+            .list_technical_debt_goals_for_project_file(Parameters(params))
+            .await
+            .unwrap();
+        assert_token_error(&result);
+    }
+
+    #[tokio::test]
+    async fn list_hotspots_rejects_missing_token() {
+        let _g = clear_token();
+        let result = make_server(false)
+            .list_technical_debt_hotspots_for_project(Parameters(ProjectParam { project_id: 1 }))
+            .await
+            .unwrap();
+        assert_token_error(&result);
+    }
+
+    #[tokio::test]
+    async fn list_hotspots_file_rejects_missing_token() {
+        let _g = clear_token();
+        let params = ProjectFileParam { project_id: 1, file_path: "/tmp/f.rs".to_string() };
+        let result = make_server(false)
+            .list_technical_debt_hotspots_for_project_file(Parameters(params))
+            .await
+            .unwrap();
+        assert_token_error(&result);
+    }
+
+    #[tokio::test]
+    async fn ownership_rejects_missing_token() {
+        let _g = clear_token();
+        let params = OwnershipParam { project_id: 1, path: "/tmp/f.rs".to_string() };
+        let result = make_server(false)
+            .code_ownership_for_path(Parameters(params))
+            .await
+            .unwrap();
+        assert_token_error(&result);
+    }
+
+    // ======================================================================
+    // run_select_project (env-var–based, no real API calls for default path)
+    // ======================================================================
+
+    #[tokio::test]
+    async fn run_select_project_with_default_project_id() {
+        let _g = set_token("test-token");
+        std::env::set_var("CS_DEFAULT_PROJECT_ID", "42");
+        let result = run_select_project(&http::ReqwestClient).await;
+        std::env::remove_var("CS_DEFAULT_PROJECT_ID");
+        let value = result.unwrap();
+        assert_eq!(value["id"], 42);
+        assert!(value["description"].as_str().unwrap().contains("default"));
+    }
+
+    #[tokio::test]
+    async fn run_select_project_default_id_empty_falls_through() {
+        let _g = set_token("test-token");
+        std::env::set_var("CS_DEFAULT_PROJECT_ID", "");
+        // With empty project ID and no real API, this will fail at the API call.
+        // We just verify it doesn't return the default-project-id branch.
+        let result = run_select_project(&http::ReqwestClient).await;
+        std::env::remove_var("CS_DEFAULT_PROJECT_ID");
+        // It should either be Ok(projects list) or Err(api error) — not the default branch
+        match result {
+            Ok(val) => assert!(val.get("projects").is_some()),
+            Err(e) => assert!(e.contains("Error")),
+        }
+    }
+
+    // ======================================================================
+    // make_relative_for_api
+    // ======================================================================
+
+    #[test]
+    fn make_relative_for_api_returns_relative_path() {
+        // When given a path inside a git repo, it should return the relative portion
+        let result = make_relative_for_api("/definitely/not/a/git/repo/file.rs");
+        // Without a git root, falls back to the full path
+        assert_eq!(result, "/definitely/not/a/git/repo/file.rs");
+    }
+
+    #[test]
+    fn make_relative_for_api_inside_git_repo() {
+        // Use a path inside our own repo to exercise the Some(root) branch.
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        let abs_path = format!("{manifest}/src/main.rs");
+        let result = make_relative_for_api(&abs_path);
+        // Should strip the repo root and return a relative path
+        assert!(
+            !result.starts_with('/'),
+            "expected relative path, got {result:?}",
+        );
+        assert!(result.ends_with("src/main.rs"), "got {result:?}");
+    }
+
+    // ======================================================================
+    // MockCliRunner & mock-based server construction
+    // ======================================================================
+
+    use crate::errors::CliError;
+    use crate::http::tests::MockHttpClient;
+    use crate::http::HttpResponse;
+
+    /// A mock CLI runner that returns pre-configured responses in FIFO order.
+    struct MockCliRunner {
+        responses: Mutex<Vec<Result<String, CliError>>>,
+    }
+
+    impl MockCliRunner {
+        fn with_responses(responses: Vec<Result<String, CliError>>) -> Self {
+            Self {
+                responses: Mutex::new(responses),
+            }
+        }
+
+        fn with_ok(output: &str) -> Self {
+            Self::with_responses(vec![Ok(output.to_string())])
+        }
+
+        fn with_err(code: i32, stderr: &str) -> Self {
+            Self::with_responses(vec![Err(CliError::NonZeroExit {
+                code,
+                stderr: stderr.to_string(),
+            })])
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl CliRunner for MockCliRunner {
+        async fn run(
+            &self,
+            _args: &[&str],
+            _working_dir: Option<&Path>,
+        ) -> Result<String, CliError> {
+            self.responses
+                .lock()
+                .unwrap()
+                .remove(0)
+        }
+    }
+
+    /// Build a `CodeSceneServer` with injectable mock CLI and HTTP clients.
+    fn make_server_with_mocks(
+        is_standalone: bool,
+        cli: MockCliRunner,
+        http: MockHttpClient,
+    ) -> CodeSceneServer {
+        CodeSceneServer::new(test_deps(
+            "test-mock",
+            is_standalone,
+            Arc::new(cli),
+            Arc::new(http),
+        ))
+    }
+
+    /// Build a mock server with only a CLI mock (HTTP unused).
+    fn make_cli_mock_server(cli: MockCliRunner) -> CodeSceneServer {
+        make_server_with_mocks(false, cli, MockHttpClient::new(vec![]))
+    }
+
+    /// Build a mock server with only an HTTP mock (CLI unused).
+    fn make_http_mock_server(http: MockHttpClient) -> CodeSceneServer {
+        make_server_with_mocks(
+            false,
+            MockCliRunner::with_responses(vec![]),
+            http,
+        )
+    }
+
+    /// Assert that a tool call succeeded and its text contains `needle`.
+    fn assert_success_contains(result: &CallToolResult, needle: &str) {
+        assert!(
+            result.is_error.is_none() || result.is_error == Some(false),
+            "expected success, got error: {:?}",
+            result_text(result),
+        );
+        assert!(
+            result_text(result).contains(needle),
+            "expected text to contain {:?}, got {:?}",
+            needle,
+            result_text(result),
+        );
+    }
+
+    /// Assert that a tool call returned an error and its text contains `needle`.
+    fn assert_error_contains(result: &CallToolResult, needle: &str) {
+        assert_eq!(result.is_error, Some(true), "expected error result");
+        assert!(
+            result_text(result).contains(needle),
+            "expected error text to contain {:?}, got {:?}",
+            needle,
+            result_text(result),
+        );
+    }
+
+    /// Create a temp directory that looks like a git repo with a single file,
+    /// and set the ACE access token env var. Returns `(TempDir, PathBuf)`.
+    fn make_refactor_fixture() -> (tempfile::TempDir, std::path::PathBuf) {
+        std::env::set_var("CS_ACE_ACCESS_TOKEN", "ace-tok");
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".git")).unwrap();
+        let file_path = dir.path().join("test.js");
+        std::fs::write(&file_path, "function foo() {}").unwrap();
+        (dir, file_path)
+    }
+
+    // ======================================================================
+    // CLI tool handler tests — code_health_review
+    // ======================================================================
+
+    #[tokio::test]
+    async fn review_success_returns_cli_output() {
+        let _g = set_token("tok");
+        let server = make_cli_mock_server(MockCliRunner::with_ok(r#"{"score":9.5,"review":[]}"#));
+        let params = FilePathParam { file_path: "/tmp/test.rs".to_string() };
+        let result = server.code_health_review(Parameters(params)).await.unwrap();
+        assert_success_contains(&result, "9.5");
+    }
+
+    #[tokio::test]
+    async fn review_error_returns_tool_error() {
+        let _g = set_token("tok");
+        let server = make_cli_mock_server(MockCliRunner::with_err(1, "review failed"));
+        let params = FilePathParam { file_path: "/tmp/test.rs".to_string() };
+        let result = server.code_health_review(Parameters(params)).await.unwrap();
+        assert_error_contains(&result, "review failed");
+    }
+
+    // ======================================================================
+    // CLI tool handler tests — code_health_score
+    // ======================================================================
+
+    #[tokio::test]
+    async fn score_success_returns_score() {
+        let _g = set_token("tok");
+        let server = make_cli_mock_server(MockCliRunner::with_ok(r#"{"score":8.5,"review":[]}"#));
+        let params = FilePathParam { file_path: "/tmp/test.rs".to_string() };
+        let result = server.code_health_score(Parameters(params)).await.unwrap();
+        assert_success_contains(&result, "Code Health score: 8.5");
+    }
+
+    #[tokio::test]
+    async fn score_no_score_in_output() {
+        let _g = set_token("tok");
+        let server = make_cli_mock_server(MockCliRunner::with_ok(r#"{"review":[]}"#));
+        let params = FilePathParam { file_path: "/tmp/test.rs".to_string() };
+        let result = server.code_health_score(Parameters(params)).await.unwrap();
+        assert_success_contains(&result, "Could not determine");
+    }
+
+    #[tokio::test]
+    async fn score_error_returns_tool_error() {
+        let _g = set_token("tok");
+        let server = make_cli_mock_server(MockCliRunner::with_err(1, "score failed"));
+        let params = FilePathParam { file_path: "/tmp/test.rs".to_string() };
+        let result = server.code_health_score(Parameters(params)).await.unwrap();
+        assert_error_contains(&result, "score failed");
+    }
+
+    // ======================================================================
+    // CLI tool handler tests — pre_commit_code_health_safeguard
+    // ======================================================================
+
+    async fn run_safeguard(cli: MockCliRunner) -> CallToolResult {
+        let server = make_cli_mock_server(cli);
+        let params = GitRepoParam { git_repository_path: "/tmp/repo".to_string() };
+        server.pre_commit_code_health_safeguard(Parameters(params)).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn safeguard_success_returns_parsed_delta() {
+        let _g = set_token("tok");
+        let result = run_safeguard(MockCliRunner::with_ok("--- file.rs\n+++ file.rs\n")).await;
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+    }
+
+    #[tokio::test]
+    async fn safeguard_error_returns_tool_error() {
+        let _g = set_token("tok");
+        let result = run_safeguard(MockCliRunner::with_err(1, "delta failed")).await;
+        assert_error_contains(&result, "delta failed");
+    }
+
+    // ======================================================================
+    // CLI tool handler tests — analyze_change_set
+    // ======================================================================
+
+    async fn run_change_set(cli: MockCliRunner) -> CallToolResult {
+        let server = make_cli_mock_server(cli);
+        let params = ChangeSetParam {
+            base_ref: "main".to_string(),
+            git_repository_path: "/tmp/repo".to_string(),
+        };
+        server.analyze_change_set(Parameters(params)).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn change_set_success_returns_parsed_delta() {
+        let _g = set_token("tok");
+        let result = run_change_set(MockCliRunner::with_ok("--- file.rs\n+++ file.rs\n")).await;
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+    }
+
+    #[tokio::test]
+    async fn change_set_error_returns_tool_error() {
+        let _g = set_token("tok");
+        let result = run_change_set(MockCliRunner::with_err(1, "delta failed")).await;
+        assert_error_contains(&result, "delta failed");
+    }
+
+    // ======================================================================
+    // CLI tool handler tests — code_health_refactoring_business_case
+    // ======================================================================
+
+    #[tokio::test]
+    async fn business_case_success_with_score() {
+        let _g = set_token("tok");
+        let server = make_cli_mock_server(MockCliRunner::with_ok(r#"{"score":6.0,"review":[]}"#));
+        let params = FilePathParam { file_path: "/tmp/test.rs".to_string() };
+        let result = server.code_health_refactoring_business_case(Parameters(params)).await.unwrap();
+        assert_success_contains(&result, "scenario");
+    }
+
+    #[tokio::test]
+    async fn business_case_optimal_score() {
+        let _g = set_token("tok");
+        let server = make_cli_mock_server(MockCliRunner::with_ok(r#"{"score":10.0,"review":[]}"#));
+        let params = FilePathParam { file_path: "/tmp/test.rs".to_string() };
+        let result = server.code_health_refactoring_business_case(Parameters(params)).await.unwrap();
+        assert_success_contains(&result, "already optimal");
+    }
+
+    #[tokio::test]
+    async fn business_case_no_score() {
+        let _g = set_token("tok");
+        let server = make_cli_mock_server(MockCliRunner::with_ok(r#"{"review":[]}"#));
+        let params = FilePathParam { file_path: "/tmp/test.rs".to_string() };
+        let result = server.code_health_refactoring_business_case(Parameters(params)).await.unwrap();
+        assert_success_contains(&result, "Could not determine");
+    }
+
+    #[tokio::test]
+    async fn business_case_cli_error() {
+        let _g = set_token("tok");
+        let server = make_cli_mock_server(MockCliRunner::with_err(1, "review failed"));
+        let params = FilePathParam { file_path: "/tmp/test.rs".to_string() };
+        let result = server.code_health_refactoring_business_case(Parameters(params)).await.unwrap();
+        assert_error_contains(&result, "review failed");
+    }
+
+    // ======================================================================
+    // API tool handler tests — using mock HTTP
+    // ======================================================================
+
+    fn make_api_mock(response: HttpResponse) -> MockHttpClient {
+        // API tools call query_api_list which paginates: first call returns
+        // data, second call returns empty array to stop pagination.
+        MockHttpClient::new(vec![response, HttpResponse::ok("[]")])
+    }
+
+    #[tokio::test]
+    async fn goals_project_success() {
+        let _g = set_token("tok");
+        let http = make_api_mock(HttpResponse::ok(r#"[{"file":"a.rs","goals":[]}]"#));
+        let server = make_http_mock_server(http);
+        let params = ProjectParam { project_id: 42 };
+        let result = server.list_technical_debt_goals_for_project(Parameters(params)).await.unwrap();
+        assert_success_contains(&result, "a.rs");
+    }
+
+    #[tokio::test]
+    async fn goals_project_api_error() {
+        let _g = set_token("tok");
+        let server = make_http_mock_server(MockHttpClient::new(vec![HttpResponse::error(500, "Server Error")]));
+        let params = ProjectParam { project_id: 42 };
+        let result = server.list_technical_debt_goals_for_project(Parameters(params)).await.unwrap();
+        assert_eq!(result.is_error, Some(true));
+    }
+
+    #[tokio::test]
+    async fn goals_file_success() {
+        let _g = set_token("tok");
+        let http = make_api_mock(HttpResponse::ok(r#"[{"goal":"reduce complexity"}]"#));
+        let server = make_http_mock_server(http);
+        let params = ProjectFileParam { project_id: 42, file_path: "/tmp/f.rs".to_string() };
+        let result = server.list_technical_debt_goals_for_project_file(Parameters(params)).await.unwrap();
+        assert_success_contains(&result, "reduce complexity");
+    }
+
+    #[tokio::test]
+    async fn goals_file_api_error() {
+        let _g = set_token("tok");
+        let server = make_http_mock_server(MockHttpClient::new(vec![HttpResponse::error(404, "Not Found")]));
+        let params = ProjectFileParam { project_id: 42, file_path: "/tmp/f.rs".to_string() };
+        let result = server.list_technical_debt_goals_for_project_file(Parameters(params)).await.unwrap();
+        assert_eq!(result.is_error, Some(true));
+    }
+
+    #[tokio::test]
+    async fn hotspots_project_success() {
+        let _g = set_token("tok");
+        let http = make_api_mock(HttpResponse::ok(r#"[{"file":"b.rs","score":3.5}]"#));
+        let server = make_http_mock_server(http);
+        let params = ProjectParam { project_id: 10 };
+        let result = server.list_technical_debt_hotspots_for_project(Parameters(params)).await.unwrap();
+        assert_success_contains(&result, "b.rs");
+    }
+
+    #[tokio::test]
+    async fn hotspots_project_api_error() {
+        let _g = set_token("tok");
+        let server = make_http_mock_server(MockHttpClient::new(vec![HttpResponse::error(403, "Forbidden")]));
+        let params = ProjectParam { project_id: 10 };
+        let result = server.list_technical_debt_hotspots_for_project(Parameters(params)).await.unwrap();
+        assert_eq!(result.is_error, Some(true));
+    }
+
+    #[tokio::test]
+    async fn hotspots_file_success() {
+        let _g = set_token("tok");
+        let http = make_api_mock(HttpResponse::ok(r#"[{"score":7.0,"revisions":12}]"#));
+        let server = make_http_mock_server(http);
+        let params = ProjectFileParam { project_id: 10, file_path: "/tmp/f.rs".to_string() };
+        let result = server.list_technical_debt_hotspots_for_project_file(Parameters(params)).await.unwrap();
+        assert_success_contains(&result, "7.0");
+    }
+
+    #[tokio::test]
+    async fn hotspots_file_api_error() {
+        let _g = set_token("tok");
+        let server = make_http_mock_server(MockHttpClient::new(vec![HttpResponse::error(500, "Oops")]));
+        let params = ProjectFileParam { project_id: 10, file_path: "/tmp/f.rs".to_string() };
+        let result = server.list_technical_debt_hotspots_for_project_file(Parameters(params)).await.unwrap();
+        assert_eq!(result.is_error, Some(true));
+    }
+
+    #[tokio::test]
+    async fn ownership_success() {
+        let _g = set_token("tok");
+        let http = make_api_mock(HttpResponse::ok(r#"[{"owner":"Alice","paths":["src/"]}]"#));
+        let server = make_http_mock_server(http);
+        let params = OwnershipParam { project_id: 5, path: "/tmp/src/f.rs".to_string() };
+        let result = server.code_ownership_for_path(Parameters(params)).await.unwrap();
+        assert_success_contains(&result, "Alice");
+    }
+
+    #[tokio::test]
+    async fn ownership_api_error() {
+        let _g = set_token("tok");
+        let server = make_http_mock_server(MockHttpClient::new(vec![HttpResponse::error(401, "Unauthorized")]));
+        let params = OwnershipParam { project_id: 5, path: "/tmp/src/f.rs".to_string() };
+        let result = server.code_ownership_for_path(Parameters(params)).await.unwrap();
+        assert_eq!(result.is_error, Some(true));
+    }
+
+    // ======================================================================
+    // select_project with mock HTTP (fallthrough to API)
+    // ======================================================================
+
+    #[tokio::test]
+    async fn select_project_api_success() {
+        let _g = set_token("tok");
+        std::env::remove_var("CS_DEFAULT_PROJECT_ID");
+        let http = make_api_mock(HttpResponse::ok(r#"[{"id":1,"name":"My Project"}]"#));
+        let server = make_server_with_mocks(false, MockCliRunner::with_responses(vec![]), http);
+        let result = server.select_project().await.unwrap();
+        assert_success_contains(&result, "My Project");
+    }
+
+    #[tokio::test]
+    async fn select_project_api_error() {
+        let _g = set_token("tok");
+        std::env::remove_var("CS_DEFAULT_PROJECT_ID");
+        let http = MockHttpClient::new(vec![HttpResponse::error(500, "API down")]);
+        let server = make_server_with_mocks(false, MockCliRunner::with_responses(vec![]), http);
+        let result = server.select_project().await.unwrap();
+        assert_eq!(result.is_error, Some(true));
+    }
+
+    // ======================================================================
+    // run_auto_refactor — complex workflow paths
+    // ======================================================================
+
+    #[tokio::test]
+    async fn auto_refactor_missing_ace_token() {
+        let _g = set_token("tok");
+        std::env::remove_var("CS_ACE_ACCESS_TOKEN");
+        let server = make_server_with_mocks(false, MockCliRunner::with_responses(vec![]), MockHttpClient::new(vec![]));
+        let params = RefactorParam { file_path: "/tmp/test.js".to_string(), function_name: "foo".to_string() };
+        let result = server.code_health_auto_refactor(Parameters(params)).await.unwrap();
+        assert_error_contains(&result, "ACE access");
+    }
+
+    #[tokio::test]
+    async fn run_auto_refactor_no_git_root() {
+        let _g = set_token("tok");
+        std::env::set_var("CS_ACE_ACCESS_TOKEN", "ace-tok");
+        let result = run_auto_refactor(
+            Path::new("/nonexistent/path/test.js"),
+            "foo",
+            &MockCliRunner::with_responses(vec![]),
+            &MockHttpClient::new(vec![]),
+        )
+        .await;
+        std::env::remove_var("CS_ACE_ACCESS_TOKEN");
+        assert!(result.unwrap_err().contains("git root"));
+    }
+
+    #[tokio::test]
+    async fn run_auto_refactor_parse_fns_error() {
+        let _g = set_token("tok");
+        let cli = MockCliRunner::with_err(1, "parse-fns failed");
+        let result = refactor_with_fixture(cli, MockHttpClient::new(vec![]), "foo").await;
+        assert!(result.unwrap_err().contains("parse-fns failed"));
+    }
+
+    #[tokio::test]
+    async fn run_auto_refactor_invalid_parse_fns_json() {
+        let _g = set_token("tok");
+        let cli = MockCliRunner::with_ok("not-json");
+        let result = refactor_with_fixture(cli, MockHttpClient::new(vec![]), "foo").await;
+        assert!(result.unwrap_err().contains("parsing functions"));
+    }
+
+    /// Run `run_auto_refactor` with the fixture file and given mocks,
+    /// cleaning up the ACE token env var afterward.
+    async fn refactor_with_fixture(
+        cli: MockCliRunner,
+        http: MockHttpClient,
+        fn_name: &str,
+    ) -> Result<serde_json::Value, String> {
+        let (_dir, file_path) = make_refactor_fixture();
+        let result = run_auto_refactor(&file_path, fn_name, &cli, &http).await;
+        std::env::remove_var("CS_ACE_ACCESS_TOKEN");
+        result
+    }
+
+    #[tokio::test]
+    async fn run_auto_refactor_review_error() {
+        let _g = set_token("tok");
+        let cli = MockCliRunner::with_responses(vec![
+            Ok(r#"[{"name":"foo","body":"function foo(){}","start-line":1,"function-type":"Function"}]"#.to_string()),
+            Err(CliError::NonZeroExit { code: 1, stderr: "review exploded".to_string() }),
+        ]);
+        let result = refactor_with_fixture(cli, MockHttpClient::new(vec![]), "foo").await;
+        assert!(result.unwrap_err().contains("review exploded"));
+    }
+
+    #[tokio::test]
+    async fn run_auto_refactor_function_not_found() {
+        let _g = set_token("tok");
+        let cli = MockCliRunner::with_responses(vec![
+            Ok(r#"[{"name":"bar","body":"function bar(){}","start-line":1,"function-type":"Function"}]"#.to_string()),
+            Ok(r#"{"score":5.0,"review":[]}"#.to_string()),
+        ]);
+        let result = refactor_with_fixture(cli, MockHttpClient::new(vec![]), "foo").await;
+        assert!(result.unwrap_err().contains("Couldn't find function: foo"));
+    }
+
+    #[tokio::test]
+    async fn run_auto_refactor_no_code_smells() {
+        let _g = set_token("tok");
+        let cli = MockCliRunner::with_responses(vec![
+            Ok(r#"[{"name":"foo","body":"function foo(){}","start-line":1,"function-type":"Function"}]"#.to_string()),
+            Ok(r#"{"score":10.0,"review":[]}"#.to_string()),
+        ]);
+        let result = refactor_with_fixture(cli, MockHttpClient::new(vec![]), "foo").await;
+        assert!(result.unwrap_err().contains("No code smells"));
+    }
+
+    #[tokio::test]
+    async fn run_auto_refactor_ace_api_error() {
+        let _g = set_token("tok");
+        let cli = MockCliRunner::with_responses(vec![
+            Ok(r#"[{"name":"foo","body":"function foo(){}","start-line":1,"function-type":"Function"}]"#.to_string()),
+            Ok(r#"{"score":5.0,"review":[{"category":"Complex Method","functions":[{"title":"foo","start-line":1}]}]}"#.to_string()),
+        ]);
+        let http = MockHttpClient::new(vec![HttpResponse::error(500, "ACE down")]);
+        let result = refactor_with_fixture(cli, http, "foo").await;
+        assert!(result.unwrap_err().contains("ACE down"));
+    }
+
+    #[tokio::test]
+    async fn run_auto_refactor_full_success() {
+        let _g = set_token("tok");
+        let cli = MockCliRunner::with_responses(vec![
+            Ok(r#"[{"name":"foo","body":"function foo() { complex(); }","start-line":1,"function-type":"Function"}]"#.to_string()),
+            Ok(r#"{"score":5.0,"review":[{"category":"Complex Method","functions":[{"title":"foo","start-line":1}]}]}"#.to_string()),
+        ]);
+        let ace_response = r#"{"code":"function foo() { simple(); }","confidence":{"description":"high"},"reasons":[{"summary":"Simplified"}]}"#;
+        let http = MockHttpClient::new(vec![HttpResponse::ok(ace_response)]);
+        let result = refactor_with_fixture(cli, http, "foo").await;
+        let value = result.unwrap();
+        assert_eq!(value["confidence"], "high");
+        assert!(value["code"].as_str().unwrap().contains("simple"));
+    }
+
+    // ======================================================================
+    // auto_refactor tool handler success path
+    // ======================================================================
+
+    #[tokio::test]
+    async fn auto_refactor_tool_success() {
+        let _g = set_token("tok");
+        let (_dir, file_path) = make_refactor_fixture();
+        let cli = MockCliRunner::with_responses(vec![
+            Ok(r#"[{"name":"foo","body":"function foo() { x(); }","start-line":1,"function-type":"Function"}]"#.to_string()),
+            Ok(r#"{"score":5.0,"review":[{"category":"Complex Method","functions":[{"title":"foo","start-line":1}]}]}"#.to_string()),
+        ]);
+        let ace_resp = r#"{"code":"function foo() {}","confidence":{"description":"high"},"reasons":[]}"#;
+        let http = MockHttpClient::new(vec![HttpResponse::ok(ace_resp)]);
+        let server = make_server_with_mocks(false, cli, http);
+        let params = RefactorParam {
+            file_path: file_path.to_string_lossy().to_string(),
+            function_name: "foo".to_string(),
+        };
+        let result = server.code_health_auto_refactor(Parameters(params)).await.unwrap();
+        std::env::remove_var("CS_ACE_ACCESS_TOKEN");
+        assert_success_contains(&result, "high");
+    }
+
+    #[tokio::test]
+    async fn auto_refactor_tool_error_path() {
+        let _g = set_token("tok");
+        std::env::set_var("CS_ACE_ACCESS_TOKEN", "ace-tok");
+        let server = make_server_with_mocks(false, MockCliRunner::with_responses(vec![]), MockHttpClient::new(vec![]));
+        let params = RefactorParam { file_path: "/nonexistent/test.js".to_string(), function_name: "foo".to_string() };
+        let result = server.code_health_auto_refactor(Parameters(params)).await.unwrap();
+        std::env::remove_var("CS_ACE_ACCESS_TOKEN");
+        assert_error_contains(&result, "git root");
+    }
+
+    // ======================================================================
+    // run_select_project with mock HTTP (API call path)
+    // ======================================================================
+
+    #[tokio::test]
+    async fn run_select_project_api_call_success() {
+        let _g = set_token("tok");
+        std::env::remove_var("CS_DEFAULT_PROJECT_ID");
+        let http = make_api_mock(HttpResponse::ok(r#"[{"id":99,"name":"TestProject"}]"#));
+        let result = run_select_project(&http).await.unwrap();
+        assert!(result["projects"].as_array().unwrap().len() > 0);
+        assert_eq!(result["projects"][0]["name"], "TestProject");
+    }
+
+    #[tokio::test]
+    async fn run_select_project_api_call_error() {
+        let _g = set_token("tok");
+        std::env::remove_var("CS_DEFAULT_PROJECT_ID");
+        let http = MockHttpClient::new(vec![HttpResponse::error(500, "fail")]);
+        let result = run_select_project(&http).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Error"));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1606,7 +2738,14 @@ async fn main() -> anyhow::Result<()> {
     let version = env!("CS_MCP_VERSION");
     let version_checker = VersionChecker::new(version);
 
-    let server = CodeSceneServer::new(config_data, instance_id, is_standalone, version_checker);
+    let server = CodeSceneServer::new(ServerDeps {
+        config_data,
+        instance_id,
+        is_standalone,
+        version_checker,
+        cli_runner: Arc::new(cli::ProductionCliRunner),
+        http_client: Arc::new(http::ReqwestClient),
+    });
 
     let service = server
         .serve(rmcp::transport::stdio())

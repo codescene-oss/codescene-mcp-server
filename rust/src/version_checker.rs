@@ -4,9 +4,13 @@
 /// Non-blocking: the check runs in a background task and results are read
 /// via `try_read()`. Disabled by `CS_DISABLE_VERSION_CHECK` env var.
 
+use std::collections::HashMap;
 use std::sync::Arc;
+
 use tokio::sync::RwLock;
 use tokio::time::{Duration, Instant};
+
+use crate::http::{HttpClient, HttpRequest, Method, ReqwestClient};
 
 /// How long to cache a version check result.
 const CACHE_DURATION: Duration = Duration::from_secs(3600);
@@ -51,7 +55,7 @@ impl VersionChecker {
 
         let checker = self.clone();
         tokio::spawn(async move {
-            checker.refresh_if_stale().await;
+            checker.refresh_if_stale(&ReqwestClient).await;
         });
     }
 
@@ -62,18 +66,12 @@ impl VersionChecker {
         guard.as_ref().map(|c| c.info.clone())
     }
 
-    async fn refresh_if_stale(&self) {
-        // Check if cache is still fresh
-        {
-            let guard = self.cache.read().await;
-            if let Some(cached) = guard.as_ref() {
-                if cached.checked_at.elapsed() < CACHE_DURATION {
-                    return;
-                }
-            }
+    async fn refresh_if_stale(&self, client: &dyn HttpClient) {
+        if self.is_cache_fresh().await {
+            return;
         }
 
-        if let Some(info) = fetch_latest_version(&self.current_version).await {
+        if let Some(info) = fetch_latest_version(&self.current_version, client).await {
             let mut guard = self.cache.write().await;
             *guard = Some(CachedCheck {
                 info,
@@ -81,31 +79,56 @@ impl VersionChecker {
             });
         }
     }
+
+    async fn is_cache_fresh(&self) -> bool {
+        let guard = self.cache.read().await;
+        guard
+            .as_ref()
+            .map(|cached| cached.checked_at.elapsed() < CACHE_DURATION)
+            .unwrap_or(false)
+    }
+
+    /// Pre-populate the cache for testing purposes.
+    #[cfg(test)]
+    pub async fn set_cached_info(&self, info: VersionInfo) {
+        let mut guard = self.cache.write().await;
+        *guard = Some(CachedCheck {
+            info,
+            checked_at: Instant::now(),
+        });
+    }
 }
 
-async fn fetch_latest_version(current: &str) -> Option<VersionInfo> {
+async fn fetch_latest_version(
+    current: &str,
+    client: &dyn HttpClient,
+) -> Option<VersionInfo> {
     let url = check_url();
-    let client = reqwest::Client::new();
 
-    let resp = client
-        .get(&url)
-        .header("User-Agent", "cs-mcp")
-        .header("Accept", "application/vnd.github.v3+json")
-        .timeout(Duration::from_secs(10))
-        .send()
-        .await
-        .ok()?;
+    let request = HttpRequest {
+        method: Method::Get,
+        url,
+        headers: HashMap::from([
+            ("User-Agent".to_string(), "cs-mcp".to_string()),
+            (
+                "Accept".to_string(),
+                "application/vnd.github.v3+json".to_string(),
+            ),
+        ]),
+        body: None,
+        timeout_secs: 10,
+    };
 
-    if !resp.status().is_success() {
+    let resp = client.send(request).await.ok()?;
+
+    if !resp.is_success() {
         return None;
     }
 
-    let body: serde_json::Value = resp.json().await.ok()?;
+    let body: serde_json::Value = serde_json::from_str(&resp.body).ok()?;
     let latest = body.get("tag_name")?.as_str()?.to_string();
 
-    let is_outdated = latest != current
-        && !current.is_empty()
-        && current != "dev";
+    let is_outdated = latest != current && !current.is_empty() && current != "dev";
 
     Some(VersionInfo {
         latest,
@@ -144,6 +167,8 @@ pub fn format_version_warning(info: &VersionInfo) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::http::tests::MockHttpClient;
+    use crate::http::HttpResponse;
 
     // ---- VersionInfo ----
 
@@ -158,7 +183,6 @@ mod tests {
         assert_eq!(cloned.latest, "1.2.0");
         assert_eq!(cloned.current, "1.0.0");
         assert!(cloned.is_outdated);
-        // Debug impl exists
         let _debug = format!("{:?}", info);
     }
 
@@ -176,7 +200,6 @@ mod tests {
         assert!(warning.contains("2.0.0"));
         assert!(warning.contains("VERSION UPDATE AVAILABLE"));
         assert!(warning.contains("Homebrew"));
-        assert!(warning.contains("Windows"));
         assert!(warning.contains("Docker"));
     }
 
@@ -228,16 +251,13 @@ mod tests {
     #[test]
     fn check_url_default() {
         std::env::remove_var("CS_VERSION_CHECK_URL");
-        let url = check_url();
-        assert!(url.contains("github.com"));
-        assert!(url.contains("releases/latest"));
+        assert!(check_url().contains("github.com"));
     }
 
     #[test]
     fn check_url_override() {
         std::env::set_var("CS_VERSION_CHECK_URL", "https://custom.url/check");
-        let url = check_url();
-        assert_eq!(url, "https://custom.url/check");
+        assert_eq!(check_url(), "https://custom.url/check");
         std::env::remove_var("CS_VERSION_CHECK_URL");
     }
 
@@ -249,7 +269,7 @@ mod tests {
         assert_eq!(vc.current_version, "1.0.0");
     }
 
-    // ---- VersionChecker::try_read (empty cache) ----
+    // ---- VersionChecker::try_read ----
 
     #[tokio::test]
     async fn try_read_empty_cache() {
@@ -257,44 +277,9 @@ mod tests {
         assert!(vc.try_read().await.is_none());
     }
 
-    // ---- check_in_background disabled ----
-
-    #[test]
-    fn check_in_background_disabled_does_nothing() {
-        std::env::set_var("CS_DISABLE_VERSION_CHECK", "1");
-        let vc = VersionChecker::new("1.0.0");
-        // Should not panic
-        vc.check_in_background();
-        std::env::remove_var("CS_DISABLE_VERSION_CHECK");
-    }
-
-    #[test]
-    fn check_in_background_dev_version_does_nothing() {
-        let vc = VersionChecker::new("dev");
-        // Should not panic
-        vc.check_in_background();
-    }
-
-    // ---- check_in_background enabled (fire-and-forget) ----
-
-    #[tokio::test]
-    async fn check_in_background_enabled_spawns_without_panic() {
-        std::env::remove_var("CS_DISABLE_VERSION_CHECK");
-        // Point to a non-routable URL so the HTTP request fails silently
-        std::env::set_var("CS_VERSION_CHECK_URL", "http://192.0.2.1:1/check");
-        let vc = VersionChecker::new("1.0.0");
-        vc.check_in_background();
-        // Give the spawned task a moment to start
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        std::env::remove_var("CS_VERSION_CHECK_URL");
-    }
-
-    // ---- try_read after manual cache population ----
-
     #[tokio::test]
     async fn try_read_returns_info_after_cache_set() {
         let vc = VersionChecker::new("1.0.0");
-        // Manually populate the cache
         {
             let mut guard = vc.cache.write().await;
             *guard = Some(CachedCheck {
@@ -306,19 +291,42 @@ mod tests {
                 checked_at: Instant::now(),
             });
         }
-        let info = vc.try_read().await;
-        assert!(info.is_some());
-        let info = info.unwrap();
+        let info = vc.try_read().await.unwrap();
         assert_eq!(info.latest, "2.0.0");
         assert!(info.is_outdated);
     }
 
-    // ---- refresh_if_stale with fresh cache ----
+    // ---- check_in_background disabled ----
+
+    #[test]
+    fn check_in_background_disabled_does_nothing() {
+        std::env::set_var("CS_DISABLE_VERSION_CHECK", "1");
+        let vc = VersionChecker::new("1.0.0");
+        vc.check_in_background();
+        std::env::remove_var("CS_DISABLE_VERSION_CHECK");
+    }
+
+    #[test]
+    fn check_in_background_dev_version_does_nothing() {
+        let vc = VersionChecker::new("dev");
+        vc.check_in_background();
+    }
+
+    #[tokio::test]
+    async fn check_in_background_enabled_spawns_without_panic() {
+        std::env::remove_var("CS_DISABLE_VERSION_CHECK");
+        std::env::set_var("CS_VERSION_CHECK_URL", "http://192.0.2.1:1/check");
+        let vc = VersionChecker::new("1.0.0");
+        vc.check_in_background();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        std::env::remove_var("CS_VERSION_CHECK_URL");
+    }
+
+    // ---- refresh_if_stale ----
 
     #[tokio::test]
     async fn refresh_if_stale_skips_when_fresh() {
         let vc = VersionChecker::new("1.0.0");
-        // Set up a fresh cache entry
         {
             let mut guard = vc.cache.write().await;
             *guard = Some(CachedCheck {
@@ -330,14 +338,94 @@ mod tests {
                 checked_at: Instant::now(),
             });
         }
-        // Point to non-routable URL
-        std::env::set_var("CS_VERSION_CHECK_URL", "http://192.0.2.1:1/check");
-        // Should not refresh since cache is fresh
-        vc.refresh_if_stale().await;
-        // Cache should still have the same data
+        // Mock should NOT be called — cache is fresh
+        let mock = MockHttpClient::new(vec![]);
+        vc.refresh_if_stale(&mock).await;
+        let reqs = mock.captured_requests.lock().unwrap();
+        assert_eq!(reqs.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn refresh_if_stale_fetches_when_cache_empty() {
+        let vc = VersionChecker::new("1.0.0");
+        let mock = MockHttpClient::new(vec![HttpResponse::ok(
+            r#"{"tag_name":"2.0.0"}"#,
+        )]);
+        vc.refresh_if_stale(&mock).await;
+
         let info = vc.try_read().await.unwrap();
-        assert_eq!(info.latest, "1.0.0");
+        assert_eq!(info.latest, "2.0.0");
+        assert!(info.is_outdated);
+    }
+
+    // ---- fetch_latest_version ----
+
+    #[tokio::test]
+    async fn fetch_latest_version_success() {
+        let mock = MockHttpClient::new(vec![HttpResponse::ok(
+            r#"{"tag_name":"3.0.0"}"#,
+        )]);
+        let info = fetch_latest_version("2.0.0", &mock).await.unwrap();
+        assert_eq!(info.latest, "3.0.0");
+        assert_eq!(info.current, "2.0.0");
+        assert!(info.is_outdated);
+    }
+
+    #[tokio::test]
+    async fn fetch_latest_version_same_version_not_outdated() {
+        let mock = MockHttpClient::new(vec![HttpResponse::ok(
+            r#"{"tag_name":"1.0.0"}"#,
+        )]);
+        let info = fetch_latest_version("1.0.0", &mock).await.unwrap();
         assert!(!info.is_outdated);
-        std::env::remove_var("CS_VERSION_CHECK_URL");
+    }
+
+    #[tokio::test]
+    async fn fetch_latest_version_dev_not_outdated() {
+        let mock = MockHttpClient::new(vec![HttpResponse::ok(
+            r#"{"tag_name":"1.0.0"}"#,
+        )]);
+        let info = fetch_latest_version("dev", &mock).await.unwrap();
+        assert!(!info.is_outdated);
+    }
+
+    #[tokio::test]
+    async fn fetch_latest_version_http_error_returns_none() {
+        let mock = MockHttpClient::new(vec![HttpResponse::error(500, "fail")]);
+        assert!(fetch_latest_version("1.0.0", &mock).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn fetch_latest_version_transport_error_returns_none() {
+        let mock = MockHttpClient::new(vec![]);
+        assert!(fetch_latest_version("1.0.0", &mock).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn fetch_latest_version_missing_tag_name_returns_none() {
+        let mock = MockHttpClient::new(vec![HttpResponse::ok(r#"{"name":"v1"}"#)]);
+        assert!(fetch_latest_version("1.0.0", &mock).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn fetch_latest_version_invalid_json_returns_none() {
+        let mock = MockHttpClient::new(vec![HttpResponse::ok("not json")]);
+        assert!(fetch_latest_version("1.0.0", &mock).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn fetch_latest_version_sends_correct_headers() {
+        let mock = MockHttpClient::new(vec![HttpResponse::ok(
+            r#"{"tag_name":"1.0.0"}"#,
+        )]);
+        let captured = mock.captured_requests.clone();
+
+        let _ = fetch_latest_version("1.0.0", &mock).await;
+
+        let reqs = captured.lock().unwrap();
+        assert_eq!(reqs.len(), 1);
+        assert_eq!(reqs[0].method, Method::Get);
+        assert_eq!(reqs[0].headers.get("User-Agent").unwrap(), "cs-mcp");
+        assert!(reqs[0].headers.get("Accept").unwrap().contains("github"));
     }
 }

@@ -16,7 +16,11 @@ const CONTAINER_MOUNT: &str = "/mount";
 struct NormalizedPath(String);
 
 impl NormalizedPath {
-    fn new(raw: &str) -> Self {
+    fn from_path(path: &Path) -> Self {
+        Self::from_str(&path.to_string_lossy())
+    }
+
+    fn from_str(raw: &str) -> Self {
         let forward = raw.replace('\\', "/");
         let bytes = forward.as_bytes();
         let has_drive = forward.len() >= 2
@@ -56,47 +60,58 @@ fn docker_mount_path() -> Option<String> {
 ///
 /// If running in Docker, translates host paths (rooted at `CS_MOUNT_PATH`)
 /// to container paths under `/mount/`. Otherwise returns the path unchanged.
-pub fn adapt_path_for_docker(path: &str) -> String {
-    let mount_raw = match docker_mount_path() {
+pub fn adapt_path_for_docker(path: &Path) -> String {
+    translate_to_container(path, docker_mount_path().as_deref().map(Path::new))
+}
+
+fn translate_to_container(path: &Path, mount_raw: Option<&Path>) -> String {
+    let path_str = path.to_string_lossy();
+    let mount_raw = match mount_raw {
         Some(m) => m,
-        None => return path.to_string(),
+        None => return path_str.to_string(),
     };
 
-    let mount = NormalizedPath::new(&mount_raw);
-    let normalized = NormalizedPath::new(path);
+    let mount = NormalizedPath::from_path(mount_raw);
+    let normalized = NormalizedPath::from_path(path);
 
     if let Some(relative) = normalized.strip_prefix(&mount) {
         format!("{CONTAINER_MOUNT}/{relative}")
     } else {
-        path.to_string()
+        path_str.to_string()
     }
 }
 
 /// Convert a container path back to a host path for display.
 #[allow(dead_code)]
-pub fn adapt_path_from_docker(path: &str) -> String {
-    let mount_path = match docker_mount_path() {
+pub fn adapt_path_from_docker(path: &Path) -> String {
+    translate_from_container(path, docker_mount_path().as_deref().map(Path::new))
+}
+
+fn translate_from_container(path: &Path, mount_path: Option<&Path>) -> String {
+    let path_str = path.to_string_lossy();
+    let mount_path = match mount_path {
         Some(m) => m,
-        None => return path.to_string(),
+        None => return path_str.to_string(),
     };
 
-    if let Some(relative) = path.strip_prefix(CONTAINER_MOUNT) {
+    if let Some(relative) = path_str.strip_prefix(CONTAINER_MOUNT) {
         let relative = relative.strip_prefix('/').unwrap_or(relative);
-        format!("{mount_path}/{relative}")
+        let mount_str = mount_path.to_string_lossy();
+        format!("{mount_str}/{relative}")
     } else {
-        path.to_string()
+        path_str.to_string()
     }
 }
 
 /// Get a relative file path suitable for API calls.
 ///
 /// Strips the repository root to produce a repo-relative path.
-pub fn get_relative_file_path_for_api(file_path: &str, repo_root: &str) -> String {
-    let file = NormalizedPath::new(file_path);
-    let root = NormalizedPath::new(repo_root);
+pub fn get_relative_file_path_for_api(file_path: &Path, repo_root: &Path) -> String {
+    let file = NormalizedPath::from_path(file_path);
+    let root = NormalizedPath::from_path(repo_root);
 
     file.strip_prefix(&root)
-        .unwrap_or_else(|| file_path.to_string())
+        .unwrap_or_else(|| file_path.to_string_lossy().to_string())
 }
 
 /// Detect and return the git worktree `.git` directory if applicable.
@@ -117,82 +132,80 @@ pub fn get_worktree_gitdir(git_root: &Path) -> Option<PathBuf> {
 /// Adapt a worktree gitdir path for Docker.
 #[allow(dead_code)]
 pub fn adapt_worktree_gitdir_for_docker(gitdir: &Path) -> PathBuf {
-    let path_str = gitdir.to_string_lossy().to_string();
-    PathBuf::from(adapt_path_for_docker(&path_str))
+    PathBuf::from(adapt_path_for_docker(gitdir))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // ---- NormalizedPath::new ----
+    // ---- NormalizedPath::from_str / from_path ----
 
     #[test]
     fn strip_windows_drive_letter() {
-        assert_eq!(NormalizedPath::new("C:/Users/foo").0, "/Users/foo");
-        assert_eq!(NormalizedPath::new("/Users/foo").0, "/Users/foo");
+        assert_eq!(NormalizedPath::from_str("C:/Users/foo").0, "/Users/foo");
+        assert_eq!(NormalizedPath::from_str("/Users/foo").0, "/Users/foo");
     }
 
     #[test]
     fn normalizes_backslashes() {
-        assert_eq!(NormalizedPath::new(r"C:\Users\foo\bar").0, "/Users/foo/bar");
+        assert_eq!(NormalizedPath::from_str(r"C:\Users\foo\bar").0, "/Users/foo/bar");
     }
 
     #[test]
     fn no_drive_letter_unix_path() {
-        assert_eq!(NormalizedPath::new("/home/user/project").0, "/home/user/project");
+        assert_eq!(NormalizedPath::from_path(Path::new("/home/user/project")).0, "/home/user/project");
     }
 
     #[test]
     fn lowercase_drive_letter() {
-        assert_eq!(NormalizedPath::new("d:/code/project").0, "/code/project");
+        assert_eq!(NormalizedPath::from_str("d:/code/project").0, "/code/project");
     }
 
     #[test]
     fn empty_string() {
-        assert_eq!(NormalizedPath::new("").0, "");
+        assert_eq!(NormalizedPath::from_str("").0, "");
     }
 
     #[test]
     fn single_char_no_colon() {
-        // "a" is only 1 char, no colon — should not strip
-        assert_eq!(NormalizedPath::new("a").0, "a");
+        assert_eq!(NormalizedPath::from_str("a").0, "a");
     }
 
     // ---- NormalizedPath::strip_prefix ----
 
     #[test]
     fn strip_prefix_works() {
-        let path = NormalizedPath::new("/Users/foo/bar");
-        let prefix = NormalizedPath::new("/Users/foo");
+        let path = NormalizedPath::from_str("/Users/foo/bar");
+        let prefix = NormalizedPath::from_str("/Users/foo");
         assert_eq!(path.strip_prefix(&prefix), Some("bar".to_string()));
     }
 
     #[test]
     fn strip_prefix_case_insensitive() {
-        let path = NormalizedPath::new("/USERS/FOO/bar");
-        let prefix = NormalizedPath::new("/users/foo");
+        let path = NormalizedPath::from_str("/USERS/FOO/bar");
+        let prefix = NormalizedPath::from_str("/users/foo");
         assert_eq!(path.strip_prefix(&prefix), Some("bar".to_string()));
     }
 
     #[test]
     fn strip_prefix_trailing_slash_on_prefix() {
-        let path = NormalizedPath::new("/Users/foo/bar");
-        let prefix = NormalizedPath::new("/Users/foo/");
+        let path = NormalizedPath::from_str("/Users/foo/bar");
+        let prefix = NormalizedPath::from_str("/Users/foo/");
         assert_eq!(path.strip_prefix(&prefix), Some("bar".to_string()));
     }
 
     #[test]
     fn strip_prefix_no_match() {
-        let path = NormalizedPath::new("/other/path");
-        let prefix = NormalizedPath::new("/Users/foo");
+        let path = NormalizedPath::from_str("/other/path");
+        let prefix = NormalizedPath::from_str("/Users/foo");
         assert_eq!(path.strip_prefix(&prefix), None);
     }
 
     #[test]
     fn strip_prefix_exact_match() {
-        let path = NormalizedPath::new("/Users/foo");
-        let prefix = NormalizedPath::new("/Users/foo");
+        let path = NormalizedPath::from_str("/Users/foo");
+        let prefix = NormalizedPath::from_str("/Users/foo");
         assert_eq!(path.strip_prefix(&prefix), Some("".to_string()));
     }
 
@@ -200,35 +213,96 @@ mod tests {
 
     #[test]
     fn relative_path_strips_root() {
-        let result = get_relative_file_path_for_api("/repo/src/main.rs", "/repo");
-        assert_eq!(result, "src/main.rs");
+        assert_eq!(
+            get_relative_file_path_for_api(Path::new("/repo/src/main.rs"), Path::new("/repo")),
+            "src/main.rs"
+        );
     }
 
     #[test]
     fn relative_path_no_match_returns_original() {
-        let result = get_relative_file_path_for_api("/other/file.rs", "/repo");
-        assert_eq!(result, "/other/file.rs");
+        assert_eq!(
+            get_relative_file_path_for_api(Path::new("/other/file.rs"), Path::new("/repo")),
+            "/other/file.rs"
+        );
     }
 
     #[test]
     fn relative_path_windows_style() {
-        let result = get_relative_file_path_for_api(r"C:\repo\src\main.rs", r"C:\repo");
-        assert_eq!(result, "src/main.rs");
+        assert_eq!(
+            get_relative_file_path_for_api(Path::new(r"C:\repo\src\main.rs"), Path::new(r"C:\repo")),
+            "src/main.rs"
+        );
     }
 
-    // ---- adapt_path_for_docker (non-Docker environment) ----
+    // ---- docker_mount_path / translate functions ----
+
+    #[test]
+    fn docker_mount_path_returns_none_when_not_docker() {
+        // In test env, is_docker() returns false
+        assert!(docker_mount_path().is_none());
+    }
+
+    // ---- adapt_path_for_docker (via public API, non-Docker) ----
 
     #[test]
     fn adapt_path_for_docker_returns_unchanged_when_not_docker() {
-        // In non-Docker env, should return path unchanged
-        let result = adapt_path_for_docker("/some/path/file.rs");
-        assert_eq!(result, "/some/path/file.rs");
+        assert_eq!(adapt_path_for_docker(Path::new("/some/path/file.rs")), "/some/path/file.rs");
+    }
+
+    // ---- translate_to_container (Docker active via direct call) ----
+
+    #[test]
+    fn translate_to_container_maps_matching_host_path() {
+        let result = translate_to_container(
+            Path::new("/host/project/src/main.rs"),
+            Some(Path::new("/host/project")),
+        );
+        assert_eq!(result, "/mount/src/main.rs");
     }
 
     #[test]
+    fn translate_to_container_returns_unchanged_when_no_mount_prefix() {
+        let result = translate_to_container(
+            Path::new("/other/path/file.rs"),
+            Some(Path::new("/host/project")),
+        );
+        assert_eq!(result, "/other/path/file.rs");
+    }
+
+    #[test]
+    fn translate_to_container_returns_unchanged_when_none() {
+        assert_eq!(translate_to_container(Path::new("/some/path"), None), "/some/path");
+    }
+
+    // ---- translate_from_container (Docker active via direct call) ----
+
+    #[test]
     fn adapt_path_from_docker_returns_unchanged_when_not_docker() {
-        let result = adapt_path_from_docker("/mount/src/file.rs");
-        assert_eq!(result, "/mount/src/file.rs");
+        assert_eq!(adapt_path_from_docker(Path::new("/mount/src/file.rs")), "/mount/src/file.rs");
+    }
+
+    #[test]
+    fn translate_from_container_maps_container_path() {
+        let result = translate_from_container(
+            Path::new("/mount/src/main.rs"),
+            Some(Path::new("/host/project")),
+        );
+        assert_eq!(result, "/host/project/src/main.rs");
+    }
+
+    #[test]
+    fn translate_from_container_returns_unchanged_when_no_mount_prefix() {
+        let result = translate_from_container(
+            Path::new("/other/path/file.rs"),
+            Some(Path::new("/host/project")),
+        );
+        assert_eq!(result, "/other/path/file.rs");
+    }
+
+    #[test]
+    fn translate_from_container_returns_unchanged_when_none() {
+        assert_eq!(translate_from_container(Path::new("/mount/src/file.rs"), None), "/mount/src/file.rs");
     }
 
     // ---- get_worktree_gitdir ----
@@ -236,20 +310,16 @@ mod tests {
     #[test]
     fn get_worktree_gitdir_returns_none_for_normal_repo() {
         let dir = tempfile::tempdir().unwrap();
-        let git_dir = dir.path().join(".git");
-        std::fs::create_dir_all(&git_dir).unwrap();
-        // .git is a directory → not a worktree
+        std::fs::create_dir_all(dir.path().join(".git")).unwrap();
         assert!(get_worktree_gitdir(dir.path()).is_none());
     }
 
     #[test]
     fn get_worktree_gitdir_returns_path_for_worktree() {
         let dir = tempfile::tempdir().unwrap();
-        let git_file = dir.path().join(".git");
-        std::fs::write(&git_file, "gitdir: /some/other/.git/worktrees/branch").unwrap();
-        let result = get_worktree_gitdir(dir.path());
+        std::fs::write(dir.path().join(".git"), "gitdir: /some/other/.git/worktrees/branch").unwrap();
         assert_eq!(
-            result,
+            get_worktree_gitdir(dir.path()),
             Some(PathBuf::from("/some/other/.git/worktrees/branch"))
         );
     }
@@ -265,7 +335,6 @@ mod tests {
     #[test]
     fn adapt_worktree_gitdir_for_docker_returns_unchanged_when_not_docker() {
         let path = PathBuf::from("/some/gitdir");
-        let result = adapt_worktree_gitdir_for_docker(&path);
-        assert_eq!(result, path);
+        assert_eq!(adapt_worktree_gitdir_for_docker(&path), path);
     }
 }
