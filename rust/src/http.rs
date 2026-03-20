@@ -13,6 +13,14 @@ pub struct HttpResponse {
 }
 
 impl HttpResponse {
+    pub fn is_success(&self) -> bool {
+        (200..300).contains(&self.status)
+    }
+}
+
+/// Test-only convenience constructors for `HttpResponse`.
+#[cfg(test)]
+impl HttpResponse {
     pub fn ok(body: &str) -> Self {
         Self {
             status: 200,
@@ -25,10 +33,6 @@ impl HttpResponse {
             status,
             body: body.to_string(),
         }
-    }
-
-    pub fn is_success(&self) -> bool {
-        (200..300).contains(&self.status)
     }
 }
 

@@ -371,6 +371,76 @@ mod tests {
         assert!(path.to_string_lossy().contains("cs"));
     }
 
+    // -- extract_cli_binary (synthetic zip tests) --
+
+    /// Build a zip archive in memory with the given named entries.
+    fn build_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        use std::io::Write;
+        let buf = std::io::Cursor::new(Vec::new());
+        let mut zw = zip::ZipWriter::new(buf);
+        let options = zip::write::SimpleFileOptions::default();
+        for (name, data) in entries {
+            zw.start_file(*name, options).unwrap();
+            zw.write_all(data).unwrap();
+        }
+        zw.finish().unwrap().into_inner()
+    }
+
+    fn open_zip(data: &[u8]) -> zip::ZipArchive<std::io::Cursor<&[u8]>> {
+        zip::ZipArchive::new(std::io::Cursor::new(data)).unwrap()
+    }
+
+    #[test]
+    fn extract_cli_binary_extracts_matching_entry() {
+        let zip_data = build_zip(&[(CLI_BINARY_NAME, b"fake-cli-binary")]);
+        let dest = tempfile::tempdir().unwrap();
+        let mut archive = open_zip(&zip_data);
+        extract_cli_binary(&mut archive, dest.path()).unwrap();
+        let extracted = dest.path().join(CLI_BINARY_NAME);
+        assert!(extracted.exists());
+        assert_eq!(std::fs::read_to_string(&extracted).unwrap(), "fake-cli-binary");
+    }
+
+    #[test]
+    fn extract_cli_binary_extracts_supporting_files() {
+        let zip_data = build_zip(&[
+            ("libsupport.so", b"shared-lib"),
+            (CLI_BINARY_NAME, b"the-binary"),
+        ]);
+        let dest = tempfile::tempdir().unwrap();
+        let mut archive = open_zip(&zip_data);
+        extract_cli_binary(&mut archive, dest.path()).unwrap();
+        // The cs binary is found on the second entry, so the first entry
+        // (libsupport.so) is extracted as a supporting file.
+        assert!(dest.path().join("libsupport.so").exists());
+        assert_eq!(
+            std::fs::read_to_string(dest.path().join("libsupport.so")).unwrap(),
+            "shared-lib"
+        );
+    }
+
+    #[test]
+    fn extract_cli_binary_empty_zip_returns_ok() {
+        let zip_data = build_zip(&[]);
+        let dest = tempfile::tempdir().unwrap();
+        let mut archive = open_zip(&zip_data);
+        // Empty zip has no entries — returns Ok(()) without extracting anything.
+        extract_cli_binary(&mut archive, dest.path()).unwrap();
+        assert!(!dest.path().join(CLI_BINARY_NAME).exists());
+    }
+
+    #[test]
+    fn extract_cli_binary_nested_path_uses_file_name() {
+        let nested = format!("some/nested/path/{CLI_BINARY_NAME}");
+        let zip_data = build_zip(&[(&nested, b"nested-binary")]);
+        let dest = tempfile::tempdir().unwrap();
+        let mut archive = open_zip(&zip_data);
+        extract_cli_binary(&mut archive, dest.path()).unwrap();
+        let extracted = dest.path().join(CLI_BINARY_NAME);
+        assert!(extracted.exists());
+        assert_eq!(std::fs::read_to_string(&extracted).unwrap(), "nested-binary");
+    }
+
     // -- resolve_cli_path --
 
     #[test]

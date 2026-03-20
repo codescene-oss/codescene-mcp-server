@@ -278,12 +278,6 @@ pub fn mask_if_sensitive(option: &ConfigOption, value: &str) -> String {
     }
 }
 
-/// Allow tests to override the config directory.
-#[cfg(test)]
-pub fn set_config_dir_override(dir: Option<PathBuf>) {
-    let _ = CONFIG_DIR_OVERRIDE.set(dir);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

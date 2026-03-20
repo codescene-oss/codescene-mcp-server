@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use serde_json::Value;
 
 use crate::errors::ApiError;
-use crate::http::{HttpClient, HttpRequest, HttpResponse, Method, ReqwestClient};
+use crate::http::{HttpClient, HttpRequest, HttpResponse, Method};
 
 /// Resolve the CodeScene API base URL.
 pub fn get_api_url() -> String {
@@ -16,11 +16,6 @@ pub fn get_api_url() -> String {
     } else {
         "https://api.codescene.io".to_string()
     }
-}
-
-/// Make an authenticated GET request to the CodeScene API (production entry point).
-pub async fn query_api(endpoint: &str) -> Result<Value, ApiError> {
-    query_api_with_client(endpoint, &ReqwestClient).await
 }
 
 /// Make an authenticated GET request using an injectable HTTP client.
@@ -62,11 +57,6 @@ fn parse_api_response(resp: HttpResponse) -> Result<Value, ApiError> {
         status: resp.status,
         body: format!("JSON parse error: {e}"),
     })
-}
-
-/// Make a paginated API query, collecting all pages (production entry point).
-pub async fn query_api_list(endpoint: &str) -> Result<Vec<Value>, ApiError> {
-    query_api_list_with_client(endpoint, &ReqwestClient).await
 }
 
 /// Make a paginated API query using an injectable HTTP client.

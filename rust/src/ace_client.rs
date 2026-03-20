@@ -8,7 +8,7 @@ use serde_json::Value;
 use tokio::time::Duration;
 
 use crate::errors::ApiError;
-use crate::http::{HttpClient, HttpRequest, Method, ReqwestClient};
+use crate::http::{HttpClient, HttpRequest, Method};
 
 /// Default ACE API endpoint.
 const ACE_API_URL: &str = "https://devtools.codescene.io/api/refactor";
@@ -18,11 +18,6 @@ const MAX_RETRIES: u32 = 3;
 
 /// Status codes that trigger a retry.
 const RETRYABLE_CODES: &[u16] = &[408, 504];
-
-/// Send a refactoring request to the ACE API (production entry point).
-pub async fn refactor(payload: &Value) -> Result<Value, ApiError> {
-    refactor_with_client(payload, &ReqwestClient).await
-}
 
 /// Send a refactoring request using an injectable HTTP client.
 pub async fn refactor_with_client(
