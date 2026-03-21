@@ -1,12 +1,7 @@
-/// Configure tool handlers — get/set config values and produce JSON output.
-///
-/// Mirrors Python's `configure/configure.py` and `configure/helpers.py`.
-
 use serde_json::json;
 
 use crate::config::{self, ConfigData};
 
-/// Get a single config option as JSON.
 pub fn get_single(key: &str, data: &ConfigData, is_standalone: bool) -> String {
     let option = match config::find_option(key) {
         Some(o) => o,
@@ -21,7 +16,6 @@ pub fn get_single(key: &str, data: &ConfigData, is_standalone: bool) -> String {
     serde_json::to_string(&result).unwrap_or_default()
 }
 
-/// Get all listable config options as JSON.
 pub fn get_all(data: &ConfigData, is_standalone: bool) -> String {
     let options: Vec<serde_json::Value> = config::OPTIONS
         .iter()
@@ -36,7 +30,6 @@ pub fn get_all(data: &ConfigData, is_standalone: bool) -> String {
     serde_json::to_string(&result).unwrap_or_default()
 }
 
-/// Set or remove a config value and return JSON result.
 pub fn set_value(key: &str, value: &str) -> String {
     let option = match config::find_option(key) {
         Some(o) => o,
@@ -164,11 +157,8 @@ fn attach_docs_url(result: &mut serde_json::Value, option: &config::ConfigOption
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config;
     use std::collections::HashMap;
-    use std::sync::Mutex;
-
-    // Serialize tests that mutate env vars so parallel tests don't race.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn empty_config() -> ConfigData {
         ConfigData {
@@ -311,7 +301,7 @@ mod tests {
 
     #[test]
     fn env_override_warning_returns_some_for_client_var() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         // Ensure the var is set before snapshotting.
         std::env::set_var("CS_DISABLE_TRACKING", "1");
         config::snapshot_client_env_vars();
@@ -373,7 +363,7 @@ mod tests {
     where
         F: FnOnce() -> R,
     {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("CS_CONFIG_DIR", dir.path().as_os_str());
         let result = f();
@@ -465,7 +455,7 @@ mod tests {
     where
         F: FnOnce() -> R,
     {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         // /dev/null is a file, not a directory — create_dir_all will fail
         std::env::set_var("CS_CONFIG_DIR", "/dev/null/impossible");
         let result = f();

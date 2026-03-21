@@ -1,18 +1,9 @@
-/// Ed25519 license verification — mirrors Python's `license.py`.
-///
-/// A standalone license is a JWT (three dot-separated base64url parts:
-/// header.payload.signature) signed with EdDSA (Ed25519). The embedded
-/// public key verifies the signature over the ASCII bytes of
-/// `"header.payload"`. If verification succeeds the token is standalone
-/// (no API access). PATs that fail are treated as API tokens.
-
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as BASE64URL;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 
 use crate::errors::LicenseError;
 
-/// Raw 32-byte Ed25519 public key (extracted from the DER/PEM wrapper).
 const PUBLIC_KEY_BYTES: &[u8; 32] = &[
     0x22, 0xb5, 0x08, 0x1e, 0xf1, 0x1f, 0x83, 0xa2,
     0x63, 0x07, 0x41, 0x2f, 0x02, 0x3f, 0x3e, 0x2b,
@@ -20,12 +11,10 @@ const PUBLIC_KEY_BYTES: &[u8; 32] = &[
     0xa6, 0x90, 0x88, 0x07, 0xcf, 0x16, 0x17, 0x7a,
 ];
 
-/// Returns `true` if the token is a valid standalone Ed25519-signed JWT.
 pub fn is_standalone_license(token: &str) -> bool {
     verify_jwt(token).is_ok()
 }
 
-/// Verify a JWT `header.payload.signature` against the embedded public key.
 fn verify_jwt(token: &str) -> Result<(), LicenseError> {
     let token = token.trim();
 

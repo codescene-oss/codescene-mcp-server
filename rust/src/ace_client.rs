@@ -1,7 +1,3 @@
-/// ACE refactoring API client — mirrors Python's `ace_api_client.py`.
-///
-/// POSTs to the ACE API for auto-refactoring with retry on 408/504.
-
 use std::collections::HashMap;
 
 use serde_json::Value;
@@ -10,16 +6,12 @@ use tokio::time::Duration;
 use crate::errors::ApiError;
 use crate::http::{HttpClient, HttpRequest, Method};
 
-/// Default ACE API endpoint.
 const ACE_API_URL: &str = "https://devtools.codescene.io/api/refactor";
 
-/// Maximum number of retry attempts on transient errors.
 const MAX_RETRIES: u32 = 3;
 
-/// Status codes that trigger a retry.
 const RETRYABLE_CODES: &[u16] = &[408, 504];
 
-/// Send a refactoring request using an injectable HTTP client.
 pub async fn refactor_with_client(
     payload: &Value,
     client: &dyn HttpClient,
@@ -88,15 +80,14 @@ fn ace_url() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config;
     use crate::http::tests::MockHttpClient;
     use crate::http::HttpResponse;
-    use std::sync::{Mutex, MutexGuard};
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    use std::sync::MutexGuard;
 
     /// Lock env vars and set up standard ACE test environment.
     fn lock_ace_env(token: &str) -> MutexGuard<'static, ()> {
-        let guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = config::lock_test_env();
         std::env::set_var("CS_ACE_ACCESS_TOKEN", token);
         std::env::remove_var("CS_ACE_API_URL");
         guard
@@ -122,24 +113,22 @@ mod tests {
         }
     }
 
-    // -- ace_url --
 
     #[test]
     fn ace_url_default() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_ACE_API_URL");
         assert_eq!(ace_url(), ACE_API_URL);
     }
 
     #[test]
     fn ace_url_override() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_ACE_API_URL", "http://custom/api");
         assert_eq!(ace_url(), "http://custom/api");
         std::env::remove_var("CS_ACE_API_URL");
     }
 
-    // -- refactor_with_client: success --
 
     #[tokio::test]
     async fn refactor_success_returns_parsed_json() {
@@ -154,7 +143,6 @@ mod tests {
         cleanup_ace_env();
     }
 
-    // -- refactor_with_client: non-retryable error --
 
     #[tokio::test]
     async fn refactor_non_retryable_error_returns_immediately() {
@@ -164,7 +152,6 @@ mod tests {
         cleanup_ace_env();
     }
 
-    // -- refactor_with_client: retryable then success --
 
     #[tokio::test]
     async fn refactor_retries_on_408_then_succeeds() {
@@ -188,7 +175,6 @@ mod tests {
         cleanup_ace_env();
     }
 
-    // -- refactor_with_client: max retries exhausted --
 
     #[tokio::test]
     async fn refactor_exhausts_retries_returns_last_error() {
@@ -202,7 +188,6 @@ mod tests {
         cleanup_ace_env();
     }
 
-    // -- refactor_with_client: HTTP transport error --
 
     #[tokio::test]
     async fn refactor_http_transport_error() {
@@ -212,7 +197,6 @@ mod tests {
         cleanup_ace_env();
     }
 
-    // -- refactor_with_client: verifies request structure --
 
     #[tokio::test]
     async fn refactor_sends_correct_request() {
@@ -232,11 +216,10 @@ mod tests {
         cleanup_ace_env();
     }
 
-    // -- refactor_with_client: empty token --
 
     #[tokio::test]
     async fn refactor_with_empty_token_sends_empty_bearer() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_ACE_ACCESS_TOKEN");
 
         let mock = MockHttpClient::always(HttpResponse::ok(r#"{"code":"x"}"#));
@@ -247,7 +230,6 @@ mod tests {
         assert_eq!(reqs[0].headers.get("Authorization").unwrap(), "Bearer ");
     }
 
-    // -- refactor_with_client: invalid JSON response --
 
     #[tokio::test]
     async fn refactor_invalid_json_response_returns_error() {

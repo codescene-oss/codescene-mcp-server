@@ -173,7 +173,6 @@ impl CodeSceneServer {
         }
     }
 
-    // -- Explain tools (static docs) ----------------------------------------
 
     #[tool(description = "Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI.\n\nWhen to use:\n    Use this tool when a user asks what Code Health means, how scores are\n    interpreted, or why Code Health matters in day-to-day development.\n\nLimitations:\n    - Returns static documentation text from this MCP server package.\n    - Does not analyze a specific repository or file.\n\nArgs:\n    context: Optional context string from the MCP protocol.\n        This argument is not used to customize output.\n\nReturns:\n    Markdown content explaining the Code Health model and core concepts.\n\nExample:\n    Call this tool, then summarize the returned Markdown into a short\n    explanation tailored to the user's current question.",
         input_schema = inlined_schema_for::<OptionalContext>())]
@@ -205,7 +204,6 @@ impl CodeSceneServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    // -- CLI-based analysis tools -------------------------------------------
 
     #[tool(description = "Review the Code Health of a single source file and return a detailed\n    CLI review output that includes the score and code smell findings.\n\n    When to use:\n        Use this tool when you need actionable maintainability diagnostics\n        for one file (not just the score).\n\n    Limitations:\n        - Analyzes one file at a time.\n        - Requires a supported source file.\n        - Returns CLI review text, not a normalized JSON schema.\n\n    Args:\n        file_path: Absolute path to the source code file to analyze.\n            Use a real file path in the local repository.\n\n    Returns:\n        A review string from the CodeScene CLI. The output typically\n        includes a Code Health score and code smell details to explain\n        why the score is high or low.\n\n        The Code Health scores are interpreted as:\n          * Optimal Code: a Code Health 10.0 is optimized for both human and AI comprehension\n          * Green Code: high quality with a score of 9.0-9.9\n          * Yellow Code: problematic technical debt with a score of 4.0-8.9\n          * Red Code: severe technical debt, maintainability issues, and expensive onboarding with a score of 1.0-3.9\n\n    Example:\n        Call with file_path=\"/repo/src/app.py\" and summarize the returned\n        smells into prioritized refactoring actions.",
         input_schema = inlined_schema_for::<FilePathParam>())]
@@ -392,7 +390,6 @@ impl CodeSceneServer {
         }
     }
 
-    // -- API-based tools (conditional on not-standalone) ---------------------
 
     #[tool(description = "Lists all projects for an organization for selection by the user.\n        The user can select the desired project by either its name or ID.\n\n        When to use:\n            Use this tool before project-scoped API tools so the user can pick\n            the project context explicitly.\n\n        Limitations:\n            - If default_project_id is configured, the server returns that\n              project and selection is effectively locked.\n\n        Args:\n            None.\n\n        Returns:\n            A JSON object with the project name and ID, formatted in a Markdown table\n            with the columns \"Project Name\" and \"Project ID\". If the output contains a\n            `description` field, it indicates that a default project is configured\n            (`default_project_id`), and the user cannot select a different project.\n            Explain this to the user.\n\n            Additionally, a `link` field is provided to guide the user to the\n            Codescene projects page where the user can find more detailed information about each project.\n            Make sure to include this link in the output, and explain its purpose clearly.\n\n        Example:\n            Call without arguments. If default_project_id is configured,\n            explain that the returned project is fixed unless that config is changed via set_config.")]
     async fn select_project(&self) -> Result<CallToolResult, ErrorData> {
@@ -603,7 +600,6 @@ impl CodeSceneServer {
         }
     }
 
-    // -- Configuration tools ------------------------------------------------
 
     #[tool(description = "Read current CodeScene MCP Server configuration values.\n\n        When to use:\n            Use this tool to discover available configuration keys, inspect\n            effective values, and understand where each value comes from.\n\n        Limitations:\n            - Returns JSON text only; callers must format it for display.\n            - Sensitive values (tokens) are masked.\n            - Effective values can be overridden by client-provided env vars.\n\n        When called without a key, lists every available configuration\n        option together with its current effective value, the source of\n        that value (environment variable vs. config file), and a short\n        description.\n\n        When called with a specific key, returns details for that option\n        only.  Sensitive values (tokens) are masked in the output.\n\n        Args:\n            key: Optional config key to query. Omit to list all options.\n        Returns:\n            A JSON string. When querying a single key, the object has:\n            key, env_var, value, source, description, aliases, and\n            docs_url.  When listing all, the object has: config_dir and\n            options (array of the same shape).  Use the aliases array\n            to match user intent to the correct key.  Present the data\n            clearly and always include docs_url links.\n\n        Example:\n            Call with key=\"access_token\" to inspect one setting, or\n            call without key to list all configurable options.",
         input_schema = inlined_schema_for::<GetConfigParam>())]
@@ -750,7 +746,6 @@ impl ServerHandler for CodeSceneServer {
 // Free helper functions
 // ---------------------------------------------------------------------------
 
-/// Resolve bundled resource content by URI.
 fn resolve_resource_content(uri: &str) -> Result<&'static str, ErrorData> {
     if uri == resources::HOW_IT_WORKS_URI {
         Ok(resources::HOW_IT_WORKS)
@@ -765,7 +760,6 @@ fn resolve_resource_content(uri: &str) -> Result<&'static str, ErrorData> {
     }
 }
 
-/// Look up a prompt template by name.
 fn resolve_prompt_text(name: &str) -> Result<&'static str, ErrorData> {
     match name {
         "review_code_health" => Ok(prompts::REVIEW_CODE_HEALTH),
@@ -778,7 +772,6 @@ fn resolve_prompt_text(name: &str) -> Result<&'static str, ErrorData> {
     }
 }
 
-/// Run `cs review` on a file and return the raw output.
 async fn run_review(file_path: &Path, cli: &dyn CliRunner) -> Result<String, errors::CliError> {
     let resolved = resolve_file_path(file_path);
     let git_root = cli::find_git_root(Path::new(&resolved));
@@ -787,7 +780,6 @@ async fn run_review(file_path: &Path, cli: &dyn CliRunner) -> Result<String, err
     cli.run(&args, git_root.as_deref()).await
 }
 
-/// Run `cs delta` (pre-commit or branch diff).
 async fn run_delta(
     repo_path: &Path,
     base_ref: Option<&str>,
@@ -800,7 +792,6 @@ async fn run_delta(
     cli.run(&args, Some(repo_path)).await
 }
 
-/// Run the auto-refactor workflow: parse-fns → review → match → ACE API.
 async fn run_auto_refactor(
     file_path: &Path,
     function_name: &str,
@@ -985,7 +976,6 @@ fn format_ace_response(response: &serde_json::Value) -> serde_json::Value {
     })
 }
 
-/// Build the `select_project` response.
 async fn run_select_project(http: &dyn HttpClient) -> Result<serde_json::Value, String> {
     let link = std::env::var("CS_ONPREM_URL")
         .ok()
@@ -1011,13 +1001,11 @@ async fn run_select_project(http: &dyn HttpClient) -> Result<serde_json::Value, 
     Ok(json!({ "projects": data, "link": link }))
 }
 
-/// Extract the Code Health score from review JSON output.
 fn extract_score(review_output: &str) -> Option<f64> {
     let parsed: serde_json::Value = serde_json::from_str(review_output).ok()?;
     parsed.get("score").and_then(|s| s.as_f64())
 }
 
-/// Make a CLI-compatible file path (relative to git root or Docker-adapted).
 fn make_cli_path(file_path: &str, git_root: Option<&Path>) -> String {
     if environment::is_docker() {
         return docker::adapt_path_for_docker(Path::new(file_path));
@@ -1028,7 +1016,6 @@ fn make_cli_path(file_path: &str, git_root: Option<&Path>) -> String {
     }
 }
 
-/// URL-encode a string for query parameters.
 fn urlencoded(s: &str) -> String {
     s.replace('%', "%25")
         .replace(' ', "%20")
@@ -1039,9 +1026,6 @@ fn urlencoded(s: &str) -> String {
 }
 
 /// Resolve a potentially relative file path to an absolute path.
-///
-/// Mirrors Python's `Path(file_path).resolve()` — if the path is relative
-/// it is joined with the current working directory.
 fn resolve_file_path(file_path: &Path) -> String {
     if file_path.is_absolute() {
         return file_path.to_string_lossy().to_string();
@@ -1052,7 +1036,6 @@ fn resolve_file_path(file_path: &Path) -> String {
     }
 }
 
-/// Make a file path relative for API calls.
 fn make_relative_for_api(file_path: &str) -> String {
     let git_root = cli::find_git_root(Path::new(file_path));
     match git_root {
@@ -1063,12 +1046,10 @@ fn make_relative_for_api(file_path: &str) -> String {
     }
 }
 
-/// Format a tool error result.
 fn tool_error(msg: &str) -> CallToolResult {
     CallToolResult::error(vec![Content::text(msg)])
 }
 
-/// Build server instructions based on whether the token is standalone.
 fn build_instructions(is_standalone: bool) -> String {
     let mut text = String::from(
         "CodeScene MCP Server — Code Health analysis tools for AI-assisted development.\n\n\
@@ -1099,7 +1080,6 @@ fn build_instructions(is_standalone: bool) -> String {
     text
 }
 
-/// Extract the first markdown heading from content (for resource names).
 fn extract_md_title(content: &str) -> &str {
     for line in content.lines() {
         if let Some(title) = line.strip_prefix("# ") {
@@ -1118,7 +1098,6 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    // -- extract_score --
 
     #[test]
     fn extract_score_valid_json() {
@@ -1150,7 +1129,6 @@ mod tests {
         assert_eq!(extract_score(r#"{"score": "8.5"}"#), None);
     }
 
-    // -- urlencoded --
 
     #[test]
     fn urlencoded_no_special_chars() {
@@ -1187,7 +1165,6 @@ mod tests {
         assert_eq!(urlencoded(""), "");
     }
 
-    // -- resolve_file_path --
 
     #[test]
     fn resolve_file_path_absolute() {
@@ -1203,7 +1180,6 @@ mod tests {
         assert!(Path::new(&result).is_absolute());
     }
 
-    // -- resolve_resource_content --
 
     #[test]
     fn resolve_resource_content_how_it_works() {
@@ -1227,7 +1203,6 @@ mod tests {
         assert!(err.message.contains("Unknown resource"));
     }
 
-    // -- resolve_prompt_text --
 
     #[test]
     fn resolve_prompt_text_review() {
@@ -1251,7 +1226,6 @@ mod tests {
         assert!(err.message.contains("Unknown prompt"));
     }
 
-    // -- extract_md_title --
 
     #[test]
     fn extract_md_title_with_heading() {
@@ -1286,7 +1260,6 @@ mod tests {
         assert_eq!(extract_md_title(""), "Untitled");
     }
 
-    // -- build_instructions --
 
     #[test]
     fn build_instructions_standalone() {
@@ -1309,7 +1282,6 @@ mod tests {
         assert!(text.contains("select_project"));
     }
 
-    // -- tool_error --
 
     #[test]
     fn tool_error_returns_error_result() {
@@ -1319,7 +1291,6 @@ mod tests {
         assert_eq!(result.content.len(), 1);
     }
 
-    // -- matches_function_name --
 
     #[test]
     fn matches_function_name_exact() {
@@ -1377,7 +1348,6 @@ mod tests {
         assert!(matches_function_name("", ""));
     }
 
-    // -- find_function_in_parsed --
 
     #[test]
     fn find_function_in_parsed_found() {
@@ -1419,7 +1389,6 @@ mod tests {
         assert!(find_function_in_parsed(&functions, "foo").is_none());
     }
 
-    // -- extract_code_smells --
 
     /// Build a single-category review JSON for `extract_code_smells` tests.
     fn make_review_json(
@@ -1508,7 +1477,6 @@ mod tests {
         assert_eq!(smells[0]["start-line"], 1);
     }
 
-    // -- build_ace_payload --
 
     #[test]
     fn build_ace_payload_api_version() {
@@ -1547,7 +1515,6 @@ mod tests {
         assert_eq!(result["review"].as_array().unwrap().len(), 0);
     }
 
-    // -- format_ace_response --
 
     #[test]
     fn format_ace_response_code_and_declarations() {
@@ -1609,7 +1576,6 @@ mod tests {
         assert!(result["reasons"].as_array().unwrap().is_empty());
     }
 
-    // -- inlined_schema_for --
 
     #[test]
     fn inlined_schema_for_produces_object() {
@@ -1625,7 +1591,6 @@ mod tests {
         assert!(!schema.is_empty());
     }
 
-    // -- make_cli_path (non-docker only since OnceLock) --
 
     #[test]
     fn make_cli_path_with_git_root() {
@@ -1644,7 +1609,6 @@ mod tests {
         }
     }
 
-    // -- API_ONLY_TOOLS constant --
 
     #[test]
     fn api_only_tools_has_expected_entries() {
@@ -1660,8 +1624,6 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Mutex;
     use rmcp::handler::server::wrapper::Parameters;
-
-    static SERVER_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     /// Build a `ServerDeps` with the given mock/production clients.
     fn test_deps(
@@ -1730,7 +1692,7 @@ mod tests {
         })
     }
 
-    /// RAII guard that acquires `SERVER_ENV_LOCK`, sets `CS_ACCESS_TOKEN`,
+    /// RAII guard that acquires the shared test env lock, sets `CS_ACCESS_TOKEN`,
     /// and restores the environment when dropped.
     struct TokenGuard<'a> {
         _lock: std::sync::MutexGuard<'a, ()>,
@@ -1743,18 +1705,17 @@ mod tests {
     }
 
     fn set_token(value: &str) -> TokenGuard<'static> {
-        let lock = SERVER_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let lock = config::lock_test_env();
         std::env::set_var("CS_ACCESS_TOKEN", value);
         TokenGuard { _lock: lock }
     }
 
     fn clear_token() -> TokenGuard<'static> {
-        let lock = SERVER_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let lock = config::lock_test_env();
         std::env::remove_var("CS_ACCESS_TOKEN");
         TokenGuard { _lock: lock }
     }
 
-    // -- CodeSceneServer::new --
 
     #[test]
     fn new_api_mode_keeps_all_tools() {
@@ -1774,7 +1735,6 @@ mod tests {
         assert_eq!(server.instance_id, "test-instance");
     }
 
-    // -- get_info --
 
     #[test]
     fn get_info_returns_server_name() {
@@ -1802,7 +1762,6 @@ mod tests {
         assert!(caps.resources.is_some());
     }
 
-    // -- require_token --
 
     #[tokio::test]
     async fn require_token_returns_error_when_missing() {
@@ -1822,7 +1781,6 @@ mod tests {
         assert!(make_server(false).require_token().is_none());
     }
 
-    // -- maybe_version_warning --
 
     #[tokio::test]
     async fn maybe_version_warning_returns_text_when_no_cache() {
@@ -1843,7 +1801,6 @@ mod tests {
         assert_eq!(server.maybe_version_warning("body text").await, "body text");
     }
 
-    // -- track / track_err (fire-and-forget, just verify no panic) --
 
     #[tokio::test]
     async fn track_does_not_panic() {

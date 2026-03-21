@@ -1,14 +1,7 @@
-/// Docker path adaptation — mirrors Python's `docker_path_adapter.py`.
-///
-/// Translates between host paths (via `CS_MOUNT_PATH`) and container
-/// mount paths (`/mount/`). Handles Windows drive letters, worktrees,
-/// and relative paths.
-
 use std::path::{Path, PathBuf};
 
 use crate::environment;
 
-/// Container-side mount point.
 const CONTAINER_MOUNT: &str = "/mount";
 
 /// A host path normalized to forward slashes with any Windows drive
@@ -56,10 +49,6 @@ fn docker_mount_path() -> Option<String> {
     std::env::var("CS_MOUNT_PATH").ok()
 }
 
-/// Adapt an incoming file path for use inside a Docker container.
-///
-/// If running in Docker, translates host paths (rooted at `CS_MOUNT_PATH`)
-/// to container paths under `/mount/`. Otherwise returns the path unchanged.
 pub fn adapt_path_for_docker(path: &Path) -> String {
     translate_to_container(path, docker_mount_path().as_deref().map(Path::new))
 }
@@ -81,7 +70,6 @@ fn translate_to_container(path: &Path, mount_raw: Option<&Path>) -> String {
     }
 }
 
-/// Convert a container path back to a host path for display.
 #[allow(dead_code)]
 pub fn adapt_path_from_docker(path: &Path) -> String {
     translate_from_container(path, docker_mount_path().as_deref().map(Path::new))
@@ -103,9 +91,6 @@ fn translate_from_container(path: &Path, mount_path: Option<&Path>) -> String {
     }
 }
 
-/// Get a relative file path suitable for API calls.
-///
-/// Strips the repository root to produce a repo-relative path.
 pub fn get_relative_file_path_for_api(file_path: &Path, repo_root: &Path) -> String {
     let file = NormalizedPath::from_path(file_path);
     let root = NormalizedPath::from_path(repo_root);
@@ -114,7 +99,6 @@ pub fn get_relative_file_path_for_api(file_path: &Path, repo_root: &Path) -> Str
         .unwrap_or_else(|| file_path.to_string_lossy().to_string())
 }
 
-/// Detect and return the git worktree `.git` directory if applicable.
 #[allow(dead_code)]
 pub fn get_worktree_gitdir(git_root: &Path) -> Option<PathBuf> {
     let git_path = git_root.join(".git");
@@ -129,7 +113,6 @@ pub fn get_worktree_gitdir(git_root: &Path) -> Option<PathBuf> {
     }
 }
 
-/// Adapt a worktree gitdir path for Docker.
 #[allow(dead_code)]
 pub fn adapt_worktree_gitdir_for_docker(gitdir: &Path) -> PathBuf {
     PathBuf::from(adapt_path_for_docker(gitdir))

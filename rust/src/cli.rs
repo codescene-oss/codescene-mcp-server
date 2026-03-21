@@ -1,10 +1,3 @@
-/// CS CLI embedding, extraction, and invocation — mirrors Python's
-/// `code_health_analysis.py`.
-///
-/// The CLI zip is embedded at compile time. At runtime, it is extracted
-/// once to a cache directory and reused. The module also handles CLI
-/// path resolution (env override, Docker paths) and subprocess execution.
-
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Output;
@@ -13,14 +6,11 @@ use crate::environment;
 use crate::errors::CliError;
 
 /// Trait abstracting CLI subprocess execution for dependency injection.
-///
-/// Production code uses `ProductionCliRunner`; tests inject a mock.
 #[async_trait::async_trait]
 pub trait CliRunner: Send + Sync {
     async fn run(&self, args: &[&str], working_dir: Option<&Path>) -> Result<String, CliError>;
 }
 
-/// Production CLI runner that resolves and invokes the real CS CLI binary.
 pub struct ProductionCliRunner;
 
 #[async_trait::async_trait]
@@ -30,13 +20,10 @@ impl CliRunner for ProductionCliRunner {
     }
 }
 
-/// Embedded CS CLI zip, downloaded at build time by `build.rs`.
 const CLI_ZIP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/cs-cli.zip"));
 
-/// Name of the CLI binary (platform-dependent).
 const CLI_BINARY_NAME: &str = if cfg!(windows) { "cs.exe" } else { "cs" };
 
-/// Docker path for the CLI binary.
 const DOCKER_CLI_PATH: &str = "/root/.local/bin/cs";
 
 /// Resolve the path to the `cs` CLI binary.
@@ -71,7 +58,6 @@ fn resolve_from_docker() -> Option<Result<PathBuf, CliError>> {
     p.exists().then(|| Ok(p))
 }
 
-/// Run a CS CLI command and return stdout on success.
 pub async fn run_cli(
     args: &[&str],
     working_dir: Option<&Path>,
@@ -80,7 +66,6 @@ pub async fn run_cli(
     run_cli_at_path(&cli_path, args, working_dir).await
 }
 
-/// Run a CLI command using an explicit binary path.
 async fn run_cli_at_path(
     cli_path: &Path,
     args: &[&str],
@@ -108,7 +93,6 @@ async fn run_cli_at_path(
     parse_cli_output(output)
 }
 
-/// Parse CLI process output into success/error.
 fn parse_cli_output(output: Output) -> Result<String, CliError> {
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -121,8 +105,6 @@ fn parse_cli_output(output: Output) -> Result<String, CliError> {
     }
 }
 
-/// Extract the embedded CLI zip to a cache directory, returning the
-/// path to the extracted binary. Skips extraction if already cached.
 fn extract_embedded_cli() -> Result<PathBuf, CliError> {
     extract_zip_to_cache(&cli_cache_dir(), CLI_ZIP)
 }
@@ -162,7 +144,6 @@ fn extract_zip_to_cache(cache_dir: &Path, zip_data: &[u8]) -> Result<PathBuf, Cl
     Ok(binary_path)
 }
 
-/// Extract the `cs` binary from the zip archive.
 fn extract_cli_binary(
     archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>,
     dest_dir: &Path,
@@ -197,7 +178,6 @@ fn extract_cli_binary(
     Ok(())
 }
 
-/// Cache directory for the extracted CLI binary.
 fn cli_cache_dir() -> PathBuf {
     let version = env!("CS_MCP_VERSION");
     dirs::cache_dir()
@@ -206,7 +186,6 @@ fn cli_cache_dir() -> PathBuf {
         .join(version)
 }
 
-/// Find the git repository root for a given path.
 pub fn find_git_root(path: &Path) -> Option<PathBuf> {
     let mut current = if path.is_file() {
         path.parent()?.to_path_buf()
@@ -227,11 +206,9 @@ pub fn find_git_root(path: &Path) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     /// Create a temp directory containing a `.git` dir and an optional subdirectory.
     /// Returns `(tempdir_handle, repo_root_path)`.
@@ -261,7 +238,6 @@ mod tests {
         }
     }
 
-    // -- cli_cache_dir --
 
     #[test]
     fn cli_cache_dir_contains_version() {
@@ -269,25 +245,23 @@ mod tests {
         assert!(dir.to_string_lossy().contains("codehealth-mcp"));
     }
 
-    // -- CLI_BINARY_NAME --
 
     #[test]
     fn cli_binary_name_is_cs() {
         assert_eq!(CLI_BINARY_NAME, "cs");
     }
 
-    // -- resolve_from_env_override --
 
     #[test]
     fn resolve_from_env_override_returns_none_when_not_set() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_CLI_PATH");
         assert!(resolve_from_env_override().is_none());
     }
 
     #[test]
     fn resolve_from_env_override_returns_ok_for_existing_path() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         let (_dir, bin) = make_fake_cli();
 
         std::env::set_var("CS_CLI_PATH", bin.to_str().unwrap());
@@ -300,7 +274,7 @@ mod tests {
 
     #[test]
     fn resolve_from_env_override_returns_error_for_missing_path() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_CLI_PATH", "/nonexistent/cs-binary");
         let result = resolve_from_env_override().unwrap();
         assert!(result.is_err());
@@ -308,14 +282,12 @@ mod tests {
         std::env::remove_var("CS_CLI_PATH");
     }
 
-    // -- resolve_from_docker --
 
     #[test]
     fn resolve_from_docker_returns_none_when_not_docker() {
         assert!(resolve_from_docker().is_none());
     }
 
-    // -- parse_cli_output --
 
     #[test]
     fn parse_cli_output_success() {
@@ -342,7 +314,6 @@ mod tests {
         assert!(!parse_cli_output(output).unwrap().is_empty());
     }
 
-    // -- find_git_root --
 
     #[test]
     fn find_git_root_finds_repo_from_subdir() {
@@ -366,7 +337,6 @@ mod tests {
         assert_eq!(find_git_root(&file).unwrap(), root);
     }
 
-    // -- extract_embedded_cli (integration) --
 
     #[test]
     fn extract_embedded_cli_produces_binary() {
@@ -377,7 +347,6 @@ mod tests {
         assert!(path.to_string_lossy().contains("cs"));
     }
 
-    // -- extract_zip_to_cache --
 
     #[test]
     fn extract_zip_to_cache_fresh_extraction() {
@@ -441,7 +410,6 @@ mod tests {
         assert!(msg.contains("Invalid embedded CLI zip"), "unexpected error: {msg}");
     }
 
-    // -- extract_cli_binary (synthetic zip tests) --
 
     /// Build a zip archive in memory with the given named entries.
     fn build_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
@@ -511,18 +479,17 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&extracted).unwrap(), "nested-binary");
     }
 
-    // -- resolve_cli_path --
 
     #[test]
     fn resolve_cli_path_finds_cli() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_CLI_PATH");
         assert!(resolve_cli_path().is_ok());
     }
 
     #[test]
     fn resolve_cli_path_uses_env_override() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         let (_dir, bin) = make_fake_cli();
 
         std::env::set_var("CS_CLI_PATH", bin.to_str().unwrap());
@@ -530,7 +497,6 @@ mod tests {
         std::env::remove_var("CS_CLI_PATH");
     }
 
-    // -- run_cli_at_path --
 
     #[tokio::test]
     async fn run_cli_at_path_with_echo() {
@@ -540,7 +506,7 @@ mod tests {
 
     #[tokio::test]
     async fn run_cli_at_path_forwards_env_vars() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_ACCESS_TOKEN", "test-token-xyz");
         std::env::set_var("CS_ONPREM_URL", "https://onprem.example.com");
 

@@ -1,9 +1,3 @@
-/// Background version checker — mirrors Python's `version_checker.py`.
-///
-/// Checks GitHub releases API for the latest version. Cached for 1 hour.
-/// Non-blocking: the check runs in a background task and results are read
-/// via `try_read()`. Disabled by `CS_DISABLE_VERSION_CHECK` env var.
-
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -12,14 +6,11 @@ use tokio::time::{Duration, Instant};
 
 use crate::http::{HttpClient, HttpRequest, Method, ReqwestClient};
 
-/// How long to cache a version check result.
 const CACHE_DURATION: Duration = Duration::from_secs(3600);
 
-/// Default GitHub releases API URL.
 const DEFAULT_CHECK_URL: &str =
     "https://api.github.com/repos/codescene-oss/codescene-mcp-server/releases/latest";
 
-/// Result of a version check.
 #[derive(Debug, Clone)]
 pub struct VersionInfo {
     pub latest: String,
@@ -32,7 +23,6 @@ struct CachedCheck {
     checked_at: Instant,
 }
 
-/// Non-blocking version checker with background refresh.
 #[derive(Clone)]
 pub struct VersionChecker {
     cache: Arc<RwLock<Option<CachedCheck>>>,
@@ -47,7 +37,6 @@ impl VersionChecker {
         }
     }
 
-    /// Spawn a background version check if the cache is stale or empty.
     pub fn check_in_background(&self) {
         if is_disabled() || self.current_version == "dev" {
             return;
@@ -59,8 +48,6 @@ impl VersionChecker {
         });
     }
 
-    /// Try to read the cached version info without blocking.
-    /// Returns `None` if no check has completed yet or the cache is empty.
     pub async fn try_read(&self) -> Option<VersionInfo> {
         let guard = self.cache.try_read().ok()?;
         guard.as_ref().map(|c| c.info.clone())
@@ -148,7 +135,6 @@ fn is_disabled() -> bool {
         .unwrap_or(false)
 }
 
-/// Format the version warning message, matching the Python output exactly.
 pub fn format_version_warning(info: &VersionInfo) -> String {
     format!(
         "\n\

@@ -1,5 +1,3 @@
-/// Tool parameter types — shared schema definitions for all MCP tools.
-
 use rmcp::schemars;
 use serde::Deserialize;
 

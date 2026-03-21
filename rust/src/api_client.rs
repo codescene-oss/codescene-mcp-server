@@ -1,7 +1,3 @@
-/// CodeScene API client — mirrors Python's `codescene_api_client.py`.
-///
-/// Handles paginated API requests to the CodeScene platform.
-
 use std::collections::HashMap;
 
 use serde_json::Value;
@@ -9,7 +5,6 @@ use serde_json::Value;
 use crate::errors::ApiError;
 use crate::http::{HttpClient, HttpRequest, HttpResponse, Method};
 
-/// Resolve the CodeScene API base URL.
 pub fn get_api_url() -> String {
     if let Ok(url) = std::env::var("CS_ONPREM_URL") {
         format!("{url}/api")
@@ -18,7 +13,6 @@ pub fn get_api_url() -> String {
     }
 }
 
-/// Make an authenticated GET request using an injectable HTTP client.
 pub async fn query_api_with_client(
     endpoint: &str,
     client: &dyn HttpClient,
@@ -45,7 +39,6 @@ pub async fn query_api_with_client(
     parse_api_response(resp)
 }
 
-/// Parse an HTTP response into a JSON value or error.
 fn parse_api_response(resp: HttpResponse) -> Result<Value, ApiError> {
     if !resp.is_success() {
         return Err(ApiError::Status {
@@ -59,7 +52,6 @@ fn parse_api_response(resp: HttpResponse) -> Result<Value, ApiError> {
     })
 }
 
-/// Make a paginated API query using an injectable HTTP client.
 pub async fn query_api_list_with_client(
     endpoint: &str,
     client: &dyn HttpClient,
@@ -94,15 +86,14 @@ fn collect_with_single(mut results: Vec<Value>, item: Value) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config;
     use crate::http::tests::MockHttpClient;
-    use std::sync::{Mutex, MutexGuard};
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    use std::sync::MutexGuard;
 
     /// Lock env vars and set up standard API test environment.
     /// Returns a guard that must be held for the duration of the test.
     fn lock_api_env(token: &str) -> MutexGuard<'static, ()> {
-        let guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = config::lock_test_env();
         std::env::remove_var("CS_ONPREM_URL");
         std::env::set_var("CS_ACCESS_TOKEN", token);
         guard
@@ -119,24 +110,22 @@ mod tests {
         }
     }
 
-    // -- get_api_url --
 
     #[test]
     fn get_api_url_default() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_ONPREM_URL");
         assert_eq!(get_api_url(), "https://api.codescene.io");
     }
 
     #[test]
     fn get_api_url_onprem() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_ONPREM_URL", "https://my-instance.com");
         assert_eq!(get_api_url(), "https://my-instance.com/api");
         std::env::remove_var("CS_ONPREM_URL");
     }
 
-    // -- parse_api_response --
 
     #[test]
     fn parse_api_response_success() {
@@ -162,7 +151,6 @@ mod tests {
         }
     }
 
-    // -- query_api_with_client --
 
     #[tokio::test]
     async fn query_api_success() {
@@ -212,7 +200,6 @@ mod tests {
         cleanup_api_env();
     }
 
-    // -- query_api_list_with_client --
 
     async fn run_list_query(responses: Vec<HttpResponse>, endpoint: &str) -> Result<Vec<Value>, ApiError> {
         let mock = MockHttpClient::new(responses);
@@ -270,7 +257,6 @@ mod tests {
         cleanup_api_env();
     }
 
-    // -- collect_with_single --
 
     #[test]
     fn collect_with_single_appends_item() {

@@ -1,11 +1,5 @@
-/// HTTP client abstraction for testability.
-///
-/// Provides a trait-based abstraction over HTTP operations, allowing
-/// production code to use reqwest while tests inject mock clients.
-
 use std::collections::HashMap;
 
-/// Simplified HTTP response returned by the `HttpClient` trait.
 #[derive(Debug, Clone)]
 pub struct HttpResponse {
     pub status: u16,
@@ -36,7 +30,6 @@ impl HttpResponse {
     }
 }
 
-/// Describes an HTTP request to be performed.
 #[derive(Debug, Clone)]
 pub struct HttpRequest {
     pub method: Method,
@@ -46,7 +39,6 @@ pub struct HttpRequest {
     pub timeout_secs: u64,
 }
 
-/// HTTP method.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Method {
     Get,
@@ -54,14 +46,11 @@ pub enum Method {
 }
 
 /// Trait abstracting HTTP operations for dependency injection.
-///
-/// Production code uses `ReqwestClient`; tests inject a mock.
 #[async_trait::async_trait]
 pub trait HttpClient: Send + Sync {
     async fn send(&self, request: HttpRequest) -> Result<HttpResponse, String>;
 }
 
-/// Production HTTP client backed by reqwest.
 pub struct ReqwestClient;
 
 #[async_trait::async_trait]

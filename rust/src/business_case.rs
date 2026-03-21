@@ -1,18 +1,14 @@
-/// S-curve business case model — mirrors Python's `business_case.py`
-/// and `s_curve/` modules.
+/// S-curve business case model.
 ///
 /// Uses embedded polynomial regression coefficients to estimate the impact
 /// of improving Code Health on defect rates and development time.
 
 use serde::Serialize;
 
-/// Embedded NDJSON regression coefficients for defects.
 const DEFECTS_COEFFICIENTS: &str = include_str!("regression/defects.json");
 
-/// Embedded NDJSON regression coefficients for development time.
 const TIME_COEFFICIENTS: &str = include_str!("regression/time.json");
 
-/// A Code Health score in the range 1.0–10.0.
 #[derive(Debug, Clone, Copy)]
 struct HealthScore(f64);
 
@@ -22,21 +18,18 @@ impl HealthScore {
     }
 }
 
-/// A pair of health scores representing baseline and target.
 #[derive(Debug, Clone, Copy)]
 struct ScoreRange {
     baseline: HealthScore,
     target: HealthScore,
 }
 
-/// Target scenarios for the business case.
 const SCENARIOS: &[(f64, &str)] = &[
     (5.15, "industry average"),
     (9.1, "top 5%"),
     (10.0, "optimal"),
 ];
 
-/// Result of a business case analysis.
 #[derive(Debug, Clone, Serialize)]
 pub struct BusinessCase {
     pub scenario: String,
@@ -47,15 +40,12 @@ pub struct BusinessCase {
     pub confidence_interval: String,
 }
 
-/// Predicted outcome (optimistic or pessimistic bound).
 #[derive(Debug, Clone, Serialize)]
 pub struct Outcome {
     pub defect_reduction_percent: f64,
     pub time_reduction_percent: f64,
 }
 
-/// Generate a business case for improving from `current_score` to the
-/// nearest applicable target scenario.
 pub fn make_business_case(current_score: f64) -> Option<BusinessCase> {
     let current = HealthScore(current_score);
     let (target_score, label) = find_target_scenario(current)?;
@@ -91,7 +81,6 @@ fn find_target_scenario(current: HealthScore) -> Option<(HealthScore, &'static s
         .map(|(t, l)| (HealthScore(*t), *l))
 }
 
-/// Collected S-curve metrics with CI90 bounds.
 struct Metrics {
     defects: (f64, f64),
     time: (f64, f64),

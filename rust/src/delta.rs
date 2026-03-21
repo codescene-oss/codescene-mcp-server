@@ -1,19 +1,12 @@
-/// Delta analysis parsing — mirrors Python's `delta_analysis.py`.
-///
-/// Parses the JSON array output from `cs delta` into structured results
-/// with per-file verdicts and an overall quality gate status.
-
 use serde::Serialize;
 use serde_json::Value;
 
-/// Overall result of a delta analysis.
 #[derive(Debug, Clone, Serialize)]
 pub struct DeltaResult {
     pub results: Vec<FileResult>,
     pub quality_gates: String,
 }
 
-/// Per-file delta result.
 #[derive(Debug, Clone, Serialize)]
 pub struct FileResult {
     pub name: String,
@@ -21,10 +14,6 @@ pub struct FileResult {
     pub findings: Vec<Value>,
 }
 
-/// Parse the raw output from `cs delta` into a `DeltaResult`.
-///
-/// The CLI emits a JSON array of file objects directly. Empty output
-/// (no code health impact) maps to an empty result with "passed" gates.
 pub fn analyze_delta_output(output: &str) -> DeltaResult {
     if output.trim().is_empty() {
         return DeltaResult {
@@ -76,11 +65,6 @@ fn build_file_result(file: &Value) -> FileResult {
 }
 
 /// Determine the verdict for a single file based on score changes.
-///
-/// Mirrors Python's `_get_verdict()`:
-/// - new file (no old-score, has new-score) → "degraded"
-/// - missing either score → "unknown"
-/// - new > old → "improved", new < old → "degraded", equal → "stable"
 fn compute_verdict(file: &Value) -> String {
     let old_score = file.get("old-score").and_then(as_numeric);
     let new_score = file.get("new-score").and_then(as_numeric);
@@ -100,7 +84,6 @@ fn compute_verdict(file: &Value) -> String {
     }
 }
 
-/// Extract a numeric value from a JSON value (handles both int and float).
 fn as_numeric(v: &Value) -> Option<f64> {
     v.as_f64()
 }

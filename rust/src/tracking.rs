@@ -1,18 +1,11 @@
-/// Analytics tracking — mirrors Python's `track.py`.
-///
-/// POSTs usage events to the CodeScene analytics endpoint in background tasks.
-/// Events are prefixed with `mcp-`. Disabled by `CS_DISABLE_TRACKING`.
-
 use std::collections::HashMap;
 
 use serde_json::{json, Value};
 
 use crate::http::{HttpClient, HttpRequest, Method, ReqwestClient};
 
-/// Default tracking URL (derived from API URL).
 const DEFAULT_API_URL: &str = "https://api.codescene.io";
 
-/// All data needed to send a single tracking event.
 struct TrackingEvent {
     url: String,
     event: String,
@@ -22,7 +15,7 @@ struct TrackingEvent {
     properties: Value,
 }
 
-/// Send a tracking event in the background. Non-blocking, fire-and-forget.
+/// Send a tracking event in the background (fire-and-forget).
 pub fn track_event(event: &str, properties: Value, instance_id: &str) {
     if is_disabled() {
         return;
@@ -42,7 +35,6 @@ pub fn track_event(event: &str, properties: Value, instance_id: &str) {
     });
 }
 
-/// Send an error tracking event.
 pub fn track_error(error_msg: &str, tool_name: &str, instance_id: &str) {
     let properties = json!({
         "error": error_msg,
@@ -51,7 +43,6 @@ pub fn track_error(error_msg: &str, tool_name: &str, instance_id: &str) {
     track_event("error", properties, instance_id);
 }
 
-/// Build the JSON body for a tracking event, enriching properties.
 fn build_tracking_body(te: &mut TrackingEvent) -> Value {
     if let Some(map) = te.properties.as_object_mut() {
         map.insert("instance-id".to_string(), json!(te.instance_id));
@@ -107,25 +98,22 @@ fn is_disabled() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config;
     use crate::http::tests::MockHttpClient;
     use crate::http::HttpResponse;
-    use std::sync::Mutex;
     use tokio::time::Duration;
 
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-    // -- is_disabled --
 
     #[test]
     fn is_disabled_returns_false_when_not_set() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_DISABLE_TRACKING");
         assert!(!is_disabled());
     }
 
     #[test]
     fn is_disabled_returns_false_for_empty_string() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_TRACKING", "");
         assert!(!is_disabled());
         std::env::remove_var("CS_DISABLE_TRACKING");
@@ -133,7 +121,7 @@ mod tests {
 
     #[test]
     fn is_disabled_returns_false_for_zero() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_TRACKING", "0");
         assert!(!is_disabled());
         std::env::remove_var("CS_DISABLE_TRACKING");
@@ -141,7 +129,7 @@ mod tests {
 
     #[test]
     fn is_disabled_returns_false_for_false_any_case() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         for val in ["false", "FALSE", "False"] {
             std::env::set_var("CS_DISABLE_TRACKING", val);
             assert!(!is_disabled(), "Expected not disabled for {val:?}");
@@ -151,7 +139,7 @@ mod tests {
 
     #[test]
     fn is_disabled_returns_true_for_truthy_values() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         for val in ["true", "1", "yes"] {
             std::env::set_var("CS_DISABLE_TRACKING", val);
             assert!(is_disabled(), "Expected disabled for {val:?}");
@@ -159,11 +147,10 @@ mod tests {
         std::env::remove_var("CS_DISABLE_TRACKING");
     }
 
-    // -- tracking_url --
 
     #[test]
     fn tracking_url_default() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_TRACKING_URL");
         std::env::remove_var("CS_ONPREM_URL");
         assert_eq!(tracking_url(), "https://api.codescene.io/v2/analytics/track");
@@ -171,7 +158,7 @@ mod tests {
 
     #[test]
     fn tracking_url_override() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_TRACKING_URL", "http://custom-tracking/track");
         assert_eq!(tracking_url(), "http://custom-tracking/track");
         std::env::remove_var("CS_TRACKING_URL");
@@ -179,7 +166,7 @@ mod tests {
 
     #[test]
     fn tracking_url_from_onprem() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_TRACKING_URL");
         std::env::set_var("CS_ONPREM_URL", "https://my-instance.example.com");
         assert_eq!(
@@ -189,7 +176,6 @@ mod tests {
         std::env::remove_var("CS_ONPREM_URL");
     }
 
-    // -- build_tracking_body --
 
     #[test]
     fn build_tracking_body_enriches_properties() {
@@ -226,11 +212,10 @@ mod tests {
         assert_eq!(body["event-properties"], "not-an-object");
     }
 
-    // -- send_event --
 
     #[tokio::test]
     async fn send_event_posts_to_correct_url() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_ACCESS_TOKEN", "test-tok");
 
         let mock = MockHttpClient::always(HttpResponse::ok(""));
@@ -258,7 +243,7 @@ mod tests {
 
     #[tokio::test]
     async fn send_event_uses_empty_bearer_when_no_token() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_ACCESS_TOKEN");
 
         let mock = MockHttpClient::always(HttpResponse::ok(""));
@@ -280,7 +265,7 @@ mod tests {
 
     #[tokio::test]
     async fn send_event_serializes_body_with_event_type() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_ACCESS_TOKEN");
 
         let mock = MockHttpClient::always(HttpResponse::ok(""));
@@ -305,7 +290,7 @@ mod tests {
 
     #[tokio::test]
     async fn send_event_returns_error_on_transport_failure() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_ACCESS_TOKEN");
 
         let mock = MockHttpClient::new(vec![]);
@@ -322,11 +307,10 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // -- track_event / track_error with tracking disabled --
 
     #[tokio::test]
     async fn track_event_disabled_does_not_panic() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_TRACKING", "1");
         track_event("test-event", json!({"key": "value"}), "test-instance");
         std::env::remove_var("CS_DISABLE_TRACKING");
@@ -334,17 +318,16 @@ mod tests {
 
     #[tokio::test]
     async fn track_error_disabled_does_not_panic() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_TRACKING", "1");
         track_error("some error", "some-tool", "test-instance");
         std::env::remove_var("CS_DISABLE_TRACKING");
     }
 
-    // -- track_event / track_error with tracking enabled (fire-and-forget) --
 
     #[tokio::test]
     async fn track_event_enabled_spawns_without_panic() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_DISABLE_TRACKING");
         std::env::set_var("CS_TRACKING_URL", "http://192.0.2.1:1/track");
         track_event("test-enabled", json!({"key": "val"}), "test-id");
@@ -354,7 +337,7 @@ mod tests {
 
     #[tokio::test]
     async fn track_error_enabled_spawns_without_panic() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_DISABLE_TRACKING");
         std::env::set_var("CS_TRACKING_URL", "http://192.0.2.1:1/track");
         track_error("err msg", "tool-name", "test-id");

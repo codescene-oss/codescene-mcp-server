@@ -1,5 +1,3 @@
-/// Error types for the CodeScene MCP server.
-
 #[derive(Debug, thiserror::Error)]
 pub enum CliError {
     #[error("CS CLI exited with code {code}: {stderr}")]

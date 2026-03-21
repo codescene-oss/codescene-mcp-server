@@ -1,12 +1,9 @@
-/// Configuration system — mirrors Python's `config.py`.
-///
-/// Manages `~/.config/codehealth-mcp/config.json` with 7 config options,
-/// an instance ID (UUID4) for analytics, and environment variable integration.
-/// Environment variables from the MCP client always take precedence.
-
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::OnceLock;
+
+#[cfg(test)]
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -16,9 +13,23 @@ use crate::errors::ConfigError;
 /// Env vars that were already set by the MCP client before startup.
 /// Captured once by `snapshot_client_env_vars()` so we can distinguish
 /// client-provided values from those applied from the config file.
+#[cfg(not(test))]
 static CLIENT_ENV_VARS: OnceLock<HashSet<String>> = OnceLock::new();
 
-/// One configurable option with metadata.
+#[cfg(test)]
+static CLIENT_ENV_VARS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+
+#[cfg(test)]
+static TEST_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+#[cfg(test)]
+pub(crate) fn lock_test_env() -> std::sync::MutexGuard<'static, ()> {
+    TEST_ENV_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
+
 pub struct ConfigOption {
     pub key: &'static str,
     pub env_var: &'static str,
@@ -30,7 +41,6 @@ pub struct ConfigOption {
     pub docs_url: &'static str,
 }
 
-/// All known configuration options.
 pub const OPTIONS: &[ConfigOption] = &[
     ConfigOption {
         key: "access_token",
@@ -104,7 +114,6 @@ pub const OPTIONS: &[ConfigOption] = &[
     },
 ];
 
-/// Persistent config data stored in `config.json`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ConfigData {
     #[serde(default)]
@@ -114,7 +123,6 @@ pub struct ConfigData {
     pub values: HashMap<String, String>,
 }
 
-/// Resolve the config directory path.
 pub fn config_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("CS_CONFIG_DIR") {
         return PathBuf::from(dir);
@@ -125,7 +133,6 @@ pub fn config_dir() -> PathBuf {
         .join("codehealth-mcp")
 }
 
-/// Read config from disk, creating defaults if missing.
 pub fn load() -> Result<ConfigData, ConfigError> {
     let path = config_dir().join("config.json");
     if !path.exists() {
@@ -148,7 +155,6 @@ pub fn load() -> Result<ConfigData, ConfigError> {
     Ok(data)
 }
 
-/// Write config to disk.
 pub fn save(data: &ConfigData) -> Result<(), ConfigError> {
     let dir = config_dir();
     std::fs::create_dir_all(&dir)?;
@@ -167,17 +173,35 @@ pub fn snapshot_client_env_vars() {
             set.insert(option.env_var.to_string());
         }
     }
+
+    #[cfg(not(test))]
     let _ = CLIENT_ENV_VARS.set(set);
+
+    #[cfg(test)]
+    {
+        let store = CLIENT_ENV_VARS.get_or_init(|| Mutex::new(HashSet::new()));
+        let mut guard = store.lock().unwrap_or_else(|e| e.into_inner());
+        guard.extend(set);
+    }
 }
 
-/// Returns `true` if this env var was set by the MCP client at startup.
 pub fn is_client_env_var(env_var: &str) -> bool {
-    CLIENT_ENV_VARS
-        .get()
-        .map_or(false, |s| s.contains(env_var))
+    #[cfg(not(test))]
+    {
+        return CLIENT_ENV_VARS
+            .get()
+            .map_or(false, |s| s.contains(env_var));
+    }
+
+    #[cfg(test)]
+    {
+        return CLIENT_ENV_VARS
+            .get()
+            .and_then(|s| s.lock().ok().map(|g| g.contains(env_var)))
+            .unwrap_or(false);
+    }
 }
 
-/// Read a non-empty environment variable.
 fn non_empty_env(var: &str) -> Option<String> {
     std::env::var(var).ok().filter(|v| !v.is_empty())
 }
@@ -199,7 +223,6 @@ pub fn get_effective(option: &ConfigOption, data: &ConfigData) -> Option<String>
     non_empty_env(option.env_var)
 }
 
-/// Where the effective value comes from.
 pub fn value_source(option: &ConfigOption, data: &ConfigData) -> &'static str {
     if is_client_env_var(option.env_var) && non_empty_env(option.env_var).is_some() {
         return "environment";
@@ -216,7 +239,6 @@ pub fn value_source(option: &ConfigOption, data: &ConfigData) -> &'static str {
     "not set"
 }
 
-/// Look up a config option by key or alias.
 pub fn find_option(key: &str) -> Option<&'static ConfigOption> {
     OPTIONS.iter().find(|o| {
         o.key == key || o.env_var == key || o.aliases.contains(&key)
@@ -237,27 +259,23 @@ pub fn apply_to_env(data: &ConfigData) {
     }
 }
 
-/// Get the instance ID, creating one if needed.
 pub fn instance_id(data: &ConfigData) -> String {
     data.instance_id
         .clone()
         .unwrap_or_else(|| Uuid::new_v4().to_string())
 }
 
-/// Get the config file path for display.
 #[allow(dead_code)]
 pub fn config_file_path() -> PathBuf {
     config_dir().join("config.json")
 }
 
-/// Returns `true` if the key is a recognized config option.
 #[allow(dead_code)]
 pub fn is_valid_key(key: &str) -> bool {
     find_option(key).is_some()
 }
 
 /// Mask sensitive values for display.
-/// Shows `...` followed by the last 6 characters, matching Python's format.
 const SENSITIVE_TAIL_LENGTH: usize = 6;
 
 pub fn mask_if_sensitive(option: &ConfigOption, value: &str) -> String {
@@ -274,10 +292,6 @@ pub fn mask_if_sensitive(option: &ConfigOption, value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    // Serialize tests that mutate env vars so parallel tests don't race.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn find_option_by_key() {
@@ -393,7 +407,7 @@ mod tests {
 
     #[test]
     fn value_source_not_set() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = lock_test_env();
         let opt = find_option("ca_bundle").unwrap();
         let data = ConfigData::default();
         std::env::remove_var("REQUESTS_CA_BUNDLE");
@@ -403,7 +417,7 @@ mod tests {
 
     #[test]
     fn value_source_from_config_file() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = lock_test_env();
         let opt = find_option("ca_bundle").unwrap();
         let mut data = ConfigData::default();
         data.values
@@ -465,7 +479,7 @@ mod tests {
 
     #[test]
     fn apply_to_env_sets_unset_vars() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = lock_test_env();
         let mut data = ConfigData::default();
         data.values
             .insert("onprem_url".to_string(), "https://apply-test.com".to_string());
@@ -490,7 +504,7 @@ mod tests {
 
     #[test]
     fn config_dir_uses_env_override() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = lock_test_env();
         std::env::set_var("CS_CONFIG_DIR", "/tmp/test-config-dir");
         let dir = config_dir();
         assert_eq!(dir.to_string_lossy(), "/tmp/test-config-dir");
@@ -505,7 +519,7 @@ mod tests {
     where
         F: FnOnce(&std::path::Path) -> R,
     {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = lock_test_env();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("CS_CONFIG_DIR", dir.path().as_os_str());
         let result = f(dir.path());
@@ -587,7 +601,7 @@ mod tests {
 
     #[test]
     fn apply_to_env_skips_already_set_vars() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = lock_test_env();
         std::env::set_var("CS_ONPREM_URL", "already-set");
         let mut data = ConfigData::default();
         data.values
@@ -602,7 +616,7 @@ mod tests {
 
     #[test]
     fn apply_to_env_skips_empty_values() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = lock_test_env();
         std::env::remove_var("CS_ONPREM_URL");
         let mut data = ConfigData::default();
         data.values
@@ -615,7 +629,7 @@ mod tests {
 
     #[test]
     fn value_source_env_applied_returns_config_file() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = lock_test_env();
         let opt = find_option("ca_bundle").unwrap();
         let data = ConfigData::default();
         std::env::set_var("REQUESTS_CA_BUNDLE", "/some/cert.pem");
@@ -631,7 +645,7 @@ mod tests {
 
     #[test]
     fn snapshot_and_client_env_var_paths() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = lock_test_env();
         // Set an env var BEFORE snapshotting so it's captured as a client var.
         // Use disable_tracking since it's hidden and unlikely to be set by other tests.
         std::env::set_var("CS_DISABLE_TRACKING", "snapshot-test");

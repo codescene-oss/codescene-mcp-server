@@ -1,8 +1,3 @@
-/// Analytics event property extractors — mirrors Python's `event_properties.py`.
-///
-/// Each tool has a specific extractor that derives non-PII properties from
-/// tool arguments and results. Uses SHA-256 truncated hashes for file paths.
-
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -10,7 +5,6 @@ use serde_json::{json, Value};
 
 use crate::hashing::truncated_sha256;
 
-/// Identifies a config tool invocation as either a read or write operation.
 #[derive(Debug, Clone, Copy)]
 pub enum ConfigAction {
     Get,
@@ -26,7 +20,6 @@ impl ConfigAction {
     }
 }
 
-/// Extract properties for a code health review event.
 pub fn review_properties(file_path: &Path, result: &str) -> Value {
     let mut props = json!({ "file-hash": hash_path(file_path) });
     if let Some(data) = parse_json_dict(result) {
@@ -41,7 +34,6 @@ pub fn review_properties(file_path: &Path, result: &str) -> Value {
     props
 }
 
-/// Extract properties for a code health score event.
 pub fn score_properties(file_path: &Path, score: Option<f64>) -> Value {
     json!({
         "file-hash": hash_path(file_path),
@@ -49,14 +41,12 @@ pub fn score_properties(file_path: &Path, score: Option<f64>) -> Value {
     })
 }
 
-/// Extract properties for a pre-commit safeguard event.
 pub fn pre_commit_properties(repo_path: &Path, result: &str) -> Value {
     let mut props = json!({ "repo-hash": hash_path(repo_path) });
     merge_delta_properties(&mut props, result);
     props
 }
 
-/// Extract properties for an analyze change set event.
 pub fn change_set_properties(repo_path: &Path, base_ref: &Path, result: &str) -> Value {
     let mut props = json!({
         "repo-hash": hash_path(repo_path),
@@ -66,7 +56,6 @@ pub fn change_set_properties(repo_path: &Path, base_ref: &Path, result: &str) ->
     props
 }
 
-/// Extract properties for an auto-refactor event.
 pub fn refactor_properties(file_path: &Path, result: &Value) -> Value {
     let mut props = json!({ "file-hash": hash_path(file_path) });
     if let Some(confidence) = result.get("confidence").and_then(|c| c.as_str()) {
@@ -75,7 +64,6 @@ pub fn refactor_properties(file_path: &Path, result: &Value) -> Value {
     props
 }
 
-/// Extract properties for a business case event.
 pub fn business_case_properties(file_path: &Path, result: &str) -> Value {
     let mut props = json!({ "file-hash": hash_path(file_path) });
     if let Some(data) = parse_json_dict(result) {
@@ -91,37 +79,30 @@ pub fn business_case_properties(file_path: &Path, result: &str) -> Value {
     props
 }
 
-/// Extract properties for a select project event (empty per Python).
 pub fn select_project_properties() -> Value {
     json!({})
 }
 
-/// Extract properties for a technical debt goals event (empty per Python).
 pub fn goals_properties(_project_id: i64, _goal_count: usize) -> Value {
     json!({})
 }
 
-/// Extract properties for a technical debt goals for file event.
 pub fn goals_file_properties(file_path: &Path) -> Value {
     json!({ "file-hash": hash_path(file_path) })
 }
 
-/// Extract properties for a technical debt hotspots event (empty per Python).
 pub fn hotspots_properties(_project_id: i64, _hotspot_count: usize) -> Value {
     json!({})
 }
 
-/// Extract properties for a technical debt hotspots for file event.
 pub fn hotspots_file_properties(file_path: &Path) -> Value {
     json!({ "file-hash": hash_path(file_path) })
 }
 
-/// Extract properties for a code ownership event.
 pub fn ownership_properties(_project_id: i64, path: &Path) -> Value {
     json!({ "path-hash": hash_path(path) })
 }
 
-/// Extract properties for a config event (get or set).
 pub fn config_properties(action: ConfigAction, key: &str) -> Value {
     json!({
         "action": action.as_str(),
@@ -133,20 +114,15 @@ pub fn config_properties(action: ConfigAction, key: &str) -> Value {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/// Hash a filesystem path for non-PII analytics.
 fn hash_path(path: &Path) -> String {
     truncated_sha256(&path.to_string_lossy())
 }
 
-/// Parse a string as JSON and return it only if it's a dict/object.
 fn parse_json_dict(s: &str) -> Option<Value> {
     let v: Value = serde_json::from_str(s).ok()?;
     if v.is_object() { Some(v) } else { None }
 }
 
-/// Extract shared delta analysis properties from the tool result string.
-///
-/// The result is a JSON string `{"quality_gates": "...", "results": [...]}`.
 fn merge_delta_properties(props: &mut Value, result: &str) {
     let data = match parse_json_dict(result) {
         Some(d) => d,
@@ -178,7 +154,6 @@ fn merge_delta_properties(props: &mut Value, result: &str) {
     add_categories(props, &categories_from_entries(&findings));
 }
 
-/// Count verdict occurrences across delta result entries.
 fn count_verdicts(results: &[Value]) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::new();
     for entry in results {
@@ -189,7 +164,6 @@ fn count_verdicts(results: &[Value]) -> BTreeMap<String, usize> {
     counts
 }
 
-/// Return sorted unique category strings from a list of finding entries.
 fn categories_from_entries(entries: &[&Value]) -> Vec<String> {
     let mut cats: Vec<String> = entries
         .iter()
@@ -202,7 +176,6 @@ fn categories_from_entries(entries: &[&Value]) -> Vec<String> {
     cats
 }
 
-/// Add categories and category-count to props if non-empty.
 fn add_categories(props: &mut Value, categories: &[String]) {
     if !categories.is_empty() {
         props["categories"] = json!(categories);

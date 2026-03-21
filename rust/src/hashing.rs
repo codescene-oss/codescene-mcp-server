@@ -1,11 +1,5 @@
-/// SHA-256 truncated hashing — mirrors Python's `hashing.py`.
-///
-/// Produces a 16-character hex digest used for non-PII analytics properties
-/// (e.g., hashed file paths).
-
 use sha2::{Digest, Sha256};
 
-/// Return the first 16 hex characters of the SHA-256 digest of `input`.
 pub fn truncated_sha256(input: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(input.as_bytes());
