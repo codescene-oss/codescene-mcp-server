@@ -1,7 +1,12 @@
 """Tests for the onefile cleanup module."""
 
+import contextlib
 import logging
+import logging.handlers
 import os
+import shutil
+import tempfile
+import unittest
 from unittest.mock import patch
 
 from utils.onefile_cleanup import (
@@ -12,184 +17,206 @@ from utils.onefile_cleanup import (
 )
 
 
-class TestOnefileDirPattern:
+class TestOnefileDirPattern(unittest.TestCase):
     """Verify the regex matches expected Nuitka onefile directory names."""
 
     def test_matches_standard_onefile_dir(self):
         m = _ONEFILE_DIR_PATTERN.match("onefile_12345_1699852985_413382")
-        assert m is not None
-        assert m.group(1) == "12345"
+        self.assertIsNotNone(m)
+        self.assertEqual(m.group(1), "12345")
 
     def test_matches_large_pid_and_timestamp(self):
         m = _ONEFILE_DIR_PATTERN.match("onefile_9999999_9999999999_0")
-        assert m is not None
+        self.assertIsNotNone(m)
 
     def test_matches_real_world_example(self):
         m = _ONEFILE_DIR_PATTERN.match("onefile_10360_1773513624_413382")
-        assert m is not None
-        assert m.group(1) == "10360"
+        self.assertIsNotNone(m)
+        self.assertEqual(m.group(1), "10360")
 
     def test_rejects_non_onefile_dir(self):
-        assert _ONEFILE_DIR_PATTERN.match("some_other_dir") is None
+        self.assertIsNone(_ONEFILE_DIR_PATTERN.match("some_other_dir"))
 
     def test_rejects_partial_match(self):
-        assert _ONEFILE_DIR_PATTERN.match("onefile_12345") is None
+        self.assertIsNone(_ONEFILE_DIR_PATTERN.match("onefile_12345"))
 
     def test_rejects_two_components_only(self):
-        # Old assumed format — should no longer match
-        assert _ONEFILE_DIR_PATTERN.match("onefile_12345_6789") is None
+        # Old assumed format — should no longer match.
+        self.assertIsNone(_ONEFILE_DIR_PATTERN.match("onefile_12345_6789"))
 
     def test_rejects_four_components(self):
-        assert _ONEFILE_DIR_PATTERN.match("onefile_12345_6789_111_extra") is None
+        self.assertIsNone(
+            _ONEFILE_DIR_PATTERN.match("onefile_12345_6789_111_extra")
+        )
 
     def test_rejects_non_numeric_pid(self):
-        assert _ONEFILE_DIR_PATTERN.match("onefile_abc_12345_6789") is None
+        self.assertIsNone(
+            _ONEFILE_DIR_PATTERN.match("onefile_abc_12345_6789")
+        )
 
 
-class TestPidIsAlive:
+class TestPidIsAlive(unittest.TestCase):
     """Verify PID liveness checking."""
 
     def test_current_process_is_alive(self):
-        assert _pid_is_alive(os.getpid()) is True
+        self.assertTrue(_pid_is_alive(os.getpid()))
 
     def test_nonexistent_pid_is_not_alive(self):
         # Use a PID that is valid but extremely unlikely to be running.
         # macOS max PID is 99998, Linux default max is 32768 (can be raised).
-        assert _pid_is_alive(99998) is False
+        self.assertFalse(_pid_is_alive(99998))
 
     def test_overflow_pid_is_not_alive(self):
         # A PID exceeding platform limits should be treated as not alive.
-        assert _pid_is_alive(4_000_000_000) is False
+        self.assertFalse(_pid_is_alive(4_000_000_000))
 
     def test_permission_error_treated_as_alive(self):
         with patch("utils.onefile_cleanup.os.kill", side_effect=PermissionError):
-            assert _pid_is_alive(1) is True
+            self.assertTrue(_pid_is_alive(1))
 
     def test_generic_os_error_treated_as_dead(self):
-        with patch("utils.onefile_cleanup.os.kill", side_effect=OSError("Unexpected")):
-            assert _pid_is_alive(42) is False
+        with patch(
+            "utils.onefile_cleanup.os.kill", side_effect=OSError("Unexpected")
+        ):
+            self.assertFalse(_pid_is_alive(42))
 
     def test_process_lookup_error_treated_as_dead(self):
-        with patch("utils.onefile_cleanup.os.kill", side_effect=ProcessLookupError):
-            assert _pid_is_alive(42) is False
+        with patch(
+            "utils.onefile_cleanup.os.kill", side_effect=ProcessLookupError
+        ):
+            self.assertFalse(_pid_is_alive(42))
 
     def test_kill_success_treated_as_alive(self):
         with patch("utils.onefile_cleanup.os.kill", return_value=None):
-            assert _pid_is_alive(42) is True
+            self.assertTrue(_pid_is_alive(42))
 
 
-class TestCleanupStaleOnefileDirs:
+class TestCleanupStaleOnefileDirs(unittest.TestCase):
     """Verify cleanup removes only stale onefile dirs."""
 
-    def test_removes_stale_directory(self, tmp_path):
-        stale_dir = tmp_path / "onefile_4000000000_1699852985_413382"
-        stale_dir.mkdir()
-        (stale_dir / "some_file.so").touch()
+    def setUp(self):
+        self.tmp_dir = tempfile.mkdtemp()
 
-        with patch("utils.onefile_cleanup.tempfile.gettempdir", return_value=str(tmp_path)):
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _make_dir(self, name):
+        """Create a subdirectory with a payload file and return its path."""
+        path = os.path.join(self.tmp_dir, name)
+        os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, "payload.so"), "w") as f:
+            f.write("")
+        return path
+
+    def _run_cleanup(self, **extra_patches):
+        """Run _cleanup_stale_onefile_dirs with tempdir patched to self.tmp_dir.
+
+        *extra_patches* are forwarded to ``unittest.mock.patch`` and stacked
+        on top of the base gettempdir patch.
+        """
+        stack = contextlib.ExitStack()
+        stack.enter_context(patch(
+            "utils.onefile_cleanup.tempfile.gettempdir",
+            return_value=self.tmp_dir,
+        ))
+        for target, kwargs in extra_patches.items():
+            stack.enter_context(patch(target, **kwargs))
+        with stack:
             _cleanup_stale_onefile_dirs()
 
-        assert not stale_dir.exists()
+    def test_removes_stale_directory(self):
+        stale = self._make_dir("onefile_4000000000_1699852985_413382")
+        self._run_cleanup()
+        self.assertFalse(os.path.exists(stale))
 
-    def test_preserves_directory_for_running_pid(self, tmp_path):
-        live_dir = tmp_path / f"onefile_{os.getpid()}_1699852985_413382"
-        live_dir.mkdir()
-        (live_dir / "some_file.so").touch()
+    def test_preserves_directory_for_running_pid(self):
+        live = self._make_dir(f"onefile_{os.getpid()}_1699852985_413382")
+        self._run_cleanup()
+        self.assertTrue(os.path.exists(live))
 
-        with patch("utils.onefile_cleanup.tempfile.gettempdir", return_value=str(tmp_path)):
-            _cleanup_stale_onefile_dirs()
+    def test_ignores_non_onefile_directories(self):
+        other = self._make_dir("some_other_temp_dir")
+        self._run_cleanup()
+        self.assertTrue(os.path.exists(other))
 
-        assert live_dir.exists()
-
-    def test_ignores_non_onefile_directories(self, tmp_path):
-        other_dir = tmp_path / "some_other_temp_dir"
-        other_dir.mkdir()
-
-        with patch("utils.onefile_cleanup.tempfile.gettempdir", return_value=str(tmp_path)):
-            _cleanup_stale_onefile_dirs()
-
-        assert other_dir.exists()
-
-    def test_handles_permission_error_gracefully(self, tmp_path):
-        stale_dir = tmp_path / "onefile_4000000000_1699852985_413382"
-        stale_dir.mkdir()
-
-        with (
-            patch("utils.onefile_cleanup.tempfile.gettempdir", return_value=str(tmp_path)),
-            patch("utils.onefile_cleanup.shutil.rmtree", side_effect=OSError("Permission denied")),
-        ):
-            # Should not raise
-            _cleanup_stale_onefile_dirs()
-
-        # Directory still exists because rmtree was mocked to fail
-        assert stale_dir.exists()
+    def test_handles_permission_error_gracefully(self):
+        stale = self._make_dir("onefile_4000000000_1699852985_413382")
+        self._run_cleanup(**{
+            "utils.onefile_cleanup.shutil.rmtree": {
+                "side_effect": OSError("Permission denied"),
+            },
+        })
+        # Directory still exists because rmtree was mocked to fail.
+        self.assertTrue(os.path.exists(stale))
 
     def test_handles_unreadable_tempdir(self):
         with patch(
             "utils.onefile_cleanup.tempfile.gettempdir",
             return_value="/nonexistent/path",
         ):
-            # Should not raise
-            _cleanup_stale_onefile_dirs()
-
-    def test_removes_multiple_stale_preserves_live(self, tmp_path):
-        """Mixed scenario: several stale dirs, one live dir, one non-onefile dir."""
-        stale_1 = tmp_path / "onefile_4000000001_1699852985_100"
-        stale_2 = tmp_path / "onefile_4000000002_1699852985_200"
-        live = tmp_path / f"onefile_{os.getpid()}_1699852985_300"
-        unrelated = tmp_path / "other_temp_dir"
-
-        for d in (stale_1, stale_2, live, unrelated):
-            d.mkdir()
-            (d / "payload.so").touch()
-
-        with patch("utils.onefile_cleanup.tempfile.gettempdir", return_value=str(tmp_path)):
-            _cleanup_stale_onefile_dirs()
-
-        assert not stale_1.exists()
-        assert not stale_2.exists()
-        assert live.exists()
-        assert unrelated.exists()
-
-    def test_logs_removed_directory(self, tmp_path, caplog):
-        stale_dir = tmp_path / "onefile_4000000000_1699852985_413382"
-        stale_dir.mkdir()
-
-        with (
-            patch("utils.onefile_cleanup.tempfile.gettempdir", return_value=str(tmp_path)),
-            caplog.at_level(logging.DEBUG, logger="utils.onefile_cleanup"),
-        ):
-            _cleanup_stale_onefile_dirs()
-
-        assert "Removed stale onefile directory" in caplog.text
-
-    def test_no_log_when_nothing_to_clean(self, tmp_path, caplog):
-        # Only a non-matching directory present.
-        (tmp_path / "regular_dir").mkdir()
-
-        with (
-            patch("utils.onefile_cleanup.tempfile.gettempdir", return_value=str(tmp_path)),
-            caplog.at_level(logging.DEBUG, logger="utils.onefile_cleanup"),
-        ):
-            _cleanup_stale_onefile_dirs()
-
-        assert "Removed stale onefile directory" not in caplog.text
-
-    def test_empty_tempdir(self, tmp_path):
-        """An empty temp directory should not cause errors."""
-        with patch("utils.onefile_cleanup.tempfile.gettempdir", return_value=str(tmp_path)):
             _cleanup_stale_onefile_dirs()  # should not raise
+
+    def test_removes_multiple_stale_preserves_live(self):
+        """Mixed scenario: several stale dirs, one live dir, one non-onefile dir."""
+        stale_1 = self._make_dir("onefile_4000000001_1699852985_100")
+        stale_2 = self._make_dir("onefile_4000000002_1699852985_200")
+        live = self._make_dir(f"onefile_{os.getpid()}_1699852985_300")
+        unrelated = self._make_dir("other_temp_dir")
+
+        self._run_cleanup()
+
+        self.assertFalse(os.path.exists(stale_1))
+        self.assertFalse(os.path.exists(stale_2))
+        self.assertTrue(os.path.exists(live))
+        self.assertTrue(os.path.exists(unrelated))
+
+    def test_logs_removed_directory(self):
+        self._make_dir("onefile_4000000000_1699852985_413382")
+
+        with patch(
+            "utils.onefile_cleanup.tempfile.gettempdir",
+            return_value=self.tmp_dir,
+        ), self.assertLogs("utils.onefile_cleanup", level=logging.DEBUG) as cm:
+            _cleanup_stale_onefile_dirs()
+
+        self.assertTrue(
+            any("Removed stale onefile directory" in msg for msg in cm.output)
+        )
+
+    def test_no_log_when_nothing_to_clean(self):
+        # Only a non-matching directory present.
+        self._make_dir("regular_dir")
+
+        logger = logging.getLogger("utils.onefile_cleanup")
+        handler = logging.handlers.MemoryHandler(capacity=100)
+        logger.addHandler(handler)
+        try:
+            self._run_cleanup()
+            handler.flush()
+            messages = [r.getMessage() for r in handler.buffer]
+            self.assertFalse(
+                any("Removed stale onefile directory" in m for m in messages)
+            )
+        finally:
+            logger.removeHandler(handler)
+
+    def test_empty_tempdir(self):
+        """An empty temp directory should not cause errors."""
+        self._run_cleanup()  # should not raise
 
     def test_listdir_os_error_is_handled(self):
         """OSError from os.listdir (e.g. permission denied on /tmp) is swallowed."""
-        with (
-            patch("utils.onefile_cleanup.tempfile.gettempdir", return_value="/some/path"),
-            patch("utils.onefile_cleanup.os.listdir", side_effect=OSError("Permission denied")),
+        with patch(
+            "utils.onefile_cleanup.tempfile.gettempdir",
+            return_value="/some/path",
+        ), patch(
+            "utils.onefile_cleanup.os.listdir",
+            side_effect=OSError("Permission denied"),
         ):
             _cleanup_stale_onefile_dirs()  # should not raise
 
 
-class TestCleanupStaleOnefileDirsAsync:
+class TestCleanupStaleOnefileDirsAsync(unittest.TestCase):
     """Verify the async wrapper respects environment checks."""
 
     def _reset_env_cache(self):
@@ -198,53 +225,52 @@ class TestCleanupStaleOnefileDirsAsync:
 
         env_mod._cached_environment = None
 
-    def test_noop_when_not_nuitka(self):
-        self._reset_env_cache()
-        with (
-            patch("utils.environment._is_nuitka_environment", return_value=False),
-            patch.dict(os.environ, {}, clear=False),
-            patch("utils.onefile_cleanup.threading.Thread") as mock_thread,
-        ):
-            os.environ.pop("CS_MOUNT_PATH", None)
-            cleanup_stale_onefile_dirs_async()
-            mock_thread.assert_not_called()
+    def setUp(self):
         self._reset_env_cache()
 
-    def test_starts_thread_when_nuitka(self):
+    def tearDown(self):
         self._reset_env_cache()
-        with (
-            patch("utils.environment._is_nuitka_environment", return_value=True),
+
+    @contextlib.contextmanager
+    def _simulate_environment(self, *, is_nuitka, docker_mount=None):
+        """Set up environment patches and yield the mock Thread class."""
+        env_patches = [
+            patch("utils.environment._is_nuitka_environment", return_value=is_nuitka),
             patch.dict(os.environ, {}, clear=False),
-            patch("utils.onefile_cleanup.threading.Thread") as mock_thread,
-        ):
-            os.environ.pop("CS_MOUNT_PATH", None)
+            patch("utils.onefile_cleanup.threading.Thread"),
+        ]
+        if docker_mount is not None:
+            env_patches.insert(1, patch.dict(
+                os.environ, {"CS_MOUNT_PATH": docker_mount}
+            ))
+
+        stack = contextlib.ExitStack()
+        for p in env_patches:
+            mock_or_ctx = stack.enter_context(p)
+        # The last patch is threading.Thread — that's our mock.
+        mock_thread = mock_or_ctx
+        with stack:
+            if docker_mount is None:
+                os.environ.pop("CS_MOUNT_PATH", None)
+            yield mock_thread
+
+    def test_noop_when_not_nuitka(self):
+        with self._simulate_environment(is_nuitka=False) as mock_thread:
+            cleanup_stale_onefile_dirs_async()
+            mock_thread.assert_not_called()
+
+    def test_starts_thread_when_nuitka(self):
+        with self._simulate_environment(is_nuitka=True) as mock_thread:
             mock_instance = mock_thread.return_value
             cleanup_stale_onefile_dirs_async()
             mock_thread.assert_called_once_with(
                 target=_cleanup_stale_onefile_dirs, daemon=True
             )
             mock_instance.start.assert_called_once()
-        self._reset_env_cache()
 
     def test_noop_when_docker(self):
-        self._reset_env_cache()
-        with (
-            patch.dict(os.environ, {"CS_MOUNT_PATH": "/some/path"}),
-            patch("utils.onefile_cleanup.threading.Thread") as mock_thread,
-        ):
+        with self._simulate_environment(
+            is_nuitka=False, docker_mount="/some/path"
+        ) as mock_thread:
             cleanup_stale_onefile_dirs_async()
             mock_thread.assert_not_called()
-        self._reset_env_cache()
-
-    def test_noop_when_source(self):
-        """Running from source (not Nuitka, not Docker) should not spawn a thread."""
-        self._reset_env_cache()
-        with (
-            patch("utils.environment._is_nuitka_environment", return_value=False),
-            patch.dict(os.environ, {}, clear=False),
-            patch("utils.onefile_cleanup.threading.Thread") as mock_thread,
-        ):
-            os.environ.pop("CS_MOUNT_PATH", None)
-            cleanup_stale_onefile_dirs_async()
-            mock_thread.assert_not_called()
-        self._reset_env_cache()
