@@ -334,6 +334,7 @@ jobs:
             --product-name="CodeHealth MCP" `
             --file-version="$nuitka_version" `
             --product-version="$nuitka_version" `
+            --onefile-tempdir-spec="{CACHE_DIR}/codescene-mcp-server" `
             --noinclude-pytest-mode=nofollow `
             --noinclude-unittest-mode=nofollow `
             --noinclude-setuptools-mode=nofollow `

@@ -52,6 +52,7 @@ from .event_properties import (
 )
 from .hashing import hash_value
 from .license import is_standalone_license, is_standalone_token
+from .onefile_cleanup import cleanup_stale_onefile_dirs_async
 from .platform_details import PlatformDetails, get_platform_details, get_ssl_cli_args
 from .require_access_token import require_access_token
 from .track import track, track_error

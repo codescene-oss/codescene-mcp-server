@@ -20,6 +20,7 @@ from technical_debt_hotspots import TechnicalDebtHotspots
 from utils import (
     analyze_code,
     apply_config_to_env,
+    cleanup_stale_onefile_dirs_async,
     is_standalone_token,
     post_refactor,
     query_api_list,
@@ -221,6 +222,10 @@ if __name__ == "__main__":
     # them.  Environment variables set by the MCP client take precedence.
     apply_config_to_env()
 
+    # Clean up orphaned Nuitka onefile extraction directories from prior
+    # sessions that were killed with SIGKILL (e.g. by MCP hosts).
+    cleanup_stale_onefile_dirs_async()
+
     # CLI args
     parser = argparse.ArgumentParser(description="CodeScene MCP Server")
 
@@ -272,7 +277,14 @@ if __name__ == "__main__":
     Configure(mcp, {})
 
     def handle_shutdown(signum, frame):
-        """Handle shutdown signals gracefully with immediate exit."""
+        """Handle shutdown signals with immediate exit.
+
+        Uses os._exit(0) rather than sys.exit(0) because the FastMCP/asyncio
+        event loop may not terminate cleanly in response to a SystemExit.
+        This is safe for Nuitka onefile builds: the C-level bootstrap parent
+        process detects child exit and cleans up the extraction directory
+        regardless of how the Python child terminates.
+        """
         os._exit(0)
 
     signal.signal(signal.SIGINT, handle_shutdown)
