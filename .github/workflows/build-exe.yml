@@ -18,6 +18,11 @@ on:
           - macos-amd64
           - macos-aarch64
           - windows-amd64
+      upload_binaries:
+        description: "Upload build artifacts (disable for dry test runs)"
+        required: true
+        default: false
+        type: boolean
   push:
     tags:
       - 'MCP-[0-9]+.[0-9]+.[0-9]+'
@@ -132,7 +137,7 @@ jobs:
           sha256sum "$BIN" > "${BIN}.sha256"
 
       - name: Check for Linux signing secrets
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu') && github.event_name == 'push'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
         id: check-linux-secrets
         shell: bash
         run: |
@@ -145,7 +150,7 @@ jobs:
           fi
 
       - name: Import GPG key (Linux)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu') && github.event_name == 'push' && steps.check-linux-secrets.outputs.can-sign == 'true'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu') && steps.check-linux-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           LINUX_GPG_PRIVATE_KEY: ${{ secrets.LINUX_GPG_PRIVATE_KEY }}
@@ -153,7 +158,7 @@ jobs:
           echo "$LINUX_GPG_PRIVATE_KEY" | gpg --batch --import
 
       - name: Sign checksum (Linux)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu') && github.event_name == 'push' && steps.check-linux-secrets.outputs.can-sign == 'true'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu') && steps.check-linux-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           LINUX_GPG_KEY_ID: ${{ secrets.LINUX_GPG_KEY_ID }}
@@ -169,7 +174,7 @@ jobs:
 
         
       - name: Check for macOS signing secrets
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && github.event_name == 'push'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
         id: check-mac-secrets
         shell: bash
         run: |
@@ -185,7 +190,7 @@ jobs:
           fi
 
       - name: Import Apple Developer Certificate (keychain)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
@@ -211,7 +216,7 @@ jobs:
           rm -f certificate.p12
 
       - name: Codesign macOS executable
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
@@ -227,7 +232,7 @@ jobs:
           codesign --verify --verbose "$BIN"
 
       - name: Notarize macOS executable
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -245,7 +250,7 @@ jobs:
             --wait
 
       - name: Staple notarization ticket
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         run: |
           BIN="${{ matrix.artifact-name }}"
@@ -255,7 +260,7 @@ jobs:
           echo "Notarization is valid - Gatekeeper will verify online"
 
       - name: Clean up keychain
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && github.event_name == 'push' && steps.check-mac-secrets.outputs.can-sign == 'true' && always()
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-mac-secrets.outputs.can-sign == 'true' && always()
         shell: bash
         run: |
           security default-keychain -s login.keychain
@@ -284,7 +289,7 @@ jobs:
         run: rm -f cs-linux-bundled
 
       - name: Upload Executable Artifact (zipped binary)
-        if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && (github.event_name == 'push' || inputs.upload_binaries)
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
@@ -369,10 +374,306 @@ jobs:
           timestamp-digest: SHA256
 
       - name: Upload Executable Artifact
+        if: github.event_name == 'push' || inputs.upload_binaries
         uses: actions/upload-artifact@v4
         with:
           name: cs-mcp-windows-amd64
           path: cs-mcp-windows-amd64.exe
+
+  build-rust-unix:
+    permissions:
+      contents: read
+
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            arch: amd64
+            variant: linux-amd64
+            rust-target: x86_64-unknown-linux-musl
+            artifact-name: cs-mcp-linux-amd64-beta
+          - os: ubuntu-22.04-arm
+            arch: aarch64
+            variant: linux-aarch64
+            rust-target: aarch64-unknown-linux-musl
+            artifact-name: cs-mcp-linux-aarch64-beta
+          - os: macos-14-large
+            arch: amd64
+            variant: macos-amd64
+            rust-target: x86_64-apple-darwin
+            artifact-name: cs-mcp-macos-amd64-beta
+          - os: macos-latest
+            arch: aarch64
+            variant: macos-aarch64
+            rust-target: aarch64-apple-darwin
+            artifact-name: cs-mcp-macos-aarch64-beta
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
+        with:
+          fetch-depth: 0
+
+      - name: Set up Rust toolchain
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - name: Install musl toolchain (Rust Linux)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Build Rust Linux binary (musl static)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
+        working-directory: rust
+        run: cargo build --release --locked --target "${{ matrix.rust-target }}"
+
+      - name: Build Rust macOS binary
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
+        working-directory: rust
+        run: cargo build --release --locked
+
+      - name: Copy and rename Rust Linux binary
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          cp "rust/target/${{ matrix.rust-target }}/release/cs-mcp" "${{ matrix.artifact-name }}"
+          chmod +x "${{ matrix.artifact-name }}"
+
+      - name: Copy and rename Rust macOS binary
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
+        shell: bash
+        run: |
+          cp rust/target/release/cs-mcp "${{ matrix.artifact-name }}"
+          chmod +x "${{ matrix.artifact-name }}"
+
+      - name: Verify Rust Linux binary is static (musl)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          BIN="${{ matrix.artifact-name }}"
+          file "$BIN"
+          if ldd "$BIN" 2>&1 | grep -q "not a dynamic executable"; then
+            echo "Verified static musl binary: $BIN"
+          else
+            echo "::error::Expected a static musl binary, but '$BIN' appears to be dynamically linked"
+            ldd "$BIN" || true
+            exit 1
+          fi
+
+      - name: Verify Rust Linux executable (optional)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          BIN="${{ matrix.artifact-name }}"
+          chmod +x "$BIN" || true
+          ./"$BIN" --help >/dev/null 2>&1 || true
+
+      - name: Generate checksum (Rust Linux)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          BIN="${{ matrix.artifact-name }}"
+          sha256sum "$BIN" > "${BIN}.sha256"
+
+      - name: Check for Linux signing secrets (Rust)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
+        id: check-rust-linux-secrets
+        shell: bash
+        run: |
+          if [[ -n "${{ secrets.LINUX_GPG_PRIVATE_KEY }}" \
+             && -n "${{ secrets.LINUX_GPG_KEY_ID }}" \
+             && -n "${{ secrets.LINUX_GPG_PASSPHRASE }}" ]]; then
+            echo "can-sign=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can-sign=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import GPG key (Rust Linux)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu') && steps.check-rust-linux-secrets.outputs.can-sign == 'true'
+        shell: bash
+        env:
+          LINUX_GPG_PRIVATE_KEY: ${{ secrets.LINUX_GPG_PRIVATE_KEY }}
+        run: |
+          echo "$LINUX_GPG_PRIVATE_KEY" | gpg --batch --import
+
+      - name: Sign checksum (Rust Linux)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu') && steps.check-rust-linux-secrets.outputs.can-sign == 'true'
+        shell: bash
+        env:
+          LINUX_GPG_KEY_ID: ${{ secrets.LINUX_GPG_KEY_ID }}
+          LINUX_GPG_PASSPHRASE: ${{ secrets.LINUX_GPG_PASSPHRASE }}
+        run: |
+          BIN="${{ matrix.artifact-name }}"
+          gpg --batch --yes --pinentry-mode loopback \
+              --passphrase "$LINUX_GPG_PASSPHRASE" \
+              --local-user "$LINUX_GPG_KEY_ID" \
+              --armor \
+              --output "${BIN}.sha256.asc" \
+              --sign "${BIN}.sha256"
+
+      - name: Check for macOS signing secrets (Rust)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
+        id: check-rust-mac-secrets
+        shell: bash
+        run: |
+          if [[ -n "${{ secrets.MACOS_CERTIFICATE }}" \
+             && -n "${{ secrets.MACOS_CERTIFICATE_PWD }}" \
+             && -n "${{ secrets.APPLE_DEVELOPER_ID }}" \
+             && -n "${{ secrets.APPLE_ID }}" \
+             && -n "${{ secrets.APPLE_APP_PASSWORD }}" \
+             && -n "${{ secrets.APPLE_TEAM_ID }}" ]]; then
+            echo "can-sign=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can-sign=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import Apple Developer Certificate (Rust keychain)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-rust-mac-secrets.outputs.can-sign == 'true'
+        shell: bash
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          KEYCHAIN_PWD: keychainpassword
+        run: |
+          security create-keychain -p "$KEYCHAIN_PWD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PWD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+
+          printf '%s' "$MACOS_CERTIFICATE" | base64 -D -o certificate.p12
+
+          if [[ ! -s certificate.p12 ]]; then
+            echo "::error::Failed to decode certificate - file is empty or missing"
+            exit 1
+          fi
+
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" build.keychain
+          rm -f certificate.p12
+
+      - name: Codesign Rust macOS executable
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-rust-mac-secrets.outputs.can-sign == 'true'
+        shell: bash
+        env:
+          APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
+        run: |
+          BIN="${{ matrix.artifact-name }}"
+          if [[ ! -f "$BIN" ]]; then
+            echo "::error::Expected macOS Rust binary at '$BIN' but it was not found."
+            ls -la
+            exit 1
+          fi
+
+          codesign --force --options runtime --sign "$APPLE_DEVELOPER_ID" --timestamp "$BIN"
+          codesign --verify --verbose "$BIN"
+
+      - name: Notarize Rust macOS executable
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-rust-mac-secrets.outputs.can-sign == 'true'
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          BIN="${{ matrix.artifact-name }}"
+          ZIP="notarize-rust-${{ matrix.arch }}.zip"
+
+          ditto -c -k --keepParent "$BIN" "$ZIP"
+          xcrun notarytool submit "$ZIP" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+      - name: Staple notarization ticket (Rust)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-rust-mac-secrets.outputs.can-sign == 'true'
+        shell: bash
+        run: |
+          echo "::notice::Skipping staple for standalone executable (not supported by Apple)"
+          echo "Notarization is valid - Gatekeeper will verify online"
+
+      - name: Clean up Rust macOS keychain
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-rust-mac-secrets.outputs.can-sign == 'true' && always()
+        shell: bash
+        run: |
+          security default-keychain -s login.keychain
+          security delete-keychain build.keychain || true
+          rm -f notarize-rust-*.zip || true
+
+      - name: Set executable permissions and zip (Rust macOS)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
+        shell: bash
+        run: |
+          chmod +x "${{ matrix.artifact-name }}"
+          zip "${{ matrix.artifact-name }}.zip" "${{ matrix.artifact-name }}"
+
+      - name: Zip binary with checksums (Rust Linux)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          BIN="${{ matrix.artifact-name }}"
+          chmod +x "$BIN"
+          zip "${BIN}.zip" "$BIN" ${BIN}.sha256 ${BIN}.sha256.asc 2>/dev/null || zip "${BIN}.zip" "$BIN" ${BIN}.sha256 2>/dev/null || zip "${BIN}.zip" "$BIN"
+
+      - name: Upload Rust Executable Artifact (zipped binary)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && (github.event_name == 'push' || inputs.upload_binaries)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-name }}.zip
+
+  build-rust-windows-amd64:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == 'windows-amd64'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Rust executable
+        run: cargo build --release --locked
+        working-directory: rust
+
+      - name: Rename Rust binary to include platform info
+        run: Copy-Item -Path "rust\target\release\cs-mcp.exe" -Destination "cs-mcp-windows-amd64-beta.exe"
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign Rust binary with Azure Trusted Signing (OIDC)
+        uses: azure/trusted-signing-action@v0
+        with:
+          endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_TRUSTED_SIGNING_CERT_PROFILE }}
+          files: |
+            ${{ github.workspace }}\cs-mcp-windows-amd64-beta.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Upload Rust Executable Artifact
+        if: github.event_name == 'push' || inputs.upload_binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: cs-mcp-windows-amd64-beta
+          path: cs-mcp-windows-amd64-beta.exe
 
   # build-exe-windows-aarch64:
   #   runs-on: windows-11-arm
@@ -417,7 +718,7 @@ jobs:
     if: github.event_name == 'push'
     permissions:
       contents: write 
-    needs: [build-exe-unix, build-exe-windows-amd64]
+    needs: [build-exe-unix, build-exe-windows-amd64, build-rust-unix, build-rust-windows-amd64]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
