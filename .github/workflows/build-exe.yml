@@ -458,11 +458,12 @@ jobs:
         run: |
           BIN="${{ matrix.artifact-name }}"
           file "$BIN"
-          if ldd "$BIN" 2>&1 | grep -q "not a dynamic executable"; then
+          LDD_OUTPUT="$(ldd "$BIN" 2>&1 || true)"
+          if echo "$LDD_OUTPUT" | grep -Eqi "statically linked|not a dynamic executable|not a valid dynamic"; then
             echo "Verified static musl binary: $BIN"
           else
             echo "::error::Expected a static musl binary, but '$BIN' appears to be dynamically linked"
-            ldd "$BIN" || true
+            echo "$LDD_OUTPUT"
             exit 1
           fi
 
