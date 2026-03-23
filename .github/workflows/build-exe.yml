@@ -21,7 +21,7 @@ on:
       upload_binaries:
         description: "Upload build artifacts (disable for dry test runs)"
         required: true
-        default: false
+        default: true
         type: boolean
   push:
     tags:

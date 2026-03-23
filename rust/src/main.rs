@@ -65,6 +65,37 @@ const API_ONLY_TOOLS: &[&str] = &[
     "code_ownership_for_path",
 ];
 
+#[derive(Debug)]
+enum CliAction {
+    RunServer,
+    PrintHelp,
+    PrintVersion(String),
+}
+
+fn display_version(raw_version: &str) -> &str {
+    raw_version.strip_prefix("MCP-").unwrap_or(raw_version)
+}
+
+fn help_text() -> &'static str {
+    "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help       Show this help message and exit\n  -v, --version    Show version and exit"
+}
+
+fn parse_cli_args(args: &[String], raw_version: &str) -> Result<CliAction, String> {
+    if args.is_empty() {
+        return Ok(CliAction::RunServer);
+    }
+
+    if args.len() == 1 {
+        return match args[0].as_str() {
+            "-h" | "--help" => Ok(CliAction::PrintHelp),
+            "-v" | "--version" => Ok(CliAction::PrintVersion(display_version(raw_version).to_string())),
+            other => Err(format!("Unknown argument: {other}")),
+        };
+    }
+
+    Err(format!("Unexpected arguments: {}", args.join(" ")))
+}
+
 fn inlined_schema_for<T: JsonSchema + 'static>() -> Arc<serde_json::Map<String, serde_json::Value>>
 {
     let mut settings = schemars::generate::SchemaSettings::draft2020_12();
@@ -716,6 +747,71 @@ mod tests {
             .contains("select_project"));
     }
 
+    #[test]
+    fn display_version_strips_mcp_prefix() {
+        assert_eq!(display_version("MCP-1.2.3"), "1.2.3");
+    }
+
+    #[test]
+    fn display_version_keeps_plain_version() {
+        assert_eq!(display_version("1.2.3"), "1.2.3");
+    }
+
+    #[test]
+    fn parse_cli_args_defaults_to_run_server() {
+        let args: Vec<String> = vec![];
+        let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
+        assert!(matches!(action, CliAction::RunServer));
+    }
+
+    #[test]
+    fn parse_cli_args_supports_help_short() {
+        let args = vec!["-h".to_string()];
+        let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
+        assert!(matches!(action, CliAction::PrintHelp));
+    }
+
+    #[test]
+    fn parse_cli_args_supports_help_long() {
+        let args = vec!["--help".to_string()];
+        let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
+        assert!(matches!(action, CliAction::PrintHelp));
+    }
+
+    #[test]
+    fn parse_cli_args_supports_version_short() {
+        let args = vec!["-v".to_string()];
+        let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
+        match action {
+            CliAction::PrintVersion(v) => assert_eq!(v, "1.2.3"),
+            _ => panic!("expected version action"),
+        }
+    }
+
+    #[test]
+    fn parse_cli_args_supports_version_long() {
+        let args = vec!["--version".to_string()];
+        let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
+        match action {
+            CliAction::PrintVersion(v) => assert_eq!(v, "1.2.3"),
+            _ => panic!("expected version action"),
+        }
+    }
+
+    #[test]
+    fn parse_cli_args_rejects_unknown_argument() {
+        let args = vec!["--nope".to_string()];
+        let err = parse_cli_args(&args, "MCP-1.2.3").unwrap_err();
+        assert!(err.contains("Unknown argument"));
+    }
+
+    #[test]
+    fn parse_cli_args_rejects_multiple_arguments() {
+        let args = vec!["--help".to_string(), "--version".to_string()];
+        let err = parse_cli_args(&args, "MCP-1.2.3").unwrap_err();
+        assert!(err.contains("Unexpected arguments"));
+    }
+
     #[tokio::test]
     async fn require_token_returns_error_when_missing() {
         let _g = clear_token();
@@ -747,6 +843,25 @@ mod tests {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
+    let raw_version = env!("CS_MCP_VERSION");
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match parse_cli_args(&args, raw_version) {
+        Ok(CliAction::RunServer) => {}
+        Ok(CliAction::PrintHelp) => {
+            println!("{}", help_text());
+            return Ok(());
+        }
+        Ok(CliAction::PrintVersion(version)) => {
+            println!("{version}");
+            return Ok(());
+        }
+        Err(message) => {
+            eprintln!("{message}");
+            eprintln!("Use --help to see available options.");
+            anyhow::bail!("invalid command line arguments");
+        }
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
         .with_writer(std::io::stderr)
@@ -763,7 +878,7 @@ async fn main() -> anyhow::Result<()> {
     let token = std::env::var("CS_ACCESS_TOKEN").unwrap_or_default();
     let is_standalone = !token.is_empty() && license::is_standalone_license(&token);
 
-    let version = env!("CS_MCP_VERSION");
+    let version = raw_version;
     let version_checker = VersionChecker::new(version);
 
     let server = CodeSceneServer::new(ServerDeps {
