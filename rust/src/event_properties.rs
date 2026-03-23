@@ -120,7 +120,11 @@ fn hash_path(path: &Path) -> String {
 
 fn parse_json_dict(s: &str) -> Option<Value> {
     let v: Value = serde_json::from_str(s).ok()?;
-    if v.is_object() { Some(v) } else { None }
+    if v.is_object() {
+        Some(v)
+    } else {
+        None
+    }
 }
 
 fn merge_delta_properties(props: &mut Value, result: &str) {

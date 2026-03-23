@@ -188,9 +188,7 @@ pub fn snapshot_client_env_vars() {
 pub fn is_client_env_var(env_var: &str) -> bool {
     #[cfg(not(test))]
     {
-        return CLIENT_ENV_VARS
-            .get()
-            .map_or(false, |s| s.contains(env_var));
+        return CLIENT_ENV_VARS.get().map_or(false, |s| s.contains(env_var));
     }
 
     #[cfg(test)]
@@ -240,9 +238,9 @@ pub fn value_source(option: &ConfigOption, data: &ConfigData) -> &'static str {
 }
 
 pub fn find_option(key: &str) -> Option<&'static ConfigOption> {
-    OPTIONS.iter().find(|o| {
-        o.key == key || o.env_var == key || o.aliases.contains(&key)
-    })
+    OPTIONS
+        .iter()
+        .find(|o| o.key == key || o.env_var == key || o.aliases.contains(&key))
 }
 
 /// Apply config values to environment variables at startup.
@@ -390,8 +388,10 @@ mod tests {
     fn get_effective_from_config_file() {
         let opt = find_option("onprem_url").unwrap();
         let mut data = ConfigData::default();
-        data.values
-            .insert("onprem_url".to_string(), "https://my-server.com".to_string());
+        data.values.insert(
+            "onprem_url".to_string(),
+            "https://my-server.com".to_string(),
+        );
         let val = get_effective(opt, &data);
         assert_eq!(val, Some("https://my-server.com".to_string()));
     }
@@ -474,15 +474,20 @@ mod tests {
 
         let json = r#"{"instance_id":"id","onprem_url":"https://x.com"}"#;
         let loaded: ConfigData = serde_json::from_str(json).unwrap();
-        assert_eq!(loaded.values.get("onprem_url").map(|s| s.as_str()), Some("https://x.com"));
+        assert_eq!(
+            loaded.values.get("onprem_url").map(|s| s.as_str()),
+            Some("https://x.com")
+        );
     }
 
     #[test]
     fn apply_to_env_sets_unset_vars() {
         let _lock = lock_test_env();
         let mut data = ConfigData::default();
-        data.values
-            .insert("onprem_url".to_string(), "https://apply-test.com".to_string());
+        data.values.insert(
+            "onprem_url".to_string(),
+            "https://apply-test.com".to_string(),
+        );
         std::env::remove_var("CS_ONPREM_URL");
 
         apply_to_env(&data);
@@ -619,8 +624,7 @@ mod tests {
         let _lock = lock_test_env();
         std::env::remove_var("CS_ONPREM_URL");
         let mut data = ConfigData::default();
-        data.values
-            .insert("onprem_url".to_string(), "".to_string());
+        data.values.insert("onprem_url".to_string(), "".to_string());
 
         apply_to_env(&data);
 

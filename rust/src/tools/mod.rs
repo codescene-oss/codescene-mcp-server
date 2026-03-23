@@ -1,6 +1,24 @@
 use rmcp::schemars;
 use serde::Deserialize;
 
+pub mod analyze_change_set;
+pub mod code_health_auto_refactor;
+pub mod code_health_refactoring_business_case;
+pub mod code_health_review;
+pub mod code_health_score;
+pub mod code_ownership_for_path;
+pub mod common;
+pub mod explain_code_health;
+pub mod explain_code_health_productivity;
+pub mod get_config;
+pub mod list_technical_debt_goals_for_project;
+pub mod list_technical_debt_goals_for_project_file;
+pub mod list_technical_debt_hotspots_for_project;
+pub mod list_technical_debt_hotspots_for_project_file;
+pub mod pre_commit_code_health_safeguard;
+pub mod select_project;
+pub mod set_config;
+
 /// Optional context parameter used by explain tools.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct OptionalContext {

@@ -1,6 +1,10 @@
 #[allow(dead_code)]
 pub fn cli_binary_name() -> &'static str {
-    if cfg!(windows) { "cs.exe" } else { "cs" }
+    if cfg!(windows) {
+        "cs.exe"
+    } else {
+        "cs"
+    }
 }
 
 #[allow(dead_code)]

@@ -55,10 +55,7 @@ fn build_tracking_body(te: &mut TrackingEvent) -> Value {
     })
 }
 
-async fn send_event(
-    mut te: TrackingEvent,
-    client: &dyn HttpClient,
-) -> Result<(), String> {
+async fn send_event(mut te: TrackingEvent, client: &dyn HttpClient) -> Result<(), String> {
     let body = build_tracking_body(&mut te);
     let token = std::env::var("CS_ACCESS_TOKEN").unwrap_or_default();
 
@@ -103,7 +100,6 @@ mod tests {
     use crate::http::HttpResponse;
     use tokio::time::Duration;
 
-
     #[test]
     fn is_disabled_returns_false_when_not_set() {
         let _lock = config::lock_test_env();
@@ -147,13 +143,15 @@ mod tests {
         std::env::remove_var("CS_DISABLE_TRACKING");
     }
 
-
     #[test]
     fn tracking_url_default() {
         let _lock = config::lock_test_env();
         std::env::remove_var("CS_TRACKING_URL");
         std::env::remove_var("CS_ONPREM_URL");
-        assert_eq!(tracking_url(), "https://api.codescene.io/v2/analytics/track");
+        assert_eq!(
+            tracking_url(),
+            "https://api.codescene.io/v2/analytics/track"
+        );
     }
 
     #[test]
@@ -175,7 +173,6 @@ mod tests {
         );
         std::env::remove_var("CS_ONPREM_URL");
     }
-
 
     #[test]
     fn build_tracking_body_enriches_properties() {
@@ -212,7 +209,6 @@ mod tests {
         assert_eq!(body["event-properties"], "not-an-object");
     }
 
-
     #[tokio::test]
     async fn send_event_posts_to_correct_url() {
         let _lock = config::lock_test_env();
@@ -236,7 +232,10 @@ mod tests {
         assert_eq!(reqs.len(), 1);
         assert_eq!(reqs[0].url, "http://track.test/v2/analytics/track");
         assert_eq!(reqs[0].method, Method::Post);
-        assert_eq!(reqs[0].headers.get("Authorization").unwrap(), "Bearer test-tok");
+        assert_eq!(
+            reqs[0].headers.get("Authorization").unwrap(),
+            "Bearer test-tok"
+        );
 
         std::env::remove_var("CS_ACCESS_TOKEN");
     }
@@ -307,7 +306,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-
     #[tokio::test]
     async fn track_event_disabled_does_not_panic() {
         let _lock = config::lock_test_env();
@@ -323,7 +321,6 @@ mod tests {
         track_error("some error", "some-tool", "test-instance");
         std::env::remove_var("CS_DISABLE_TRACKING");
     }
-
 
     #[tokio::test]
     async fn track_event_enabled_spawns_without_panic() {

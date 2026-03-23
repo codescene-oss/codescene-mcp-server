@@ -103,7 +103,8 @@ fn delete_key(option: &config::ConfigOption, data: &mut ConfigData) -> String {
 }
 
 fn save_key(option: &config::ConfigOption, value: &str, data: &mut ConfigData) -> String {
-    data.values.insert(option.key.to_string(), value.to_string());
+    data.values
+        .insert(option.key.to_string(), value.to_string());
     if let Err(e) = config::save(data) {
         return format!("Error saving config: {e}");
     }

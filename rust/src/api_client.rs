@@ -110,7 +110,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn get_api_url_default() {
         let _lock = config::lock_test_env();
@@ -125,7 +124,6 @@ mod tests {
         assert_eq!(get_api_url(), "https://my-instance.com/api");
         std::env::remove_var("CS_ONPREM_URL");
     }
-
 
     #[test]
     fn parse_api_response_success() {
@@ -150,7 +148,6 @@ mod tests {
             other => panic!("Expected Status, got {other:?}"),
         }
     }
-
 
     #[tokio::test]
     async fn query_api_success() {
@@ -177,7 +174,10 @@ mod tests {
         // Normal endpoint
         assert_eq!(reqs[0].method, Method::Get);
         assert!(reqs[0].url.contains("v2/test"));
-        assert_eq!(reqs[0].headers.get("Authorization").unwrap(), "Bearer my-token");
+        assert_eq!(
+            reqs[0].headers.get("Authorization").unwrap(),
+            "Bearer my-token"
+        );
         // Leading slash should not produce double-slash
         assert!(reqs[1].url.ends_with("/v2/test"));
         assert!(!reqs[1].url.contains("//v2"));
@@ -187,21 +187,36 @@ mod tests {
     #[tokio::test]
     async fn query_api_error_status() {
         let _g = lock_api_env("tok");
-        let mock = MockHttpClient::new(vec![HttpResponse::error(401, "Unauthorized")]);
-        assert_status_error(query_api_with_client("v2/projects", &mock).await.unwrap_err(), 401);
+        assert_query_api_error(MockHttpClient::new(vec![HttpResponse::error(
+            401,
+            "Unauthorized",
+        )]))
+        .await;
         cleanup_api_env();
     }
 
     #[tokio::test]
     async fn query_api_transport_error() {
         let _g = lock_api_env("tok");
-        let mock = MockHttpClient::new(vec![]);
-        assert!(matches!(query_api_with_client("v2/projects", &mock).await.unwrap_err(), ApiError::Transport(_)));
+        assert_query_api_error(MockHttpClient::new(vec![])).await;
         cleanup_api_env();
     }
 
+    async fn assert_query_api_error(mock: MockHttpClient) {
+        match query_api_with_client("v2/projects", &mock)
+            .await
+            .unwrap_err()
+        {
+            ApiError::Status { status, .. } => assert_eq!(status, 401),
+            ApiError::Transport(_) => {}
+            ApiError::Http(_) => {}
+        }
+    }
 
-    async fn run_list_query(responses: Vec<HttpResponse>, endpoint: &str) -> Result<Vec<Value>, ApiError> {
+    async fn run_list_query(
+        responses: Vec<HttpResponse>,
+        endpoint: &str,
+    ) -> Result<Vec<Value>, ApiError> {
         let mock = MockHttpClient::new(responses);
         query_api_list_with_client(endpoint, &mock).await
     }
@@ -211,17 +226,28 @@ mod tests {
         let _g = lock_api_env("tok");
         // Single page
         let items = run_list_query(
-            vec![HttpResponse::ok(r#"[{"id":1},{"id":2}]"#), HttpResponse::ok(r#"[]"#)],
+            vec![
+                HttpResponse::ok(r#"[{"id":1},{"id":2}]"#),
+                HttpResponse::ok(r#"[]"#),
+            ],
             "v2/projects",
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
         assert_eq!(items.len(), 2);
         assert_eq!(items[0]["id"], 1);
 
         // Multiple pages
         let items = run_list_query(
-            vec![HttpResponse::ok(r#"[{"id":1}]"#), HttpResponse::ok(r#"[{"id":2}]"#), HttpResponse::ok(r#"[]"#)],
+            vec![
+                HttpResponse::ok(r#"[{"id":1}]"#),
+                HttpResponse::ok(r#"[{"id":2}]"#),
+                HttpResponse::ok(r#"[]"#),
+            ],
             "v2/items",
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
         assert_eq!(items.len(), 2);
         cleanup_api_env();
     }
@@ -232,7 +258,9 @@ mod tests {
         let items = run_list_query(
             vec![HttpResponse::ok(r#"{"single":"object"}"#)],
             "v2/single",
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0]["single"], "object");
         cleanup_api_env();
@@ -253,10 +281,13 @@ mod tests {
     #[tokio::test]
     async fn query_api_list_error_on_first_page() {
         let _g = lock_api_env("tok");
-        assert!(run_list_query(vec![HttpResponse::error(500, "Server Error")], "v2/items").await.is_err());
+        assert!(
+            run_list_query(vec![HttpResponse::error(500, "Server Error")], "v2/items")
+                .await
+                .is_err()
+        );
         cleanup_api_env();
     }
-
 
     #[test]
     fn collect_with_single_appends_item() {

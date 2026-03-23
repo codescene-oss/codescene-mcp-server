@@ -110,10 +110,7 @@ pub mod tests {
     #[async_trait::async_trait]
     impl HttpClient for MockHttpClient {
         async fn send(&self, request: HttpRequest) -> Result<HttpResponse, String> {
-            self.captured_requests
-                .lock()
-                .unwrap()
-                .push(request);
+            self.captured_requests.lock().unwrap().push(request);
             let mut responses = self.responses.lock().unwrap();
             if responses.is_empty() {
                 return Err("MockHttpClient: no more responses".to_string());
@@ -138,10 +135,26 @@ pub mod tests {
 
     #[test]
     fn http_response_is_success_boundary() {
-        assert!(HttpResponse { status: 200, body: String::new() }.is_success());
-        assert!(HttpResponse { status: 299, body: String::new() }.is_success());
-        assert!(!HttpResponse { status: 300, body: String::new() }.is_success());
-        assert!(!HttpResponse { status: 199, body: String::new() }.is_success());
+        assert!(HttpResponse {
+            status: 200,
+            body: String::new()
+        }
+        .is_success());
+        assert!(HttpResponse {
+            status: 299,
+            body: String::new()
+        }
+        .is_success());
+        assert!(!HttpResponse {
+            status: 300,
+            body: String::new()
+        }
+        .is_success());
+        assert!(!HttpResponse {
+            status: 199,
+            body: String::new()
+        }
+        .is_success());
     }
 
     #[tokio::test]

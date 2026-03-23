@@ -2,7 +2,6 @@
 ///
 /// Uses embedded polynomial regression coefficients to estimate the impact
 /// of improving Code Health on defect rates and development time.
-
 use serde::Serialize;
 
 const DEFECTS_COEFFICIENTS: &str = include_str!("regression/defects.json");
@@ -49,7 +48,10 @@ pub struct Outcome {
 pub fn make_business_case(current_score: f64) -> Option<BusinessCase> {
     let current = HealthScore(current_score);
     let (target_score, label) = find_target_scenario(current)?;
-    let range = ScoreRange { baseline: current, target: target_score };
+    let range = ScoreRange {
+        baseline: current,
+        target: target_score,
+    };
     let metrics = collect_metrics(range);
 
     let (defect_pessimistic, defect_optimistic) = metrics.defects;
@@ -127,7 +129,10 @@ fn polynomial(x: f64, coeffs: &[f64]) -> f64 {
 }
 
 fn vectorized_polynomial(score: HealthScore, all_coeffs: &[Vec<f64>]) -> Vec<f64> {
-    all_coeffs.iter().map(|c| polynomial(score.value(), c)).collect()
+    all_coeffs
+        .iter()
+        .map(|c| polynomial(score.value(), c))
+        .collect()
 }
 
 fn relative_change(baseline: &[f64], target: &[f64]) -> Vec<f64> {

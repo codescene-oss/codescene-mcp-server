@@ -39,16 +39,15 @@ pub async fn refactor_with_client(
             timeout_secs: 120,
         };
 
-        let resp = client.send(request).await.map_err(|e| {
-            ApiError::Transport(e)
-        })?;
+        let resp = client
+            .send(request)
+            .await
+            .map_err(|e| ApiError::Transport(e))?;
 
         if resp.is_success() {
-            let parsed: Value = serde_json::from_str(&resp.body).map_err(|e| {
-                ApiError::Status {
-                    status: resp.status,
-                    body: format!("JSON parse error: {e}"),
-                }
+            let parsed: Value = serde_json::from_str(&resp.body).map_err(|e| ApiError::Status {
+                status: resp.status,
+                body: format!("JSON parse error: {e}"),
             })?;
             return Ok(parsed);
         }
@@ -113,7 +112,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn ace_url_default() {
         let _lock = config::lock_test_env();
@@ -129,7 +127,6 @@ mod tests {
         std::env::remove_var("CS_ACE_API_URL");
     }
 
-
     #[tokio::test]
     async fn refactor_success_returns_parsed_json() {
         let _g = lock_ace_env("test-token");
@@ -143,7 +140,6 @@ mod tests {
         cleanup_ace_env();
     }
 
-
     #[tokio::test]
     async fn refactor_non_retryable_error_returns_immediately() {
         let _g = lock_ace_env("test-token");
@@ -151,7 +147,6 @@ mod tests {
         assert_status_error(call_refactor(&mock).await.unwrap_err(), 400, "Bad Request");
         cleanup_ace_env();
     }
-
 
     #[tokio::test]
     async fn refactor_retries_on_408_then_succeeds() {
@@ -175,7 +170,6 @@ mod tests {
         cleanup_ace_env();
     }
 
-
     #[tokio::test]
     async fn refactor_exhausts_retries_returns_last_error() {
         let _g = lock_ace_env("test-token");
@@ -188,15 +182,16 @@ mod tests {
         cleanup_ace_env();
     }
 
-
     #[tokio::test]
     async fn refactor_http_transport_error() {
         let _g = lock_ace_env("test-token");
         let mock = MockHttpClient::new(vec![]); // empty = transport error
-        assert!(matches!(call_refactor(&mock).await.unwrap_err(), ApiError::Transport(_)));
+        assert!(matches!(
+            call_refactor(&mock).await.unwrap_err(),
+            ApiError::Transport(_)
+        ));
         cleanup_ace_env();
     }
-
 
     #[tokio::test]
     async fn refactor_sends_correct_request() {
@@ -211,11 +206,16 @@ mod tests {
         assert_eq!(reqs.len(), 1);
         assert_eq!(reqs[0].method, Method::Post);
         assert_eq!(reqs[0].url, "http://test-ace/refactor");
-        assert_eq!(reqs[0].headers.get("Authorization").unwrap(), "Bearer my-ace-token");
-        assert_eq!(reqs[0].headers.get("Content-Type").unwrap(), "application/json");
+        assert_eq!(
+            reqs[0].headers.get("Authorization").unwrap(),
+            "Bearer my-ace-token"
+        );
+        assert_eq!(
+            reqs[0].headers.get("Content-Type").unwrap(),
+            "application/json"
+        );
         cleanup_ace_env();
     }
-
 
     #[tokio::test]
     async fn refactor_with_empty_token_sends_empty_bearer() {
@@ -229,7 +229,6 @@ mod tests {
         let reqs = captured.lock().unwrap();
         assert_eq!(reqs[0].headers.get("Authorization").unwrap(), "Bearer ");
     }
-
 
     #[tokio::test]
     async fn refactor_invalid_json_response_returns_error() {

@@ -13,8 +13,7 @@ fn main() {
 }
 
 fn embed_version() {
-    let version =
-        git_tag_version().unwrap_or_else(|| format!("v{}", env!("CARGO_PKG_VERSION")));
+    let version = git_tag_version().unwrap_or_else(|| format!("v{}", env!("CARGO_PKG_VERSION")));
     println!("cargo:rustc-env=CS_MCP_VERSION={version}");
 }
 
@@ -30,7 +29,11 @@ fn git_tag_version() -> Option<String> {
 
     let tag = String::from_utf8(output.stdout).ok()?;
     let tag = tag.trim();
-    if tag.is_empty() { None } else { Some(tag.to_string()) }
+    if tag.is_empty() {
+        None
+    } else {
+        Some(tag.to_string())
+    }
 }
 
 fn download_cli() {
@@ -70,7 +73,5 @@ fn cli_download_url() -> String {
         other => panic!("Unsupported target arch: {other}"),
     };
 
-    format!(
-        "https://downloads.codescene.io/enterprise/cli/cs-{os_part}-{arch_part}-latest.zip"
-    )
+    format!("https://downloads.codescene.io/enterprise/cli/cs-{os_part}-{arch_part}-latest.zip")
 }

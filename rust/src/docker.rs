@@ -16,9 +16,7 @@ impl NormalizedPath {
     fn from_str(raw: &str) -> Self {
         let forward = raw.replace('\\', "/");
         let bytes = forward.as_bytes();
-        let has_drive = forward.len() >= 2
-            && bytes[0].is_ascii_alphabetic()
-            && bytes[1] == b':';
+        let has_drive = forward.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
         if has_drive {
             Self(forward[2..].to_string())
         } else {
@@ -132,17 +130,26 @@ mod tests {
 
     #[test]
     fn normalizes_backslashes() {
-        assert_eq!(NormalizedPath::from_str(r"C:\Users\foo\bar").0, "/Users/foo/bar");
+        assert_eq!(
+            NormalizedPath::from_str(r"C:\Users\foo\bar").0,
+            "/Users/foo/bar"
+        );
     }
 
     #[test]
     fn no_drive_letter_unix_path() {
-        assert_eq!(NormalizedPath::from_path(Path::new("/home/user/project")).0, "/home/user/project");
+        assert_eq!(
+            NormalizedPath::from_path(Path::new("/home/user/project")).0,
+            "/home/user/project"
+        );
     }
 
     #[test]
     fn lowercase_drive_letter() {
-        assert_eq!(NormalizedPath::from_str("d:/code/project").0, "/code/project");
+        assert_eq!(
+            NormalizedPath::from_str("d:/code/project").0,
+            "/code/project"
+        );
     }
 
     #[test]
@@ -213,7 +220,10 @@ mod tests {
     #[test]
     fn relative_path_windows_style() {
         assert_eq!(
-            get_relative_file_path_for_api(Path::new(r"C:\repo\src\main.rs"), Path::new(r"C:\repo")),
+            get_relative_file_path_for_api(
+                Path::new(r"C:\repo\src\main.rs"),
+                Path::new(r"C:\repo")
+            ),
             "src/main.rs"
         );
     }
@@ -230,7 +240,10 @@ mod tests {
 
     #[test]
     fn adapt_path_for_docker_returns_unchanged_when_not_docker() {
-        assert_eq!(adapt_path_for_docker(Path::new("/some/path/file.rs")), "/some/path/file.rs");
+        assert_eq!(
+            adapt_path_for_docker(Path::new("/some/path/file.rs")),
+            "/some/path/file.rs"
+        );
     }
 
     // ---- translate_to_container (Docker active via direct call) ----
@@ -255,14 +268,20 @@ mod tests {
 
     #[test]
     fn translate_to_container_returns_unchanged_when_none() {
-        assert_eq!(translate_to_container(Path::new("/some/path"), None), "/some/path");
+        assert_eq!(
+            translate_to_container(Path::new("/some/path"), None),
+            "/some/path"
+        );
     }
 
     // ---- translate_from_container (Docker active via direct call) ----
 
     #[test]
     fn adapt_path_from_docker_returns_unchanged_when_not_docker() {
-        assert_eq!(adapt_path_from_docker(Path::new("/mount/src/file.rs")), "/mount/src/file.rs");
+        assert_eq!(
+            adapt_path_from_docker(Path::new("/mount/src/file.rs")),
+            "/mount/src/file.rs"
+        );
     }
 
     #[test]
@@ -285,7 +304,10 @@ mod tests {
 
     #[test]
     fn translate_from_container_returns_unchanged_when_none() {
-        assert_eq!(translate_from_container(Path::new("/mount/src/file.rs"), None), "/mount/src/file.rs");
+        assert_eq!(
+            translate_from_container(Path::new("/mount/src/file.rs"), None),
+            "/mount/src/file.rs"
+        );
     }
 
     // ---- get_worktree_gitdir ----
@@ -300,7 +322,11 @@ mod tests {
     #[test]
     fn get_worktree_gitdir_returns_path_for_worktree() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join(".git"), "gitdir: /some/other/.git/worktrees/branch").unwrap();
+        std::fs::write(
+            dir.path().join(".git"),
+            "gitdir: /some/other/.git/worktrees/branch",
+        )
+        .unwrap();
         assert_eq!(
             get_worktree_gitdir(dir.path()),
             Some(PathBuf::from("/some/other/.git/worktrees/branch"))

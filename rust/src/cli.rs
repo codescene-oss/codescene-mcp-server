@@ -58,10 +58,7 @@ fn resolve_from_docker() -> Option<Result<PathBuf, CliError>> {
     p.exists().then(|| Ok(p))
 }
 
-pub async fn run_cli(
-    args: &[&str],
-    working_dir: Option<&Path>,
-) -> Result<String, CliError> {
+pub async fn run_cli(args: &[&str], working_dir: Option<&Path>) -> Result<String, CliError> {
     let cli_path = resolve_cli_path()?;
     run_cli_at_path(&cli_path, args, working_dir).await
 }
@@ -238,19 +235,16 @@ mod tests {
         }
     }
 
-
     #[test]
     fn cli_cache_dir_contains_version() {
         let dir = cli_cache_dir();
         assert!(dir.to_string_lossy().contains("codehealth-mcp"));
     }
 
-
     #[test]
     fn cli_binary_name_is_cs() {
         assert_eq!(CLI_BINARY_NAME, "cs");
     }
-
 
     #[test]
     fn resolve_from_env_override_returns_none_when_not_set() {
@@ -282,12 +276,10 @@ mod tests {
         std::env::remove_var("CS_CLI_PATH");
     }
 
-
     #[test]
     fn resolve_from_docker_returns_none_when_not_docker() {
         assert!(resolve_from_docker().is_none());
     }
-
 
     #[test]
     fn parse_cli_output_success() {
@@ -314,7 +306,6 @@ mod tests {
         assert!(!parse_cli_output(output).unwrap().is_empty());
     }
 
-
     #[test]
     fn find_git_root_finds_repo_from_subdir() {
         let (_dir, root) = make_git_repo(Some("src"));
@@ -337,7 +328,6 @@ mod tests {
         assert_eq!(find_git_root(&file).unwrap(), root);
     }
 
-
     #[test]
     fn extract_embedded_cli_produces_binary() {
         let result = extract_embedded_cli();
@@ -346,7 +336,6 @@ mod tests {
         assert!(path.exists());
         assert!(path.to_string_lossy().contains("cs"));
     }
-
 
     #[test]
     fn extract_zip_to_cache_fresh_extraction() {
@@ -395,7 +384,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cache = dir.path().join("missing-cache");
         let result = extract_zip_to_cache(&cache, &zip_data);
-        assert!(result.is_err(), "should fail when binary is missing from zip");
+        assert!(
+            result.is_err(),
+            "should fail when binary is missing from zip"
+        );
         let msg = result.unwrap_err().to_string();
         assert!(msg.contains("not found"), "unexpected error: {msg}");
     }
@@ -407,9 +399,11 @@ mod tests {
         let result = extract_zip_to_cache(&cache, b"this is not a zip");
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("Invalid embedded CLI zip"), "unexpected error: {msg}");
+        assert!(
+            msg.contains("Invalid embedded CLI zip"),
+            "unexpected error: {msg}"
+        );
     }
-
 
     /// Build a zip archive in memory with the given named entries.
     fn build_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
@@ -436,7 +430,10 @@ mod tests {
         extract_cli_binary(&mut archive, dest.path()).unwrap();
         let extracted = dest.path().join(CLI_BINARY_NAME);
         assert!(extracted.exists());
-        assert_eq!(std::fs::read_to_string(&extracted).unwrap(), "fake-cli-binary");
+        assert_eq!(
+            std::fs::read_to_string(&extracted).unwrap(),
+            "fake-cli-binary"
+        );
     }
 
     #[test]
@@ -476,9 +473,11 @@ mod tests {
         extract_cli_binary(&mut archive, dest.path()).unwrap();
         let extracted = dest.path().join(CLI_BINARY_NAME);
         assert!(extracted.exists());
-        assert_eq!(std::fs::read_to_string(&extracted).unwrap(), "nested-binary");
+        assert_eq!(
+            std::fs::read_to_string(&extracted).unwrap(),
+            "nested-binary"
+        );
     }
-
 
     #[test]
     fn resolve_cli_path_finds_cli() {
@@ -496,7 +495,6 @@ mod tests {
         assert_eq!(resolve_cli_path().unwrap(), bin);
         std::env::remove_var("CS_CLI_PATH");
     }
-
 
     #[tokio::test]
     async fn run_cli_at_path_with_echo() {
@@ -527,7 +525,9 @@ mod tests {
     #[tokio::test]
     async fn run_cli_at_path_with_working_dir() {
         let dir = tempfile::tempdir().unwrap();
-        let output = run_cli_at_path(Path::new("/bin/pwd"), &[], Some(dir.path())).await.unwrap();
+        let output = run_cli_at_path(Path::new("/bin/pwd"), &[], Some(dir.path()))
+            .await
+            .unwrap();
         let canonical = dir.path().canonicalize().unwrap();
         assert_eq!(output.trim(), canonical.to_string_lossy());
     }

@@ -86,10 +86,7 @@ impl VersionChecker {
     }
 }
 
-async fn fetch_latest_version(
-    current: &str,
-    client: &dyn HttpClient,
-) -> Option<VersionInfo> {
+async fn fetch_latest_version(current: &str, client: &dyn HttpClient) -> Option<VersionInfo> {
     let url = check_url();
 
     let request = HttpRequest {
@@ -125,8 +122,7 @@ async fn fetch_latest_version(
 }
 
 fn check_url() -> String {
-    std::env::var("CS_VERSION_CHECK_URL")
-        .unwrap_or_else(|_| DEFAULT_CHECK_URL.to_string())
+    std::env::var("CS_VERSION_CHECK_URL").unwrap_or_else(|_| DEFAULT_CHECK_URL.to_string())
 }
 
 fn is_disabled() -> bool {
@@ -334,9 +330,7 @@ mod tests {
     #[tokio::test]
     async fn refresh_if_stale_fetches_when_cache_empty() {
         let vc = VersionChecker::new("1.0.0");
-        let mock = MockHttpClient::new(vec![HttpResponse::ok(
-            r#"{"tag_name":"2.0.0"}"#,
-        )]);
+        let mock = MockHttpClient::new(vec![HttpResponse::ok(r#"{"tag_name":"2.0.0"}"#)]);
         vc.refresh_if_stale(&mock).await;
 
         let info = vc.try_read().await.unwrap();
@@ -348,9 +342,7 @@ mod tests {
 
     #[tokio::test]
     async fn fetch_latest_version_success() {
-        let mock = MockHttpClient::new(vec![HttpResponse::ok(
-            r#"{"tag_name":"3.0.0"}"#,
-        )]);
+        let mock = MockHttpClient::new(vec![HttpResponse::ok(r#"{"tag_name":"3.0.0"}"#)]);
         let info = fetch_latest_version("2.0.0", &mock).await.unwrap();
         assert_eq!(info.latest, "3.0.0");
         assert_eq!(info.current, "2.0.0");
@@ -359,18 +351,14 @@ mod tests {
 
     #[tokio::test]
     async fn fetch_latest_version_same_version_not_outdated() {
-        let mock = MockHttpClient::new(vec![HttpResponse::ok(
-            r#"{"tag_name":"1.0.0"}"#,
-        )]);
+        let mock = MockHttpClient::new(vec![HttpResponse::ok(r#"{"tag_name":"1.0.0"}"#)]);
         let info = fetch_latest_version("1.0.0", &mock).await.unwrap();
         assert!(!info.is_outdated);
     }
 
     #[tokio::test]
     async fn fetch_latest_version_dev_not_outdated() {
-        let mock = MockHttpClient::new(vec![HttpResponse::ok(
-            r#"{"tag_name":"1.0.0"}"#,
-        )]);
+        let mock = MockHttpClient::new(vec![HttpResponse::ok(r#"{"tag_name":"1.0.0"}"#)]);
         let info = fetch_latest_version("dev", &mock).await.unwrap();
         assert!(!info.is_outdated);
     }
@@ -401,9 +389,7 @@ mod tests {
 
     #[tokio::test]
     async fn fetch_latest_version_sends_correct_headers() {
-        let mock = MockHttpClient::new(vec![HttpResponse::ok(
-            r#"{"tag_name":"1.0.0"}"#,
-        )]);
+        let mock = MockHttpClient::new(vec![HttpResponse::ok(r#"{"tag_name":"1.0.0"}"#)]);
         let captured = mock.captured_requests.clone();
 
         let _ = fetch_latest_version("1.0.0", &mock).await;
