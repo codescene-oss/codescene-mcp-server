@@ -64,6 +64,7 @@ PY
   --lto=yes \
   --company-name="CodeScene AB" \
   --product-name="CodeHealth MCP" \
+  --onefile-tempdir-spec="{CACHE_DIR}/codescene-mcp-server" \
   --noinclude-pytest-mode=nofollow \
   --noinclude-unittest-mode=nofollow \
   --noinclude-setuptools-mode=nofollow \
