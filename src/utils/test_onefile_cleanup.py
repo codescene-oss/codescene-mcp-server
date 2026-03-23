@@ -1,5 +1,6 @@
 """Tests for the onefile cleanup module."""
 
+import logging
 import os
 from unittest.mock import patch
 
@@ -64,6 +65,18 @@ class TestPidIsAlive:
         with patch("utils.onefile_cleanup.os.kill", side_effect=PermissionError):
             assert _pid_is_alive(1) is True
 
+    def test_generic_os_error_treated_as_dead(self):
+        with patch("utils.onefile_cleanup.os.kill", side_effect=OSError("Unexpected")):
+            assert _pid_is_alive(42) is False
+
+    def test_process_lookup_error_treated_as_dead(self):
+        with patch("utils.onefile_cleanup.os.kill", side_effect=ProcessLookupError):
+            assert _pid_is_alive(42) is False
+
+    def test_kill_success_treated_as_alive(self):
+        with patch("utils.onefile_cleanup.os.kill", return_value=None):
+            assert _pid_is_alive(42) is True
+
 
 class TestCleanupStaleOnefileDirs:
     """Verify cleanup removes only stale onefile dirs."""
@@ -119,6 +132,62 @@ class TestCleanupStaleOnefileDirs:
             # Should not raise
             _cleanup_stale_onefile_dirs()
 
+    def test_removes_multiple_stale_preserves_live(self, tmp_path):
+        """Mixed scenario: several stale dirs, one live dir, one non-onefile dir."""
+        stale_1 = tmp_path / "onefile_4000000001_1699852985_100"
+        stale_2 = tmp_path / "onefile_4000000002_1699852985_200"
+        live = tmp_path / f"onefile_{os.getpid()}_1699852985_300"
+        unrelated = tmp_path / "other_temp_dir"
+
+        for d in (stale_1, stale_2, live, unrelated):
+            d.mkdir()
+            (d / "payload.so").touch()
+
+        with patch("utils.onefile_cleanup.tempfile.gettempdir", return_value=str(tmp_path)):
+            _cleanup_stale_onefile_dirs()
+
+        assert not stale_1.exists()
+        assert not stale_2.exists()
+        assert live.exists()
+        assert unrelated.exists()
+
+    def test_logs_removed_directory(self, tmp_path, caplog):
+        stale_dir = tmp_path / "onefile_4000000000_1699852985_413382"
+        stale_dir.mkdir()
+
+        with (
+            patch("utils.onefile_cleanup.tempfile.gettempdir", return_value=str(tmp_path)),
+            caplog.at_level(logging.DEBUG, logger="utils.onefile_cleanup"),
+        ):
+            _cleanup_stale_onefile_dirs()
+
+        assert "Removed stale onefile directory" in caplog.text
+
+    def test_no_log_when_nothing_to_clean(self, tmp_path, caplog):
+        # Only a non-matching directory present.
+        (tmp_path / "regular_dir").mkdir()
+
+        with (
+            patch("utils.onefile_cleanup.tempfile.gettempdir", return_value=str(tmp_path)),
+            caplog.at_level(logging.DEBUG, logger="utils.onefile_cleanup"),
+        ):
+            _cleanup_stale_onefile_dirs()
+
+        assert "Removed stale onefile directory" not in caplog.text
+
+    def test_empty_tempdir(self, tmp_path):
+        """An empty temp directory should not cause errors."""
+        with patch("utils.onefile_cleanup.tempfile.gettempdir", return_value=str(tmp_path)):
+            _cleanup_stale_onefile_dirs()  # should not raise
+
+    def test_listdir_os_error_is_handled(self):
+        """OSError from os.listdir (e.g. permission denied on /tmp) is swallowed."""
+        with (
+            patch("utils.onefile_cleanup.tempfile.gettempdir", return_value="/some/path"),
+            patch("utils.onefile_cleanup.os.listdir", side_effect=OSError("Permission denied")),
+        ):
+            _cleanup_stale_onefile_dirs()  # should not raise
+
 
 class TestCleanupStaleOnefileDirsAsync:
     """Verify the async wrapper respects environment checks."""
@@ -163,6 +232,19 @@ class TestCleanupStaleOnefileDirsAsync:
             patch.dict(os.environ, {"CS_MOUNT_PATH": "/some/path"}),
             patch("utils.onefile_cleanup.threading.Thread") as mock_thread,
         ):
+            cleanup_stale_onefile_dirs_async()
+            mock_thread.assert_not_called()
+        self._reset_env_cache()
+
+    def test_noop_when_source(self):
+        """Running from source (not Nuitka, not Docker) should not spawn a thread."""
+        self._reset_env_cache()
+        with (
+            patch("utils.environment._is_nuitka_environment", return_value=False),
+            patch.dict(os.environ, {}, clear=False),
+            patch("utils.onefile_cleanup.threading.Thread") as mock_thread,
+        ):
+            os.environ.pop("CS_MOUNT_PATH", None)
             cleanup_stale_onefile_dirs_async()
             mock_thread.assert_not_called()
         self._reset_env_cache()
