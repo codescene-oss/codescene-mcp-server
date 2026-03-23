@@ -86,9 +86,28 @@ jobs:
           name: npm-coverage-report
           path: npm/coverage/cobertura-coverage.xml
 
+  test-rust:
+    runs-on: ubuntu-latest
+    name: Rust Unit Tests + Coverage
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install coverage tooling
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Run Rust tests with cobertura coverage
+        run: cargo llvm-cov --workspace --cobertura --output-path coverage.xml
+        working-directory: rust
+      - name: Upload Rust coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-coverage-report
+          path: rust/coverage.xml
+
   cs-coverage-check:
     runs-on: ubuntu-24.04
-    needs: [test, test-npm]
+    needs: [test, test-npm, test-rust]
     if: always()
     steps:
       - uses: actions/checkout@v4
