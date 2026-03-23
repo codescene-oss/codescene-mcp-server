@@ -143,13 +143,13 @@ mod tests {
     #[tokio::test]
     async fn run_auto_refactor_review_error() {
         let _g = set_token("tok");
-        let cli = MockCliRunner::with_responses(vec![
-            Ok(r#"[{"name":"foo","body":"function foo(){}","start-line":1,"function-type":"Function"}]"#.to_string()),
+        let cli = mock_cli_with_function_and_review(
+            Some("foo"),
             Err(crate::errors::CliError::NonZeroExit {
                 code: 1,
                 stderr: "review exploded".to_string(),
             }),
-        ]);
+        );
         let result = refactor_with_fixture(cli, MockHttpClient::new(vec![]), "foo").await;
         assert!(result.unwrap_err().contains("review exploded"));
     }
@@ -168,10 +168,10 @@ mod tests {
     #[tokio::test]
     async fn run_auto_refactor_no_code_smells() {
         let _g = set_token("tok");
-        let cli = MockCliRunner::with_responses(vec![
-            Ok(r#"[{"name":"foo","body":"function foo(){}","start-line":1,"function-type":"Function"}]"#.to_string()),
+        let cli = mock_cli_with_function_and_review(
+            Some("foo"),
             Ok(r#"{"score":10.0,"review":[]}"#.to_string()),
-        ]);
+        );
         let result = refactor_with_fixture(cli, MockHttpClient::new(vec![]), "foo").await;
         assert!(result.unwrap_err().contains("No code smells"));
     }
@@ -230,21 +230,37 @@ mod tests {
     #[tokio::test]
     async fn auto_refactor_tool_error_path() {
         let _g = set_token("tok");
+        let result = run_tool_with_ace_token(RefactorParam {
+            file_path: "/nonexistent/test.js".to_string(),
+            function_name: "foo".to_string(),
+        })
+        .await;
+        assert_error_contains(&result, "git root");
+    }
+
+    fn mock_cli_with_function_and_review(
+        function_name: Option<&str>,
+        review: Result<String, crate::errors::CliError>,
+    ) -> MockCliRunner {
+        let name = function_name.unwrap_or("foo");
+        let parse = format!(
+            r#"[{{"name":"{name}","body":"function {name}(){{}}","start-line":1,"function-type":"Function"}}]"#
+        );
+        MockCliRunner::with_responses(vec![Ok(parse), review])
+    }
+
+    async fn run_tool_with_ace_token(params: RefactorParam) -> rmcp::model::CallToolResult {
         std::env::set_var("CS_ACE_ACCESS_TOKEN", "ace-tok");
         let server = make_server_with_mocks(
             false,
             MockCliRunner::with_responses(vec![]),
             MockHttpClient::new(vec![]),
         );
-        let params = RefactorParam {
-            file_path: "/nonexistent/test.js".to_string(),
-            function_name: "foo".to_string(),
-        };
         let result = server
             .code_health_auto_refactor(Parameters(params))
             .await
             .unwrap();
         std::env::remove_var("CS_ACE_ACCESS_TOKEN");
-        assert_error_contains(&result, "git root");
+        result
     }
 }

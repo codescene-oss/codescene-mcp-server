@@ -24,7 +24,7 @@ pub(crate) async fn handle(
     }
     server.version_checker.check_in_background();
     let path = docker::adapt_path_for_docker(Path::new(&params.path));
-    let relative = make_relative_for_api(&path);
+    let relative = make_relative_for_api(Path::new(&path));
     let endpoint = format!(
         "v2/projects/{}/ownership?path={}",
         params.project_id,

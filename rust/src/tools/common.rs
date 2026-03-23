@@ -100,11 +100,11 @@ pub(crate) fn extract_score(review_output: &str) -> Option<f64> {
     parsed.get("score").and_then(|s| s.as_f64())
 }
 
-pub(crate) fn make_relative_for_api(file_path: &str) -> String {
-    let git_root = cli::find_git_root(Path::new(file_path));
+pub(crate) fn make_relative_for_api(file_path: &Path) -> String {
+    let git_root = cli::find_git_root(file_path);
     match git_root {
-        Some(root) => docker::get_relative_file_path_for_api(Path::new(file_path), &root),
-        None => file_path.to_string(),
+        Some(root) => docker::get_relative_file_path_for_api(file_path, &root),
+        None => file_path.to_string_lossy().to_string(),
     }
 }
 
@@ -117,8 +117,8 @@ pub(crate) fn urlencoded(s: &str) -> String {
         .replace('?', "%3F")
 }
 
-pub(crate) fn tool_error(msg: &str) -> CallToolResult {
-    CallToolResult::error(vec![Content::text(msg)])
+pub(crate) fn tool_error(msg: impl Into<String>) -> CallToolResult {
+    CallToolResult::error(vec![Content::text(msg.into())])
 }
 
 fn find_function_in_parsed<'a>(

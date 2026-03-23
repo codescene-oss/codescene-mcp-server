@@ -24,7 +24,7 @@ pub(crate) async fn handle(
     }
     server.version_checker.check_in_background();
     let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
-    let relative = make_relative_for_api(&file_path);
+    let relative = make_relative_for_api(Path::new(&file_path));
     let endpoint = format!(
         "v2/projects/{}/hotspots?file={}",
         params.project_id,
