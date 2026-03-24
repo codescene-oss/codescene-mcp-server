@@ -6,7 +6,7 @@ use rmcp::ErrorData;
 use crate::api_client;
 use crate::docker;
 use crate::event_properties;
-use crate::tools::common::{make_relative_for_api, tool_error, urlencoded};
+use crate::tools::common::{make_relative_for_api, tool_error};
 use crate::tools::OwnershipParam;
 use crate::CodeSceneServer;
 
@@ -25,12 +25,18 @@ pub(crate) async fn handle(
     server.version_checker.check_in_background();
     let path = docker::adapt_path_for_docker(Path::new(&params.path));
     let relative = make_relative_for_api(Path::new(&path));
-    let endpoint = format!(
-        "v2/projects/{}/ownership?path={}",
-        params.project_id,
-        urlencoded(&relative)
-    );
-    let result = api_client::query_api_list_with_client(&endpoint, &*server.http_client).await;
+    let endpoint = format!("v2/projects/{}/analyses/latest/files", params.project_id);
+    let query_params = vec![
+        ("filter".to_string(), format!("path~{}", relative)),
+        ("fields".to_string(), "owner,path".to_string()),
+    ];
+    let result = api_client::query_api_keyed_list_with_client(
+        &endpoint,
+        &query_params,
+        "files",
+        &*server.http_client,
+    )
+    .await;
     match result {
         Ok(data) => {
             let props =
@@ -93,7 +99,9 @@ mod tests {
     #[tokio::test]
     async fn success() {
         let _g = set_token("tok");
-        let http = make_api_mock(HttpResponse::ok(r#"[{"owner":"Alice","paths":["src/"]}]"#));
+        let http = make_api_mock(HttpResponse::ok(
+            r#"{"files":[{"owner":"Alice","path":"src/f.rs"}],"page":1,"max_pages":1}"#,
+        ));
         let server = make_server_with_mocks(false, MockCliRunner::with_responses(vec![]), http);
         let params = OwnershipParam {
             project_id: 5,

@@ -195,7 +195,7 @@ impl CodeSceneServer {
     }
 
     #[tool(
-        description = "Describes how to build a business case for Code Health improvements.",
+        description = "Describes how to build a business case for Code Health improvements.\nCovers empirical data on how healthy code lets you ship faster with\nfewer defects.",
         input_schema = inlined_schema_for::<OptionalContext>()
     )]
     async fn explain_code_health_productivity(
@@ -217,7 +217,7 @@ impl CodeSceneServer {
     }
 
     #[tool(
-        description = "Calculate the Code Health score for a single source file.",
+        description = "Calculate the Code Health score for a single source file.\nThe tool returns one numeric score from 10.0 (optimal) to 1.0 (worst).",
         input_schema = inlined_schema_for::<FilePathParam>()
     )]
     async fn code_health_score(
@@ -261,7 +261,7 @@ impl CodeSceneServer {
     }
 
     #[tool(
-        description = "Refactor a single function to fix specific code health problems.",
+        description = "Refactor a single function to fix specific code health problems.\nThis auto-refactor uses CodeScene ACE, and is intended as an initial\nrefactoring to increase the modularity of the code so that you as an\nAI agent can continue and iterate with more specific refactorings.",
         input_schema = inlined_schema_for::<RefactorParam>()
     )]
     async fn code_health_auto_refactor(
@@ -271,7 +271,9 @@ impl CodeSceneServer {
         tools::code_health_auto_refactor::handle(self, params).await
     }
 
-    #[tool(description = "Lists all projects for an organization for selection by the user.")]
+    #[tool(
+        description = "Lists all projects for an organization for selection by the user.\nThe user can select the desired project by either its name or ID."
+    )]
     async fn select_project(&self) -> Result<CallToolResult, ErrorData> {
         tools::select_project::handle(self).await
     }

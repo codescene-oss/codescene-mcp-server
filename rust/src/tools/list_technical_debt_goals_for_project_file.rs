@@ -6,7 +6,7 @@ use rmcp::ErrorData;
 use crate::api_client;
 use crate::docker;
 use crate::event_properties;
-use crate::tools::common::{make_relative_for_api, tool_error, urlencoded};
+use crate::tools::common::{make_relative_for_api, tool_error};
 use crate::tools::ProjectFileParam;
 use crate::CodeSceneServer;
 
@@ -25,12 +25,18 @@ pub(crate) async fn handle(
     server.version_checker.check_in_background();
     let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
     let relative = make_relative_for_api(Path::new(&file_path));
-    let endpoint = format!(
-        "v2/projects/{}/goals?file={}",
-        params.project_id,
-        urlencoded(&relative)
-    );
-    let result = api_client::query_api_list_with_client(&endpoint, &*server.http_client).await;
+    let endpoint = format!("v2/projects/{}/analyses/latest/files", params.project_id);
+    let query_params = vec![
+        ("filter".to_string(), format!("path~{}", relative)),
+        ("fields".to_string(), "goals".to_string()),
+    ];
+    let result = api_client::query_api_keyed_list_with_client(
+        &endpoint,
+        &query_params,
+        "files",
+        &*server.http_client,
+    )
+    .await;
     match result {
         Ok(data) => {
             let props = event_properties::goals_file_properties(Path::new(&params.file_path));
@@ -92,7 +98,9 @@ mod tests {
     #[tokio::test]
     async fn file_success() {
         let _g = set_token("tok");
-        let http = make_api_mock(HttpResponse::ok(r#"[{"goal":"reduce complexity"}]"#));
+        let http = make_api_mock(HttpResponse::ok(
+            r#"{"files":[{"goals":[{"goal":"reduce complexity"}]}],"page":1,"max_pages":1}"#,
+        ));
         let server = make_server_with_mocks(false, MockCliRunner::with_responses(vec![]), http);
         let params = ProjectFileParam {
             project_id: 42,

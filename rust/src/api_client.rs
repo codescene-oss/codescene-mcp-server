@@ -18,11 +18,15 @@ pub async fn query_api_with_client(
     client: &dyn HttpClient,
 ) -> Result<Value, ApiError> {
     let url = format!("{}/{}", get_api_url(), endpoint.trim_start_matches('/'));
+    query_api_url_with_client(&url, client).await
+}
+
+async fn query_api_url_with_client(url: &str, client: &dyn HttpClient) -> Result<Value, ApiError> {
     let token = std::env::var("CS_ACCESS_TOKEN").unwrap_or_default();
 
     let request = HttpRequest {
         method: Method::Get,
-        url,
+        url: url.to_string(),
         headers: build_api_headers(&token),
         body: None,
         timeout_secs: 30,
@@ -87,6 +91,68 @@ pub async fn query_api_list_with_client(
     }
 
     Ok(results)
+}
+
+pub async fn query_api_keyed_list_with_client(
+    endpoint: &str,
+    params: &[(String, String)],
+    key: &str,
+    client: &dyn HttpClient,
+) -> Result<Vec<Value>, ApiError> {
+    let mut all_items = Vec::new();
+    let mut current_page: i64 = 1;
+
+    loop {
+        let mut query_params = params.to_vec();
+        upsert_query_param(&mut query_params, "page", &current_page.to_string());
+
+        let url = endpoint_with_query_params(endpoint, &query_params)?;
+        let data = query_api_url_with_client(&url, client).await?;
+
+        let items = data.get(key).and_then(|v| v.as_array()).cloned().unwrap_or_default();
+        if items.is_empty() {
+            break;
+        }
+        all_items.extend(items);
+
+        let max_pages = data.get("max_pages").and_then(|v| v.as_i64()).unwrap_or(0);
+        let page = data
+            .get("page")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(current_page);
+
+        if max_pages == 0 || page >= max_pages {
+            break;
+        }
+
+        current_page = page + 1;
+    }
+
+    Ok(all_items)
+}
+
+fn endpoint_with_query_params(
+    endpoint: &str,
+    params: &[(String, String)],
+) -> Result<String, ApiError> {
+    let base = format!("{}/{}", get_api_url(), endpoint.trim_start_matches('/'));
+    let mut url =
+        reqwest::Url::parse(&base).map_err(|e| ApiError::Transport(format!("invalid API URL: {e}")))?;
+    {
+        let mut query = url.query_pairs_mut();
+        for (k, v) in params {
+            query.append_pair(k, v);
+        }
+    }
+    Ok(url.to_string())
+}
+
+fn upsert_query_param(params: &mut Vec<(String, String)>, key: &str, value: &str) {
+    if let Some((_, v)) = params.iter_mut().find(|(k, _)| k == key) {
+        *v = value.to_string();
+    } else {
+        params.push((key.to_string(), value.to_string()));
+    }
 }
 
 fn collect_with_single(mut results: Vec<Value>, item: Value) -> Vec<Value> {
@@ -237,6 +303,16 @@ mod tests {
         query_api_list_with_client(endpoint, &mock).await
     }
 
+    async fn run_keyed_list_query(
+        responses: Vec<HttpResponse>,
+        endpoint: &str,
+        params: &[(String, String)],
+        key: &str,
+    ) -> Result<Vec<Value>, ApiError> {
+        let mock = MockHttpClient::new(responses);
+        query_api_keyed_list_with_client(endpoint, params, key, &mock).await
+    }
+
     #[tokio::test]
     async fn query_api_list_paginates_correctly() {
         let _g = lock_api_env("tok");
@@ -303,6 +379,37 @@ mod tests {
                 .is_err()
         );
         cleanup_api_env();
+    }
+
+    #[tokio::test]
+    async fn query_api_keyed_list_reads_items_and_paginates() {
+        let _g = lock_api_env("tok");
+        let items = run_keyed_list_query(
+            vec![
+                HttpResponse::ok(r#"{"result":[{"id":1}],"page":1,"max_pages":2}"#),
+                HttpResponse::ok(r#"{"result":[{"id":2}],"page":2,"max_pages":2}"#),
+            ],
+            "v2/projects/1/analyses/latest/technical-debt",
+            &[("refactoring_targets".to_string(), "true".to_string())],
+            "result",
+        )
+        .await
+        .unwrap();
+        assert_eq!(items.len(), 2);
+        cleanup_api_env();
+    }
+
+    #[test]
+    fn endpoint_with_query_params_appends_correct_separator() {
+        let params = vec![("a".to_string(), "1".to_string())];
+        let one = endpoint_with_query_params("v2/test", &params).unwrap();
+        assert!(one.starts_with("https://api.codescene.io/v2/test?"));
+        assert!(one.contains("a=1"));
+
+        let two = endpoint_with_query_params("v2/test?x=y", &params).unwrap();
+        assert!(two.starts_with("https://api.codescene.io/v2/test?"));
+        assert!(two.contains("x=y"));
+        assert!(two.contains("a=1"));
     }
 
     #[test]

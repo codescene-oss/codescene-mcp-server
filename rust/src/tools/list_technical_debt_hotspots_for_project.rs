@@ -20,8 +20,18 @@ pub(crate) async fn handle(
         ));
     }
     server.version_checker.check_in_background();
-    let endpoint = format!("v2/projects/{}/hotspots", params.project_id);
-    let result = api_client::query_api_list_with_client(&endpoint, &*server.http_client).await;
+    let endpoint = format!(
+        "v2/projects/{}/analyses/latest/technical-debt",
+        params.project_id
+    );
+    let query_params = vec![("page_size".to_string(), "200".to_string()), ("refactoring_targets".to_string(), "true".to_string())];
+    let result = api_client::query_api_keyed_list_with_client(
+        &endpoint,
+        &query_params,
+        "result",
+        &*server.http_client,
+    )
+    .await;
     match result {
         Ok(data) => {
             let props = event_properties::hotspots_properties(params.project_id, data.len());
@@ -75,7 +85,9 @@ mod tests {
     #[tokio::test]
     async fn project_success() {
         let _g = set_token("tok");
-        let http = make_api_mock(HttpResponse::ok(r#"[{"file":"b.rs","score":3.5}]"#));
+        let http = make_api_mock(HttpResponse::ok(
+            r#"{"result":[{"file":"b.rs","score":3.5}],"page":1,"max_pages":1}"#,
+        ));
         let server = make_server_with_mocks(false, MockCliRunner::with_responses(vec![]), http);
         let params = ProjectParam { project_id: 10 };
         let result = server

@@ -6,7 +6,7 @@ use rmcp::ErrorData;
 use crate::api_client;
 use crate::docker;
 use crate::event_properties;
-use crate::tools::common::{make_relative_for_api, tool_error, urlencoded};
+use crate::tools::common::{make_relative_for_api, tool_error};
 use crate::tools::ProjectFileParam;
 use crate::CodeSceneServer;
 
@@ -26,11 +26,23 @@ pub(crate) async fn handle(
     let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
     let relative = make_relative_for_api(Path::new(&file_path));
     let endpoint = format!(
-        "v2/projects/{}/hotspots?file={}",
-        params.project_id,
-        urlencoded(&relative)
+        "v2/projects/{}/analyses/latest/technical-debt",
+        params.project_id
     );
-    let result = api_client::query_api_list_with_client(&endpoint, &*server.http_client).await;
+    let query_params = vec![
+        (
+            "filter".to_string(),
+            format!("file_name~{}", relative),
+        ),
+        ("refactoring_targets".to_string(), "true".to_string()),
+    ];
+    let result = api_client::query_api_keyed_list_with_client(
+        &endpoint,
+        &query_params,
+        "result",
+        &*server.http_client,
+    )
+    .await;
     match result {
         Ok(data) => {
             let props = event_properties::hotspots_file_properties(Path::new(&params.file_path));
@@ -92,7 +104,9 @@ mod tests {
     #[tokio::test]
     async fn file_success() {
         let _g = set_token("tok");
-        let http = make_api_mock(HttpResponse::ok(r#"[{"score":7.0,"revisions":12}]"#));
+        let http = make_api_mock(HttpResponse::ok(
+            r#"{"result":[{"score":7.0,"revisions":12}],"page":1,"max_pages":1}"#,
+        ));
         let server = make_server_with_mocks(false, MockCliRunner::with_responses(vec![]), http);
         let params = ProjectFileParam {
             project_id: 10,

@@ -108,15 +108,6 @@ pub(crate) fn make_relative_for_api(file_path: &Path) -> String {
     }
 }
 
-pub(crate) fn urlencoded(s: &str) -> String {
-    s.replace('%', "%25")
-        .replace(' ', "%20")
-        .replace('&', "%26")
-        .replace('=', "%3D")
-        .replace('#', "%23")
-        .replace('?', "%3F")
-}
-
 pub(crate) fn tool_error(msg: impl Into<String>) -> CallToolResult {
     CallToolResult::error(vec![Content::text(msg.into())])
 }
@@ -265,8 +256,4 @@ mod tests {
         assert_eq!(extract_score("invalid"), None);
     }
 
-    #[test]
-    fn urlencoded_escapes_special_chars() {
-        assert_eq!(urlencoded("a=1&b=2"), "a%3D1%26b%3D2");
-    }
 }
