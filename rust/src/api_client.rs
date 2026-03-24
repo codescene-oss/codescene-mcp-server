@@ -7,7 +7,7 @@ use crate::http::{HttpClient, HttpRequest, HttpResponse, Method};
 
 pub fn get_api_url() -> String {
     if let Ok(url) = std::env::var("CS_ONPREM_URL") {
-        format!("{url}/api")
+        format!("{}/api", url.trim_end_matches('/'))
     } else {
         "https://api.codescene.io".to_string()
     }
@@ -198,6 +198,14 @@ mod tests {
     fn get_api_url_onprem() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_ONPREM_URL", "https://my-instance.com");
+        assert_eq!(get_api_url(), "https://my-instance.com/api");
+        std::env::remove_var("CS_ONPREM_URL");
+    }
+
+    #[test]
+    fn get_api_url_onprem_trailing_slash() {
+        let _lock = config::lock_test_env();
+        std::env::set_var("CS_ONPREM_URL", "https://my-instance.com/");
         assert_eq!(get_api_url(), "https://my-instance.com/api");
         std::env::remove_var("CS_ONPREM_URL");
     }
