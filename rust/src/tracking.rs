@@ -238,14 +238,29 @@ mod tests {
         assert_eq!(body["event-properties"], "not-an-object");
     }
 
-    #[tokio::test]
-    async fn send_event_posts_to_correct_url() {
-        let _lock = config::lock_test_env();
-        std::env::set_var("CS_ACCESS_TOKEN", "test-tok");
+    async fn send_event_and_capture_request(
+        token: Option<&str>,
+        te: TrackingEvent,
+    ) -> crate::http::HttpRequest {
+        match token {
+            Some(value) => std::env::set_var("CS_ACCESS_TOKEN", value),
+            None => std::env::remove_var("CS_ACCESS_TOKEN"),
+        }
 
         let mock = MockHttpClient::always(HttpResponse::ok(""));
         let captured = mock.captured_requests.clone();
 
+        let result = send_event(te, &mock).await;
+        assert!(result.is_ok());
+
+        let reqs = captured.lock().unwrap();
+        assert_eq!(reqs.len(), 1);
+        reqs[0].clone()
+    }
+
+    #[tokio::test]
+    async fn send_event_posts_to_correct_url() {
+        let _lock = config::lock_test_env();
         let te = TrackingEvent {
             url: "http://track.test/v2/analytics/track".to_string(),
             event: "mcp-review".to_string(),
@@ -254,19 +269,16 @@ mod tests {
             version: "1.0.0",
             properties: json!({"key": "val"}),
         };
-        let result = send_event(te, &mock).await;
-        assert!(result.is_ok());
+        let req = send_event_and_capture_request(Some("test-tok"), te).await;
 
-        let reqs = captured.lock().unwrap();
-        assert_eq!(reqs.len(), 1);
-        assert_eq!(reqs[0].url, "http://track.test/v2/analytics/track");
-        assert_eq!(reqs[0].method, Method::Post);
+        assert_eq!(req.url, "http://track.test/v2/analytics/track");
+        assert_eq!(req.method, Method::Post);
         assert_eq!(
-            reqs[0].headers.get("Authorization").unwrap(),
+            req.headers.get("Authorization").unwrap(),
             "Bearer test-tok"
         );
-        assert_eq!(reqs[0].headers.get("Accept").unwrap(), "application/json");
-        assert!(reqs[0]
+        assert_eq!(req.headers.get("Accept").unwrap(), "application/json");
+        assert!(req
             .headers
             .get("User-Agent")
             .is_some_and(|v| v.starts_with("codescene-mcp/")));
@@ -277,11 +289,6 @@ mod tests {
     #[tokio::test]
     async fn send_event_omits_authorization_when_no_token() {
         let _lock = config::lock_test_env();
-        std::env::remove_var("CS_ACCESS_TOKEN");
-
-        let mock = MockHttpClient::always(HttpResponse::ok(""));
-        let captured = mock.captured_requests.clone();
-
         let te = TrackingEvent {
             url: "http://t/track".to_string(),
             event: "mcp-e".to_string(),
@@ -290,16 +297,15 @@ mod tests {
             version: "1.0.0",
             properties: json!({}),
         };
-        let _ = send_event(te, &mock).await;
+        let req = send_event_and_capture_request(None, te).await;
 
-        let reqs = captured.lock().unwrap();
-        assert!(reqs[0].headers.get("Authorization").is_none());
+        assert!(req.headers.get("Authorization").is_none());
         assert_eq!(
-            reqs[0].headers.get("Content-Type").unwrap(),
+            req.headers.get("Content-Type").unwrap(),
             "application/json"
         );
-        assert_eq!(reqs[0].headers.get("Accept").unwrap(), "application/json");
-        assert!(reqs[0]
+        assert_eq!(req.headers.get("Accept").unwrap(), "application/json");
+        assert!(req
             .headers
             .get("User-Agent")
             .is_some_and(|v| v.starts_with("codescene-mcp/")));
