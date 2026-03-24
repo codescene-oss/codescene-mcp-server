@@ -68,11 +68,35 @@ async fn run_cli_at_path(
     args: &[&str],
     working_dir: Option<&Path>,
 ) -> Result<String, CliError> {
+    let output = run_cli_process(cli_path, args, working_dir, false).await?;
+    if output.status.success() {
+        return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    if should_retry_after_telemetry_flush_error(&stderr) {
+        let retry_output = run_cli_process(cli_path, args, working_dir, true).await?;
+        return parse_cli_output(retry_output);
+    }
+
+    parse_cli_output(output)
+}
+
+async fn run_cli_process(
+    cli_path: &Path,
+    args: &[&str],
+    working_dir: Option<&Path>,
+    disable_tracking: bool,
+) -> Result<Output, CliError> {
     let mut cmd = tokio::process::Command::new(cli_path);
 
     cmd.args(args)
         .env("CS_CONTEXT", "mcp-server")
         .env("CS_DISABLE_VERSION_CHECK", "1");
+
+    if disable_tracking {
+        cmd.env("CS_DISABLE_TRACKING", "1");
+    }
 
     if let Ok(token) = std::env::var("CS_ACCESS_TOKEN") {
         cmd.env("CS_ACCESS_TOKEN", token);
@@ -86,8 +110,11 @@ async fn run_cli_at_path(
         cmd.current_dir(dir);
     }
 
-    let output: Output = cmd.output().await?;
-    parse_cli_output(output)
+    cmd.output().await.map_err(CliError::from)
+}
+
+fn should_retry_after_telemetry_flush_error(stderr: &str) -> bool {
+    stderr.contains("NoSuchFileException") && stderr.contains("codescene-cli.log.jsonl")
 }
 
 fn parse_cli_output(output: Output) -> Result<String, CliError> {
@@ -545,5 +572,30 @@ mod tests {
             CliError::NonZeroExit { code, .. } => assert_eq!(code, 42),
             other => panic!("Expected NonZeroExit, got: {other:?}"),
         }
+    }
+
+    #[test]
+    fn should_retry_for_telemetry_flush_no_such_file_error() {
+        let stderr = "java.nio.file.NoSuchFileException: /tmp/codescene-cli.log.jsonl";
+        assert!(should_retry_after_telemetry_flush_error(stderr));
+    }
+
+    #[test]
+    fn should_not_retry_for_other_no_such_file_error() {
+        let stderr = "java.nio.file.NoSuchFileException: /tmp/other-file.log";
+        assert!(!should_retry_after_telemetry_flush_error(stderr));
+    }
+
+    #[tokio::test]
+    async fn run_cli_at_path_retries_once_on_telemetry_flush_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("first-run.marker");
+        let marker_path = marker.to_string_lossy().to_string();
+        let script = format!(
+            "if [ ! -f '{marker_path}' ]; then touch '{marker_path}'; >&2 echo 'java.nio.file.NoSuchFileException: /tmp/codescene-cli.log.jsonl'; exit 1; fi; echo ok"
+        );
+
+        let output = run_cli_at_path(Path::new("/bin/sh"), &["-c", &script], None).await;
+        assert_eq!(output.unwrap().trim(), "ok");
     }
 }
