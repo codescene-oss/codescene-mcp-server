@@ -23,10 +23,7 @@ pub async fn query_api_with_client(
     let request = HttpRequest {
         method: Method::Get,
         url,
-        headers: HashMap::from([
-            ("Authorization".to_string(), format!("Bearer {token}")),
-            ("Accept".to_string(), "application/json".to_string()),
-        ]),
+        headers: build_api_headers(&token),
         body: None,
         timeout_secs: 30,
     };
@@ -37,6 +34,20 @@ pub async fn query_api_with_client(
         .map_err(|e| ApiError::Transport(e))?;
 
     parse_api_response(resp)
+}
+
+fn build_api_headers(token: &str) -> HashMap<String, String> {
+    let mut headers = HashMap::from([
+        ("Accept".to_string(), "application/json".to_string()),
+        (
+            "User-Agent".to_string(),
+            format!("codescene-mcp/{}", env!("CS_MCP_VERSION")),
+        ),
+    ]);
+    if !token.is_empty() {
+        headers.insert("Authorization".to_string(), format!("Bearer {token}"));
+    }
+    headers
 }
 
 fn parse_api_response(resp: HttpResponse) -> Result<Value, ApiError> {
@@ -178,6 +189,11 @@ mod tests {
             reqs[0].headers.get("Authorization").unwrap(),
             "Bearer my-token"
         );
+        assert_eq!(reqs[0].headers.get("Accept").unwrap(), "application/json");
+        assert!(reqs[0]
+            .headers
+            .get("User-Agent")
+            .is_some_and(|v| v.starts_with("codescene-mcp/")));
         // Leading slash should not produce double-slash
         assert!(reqs[1].url.ends_with("/v2/test"));
         assert!(!reqs[1].url.contains("//v2"));
@@ -301,5 +317,15 @@ mod tests {
         let result = collect_with_single(vec![], serde_json::json!("only"));
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], "only");
+    }
+
+    #[test]
+    fn build_api_headers_without_token_omits_authorization() {
+        let headers = build_api_headers("");
+        assert!(headers.get("Authorization").is_none());
+        assert_eq!(headers.get("Accept").unwrap(), "application/json");
+        assert!(headers
+            .get("User-Agent")
+            .is_some_and(|v| v.starts_with("codescene-mcp/")));
     }
 }
