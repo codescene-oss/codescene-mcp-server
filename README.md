@@ -113,18 +113,17 @@ With the CodeScene MCP Server in place, your AI tools can:
 ### Safeguard AI-Generated Code
 Prevent AI from introducing technical debt by flagging maintainability issues like complexity, deep nesting, low cohesion, etc.
 
-### Uplifting Unhealthy Code for AI Readiness: Refactoring With ACE + AI
-AI works best on healthy, modular code. Many legacy functions are too large or complex for reliable AI refactoring, which leads to poor suggestions and unstable changes.  
-[CodeScene ACE](https://codescene.com/product/integrations/ide-extensions/ai-refactoring), exposed through the MCP server, helps by *first* restructuring these complex functions into smaller and more cohesive units. This modularity makes the code far easier for AI agents to understand and refactor safely.
+### Uplift Unhealthy Code for AI Readiness
+AI refactoring quality improves when code is modular and easy to reason about. The MCP server gives your assistant concrete guidance to get there:
 
-The result is a cooperative workflow where:  
-- **CodeScene ACE improves modularity and structure**,  
-- **AI performs more precise refactorings**, and  
-- **Code Health guides both toward maintainable outcomes**.
+- run focused Code Health reviews,
+- identify the specific design issues to address,
+- refactor in small, measurable steps, and
+- verify progress with updated Code Health scores.
 
-🎗️ ACE is a **CodeScene add-on** and requires an additional license. You can [request access and more info here](https://codescene.com/contact-us-about-codescene-ace).
+This workflow works with MCP alone and is often enough to safely improve legacy code.
 
-To enable ACE, add the `CS_ACE_ACCESS_TOKEN` environment variable to your MCP configuration. See [Configuration Options](docs/configuration-options.md#ace_access_token) for setup details.
+If you also use [CodeScene ACE](https://codescene.com/product/integrations/ide-extensions/ai-refactoring), it can accelerate the first restructuring step for some large functions. ACE is optional and requires a separate add-on license. For details, see [ACE refactoring with MCP](docs/ace-refactoring-with-mcp.md).
 
 ### Make Targeted Refactoring  
 AI tools can refactor code, but they lack direction on *what* to fix and *how to measure* if it helped.  
