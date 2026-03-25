@@ -15,6 +15,7 @@ mod license;
 mod platform;
 mod prompts;
 mod resources;
+mod startup;
 mod tools;
 mod tracking;
 mod version_checker;
@@ -876,7 +877,9 @@ async fn main() -> anyhow::Result<()> {
         .with_ansi(false)
         .init();
 
-    tracing::info!("Starting CodeScene MCP server");
+    startup::print_startup_logo();
+    tracing::info!("CodeScene MCP server started");
+    tracing::info!("Waiting for MCP client initialization...");
 
     config::snapshot_client_env_vars();
     let config_data = config::load().unwrap_or_default();
@@ -901,7 +904,14 @@ async fn main() -> anyhow::Result<()> {
     let service = server
         .serve(rmcp::transport::stdio())
         .await
-        .inspect_err(|e| tracing::error!("serving error: {:?}", e))?;
+        .inspect_err(|e| {
+            if e.to_string().contains("initialize request") {
+                tracing::info!("No MCP initialize request received. If you ran `cs-mcp` directly in a terminal, run it through an MCP client instead.");
+            }
+            tracing::error!("serving error: {:?}", e);
+        })?;
+
+    tracing::info!("CodeScene MCP server ready");
 
     service.waiting().await?;
     Ok(())
