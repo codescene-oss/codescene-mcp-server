@@ -424,6 +424,7 @@ mod tests {
 
     #[test]
     fn endpoint_with_query_params_appends_correct_separator() {
+        let _g = lock_api_env("tok");
         let params = vec![("a".to_string(), "1".to_string())];
         let one = endpoint_with_query_params("v2/test", &params).unwrap();
         assert!(one.starts_with("https://api.codescene.io/v2/test?"));
@@ -433,6 +434,7 @@ mod tests {
         assert!(two.starts_with("https://api.codescene.io/v2/test?"));
         assert!(two.contains("x=y"));
         assert!(two.contains("a=1"));
+        cleanup_api_env();
     }
 
     #[test]
