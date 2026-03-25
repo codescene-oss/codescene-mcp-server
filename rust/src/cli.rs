@@ -99,7 +99,10 @@ async fn run_cli_process(
     }
 
     if let Ok(token) = std::env::var("CS_ACCESS_TOKEN") {
-        cmd.env("CS_ACCESS_TOKEN", token);
+        let token = token.trim();
+        if !token.is_empty() {
+            cmd.env("CS_ACCESS_TOKEN", token);
+        }
     }
 
     if let Ok(url) = std::env::var("CS_ONPREM_URL") {
@@ -547,6 +550,19 @@ mod tests {
 
         std::env::remove_var("CS_ACCESS_TOKEN");
         std::env::remove_var("CS_ONPREM_URL");
+    }
+
+    #[tokio::test]
+    async fn run_cli_at_path_trims_access_token_before_forwarding() {
+        let _lock = config::lock_test_env();
+        std::env::set_var("CS_ACCESS_TOKEN", "  test-token-xyz  ");
+
+        let output = run_cli_at_path(Path::new("/bin/sh"), &["-c", "echo [$CS_ACCESS_TOKEN]"], None)
+            .await
+            .unwrap();
+        assert!(output.contains("[test-token-xyz]"));
+
+        std::env::remove_var("CS_ACCESS_TOKEN");
     }
 
     #[tokio::test]

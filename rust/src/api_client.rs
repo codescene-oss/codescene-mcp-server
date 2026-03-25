@@ -23,11 +23,12 @@ pub async fn query_api_with_client(
 
 async fn query_api_url_with_client(url: &str, client: &dyn HttpClient) -> Result<Value, ApiError> {
     let token = std::env::var("CS_ACCESS_TOKEN").unwrap_or_default();
+    let token = token.trim();
 
     let request = HttpRequest {
         method: Method::Get,
         url: url.to_string(),
-        headers: build_api_headers(&token),
+        headers: build_api_headers(token),
         body: None,
         timeout_secs: 30,
     };
@@ -271,6 +272,20 @@ mod tests {
         // Leading slash should not produce double-slash
         assert!(reqs[1].url.ends_with("/v2/test"));
         assert!(!reqs[1].url.contains("//v2"));
+        cleanup_api_env();
+    }
+
+    #[tokio::test]
+    async fn query_api_trims_access_token_before_authorization_header() {
+        let _g = lock_api_env("  my-token  ");
+        let mock = MockHttpClient::always(HttpResponse::ok(r#"{}"#));
+        let captured = mock.captured_requests.clone();
+
+        let _ = query_api_with_client("v2/test", &mock).await;
+
+        let reqs = captured.lock().unwrap();
+        assert_eq!(reqs.len(), 1);
+        assert_eq!(reqs[0].headers.get("Authorization").unwrap(), "Bearer my-token");
         cleanup_api_env();
     }
 

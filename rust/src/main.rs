@@ -133,7 +133,7 @@ struct CodeSceneServer {
 impl CodeSceneServer {
     pub(crate) fn require_token(&self) -> Option<CallToolResult> {
         if std::env::var("CS_ACCESS_TOKEN")
-            .map(|v| v.is_empty())
+            .map(|v| v.trim().is_empty())
             .unwrap_or(true)
         {
             return Some(CallToolResult::success(vec![Content::text(
@@ -824,6 +824,12 @@ mod tests {
     async fn require_token_returns_none_when_set() {
         let _g = set_token("token");
         assert!(make_server(false).require_token().is_none());
+    }
+
+    #[tokio::test]
+    async fn require_token_treats_whitespace_as_missing() {
+        let _g = set_token("   ");
+        assert!(make_server(false).require_token().is_some());
     }
 
     #[tokio::test]

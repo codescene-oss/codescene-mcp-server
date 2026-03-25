@@ -36,6 +36,12 @@ pub fn set_value(key: &str, value: &str) -> String {
         None => return unknown_key_error(key),
     };
 
+    let value = if option.key.ends_with("_token") {
+        value.trim()
+    } else {
+        value
+    };
+
     let mut data = config::load().unwrap_or_default();
 
     if value.is_empty() {
@@ -397,6 +403,18 @@ mod tests {
             let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
             assert_eq!(parsed["status"], json!("saved"));
             assert!(parsed.get("restart_required").is_some());
+        });
+    }
+
+    #[test]
+    fn set_value_trims_access_token() {
+        with_temp_config_dir(|| {
+            let _ = set_value("access_token", "  my-token  ");
+            let data = config::load().unwrap();
+            assert_eq!(
+                data.values.get("access_token").map(|s| s.as_str()),
+                Some("my-token")
+            );
         });
     }
 
