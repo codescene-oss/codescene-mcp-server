@@ -120,11 +120,18 @@ fn should_retry_after_telemetry_flush_error(stderr: &str) -> bool {
     stderr.contains("NoSuchFileException") && stderr.contains("codescene-cli.log.jsonl")
 }
 
+fn is_license_check_failure(stderr: &str) -> bool {
+    stderr.contains("License check failed")
+}
+
 fn parse_cli_output(output: Output) -> Result<String, CliError> {
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        if is_license_check_failure(&stderr) {
+            return Err(CliError::LicenseCheckFailed);
+        }
         Err(CliError::NonZeroExit {
             code: output.status.code().unwrap_or(-1),
             stderr,
@@ -328,6 +335,35 @@ mod tests {
             }
             other => panic!("Expected NonZeroExit, got: {other:?}"),
         }
+    }
+
+    #[test]
+    fn parse_cli_output_license_check_failed() {
+        let stderr = b"License check failed: [401] The user must reauthorize.\n\n  Make sure that CS_ACCESS_TOKEN is set to a valid Personal Access Token.";
+        let output = make_output(256, b"", stderr);
+        match parse_cli_output(output).unwrap_err() {
+            CliError::LicenseCheckFailed => {
+                // Verify the user-facing message doesn't mention the CLI
+                let msg = CliError::LicenseCheckFailed.to_string();
+                assert!(msg.contains("invalid or expired"), "msg: {msg}");
+                assert!(msg.contains("set_config"), "msg: {msg}");
+                assert!(!msg.contains("CS CLI"), "msg should not mention CLI: {msg}");
+            }
+            other => panic!("Expected LicenseCheckFailed, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn is_license_check_failure_detects_license_error() {
+        assert!(is_license_check_failure(
+            "License check failed: [401] The user must reauthorize."
+        ));
+    }
+
+    #[test]
+    fn is_license_check_failure_ignores_other_errors() {
+        assert!(!is_license_check_failure("Some other error"));
+        assert!(!is_license_check_failure(""));
     }
 
     #[test]
