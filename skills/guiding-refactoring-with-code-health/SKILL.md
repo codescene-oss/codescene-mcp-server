@@ -7,7 +7,7 @@ description: Use when refactoring unhealthy code and needing Code Health finding
 
 ## Overview
 
-Use Code Health as the control signal for refactoring. The agent should first understand why a file is hard to work with, then improve it in small steps and verify that each step helped.
+Use Code Health as the control signal for refactoring. The agent should first understand why a file is hard to work with, establish a measurable baseline, then improve it in small structural steps and verify that each step helped. The goal is not just cleaner code, but code that is easier for both humans and agents to understand and modify safely.
 
 ## When to Use
 
@@ -20,19 +20,23 @@ Do not use this skill when the task is to rank project-wide priorities. Use `pri
 ## Quick Reference
 
 - `code_health_review`: Detailed maintainability findings for a file.
-- `code_health_score`: Numeric checkpoint before and after a refactor.
+- `code_health_score`: Numeric baseline and trend check across refactoring iterations.
 
 ## Implementation
 
 1. Run `code_health_review` on the target file.
-2. Identify the highest-leverage maintainability problems.
-3. Propose 3 to 5 small refactor steps, not a single rewrite.
-4. Re-run `code_health_review` or `code_health_score` after each significant step.
-5. Stop only when the file is materially healthier or the user chooses to pause.
+2. Record the current `code_health_score` so the refactoring starts from a measurable baseline.
+3. Identify the highest-leverage structural problems, such as excessive responsibilities, deep nesting, low cohesion, or hard-to-follow control flow.
+4. Propose 3 to 5 small structural refactor steps, not a single rewrite.
+5. After each meaningful step, re-run `code_health_review` to see whether the targeted structural problems were reduced.
+6. Use `code_health_score` as the compact checkpoint to confirm directional improvement across iterations.
+7. Stop only when the targeted structural issues are substantially reduced and the score has measurably improved, or when the user explicitly accepts a partial uplift.
 
 ## Common Mistakes
 
 - Refactoring without a baseline review.
+- Refactoring without recording the initial score.
 - Making a large rewrite that hides whether things improved.
-- Reporting cosmetic cleanup as Code Health improvement.
+- Counting cosmetic cleanup as meaningful progress when the structural problems remain.
+- Using score checks alone without re-running the detailed review.
 - Forgetting to re-measure after each meaningful step.

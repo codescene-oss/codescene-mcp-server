@@ -19,20 +19,21 @@ Do not use this skill for broad refactoring discovery or project-level prioritiz
 
 ## Quick Reference
 
+- `code_health_review`: Review each AI-modified file immediately after the change.
 - `pre_commit_code_health_safeguard`: Check staged or modified files before commit.
 - `analyze_change_set`: Check a branch or PR-style change set against a base ref.
-- `code_health_review`: Inspect files that triggered the safeguard.
 
 ## Implementation
 
-1. Run `pre_commit_code_health_safeguard` before commit-oriented recommendations.
-2. Run `analyze_change_set` before PR-oriented recommendations.
-3. If a regression is reported, inspect the affected files with `code_health_review`.
-4. Refactor in small steps.
-5. Re-run the safeguard until the regression is gone or the user explicitly accepts the risk.
+1. After each AI modification to a file, run `code_health_review` on that file.
+2. If the review reports maintainability problems or regression risk, refactor the file in small steps and review it again.
+3. Run `pre_commit_code_health_safeguard` before commit-oriented recommendations as a broader gate across staged or modified files.
+4. Run `analyze_change_set` before PR-oriented recommendations as a final branch-level gate.
+5. If either later gate reports a regression, inspect the affected files with `code_health_review` and keep iterating until the issue is removed or the user explicitly accepts the risk.
 
 ## Common Mistakes
 
+- Waiting until commit time to run the first Code Health check.
 - Treating safeguard output as optional guidance instead of a release gate.
 - Declaring work done after a failing safeguard.
 - Jumping straight to broad rewrites instead of inspecting the flagged files first.
