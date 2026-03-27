@@ -52,3 +52,88 @@ pub enum ApiError {
     #[error("API error {status}: {body}")]
     Status { status: u16, body: String },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cli_error_non_zero_exit_display() {
+        let err = CliError::NonZeroExit {
+            code: 1,
+            stderr: "something broke".into(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "CS CLI exited with code 1: something broke"
+        );
+    }
+
+    #[test]
+    fn cli_error_not_found_display() {
+        let err = CliError::NotFound("/usr/bin/cs".into());
+        assert_eq!(err.to_string(), "CS CLI not found: /usr/bin/cs");
+    }
+
+    #[test]
+    fn cli_error_io_display() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "no such file");
+        let err = CliError::Io(io_err);
+        assert!(err.to_string().starts_with("Failed to run CS CLI:"));
+    }
+
+    #[test]
+    fn cli_error_license_check_failed_display() {
+        let err = CliError::LicenseCheckFailed;
+        assert!(err
+            .to_string()
+            .contains("Access token is invalid or expired"));
+        assert!(err.to_string().contains("set_config"));
+    }
+
+    #[test]
+    fn config_error_io_display() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
+        let err = ConfigError::Io(io_err);
+        assert!(err.to_string().starts_with("Config I/O error:"));
+    }
+
+    #[test]
+    fn config_error_parse_display() {
+        let json_err =
+            serde_json::from_str::<serde_json::Value>("{{bad}}").expect_err("should fail");
+        let err = ConfigError::Parse(json_err);
+        assert!(err.to_string().starts_with("Config parse error:"));
+    }
+
+    #[test]
+    fn license_error_invalid_format_display() {
+        assert_eq!(
+            LicenseError::InvalidFormat.to_string(),
+            "Invalid license format"
+        );
+    }
+
+    #[test]
+    fn license_error_invalid_signature_display() {
+        assert_eq!(
+            LicenseError::InvalidSignature.to_string(),
+            "Invalid signature"
+        );
+    }
+
+    #[test]
+    fn api_error_transport_display() {
+        let err = ApiError::Transport("connection refused".into());
+        assert_eq!(err.to_string(), "HTTP transport error: connection refused");
+    }
+
+    #[test]
+    fn api_error_status_display() {
+        let err = ApiError::Status {
+            status: 404,
+            body: "not found".into(),
+        };
+        assert_eq!(err.to_string(), "API error 404: not found");
+    }
+}

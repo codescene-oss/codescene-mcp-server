@@ -178,15 +178,9 @@ fn matches_function_name(title: &str, function_name: &str) -> bool {
     if title == function_name {
         return true;
     }
-    if let Some(base) = title.strip_suffix(|c: char| c == ':' || c.is_ascii_digit()) {
-        let base = base.trim_end_matches(':');
-        return base == function_name;
-    }
-    title.starts_with(function_name)
-        && title[function_name.len()..].starts_with(':')
-        && title[function_name.len() + 1..]
-            .chars()
-            .all(|c| c.is_ascii_digit())
+    let base = title.trim_end_matches(|c: char| c.is_ascii_digit());
+    let base = base.trim_end_matches(':');
+    base == function_name && base.len() < title.len()
 }
 
 fn build_ace_payload(
@@ -269,5 +263,100 @@ mod tests {
     #[test]
     fn extract_score_handles_invalid_json() {
         assert_eq!(extract_score("invalid"), None);
+    }
+
+    #[test]
+    fn matches_function_name_exact() {
+        assert!(matches_function_name("foo", "foo"));
+    }
+
+    #[test]
+    fn matches_function_name_with_line_suffix() {
+        assert!(matches_function_name("foo:42", "foo"));
+    }
+
+    #[test]
+    fn matches_function_name_no_match() {
+        assert!(!matches_function_name("bar", "foo"));
+    }
+
+    #[test]
+    fn matches_function_name_strip_trailing_colon_digit() {
+        assert!(matches_function_name("myFunc:7", "myFunc"));
+    }
+
+    #[test]
+    fn matches_function_name_prefix_mismatch() {
+        assert!(!matches_function_name("foobar", "foo"));
+    }
+
+    #[test]
+    fn extract_code_smells_finds_matching_functions() {
+        let review = json!({
+            "review": [{
+                "category": "Complex Method",
+                "functions": [
+                    {"title": "do_stuff", "start-line": 10},
+                    {"title": "other_fn", "start-line": 20}
+                ]
+            }]
+        });
+        let function = json!({"start-line": 5});
+        let smells = extract_code_smells(&review, &function, "do_stuff");
+        assert_eq!(smells.len(), 1);
+        assert_eq!(smells[0]["category"], "Complex Method");
+        // start-line relative to function: 10 - 5 + 1 = 6
+        assert_eq!(smells[0]["start-line"], 6);
+    }
+
+    #[test]
+    fn extract_code_smells_empty_when_no_match() {
+        let review = json!({"review": [{"category": "X", "functions": [{"title": "other", "start-line": 1}]}]});
+        let function = json!({"start-line": 1});
+        let smells = extract_code_smells(&review, &function, "nonexistent");
+        assert!(smells.is_empty());
+    }
+
+    #[test]
+    fn extract_code_smells_handles_missing_review_key() {
+        let review = json!({});
+        let function = json!({"start-line": 1});
+        let smells = extract_code_smells(&review, &function, "foo");
+        assert!(smells.is_empty());
+    }
+
+    #[test]
+    fn resolve_file_path_absolute_stays_unchanged() {
+        let p = resolve_file_path(Path::new("/absolute/path/file.rs"));
+        assert_eq!(p, "/absolute/path/file.rs");
+    }
+
+    #[test]
+    fn resolve_file_path_relative_gets_cwd_prefix() {
+        let p = resolve_file_path(Path::new("relative/file.rs"));
+        // Should be prefixed with current working dir
+        assert!(p.ends_with("relative/file.rs"));
+        assert!(Path::new(&p).is_absolute());
+    }
+
+    #[test]
+    fn make_cli_path_non_docker_with_root() {
+        // When not in docker mode and git root is provided, returns relative path
+        let file_path = "/repo/src/main.rs";
+        let git_root = Path::new("/repo");
+        let result = make_cli_path(file_path, Some(git_root));
+        assert_eq!(result, "src/main.rs");
+    }
+
+    #[test]
+    fn make_cli_path_non_docker_without_root() {
+        let result = make_cli_path("/some/file.rs", None);
+        assert_eq!(result, "/some/file.rs");
+    }
+
+    #[test]
+    fn tool_error_returns_error_result() {
+        let result = tool_error("something went wrong");
+        assert!(result.is_error.unwrap_or(false));
     }
 }

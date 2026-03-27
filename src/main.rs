@@ -850,6 +850,63 @@ mod tests {
         assert!(result.contains("VERSION UPDATE AVAILABLE"));
         assert!(result.contains("body text"));
     }
+
+    #[test]
+    fn help_text_contains_usage_info() {
+        let text = help_text();
+        assert!(text.contains("Usage:"));
+        assert!(text.contains("--help"));
+        assert!(text.contains("--version"));
+    }
+
+    #[test]
+    fn inlined_schema_for_produces_object_with_type() {
+        let schema = inlined_schema_for::<crate::tools::FilePathParam>();
+        assert!(schema.contains_key("type") || schema.contains_key("properties"));
+    }
+
+    #[test]
+    fn resolve_resource_content_returns_how_it_works() {
+        let content = resolve_resource_content(resources::HOW_IT_WORKS_URI).unwrap();
+        assert!(!content.is_empty());
+    }
+
+    #[test]
+    fn resolve_resource_content_returns_business_case() {
+        let content = resolve_resource_content(resources::BUSINESS_CASE_URI).unwrap();
+        assert!(!content.is_empty());
+    }
+
+    #[test]
+    fn resolve_resource_content_returns_error_for_unknown() {
+        let result = resolve_resource_content("unknown://resource");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn build_instructions_standalone_omits_api_tools() {
+        let text = build_instructions(true);
+        assert!(text.contains("code_health_review"));
+        assert!(!text.contains("select_project"));
+    }
+
+    #[test]
+    fn build_instructions_api_mode_includes_all_tools() {
+        let text = build_instructions(false);
+        assert!(text.contains("code_health_review"));
+        assert!(text.contains("select_project"));
+        assert!(text.contains("code_ownership_for_path"));
+    }
+
+    #[test]
+    fn extract_md_title_returns_first_heading() {
+        assert_eq!(extract_md_title("# Hello World\nsome text"), "Hello World");
+    }
+
+    #[test]
+    fn extract_md_title_falls_back_to_resource() {
+        assert_eq!(extract_md_title("no heading here"), "Untitled");
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]

@@ -111,3 +111,97 @@ pub struct SetConfigParam {
     /// The value to store. Pass an empty string to remove the key.
     pub value: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn optional_context_deserializes_with_value() {
+        let json = r#"{"context": "some context"}"#;
+        let p: OptionalContext = serde_json::from_str(json).unwrap();
+        assert_eq!(p.context.as_deref(), Some("some context"));
+    }
+
+    #[test]
+    fn optional_context_deserializes_without_value() {
+        let json = r#"{}"#;
+        let p: OptionalContext = serde_json::from_str(json).unwrap();
+        assert!(p.context.is_none());
+    }
+
+    #[test]
+    fn file_path_param_deserializes() {
+        let json = r#"{"file_path": "/tmp/foo.rs"}"#;
+        let p: FilePathParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.file_path, "/tmp/foo.rs");
+    }
+
+    #[test]
+    fn git_repo_param_deserializes() {
+        let json = r#"{"git_repository_path": "/my/repo"}"#;
+        let p: GitRepoParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.git_repository_path, "/my/repo");
+    }
+
+    #[test]
+    fn change_set_param_deserializes() {
+        let json = r#"{"base_ref": "main", "git_repository_path": "/repo"}"#;
+        let p: ChangeSetParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.base_ref, "main");
+        assert_eq!(p.git_repository_path, "/repo");
+    }
+
+    #[test]
+    fn refactor_param_deserializes() {
+        let json = r#"{"file_path": "/src/lib.rs", "function_name": "do_stuff"}"#;
+        let p: RefactorParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.file_path, "/src/lib.rs");
+        assert_eq!(p.function_name, "do_stuff");
+    }
+
+    #[test]
+    fn project_param_deserializes() {
+        let json = r#"{"project_id": 42}"#;
+        let p: ProjectParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.project_id, 42);
+    }
+
+    #[test]
+    fn project_file_param_deserializes() {
+        let json = r#"{"file_path": "/a/b.rs", "project_id": 7}"#;
+        let p: ProjectFileParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.file_path, "/a/b.rs");
+        assert_eq!(p.project_id, 7);
+    }
+
+    #[test]
+    fn ownership_param_deserializes() {
+        let json = r#"{"project_id": 1, "path": "src/"}"#;
+        let p: OwnershipParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.project_id, 1);
+        assert_eq!(p.path, "src/");
+    }
+
+    #[test]
+    fn get_config_param_deserializes_with_key() {
+        let json = r#"{"key": "access_token"}"#;
+        let p: GetConfigParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.key.as_deref(), Some("access_token"));
+    }
+
+    #[test]
+    fn get_config_param_deserializes_without_key() {
+        let json = r#"{}"#;
+        let p: GetConfigParam = serde_json::from_str(json).unwrap();
+        assert!(p.key.is_none());
+    }
+
+    #[test]
+    fn set_config_param_deserializes() {
+        let json = r#"{"key": "access_token", "value": "abc123"}"#;
+        let p: SetConfigParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.key, "access_token");
+        assert_eq!(p.value, "abc123");
+    }
+}
