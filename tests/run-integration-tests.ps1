@@ -3,7 +3,7 @@
 # Run all integration tests for the CodeScene MCP Server (Windows/PowerShell)
 #
 # This script runs the comprehensive integration test suite which:
-# - Builds the static executable in an isolated environment
+# - Builds the static executable using Cargo (Rust) in the repo root
 # - Moves it outside the repo to mimic real user installations
 # - Tests actual MCP tools with real Code Health analysis
 # - Validates across different scenarios (git, worktrees, platform-specific)
@@ -12,7 +12,7 @@
 # - Python 3.10+ (3.13 recommended)
 # - Git
 # - CS_ACCESS_TOKEN environment variable
-# - Nuitka (pip install nuitka)
+# - Rust/Cargo (for static backend)
 #
 # Usage:
 #   .\run-integration-tests.ps1          # Build and run all tests
@@ -120,17 +120,15 @@ function Test-PythonVersion {
     }
 }
 
-# Check if Nuitka is installed
-function Test-NuitkaInstalled {
-    try {
-        python -c "import nuitka" 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Success "[OK] Nuitka is installed"
-            return $true
-        }
-    } catch { }
-    Write-Warning-Message "[!] Nuitka not installed (required for static backend)"
-    Write-Host "  Install with: pip install nuitka"
+# Check if Cargo/Rust is installed
+function Test-CargoInstalled {
+    if (Test-CommandExists "cargo") {
+        $cargoVersion = cargo --version 2>&1
+        Write-Success "[OK] Cargo: $cargoVersion"
+        return $true
+    }
+    Write-Warning-Message "[!] Cargo not found (required for static backend)"
+    Write-Host "  Install with: https://rustup.rs"
     return $false
 }
 
@@ -172,7 +170,7 @@ function Check-Prerequisites {
     Write-Host "Checking prerequisites..."
     $allOk = (Test-PythonVersion) -and (Test-GitInstalled) -and (Test-AccessToken)
     
-    if ($Backend -eq "static" -and -not (Test-NuitkaInstalled)) { $allOk = $false }
+    if ($Backend -eq "static" -and -not (Test-CargoInstalled)) { $allOk = $false }
     if ($Backend -eq "docker" -and -not (Test-DockerInstalled)) { $allOk = $false }
     
     if (-not $allOk) {

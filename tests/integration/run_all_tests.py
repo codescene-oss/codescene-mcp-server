@@ -3,7 +3,7 @@
 Comprehensive MCP Server Integration Test Suite
 
 This test suite:
-1. Builds the static executable using Nuitka in an isolated directory
+1. Builds the static executable using Cargo in the repo root
 2. Moves the executable OUTSIDE the repo root to avoid picking up bundled CLI
 3. Creates test fixtures with real code samples
 4. Runs the MCP server and invokes actual tools
@@ -25,6 +25,9 @@ Usage:
 
 import argparse
 import os
+import platform
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -34,12 +37,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 from fixtures import get_expected_scores, get_sample_files
 
 from test_utils import (
-    BuildConfig,
+    CargoBackend,
     DockerBackend,
-    ExecutableBuilder,
     MCPClient,
     NpmBackend,
-    NuitkaBackend,
     ServerBackend,
     create_git_repo,
     extract_code_health_score,
@@ -65,8 +66,6 @@ def check_prerequisites() -> tuple[bool, list[str]]:
         issues.append("CS_ACCESS_TOKEN not set (required for actual Code Health analysis)")
 
     # Check for git
-    import shutil
-
     if not shutil.which("git"):
         issues.append("git not found in PATH")
 
@@ -211,8 +210,6 @@ def test_pre_commit_safeguard_with_backend(command: list[str], env: dict, test_d
         test_file.write_text(original_content + "\n# Test modification\n")
 
         # Stage the change
-        import subprocess
-
         subprocess.run(
             ["git", "add", str(test_file)],
             cwd=repo_dir,
@@ -327,40 +324,50 @@ def test_no_bundled_cli_interference_with_backend(command: list[str], env: dict,
 
 def build_executable() -> Path:
     """
-    Build the static executable in an isolated directory.
+    Build the static executable using Cargo.
 
     Returns:
         Path to the built executable
     """
-    import shutil
-
     repo_root = Path(__file__).parent.parent.parent
 
-    # Create build directory outside repo
-    with safe_temp_directory(prefix="cs_mcp_build_") as tmp:
-        build_dir = tmp / "build"
+    print_header("Building Static Executable with Cargo")
 
-        config = BuildConfig(repo_root=repo_root, build_dir=build_dir, python_executable=sys.executable)
+    # Run cargo build --release
+    print("  Running cargo build --release (this may take several minutes)...")
+    sys.stdout.flush()
 
-        builder = ExecutableBuilder(config)
-        binary_path = builder.build()
+    result = subprocess.run(
+        ["cargo", "build", "--release"],
+        cwd=str(repo_root),
+        text=True,
+    )
 
-        # Move executable to a persistent location outside repo
-        test_bin_dir = repo_root.parent / "cs_mcp_test_bin"
-        test_bin_dir.mkdir(exist_ok=True)
+    if result.returncode != 0:
+        raise RuntimeError("Cargo build failed")
 
-        executable_name = binary_path.name
-        final_path = test_bin_dir / executable_name
+    final_path = _copy_binary_to_test_dir(repo_root)
+    print(f"\n\033[92mExecutable ready:\033[0m {final_path}")
+    return final_path
 
-        # Copy instead of move to handle cross-device issues
-        shutil.copy2(binary_path, final_path)
 
-        # Make executable on Unix-like systems
-        if os.name != "nt" and sys.platform != "win32":
-            os.chmod(final_path, 0o755)
+def _copy_binary_to_test_dir(repo_root: Path) -> Path:
+    """Locate the cargo-built binary and copy it outside the repo for testing."""
+    binary_name = "cs-mcp.exe" if platform.system() == "Windows" else "cs-mcp"
+    binary_path = repo_root / "target" / "release" / binary_name
 
-        print(f"\n\033[92mExecutable ready:\033[0m {final_path}")
-        return final_path
+    if not binary_path.exists():
+        raise FileNotFoundError(f"Binary not found at {binary_path} after build")
+
+    test_bin_dir = repo_root.parent / "cs_mcp_test_bin"
+    test_bin_dir.mkdir(exist_ok=True)
+    final_path = test_bin_dir / binary_name
+    shutil.copy2(binary_path, final_path)
+
+    if platform.system() != "Windows":
+        os.chmod(final_path, 0o755)
+
+    return final_path
 
 
 def validate_prerequisites() -> bool:
@@ -400,14 +407,14 @@ def create_backend(args) -> ServerBackend | None:
             return None
         if args.backend == "npm":
             return NpmBackend(executable=args.executable)
-        return NuitkaBackend(executable=args.executable)
+        return CargoBackend(executable=args.executable)
 
     if args.backend == "docker":
         return DockerBackend()
     elif args.backend == "npm":
         return NpmBackend()
     else:
-        return NuitkaBackend()
+        return CargoBackend()
 
 
 def _run_test_module(module_name: str, run_func, backend: ServerBackend) -> tuple[str, bool]:
@@ -514,8 +521,8 @@ def run_all_tests_with_backend(backend: ServerBackend) -> int:
             )
         )
 
-        # Note: For Nuitka backend, also test no bundled CLI interference
-        if isinstance(backend, NuitkaBackend):
+        # Note: For Cargo backend, also test no bundled CLI interference
+        if isinstance(backend, CargoBackend):
             all_results.append(
                 (
                     "No Bundled CLI",

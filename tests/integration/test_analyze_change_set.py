@@ -21,7 +21,7 @@ from fixtures import get_sample_files
 
 from test_utils import (
     MCPClient,
-    NuitkaBackend,
+    CargoBackend,
     ServerBackend,
     create_git_repo,
     extract_result_text,
@@ -318,7 +318,7 @@ def run_analyze_change_set_tests(executable: Path) -> int:
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    backend = NuitkaBackend(executable=executable)
+    backend = CargoBackend(executable=executable)
     return run_analyze_change_set_tests_with_backend(backend)
 
 

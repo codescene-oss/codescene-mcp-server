@@ -191,7 +191,7 @@ seems to hallucinate parts of the path some of the time. We're still investigati
 
 <summary>How do I configure custom SSL certificates?</summary>
 
-If your organization uses an internal CA (Certificate Authority), set the `REQUESTS_CA_BUNDLE` environment variable to point to your CA certificate file (PEM format). The MCP server automatically configures SSL for both its Python components and the embedded Java CLI — you only need to set it once.
+If your organization uses an internal CA (Certificate Authority), set the `REQUESTS_CA_BUNDLE` environment variable to point to your CA certificate file (PEM format). The MCP server automatically configures SSL — you only need to set it once.
 
 The MCP also supports `SSL_CERT_FILE` and `CURL_CA_BUNDLE` as alternatives.
 
@@ -209,8 +209,18 @@ Set the `CS_DISABLE_VERSION_CHECK` environment variable to any non-empty value (
 
 </details>
 
-## Building Locally
+## Building from Source
 
-- [Building the Docker image locally](docs/building-docker-locally.md)
+The MCP server is written in Rust. To build from source:
+
+```bash
+cargo build --release
+```
+
+The binary is produced at `target/release/cs-mcp`.
+
+For more details, see:
+
 - [Building a static executable locally](docs/building-executable-locally.md)
-- [Building Linux executable in Docker (glibc 2.28)](docs/building-linux-executable-with-docker.md)
+- [Building a static Linux executable with musl](docs/building-linux-executable-with-docker.md)
+- [Building the Docker image locally](docs/building-docker-locally.md)

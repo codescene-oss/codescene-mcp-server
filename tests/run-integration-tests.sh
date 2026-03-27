@@ -3,7 +3,7 @@
 # Run all integration tests for the CodeScene MCP Server
 #
 # This script runs the comprehensive integration test suite which:
-# - Builds the static executable in an isolated environment
+# - Builds the static executable using Cargo (Rust) in the repo root
 # - Moves it outside the repo to mimic real user installations
 # - Tests actual MCP tools with real Code Health analysis
 # - Validates across different scenarios (git, worktrees, platform-specific)
@@ -12,7 +12,7 @@
 # - Python 3.10+ (3.13 recommended)
 # - Git
 # - CS_ACCESS_TOKEN environment variable
-# - Nuitka (pip install nuitka)
+# - Rust/Cargo (for static backend)
 #
 # Usage:
 #   ./run-integration-tests.sh          # Build and run all tests
@@ -63,14 +63,15 @@ check_prerequisites() {
         echo -e "${GREEN}✓ CS_ACCESS_TOKEN is set${NC}"
     fi
     
-    # Check Nuitka (only required for static backend)
+    # Check Cargo/Rust (only required for static backend)
     if [ "$BACKEND" = "static" ]; then
-        if ! python3 -c "import nuitka" 2>/dev/null; then
-            echo -e "${YELLOW}! Nuitka not installed (required for static backend)${NC}"
-            echo "  Install with: pip install nuitka"
+        if ! command -v cargo &> /dev/null; then
+            echo -e "${YELLOW}! Cargo not found (required for static backend)${NC}"
+            echo "  Install with: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
             missing=1
         else
-            echo -e "${GREEN}✓ Nuitka is installed${NC}"
+            local cargo_version=$(cargo --version | awk '{print $2}')
+            echo -e "${GREEN}✓ Cargo: $cargo_version${NC}"
         fi
     fi
     

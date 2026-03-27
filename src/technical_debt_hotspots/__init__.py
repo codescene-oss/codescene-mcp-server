@@ -1,1 +1,0 @@
-from .technical_debt_hotspots import TechnicalDebtHotspots

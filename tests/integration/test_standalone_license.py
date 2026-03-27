@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from test_utils import (
     MCPClient,
-    NuitkaBackend,
+    CargoBackend,
     ServerBackend,
     create_git_repo,
     print_header,
@@ -172,7 +172,7 @@ def test_pat_exposes_all_tools(server: ServerParams, env: dict) -> bool:
 
 
 def run_standalone_license_tests(executable: Path) -> int:
-    backend = NuitkaBackend(executable=executable)
+    backend = CargoBackend(executable=executable)
     return run_standalone_license_tests_with_backend(backend)
 
 

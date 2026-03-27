@@ -4,6 +4,7 @@ description: Write an end-to-end integration test for the CodeScene MCP Server, 
 metadata:
   audience: contributors
   language: python
+  server_language: rust
 ---
 
 ## Purpose
@@ -12,11 +13,12 @@ Use this skill when adding an end-to-end integration test for a new or existing 
 
 ## Project Context
 
+- **MCP Server:** Rust binary built with `cargo build --release`
 - **Test framework:** Custom plain-Python scripts (no pytest); exit codes `0` (pass) / `1` (fail)
 - **Test location:** `tests/integration/`
 - **Shell entry points:** `tests/run-integration-tests.sh` (Linux/macOS), `tests/run-integration-tests.ps1` (Windows)
 - **Central orchestrator:** `tests/integration/run_all_tests.py` — builds the executable/image and runs every registered test module
-- **Backend abstraction:** `ServerBackend` ABC with two implementations: `NuitkaBackend` (compiled executable) and `DockerBackend` (container). Every test must work with both.
+- **Backend abstraction:** `ServerBackend` ABC with two implementations: `CargoBackend` (compiled Rust executable) and `DockerBackend` (container). Every test must work with both.
 - **Key environment variables:** `CS_ACCESS_TOKEN` (required), `CS_ONPREM_URL`, `CS_DISABLE_VERSION_CHECK`, `CS_MOUNT_PATH` (docker only)
 
 ### Infrastructure modules (all in `tests/integration/`)
@@ -24,7 +26,7 @@ Use this skill when adding an end-to-end integration test for a new or existing 
 | Module | Role |
 |---|---|
 | `mcp_client.py` | `MCPClient` class — starts the MCP server as a subprocess, communicates via JSON-RPC over stdio |
-| `server_backends.py` |`NuitkaBackend`, `DockerBackend` |
+| `server_backends.py` | `CargoBackend`, `DockerBackend` |
 | `file_utils.py` | `create_test_environment()`, `create_git_repo()`, `safe_temp_directory()`, `cleanup_dir()` |
 | `response_parsers.py` | `extract_result_text()`, `extract_code_health_score()` |
 | `test_output.py` | `print_header()`, `print_test()`, `print_summary()` |
@@ -59,7 +61,7 @@ from fixtures import get_sample_files
 
 from test_utils import (
     MCPClient,
-    NuitkaBackend,
+    CargoBackend,
     ServerBackend,
     create_git_repo,
     extract_result_text,
@@ -73,7 +75,7 @@ from test_utils import (
 Conventions:
 - The `sys.path.insert` line is required — integration tests are not installed as a package.
 - Import only what you need from `test_utils`. All infrastructure modules are re-exported from there.
-- `NuitkaBackend` is only needed for the standalone entry point (step 5). The test logic itself is backend-agnostic — it receives a `ServerBackend` and uses `backend.get_command()` / `backend.get_env()`.
+- `CargoBackend` is only needed for the standalone entry point (step 5). The test logic itself is backend-agnostic — it receives a `ServerBackend` and uses `backend.get_command()` / `backend.get_env()`.
 - The module docstring should explain **what** the test validates and **why** (e.g., what bug it prevents or what user scenario it covers).
 
 ### 2. Add fixtures if needed
@@ -203,7 +205,7 @@ Conventions:
 - **Report every assertion via `print_test()`** — this is how results appear in the test output.
 - **Return a single `bool`** — `True` if all assertions passed, `False` otherwise.
 
-### 5. Add the NuitkaBackend convenience wrapper
+### 5. Add the CargoBackend convenience wrapper
 
 This lets the test file run standalone with a pre-built executable:
 
@@ -218,7 +220,7 @@ def run_<feature>_tests(executable: Path) -> int:
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    backend = NuitkaBackend(executable=executable)
+    backend = CargoBackend(executable=executable)
     return run_<feature>_tests_with_backend(backend)
 ```
 
@@ -266,7 +268,7 @@ all_results.append(_run_test_module("<Feature> Tests", run_<feature>_tests_with_
 The simplest existing test to reference is `tests/integration/test_business_case.py`. It demonstrates:
 - Three focused test functions with the standard MCPClient lifecycle
 - Backend-aware runner collecting results into `print_summary()`
-- NuitkaBackend convenience wrapper + standalone `main()` entry point
+- CargoBackend convenience wrapper + standalone `main()` entry point
 - Regression testing pattern (checking for specific error strings like `"no such file or directory"`)
 
 Refer to `test_business_case.py` as the minimal template for any new test module.
@@ -275,12 +277,16 @@ Refer to `test_business_case.py` as the minimal template for any new test module
 
 Run the full integration test suite to verify your new test is picked up and passes. Docker builds faster, so start there for a quicker feedback cycle:
 
+**Prerequisites:**
+- Rust toolchain installed (`rustup`, `cargo`)
+- Docker installed (for Docker backend)
+
 **Linux/macOS:**
 ```bash
 # Docker backend (faster build, try this first)
 ./tests/run-integration-tests.sh --docker
 
-# Static/Nuitka backend (full release-like validation)
+# Static/Cargo backend (full release-like validation, uses `cargo build --release`)
 ./tests/run-integration-tests.sh
 ```
 
@@ -289,7 +295,7 @@ Run the full integration test suite to verify your new test is picked up and pas
 # Docker backend (faster build, try this first)
 .\tests\run-integration-tests.ps1 -Docker
 
-# Static/Nuitka backend (full release-like validation)
+# Static/Cargo backend (full release-like validation, uses `cargo build --release`)
 .\tests\run-integration-tests.ps1
 ```
 
@@ -330,7 +336,7 @@ Before considering the test complete:
 - [ ] All test functions use `print_header` and `print_test` for formatted output
 - [ ] Results collected as `list[tuple[str, bool]]` and passed to `print_summary()`
 - [ ] Standalone `main()` entry point accepts executable path from `sys.argv[1]`
-- [ ] NuitkaBackend convenience wrapper provided
+- [ ] CargoBackend convenience wrapper provided
 - [ ] Test registered in `run_all_tests.py` via `_run_test_module()`
 - [ ] Fixtures added to `fixtures.py` if new code samples are needed
 - [ ] Full suite passes with Docker: `./tests/run-integration-tests.sh --docker`

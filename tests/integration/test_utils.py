@@ -7,7 +7,7 @@ The actual implementations are in:
 - test_output.py: Print utilities (print_header, print_test, print_summary)
 - mcp_client.py: MCPClient for communicating with MCP servers
 - response_parsers.py: extract_result_text, extract_code_health_score
-- server_backends.py: ServerBackend, NuitkaBackend, DockerBackend, BuildConfig, ExecutableBuilder
+- server_backends.py: ServerBackend, CargoBackend, DockerBackend
 - file_utils.py: create_test_environment, create_git_repo, cleanup_dir, safe_temp_directory
 """
 
@@ -34,11 +34,9 @@ from response_parsers import (
 
 # Re-export from server_backends
 from server_backends import (
-    BuildConfig,
+    CargoBackend,
     DockerBackend,
-    ExecutableBuilder,
     NpmBackend,
-    NuitkaBackend,
     ServerBackend,
 )
 from test_output import (
@@ -61,9 +59,7 @@ __all__ = [
     "extract_code_health_score",
     # server_backends
     "ServerBackend",
-    "BuildConfig",
-    "ExecutableBuilder",
-    "NuitkaBackend",
+    "CargoBackend",
     "NpmBackend",
     "DockerBackend",
     # file_utils

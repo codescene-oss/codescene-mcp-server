@@ -4,4 +4,4 @@ __pycache__
 npm/node_modules/
 npm/coverage/
 npm/.cache/
-rust/target/
+target/

@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from test_utils import (
     MCPClient,
-    NuitkaBackend,
+    CargoBackend,
     ServerBackend,
     create_git_repo,
     extract_result_text,
@@ -162,8 +162,8 @@ def _build_test_cases(repo_dir: Path) -> list[TokenGuardTestCase]:
 
 
 def run_require_access_token_tests(executable: Path) -> int:
-    """Run all access token guard tests with a Nuitka executable."""
-    backend = NuitkaBackend(executable=executable)
+    """Run all access token guard tests with a Cargo executable."""
+    backend = CargoBackend(executable=executable)
     return run_require_access_token_tests_with_backend(backend)
 
 

@@ -3,7 +3,7 @@ name: create-mcp-tool
 description: Scaffold a new MCP tool for the CodeScene MCP Server following the project's established patterns for directory structure, dependency injection, decorators, testing, and registration.
 metadata:
   audience: contributors
-  language: python
+  language: rust
 ---
 
 ## Purpose
@@ -12,176 +12,240 @@ Use this skill when creating a new MCP tool in the CodeScene MCP Server project.
 
 ## Project Context
 
-- **Framework:** FastMCP (`from fastmcp import FastMCP`)
-- **Language:** Python
+- **Framework:** `rmcp` (Rust MCP SDK) with `#[tool(tool_box)]` macros
+- **Language:** Rust
 - **Source root:** `src/`
-- **Server entry point:** `src/cs_mcp_server.py`
-- **Shared utilities:** `src/utils/` (re-exported from `src/utils/__init__.py`)
+- **Server entry point:** `src/main.rs` (contains `CodeSceneServer` struct and tool method bindings)
+- **Tools directory:** `src/tools/` with `mod.rs` for module declarations and parameter type definitions
+- **Dependency injection:** Via the `CodeSceneServer` struct, which holds `cli_runner: Arc<dyn CliRunner>` and `http_client: Arc<dyn HttpClient>` trait objects
 
 ## Step-by-Step
 
-### 1. Create the tool directory
+### 1. Create the tool file
 
-Create a new directory under `src/` named after the tool using snake_case:
+Create a new `.rs` file in `src/tools/` named after the tool using snake_case:
 
 ```
-src/<tool_name>/
-  __init__.py
-  <tool_name>.py
-  test_<tool_name>.py
+src/tools/<tool_name>.rs
 ```
 
-### 2. Choose a dependency pattern
+### 2. Define the parameter struct (if needed)
 
-Tools receive their external dependencies via injection for testability. Pick the pattern that matches your tool's data source:
+If the tool needs parameters beyond what already exists, add a new struct to `src/tools/mod.rs`:
 
-| Dependency | Signature | When to use |
+```rust
+/// Parameters for <description of what the tool does>.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct MyToolParam {
+    /// Description of this field for the JSON Schema (visible to LLM clients).
+    pub some_field: String,
+
+    /// Optional fields use Option<T> with #[serde(default)].
+    #[serde(default)]
+    pub optional_field: Option<String>,
+}
+```
+
+Existing parameter structs that may already fit your tool:
+
+| Struct | Fields | When to use |
 |---|---|---|
-| `analyze_code_fn` | `Callable[[str], str]` | Analyze a local source file via the CodeScene CLI |
-| `run_local_tool_fn` | `Callable[..., str]` | Run a local tool subprocess (pre-commit safeguard, change-set analysis, auto-refactor) |
-| `query_api_list_fn` | `Callable[[str, dict, str], list]` | Query the CodeScene cloud/on-prem API with pagination |
-| `post_refactor_fn` | `Callable[..., str]` | POST to the refactoring API endpoint |
+| `FilePathParam` | `file_path: String` | Single-file analysis tools |
+| `GitRepoParam` | `git_repository_path: String` | Repository-level tools |
+| `ChangeSetParam` | `base_ref: String`, `git_repository_path: String` | Branch diff tools |
+| `RefactorParam` | `file_path: String`, `function_name: String` | Function-level refactoring |
+| `ProjectParam` | `project_id: i64` | Project-scoped API tools |
+| `ProjectFileParam` | `file_path: String`, `project_id: i64` | Project + file API tools |
+| `OptionalContext` | `context: Option<String>` | Tools that take no meaningful input |
+| `GetConfigParam` | `key: Option<String>` | Config read |
+| `SetConfigParam` | `key: String`, `value: String` | Config write |
 
-A tool may combine multiple dependencies (see `AutoRefactor` which uses both `post_refactor_fn` and `run_local_tool_fn`).
+Reuse an existing struct when possible. Only define a new one if no existing struct matches.
 
-### 3. Define the deps TypedDict and tool class
+### 3. Add the module declaration
 
-```python
-from collections.abc import Callable
-from typing import TypedDict
+Add a `pub mod` line in `src/tools/mod.rs`, keeping the list alphabetically sorted:
 
-from utils import track, with_version_check
-
-
-class MyToolDeps(TypedDict):
-    analyze_code_fn: Callable[[str], str]
-
-
-class MyTool:
-    def __init__(self, mcp_instance, deps: MyToolDeps):
-        self.deps = deps
-
-        # Register each public tool method with the MCP server
-        mcp_instance.tool(self.my_tool_method)
+```rust
+pub mod my_tool;
 ```
 
-Key rules:
-- The constructor stores `deps` on `self` and registers tool methods via `mcp_instance.tool(self.method)`.
-- A single class can register multiple tool methods (see `TechnicalDebtHotspots` which registers two).
-- Keep private helpers as separate methods prefixed with `_`.
+### 4. Implement the tool handler
 
-### 4. Implement the tool method
+Create `src/tools/<tool_name>.rs` with a `handle` function:
 
-```python
-    @with_version_check
-    @track("my-tool-event")
-    def my_tool_method(self, file_path: str) -> str:
-        """
-        One-line summary of what this tool does.
+```rust
+use std::path::Path;
 
-        Detailed description that becomes the MCP tool description visible
-        to LLM clients. Be specific about inputs, outputs, and how the
-        LLM should present results to users.
+use rmcp::model::{CallToolResult, Content};
+use rmcp::ErrorData;
 
-        Args:
-            file_path: The absolute path to the source code file.
-        Returns:
-            A description of what the return value contains and how
-            the LLM should interpret/display it.
-        """
-        try:
-            result = self.deps["analyze_code_fn"](file_path)
-            return f"Result: {result}"
-        except Exception as e:
-            from utils import track_error
-            track_error("my-tool-event", e)
-            return f"Error: {e}"
+use crate::docker;
+use crate::event_properties;
+use crate::tools::common::{run_review, tool_error};
+use crate::tools::FilePathParam;
+use crate::CodeSceneServer;
+
+pub(crate) async fn handle(
+    server: &CodeSceneServer,
+    params: FilePathParam,
+) -> Result<CallToolResult, ErrorData> {
+    // 1. Check for access token
+    if let Some(r) = server.require_token() {
+        return Ok(r);
+    }
+
+    // 2. Trigger background version check
+    server.version_checker.check_in_background();
+
+    // 3. Adapt paths for Docker if needed
+    let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
+
+    // 4. Call the CLI or HTTP client via the server's injected dependencies
+    let result = run_review(Path::new(&file_path), &*server.cli_runner).await;
+
+    // 5. Handle the result
+    match result {
+        Ok(output) => {
+            // Track success event
+            let props = event_properties::score_properties(Path::new(&params.file_path), None);
+            server.track("my-tool", props);
+
+            // Format and return
+            let text = server.maybe_version_warning(&output).await;
+            Ok(CallToolResult::success(vec![Content::text(text)]))
+        }
+        Err(e) => {
+            server.track_err("my-tool", &e.to_string());
+            Ok(tool_error(&format!("Error: {e}")))
+        }
+    }
+}
+```
+
+Key conventions:
+- **The handler is a free `async fn`**, not a method on a struct. It receives `&CodeSceneServer` and the parameter struct.
+- **Always check for the access token first** with `server.require_token()`.
+- **Always trigger the background version check** with `server.version_checker.check_in_background()`.
+- **Use `docker::adapt_path_for_docker()`** when the tool receives file paths from the client.
+- **Track events** with `server.track()` on success and `server.track_err()` on failure.
+- **Use `server.maybe_version_warning()`** to prepend version update notices to the response.
+- **Return `tool_error()`** from `crate::tools::common` for error results (sets `is_error = true`).
+- **Return type is always `Result<CallToolResult, ErrorData>`.**
+
+Choose the right dependency based on what the tool does:
+
+| Dependency | Access via | When to use |
+|---|---|---|
+| `server.cli_runner` | `Arc<dyn CliRunner>` | Run the CodeScene CLI (code review, pre-commit, change-set, auto-refactor) |
+| `server.http_client` | `Arc<dyn HttpClient>` | Make HTTP requests to CodeScene cloud/on-prem API |
+| `server.config_data` | `Arc<ConfigData>` | Read server configuration values |
+
+### 5. Wire the tool method on `CodeSceneServer`
+
+In `src/main.rs`, inside the `#[tool_router] impl CodeSceneServer` block, add a new method:
+
+```rust
+#[tool(
+    description = "One-line summary of what this tool does.\nAdditional detail on inputs, outputs, and how the LLM should present results.",
+    input_schema = inlined_schema_for::<MyToolParam>()
+)]
+async fn my_tool(
+    &self,
+    Parameters(params): Parameters<MyToolParam>,
+) -> Result<CallToolResult, ErrorData> {
+    tools::my_tool::handle(self, params).await
+}
 ```
 
 Conventions:
-- **Decorator order matters:** `@with_version_check` outermost, then `@track("event-name")`.
-- **Return type is always `str`.**
-- **The docstring is critical** -- it becomes the tool description that LLM clients see. Follow `dev-docs/mcp-tool-description-guidelines.md` and include all six required components: Purpose, Guidelines, Limitations, Parameter Explanation, Length/Completeness, and Examples.
-- **Error handling:** Wrap API/CLI calls in try/except, use `track_error` to report failures, and return a user-friendly error string.
+- **The `description` string is critical** — it becomes the tool description visible to LLM clients. Be specific about inputs, outputs, and how the LLM should present results.
+- **The method name becomes the MCP tool name** as seen by clients.
+- **Use `inlined_schema_for::<ParamType>()`** to generate the JSON Schema for the parameter struct.
+- **The method body is a one-liner** that delegates to the handler in `src/tools/<tool_name>.rs`.
+- **For tools with no parameters**, omit `input_schema` and `Parameters`:
+  ```rust
+  #[tool(description = "...")]
+  async fn my_tool(&self) -> Result<CallToolResult, ErrorData> {
+      tools::my_tool::handle(self).await
+  }
+  ```
 
-### 5. Create `__init__.py`
+Also add the parameter struct to the import at the top of `src/main.rs` if you defined a new one:
 
-Re-export the class and deps TypedDict:
-
-```python
-from .<tool_name> import MyTool, MyToolDeps
+```rust
+use crate::tools::{
+    ChangeSetParam, FilePathParam, GetConfigParam, GitRepoParam, MyToolParam,
+    OptionalContext, OwnershipParam, ProjectFileParam, ProjectParam,
+    RefactorParam, SetConfigParam,
+};
 ```
 
-### 6. Write tests
+### 6. Write inline tests
 
-Use `unittest` with mocked dependencies and a throwaway `FastMCP("Test")` instance:
+Add a `#[cfg(test)]` module at the bottom of `src/tools/<tool_name>.rs`:
 
-```python
-import json
-import unittest
+```rust
+#[cfg(test)]
+mod tests {
+    use rmcp::handler::server::wrapper::Parameters;
 
-from fastmcp import FastMCP
+    use crate::tests::{
+        assert_error_contains, assert_success_contains, assert_token_error, clear_token,
+        make_cli_mock_server, make_server, set_token, MockCliRunner,
+    };
+    use crate::tools::FilePathParam;
 
-from .<tool_name> import MyTool
+    #[tokio::test]
+    async fn rejects_missing_token() {
+        let _g = clear_token();
+        let params = FilePathParam {
+            file_path: "/tmp/f.rs".to_string(),
+        };
+        let result = make_server(false)
+            .my_tool(Parameters(params))
+            .await
+            .unwrap();
+        assert_token_error(&result);
+    }
 
+    #[tokio::test]
+    async fn success_returns_expected_content() {
+        let _g = set_token("tok");
+        let server = make_cli_mock_server(MockCliRunner::with_ok(r#"{"score":8.5,"review":[]}"#));
+        let params = FilePathParam {
+            file_path: "/tmp/test.rs".to_string(),
+        };
+        let result = server.my_tool(Parameters(params)).await.unwrap();
+        assert_success_contains(&result, "expected content");
+    }
 
-class TestMyTool(unittest.TestCase):
-    def test_success_case(self):
-        def mock_analyze_code(file_path: str):
-            return json.dumps({"score": 9.5})
-
-        instance = MyTool(FastMCP("Test"), {"analyze_code_fn": mock_analyze_code})
-        result = instance.my_tool_method("test.py")
-
-        self.assertIn("9.5", result)
-
-    def test_error_case(self):
-        def mock_analyze_code(file_path: str):
-            return json.dumps({})
-
-        instance = MyTool(FastMCP("Test"), {"analyze_code_fn": mock_analyze_code})
-        result = instance.my_tool_method("test.py")
-
-        self.assertIn("Error", result)
+    #[tokio::test]
+    async fn error_returns_tool_error() {
+        let _g = set_token("tok");
+        let server = make_cli_mock_server(MockCliRunner::with_err(1, "tool failed"));
+        let params = FilePathParam {
+            file_path: "/tmp/test.rs".to_string(),
+        };
+        let result = server.my_tool(Parameters(params)).await.unwrap();
+        assert_error_contains(&result, "tool failed");
+    }
+}
 ```
 
 Key patterns:
-- Mock each dependency function to return controlled data.
-- Test both happy path and error/empty cases.
-- Instantiate the tool class with `FastMCP("Test")` -- this registers the tool but does not start a server.
+- **Use `set_token()` / `clear_token()`** — these acquire a mutex guard (`TokenGuard`) that serializes tests touching `CS_ACCESS_TOKEN`. Always bind the guard to `_g` so it lives for the test's duration.
+- **Use `MockCliRunner`** to inject controlled CLI responses:
+  - `MockCliRunner::with_ok(output)` — simulates successful CLI execution
+  - `MockCliRunner::with_err(code, stderr)` — simulates CLI failure
+  - `MockCliRunner::with_responses(vec![...])` — queues multiple responses for tools that make multiple CLI calls
+- **Use `make_cli_mock_server()`** to create a `CodeSceneServer` with mocked CLI and default HTTP.
+- **Use `make_server_with_mocks()`** when you need to mock both CLI and HTTP.
+- **Call the tool method directly** on the server instance: `server.my_tool(Parameters(params))`.
+- **Use assertion helpers**: `assert_success_contains`, `assert_error_contains`, `assert_token_error`, `assert_standalone_error`.
+- **Test at minimum**: missing token rejection, success path, and error path.
 
-### 7. Register in `cs_mcp_server.py`
-
-1. Add the import at the top of `src/cs_mcp_server.py`:
-
-```python
-from my_tool import MyTool
-```
-
-2. Instantiate the tool in the `# tools` section, passing the `mcp` instance and the real dependency functions:
-
-```python
-MyTool(mcp, {"analyze_code_fn": analyze_code})
-```
-
-The available real dependency functions are imported from `utils` at the top of `cs_mcp_server.py`:
-- `analyze_code` -- for `analyze_code_fn`
-- `run_local_tool` -- for `run_local_tool_fn`
-- `query_api_list` -- for `query_api_list_fn`
-- `post_refactor` -- for `post_refactor_fn`
-
-## Canonical Example: `code_health_score`
-
-The simplest existing tool to reference is `src/code_health_score/`. It demonstrates:
-- Single dependency (`analyze_code_fn`)
-- Single tool method with both decorators
-- Private helper method
-- Clean `__init__.py` re-export
-- Unit tests with mocked deps
-
-Refer to `src/code_health_score/score_calculator.py` as the minimal template.
-
-### 8. Validate Code Health and fix any issues
+### 7. Validate Code Health and fix any issues
 
 After the tool is implemented, tested, and registered, run the CodeScene Code Health tools to ensure the new code meets quality standards. **Do not consider the tool complete until Code Health passes without regressions.**
 
@@ -195,7 +259,7 @@ Choose the appropriate scope:
 
 Recommended workflow:
 
-1. Run `code_health_review` on each new/modified file (at minimum `src/<tool_name>/<tool_name>.py`).
+1. Run `code_health_review` on each new/modified file (at minimum `src/tools/<tool_name>.rs`).
 2. If any code smells or regressions are reported:
    - Refactor the flagged code to resolve the issues.
    - Re-run `code_health_review` after each fix to confirm improvement.
@@ -204,19 +268,32 @@ Recommended workflow:
 
 **Target: Code Health 10.0.** Scores of 9+ are not "good enough" — aim for optimal.
 
+## Canonical Example: `code_health_score`
+
+The simplest existing tool to reference is `src/tools/code_health_score.rs`. It demonstrates:
+- Single parameter (`FilePathParam`)
+- Free `async fn handle()` receiving `&CodeSceneServer` and params
+- Token check, version check, Docker path adaptation
+- CLI call via `server.cli_runner`
+- Event tracking on success and error
+- Version warning prepended to output
+- Inline `#[cfg(test)]` module with mocked dependencies
+
+Refer to `src/tools/code_health_score.rs` as the minimal template.
+
 ## Checklist
 
 Before considering the tool complete:
 
-- [ ] Tool directory created under `src/` with `__init__.py`, implementation, and tests
-- [ ] `TypedDict` deps defined for dependency injection
-- [ ] Tool method(s) decorated with `@with_version_check` (outer) and `@track` (inner)
-- [ ] Docstring follows `dev-docs/mcp-tool-description-guidelines.md` (all six components)
-- [ ] Return type is `str`
-- [ ] Error handling with `track_error` for failures
-- [ ] Tests cover success and error paths using mocked deps
-- [ ] Tool imported and instantiated in `src/cs_mcp_server.py`
-- [ ] Run tests with `python -m pytest src/<tool_name>/`
+- [ ] Tool file created at `src/tools/<tool_name>.rs`
+- [ ] Parameter struct defined in `src/tools/mod.rs` (or existing struct reused)
+- [ ] Module declared in `src/tools/mod.rs` (`pub mod <tool_name>;`)
+- [ ] Handler function `pub(crate) async fn handle()` implemented with token check, version check, and error handling
+- [ ] Tool method added to `#[tool_router] impl CodeSceneServer` in `src/main.rs` with `#[tool(description = "...")]`
+- [ ] Parameter struct imported in `src/main.rs` (if new)
+- [ ] Inline tests cover: missing token, success path, and error path
+- [ ] Tests use `MockCliRunner` / `MockHttpClient` for dependency injection
+- [ ] Run tests with `cargo test`
 - [ ] `code_health_review` passes on all new/modified files with no code smells
 - [ ] `pre_commit_code_health_safeguard` reports no regressions before commit
 - [ ] `analyze_change_set` reports no regressions before opening a PR

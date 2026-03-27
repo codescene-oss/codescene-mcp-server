@@ -30,7 +30,7 @@ from fixtures import get_sample_files
 from test_utils import (
     DockerBackend,
     MCPClient,
-    NuitkaBackend,
+    CargoBackend,
     ServerBackend,
     create_git_repo,
     extract_code_health_score,
@@ -102,8 +102,8 @@ class _FakeAnalyticsHandler(BaseHTTPRequestHandler):
 
 
 def run_analytics_tracking_tests(executable: Path) -> int:
-    """Run all analytics tracking tests using a Nuitka executable."""
-    backend = NuitkaBackend(executable=executable)
+    """Run all analytics tracking tests using a Cargo executable."""
+    backend = CargoBackend(executable=executable)
     return run_analytics_tracking_tests_with_backend(backend)
 
 
@@ -517,7 +517,7 @@ def _check_common_properties(props: dict) -> bool:
     has_instance_id = bool(props.get("instance-id"))
     print_test("Has instance-id", has_instance_id, f"Value: {props.get('instance-id', 'MISSING')}")
 
-    has_environment = props.get("environment") in ("docker", "nuitka", "source", "binary")
+    has_environment = props.get("environment") in ("docker", "source", "binary")
     print_test("Has valid environment", has_environment, f"Value: {props.get('environment', 'MISSING')}")
 
     has_version = bool(props.get("version"))

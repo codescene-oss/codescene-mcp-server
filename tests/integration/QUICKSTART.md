@@ -39,7 +39,7 @@ make test-integration-worktree
 Tests can run with different backends:
 
 ```bash
-# Static backend (default) - builds static executable with Nuitka
+# Static backend (default) - builds static executable with Cargo
 ./tests/run-integration-tests.sh
 
 # Docker backend - runs in container (Linux/macOS only)
@@ -50,26 +50,26 @@ Tests can run with different backends:
 
 ### Linux/macOS
 ```bash
-# 1. Install Nuitka
-pip install nuitka
+# 1. Install Rust toolchain
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # 2. Set CodeScene token
 export CS_ACCESS_TOKEN="your_token_here"
 
-# Note: CS CLI is downloaded automatically if not present
+# Note: CS CLI is downloaded automatically during cargo build
 # Note: git-subtree tests will be skipped if git-subtree is not installed
 #       (it's a contrib command, not always available by default)
 ```
 
 ### Windows
 ```powershell
-# 1. Install Nuitka
-pip install nuitka
+# 1. Install Rust toolchain
+# Download and run rustup-init.exe from https://rustup.rs
 
 # 2. Set CodeScene token
 $env:CS_ACCESS_TOKEN="your_token_here"
 
-# Note: CS CLI is downloaded automatically if not present
+# Note: CS CLI is downloaded automatically during cargo build
 ```
 
 

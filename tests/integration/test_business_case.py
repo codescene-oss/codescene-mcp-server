@@ -10,10 +10,10 @@ This test suite validates:
 2. The response contains expected business case metrics (defects, development time)
 3. The regression coefficient data files (defects.json, time.json) are properly
    bundled and accessible at runtime (preventing the "No such file or directory"
-   error that occurs when these files are not included in the Nuitka build)
+   error that occurs when these files are not embedded in the binary)
 
-Issue this prevents: When the s_curve/regression/*.json files are not included
-in the Nuitka build, the tool fails with:
+Issue this prevents: When the regression/*.json files are not embedded
+in the binary, the tool fails with:
     "No such file or directory (os error 2): .../regression/defects.json"
 """
 
@@ -27,7 +27,7 @@ from fixtures import get_sample_files
 
 from test_utils import (
     MCPClient,
-    NuitkaBackend,
+    CargoBackend,
     ServerBackend,
     create_git_repo,
     extract_result_text,
@@ -48,7 +48,7 @@ def run_business_case_tests(executable: Path) -> int:
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    backend = NuitkaBackend(executable=executable)
+    backend = CargoBackend(executable=executable)
     return run_business_case_tests_with_backend(backend)
 
 
@@ -193,11 +193,11 @@ def test_business_case_no_file_errors(command: list[str], env: dict, repo_dir: P
     Test that business case does not fail with file not found errors.
 
     This is a regression test for the bug where regression coefficient files
-    (defects.json, time.json) were not included in the Nuitka build, causing:
+    (defects.json, time.json) were not embedded in the binary, causing:
         "No such file or directory (os error 2): .../regression/defects.json"
 
-    The fix was to add --include-data-dir for the s_curve/regression directory
-    in the Makefile Nuitka build command.
+    The fix was to embed these files at compile time via build.rs
+    include_bytes! directives.
     """
     print_header("Test: Business Case No Regression File Errors")
 
@@ -230,9 +230,9 @@ def test_business_case_no_file_errors(command: list[str], env: dict, repo_dir: P
 
         if has_file_error:
             print("\n  ERROR: Regression coefficient files not found!")
-            print("  This likely means the s_curve/regression/*.json files are not")
-            print("  included in the Nuitka build. Check the Makefile for:")
-            print("    --include-data-dir=./src/code_health_refactoring_business_case/s_curve/regression=...")
+            print("  This likely means the regression/*.json files are not")
+            print("  embedded in the binary. Check build.rs for:")
+            print("    include_bytes! or similar data embedding logic")
             return False
 
         # Additional check: response should not contain traceback
@@ -261,7 +261,7 @@ def main() -> int:
     print_header("Business Case Integration Tests")
     print("\nThese tests verify the code_health_refactoring_business_case tool")
     print("works correctly, including that regression coefficient files are")
-    print("properly bundled in the Nuitka executable.")
+    print("properly bundled in the executable.")
 
     return run_business_case_tests(executable)
 

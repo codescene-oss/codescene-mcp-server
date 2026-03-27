@@ -1,19 +1,10 @@
-create-executable:
-	python3.13 -m nuitka --onefile \
-	--assume-yes-for-downloads \
-	--lto=yes \
-	--company-name="CodeScene AB" \
-	--product-name="CodeHealth MCP" \
-	--onefile-tempdir-spec="{CACHE_DIR}/codescene-mcp-server" \
-	--noinclude-pytest-mode=nofollow \
-	--noinclude-unittest-mode=nofollow \
-	--noinclude-setuptools-mode=nofollow \
-	--noinclude-pydoc-mode=nofollow \
-	--include-data-dir=./src/docs=src/docs \
-	--include-data-dir=./src/code_health_refactoring_business_case/s_curve/regression=code_health_refactoring_business_case/s_curve/regression \
-	--include-data-files=./cs=cs \
-	--output-filename=cs-mcp \
-	src/cs_mcp_server.py
+.PHONY: build
+build:
+	cargo build --release
+
+.PHONY: test
+test:
+	cargo test
 
 .PHONY: test-integration
 test-integration:
@@ -53,7 +44,7 @@ test-npm-package:
 .PHONY: test-all
 test-all:
 	@echo "Running unit tests..."
-	python3 -m pytest src/
+	cargo test
 	@echo ""
 	@echo "Running npm unit tests..."
 	cd npm && npm test
@@ -63,16 +54,16 @@ test-all:
 
 .PHONY: lint
 lint:
-	ruff check .
+	cargo clippy -- -D warnings
 
 .PHONY: lint-fix
 lint-fix:
-	ruff check . --fix
+	cargo clippy --fix --allow-dirty
 
 .PHONY: format
 format:
-	ruff format .
+	cargo fmt
 
 .PHONY: format-check
 format-check:
-	ruff format . --check
+	cargo fmt -- --check

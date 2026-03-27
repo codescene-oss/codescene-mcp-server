@@ -1,48 +1,51 @@
-# Building Linux Executables in Docker (glibc 2.28)
+# Building a Static Linux Executable
 
-This project includes a local Docker-based build flow for Linux binaries.
-It uses manylinux 2.28 so you can iterate locally and reuse the exact same
-build command in CI.
+Rust can produce fully static Linux binaries using the `musl` target. This avoids any glibc version dependencies.
 
-## Prerequisites
+## Building locally (with musl)
 
-- Docker
-- A checked-out repository root
-
-## Build locally
-
-From the repository root:
+1. Add the musl target:
 
 ```sh
-./scripts/build-linux-exe.sh amd64
+rustup target add x86_64-unknown-linux-musl
 ```
 
-Or for ARM64:
+2. Install musl tools (Ubuntu/Debian):
 
 ```sh
-./scripts/build-linux-exe.sh aarch64
+sudo apt-get install musl-tools
 ```
 
-This produces one of these files in the repository root:
-
-- `cs-mcp-linux-amd64`
-- `cs-mcp-linux-aarch64`
-
-You can override the embedded version string:
+3. Build:
 
 ```sh
-VERSION=MCP-0.0.0-local ./scripts/build-linux-exe.sh amd64
+cargo build --release --target x86_64-unknown-linux-musl
 ```
 
-## Files used
+The binary is produced at `target/x86_64-unknown-linux-musl/release/cs-mcp`.
 
-- Builder image definition: `docker/linux-exe-builder.Dockerfile`
-- Host entry script: `scripts/build-linux-exe.sh`
-- In-container build script: `scripts/build-linux-exe-inner.sh`
+## Building via Docker
 
-The GitHub workflow uses the same host script for Linux builds.
+If you don't have a Linux environment or musl toolchain set up, you can use Docker to build:
 
-## GLIBC guard
+```sh
+docker run --rm -v "$(pwd)":/build -w /build rust:1-bookworm bash -c \
+  "apt-get update && apt-get install -y musl-tools && \
+   rustup target add x86_64-unknown-linux-musl && \
+   cargo build --release --target x86_64-unknown-linux-musl"
+```
 
-CI validates Linux binaries with `scripts/check_glibc_max.py` and fails if
-any inspected binary requires a GLIBC version above `2.28`.
+The binary will be at `target/x86_64-unknown-linux-musl/release/cs-mcp`.
+
+## ARM64 (aarch64)
+
+For aarch64 static builds, use the `aarch64-unknown-linux-musl` target instead:
+
+```sh
+rustup target add aarch64-unknown-linux-musl
+cargo build --release --target aarch64-unknown-linux-musl
+```
+
+## CI
+
+The GitHub Actions CI workflow handles Linux builds automatically using the same musl target approach.
