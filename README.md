@@ -9,6 +9,8 @@ The **CodeScene MCP Server** exposes CodeScene's [Code Health](https://codescene
 This server is designed to run in your local environment and lets AI assistants (like GitHub Copilot, Cursor, Claude code, etc.) request meaningful Code Health insights directly from your codebase. 
 The Code Health insights augment the AI prompts with rich content around code quality issues, maintainability problems, and technical debt in general.
 
+The repository also includes a downloadable set of public agent skills in [skills/](skills) for teams that want to reuse CodeScene MCP workflows in their own agentic pipelines.
+
 ## Getting Started with CodeScene MCP
 
 1. Get an Access Token for the MCP Server — see [Getting a Personal Access Token](docs/getting-a-personal-access-token.md).
@@ -16,6 +18,7 @@ The Code Health insights augment the AI prompts with rich content around code qu
 3. Add the MCP Server to your AI assistant. See the detailed instructions for your environment in the installation guide.
 4. Copy the file [AGENTS.md](AGENTS.md) to your repository. This file guides AI agents on how to use the MCP, e.g. rules to safeguard AI coding.
    * If you use Amazon Q, then you want to copy our [.amazonq/rules](.amazonq/rules) to your repository instead.
+5. If you want reusable workflow prompts for your agents, copy one or more public skills from [skills/](skills).
 
 ## Installation
 
@@ -106,7 +109,7 @@ docker pull codescene/codescene-mcp
 > Watch the [demo video of the CodeScene MCP](https://www.youtube.com/watch?v=AycLVxKmVSY).
 
 > [!NOTE]
-> CodeScene MCP comes with a set of [example prompts](.github/prompts) and an [AGENTS.md](AGENTS.md) file to capture the key use cases and guide your AI agents. Copy the `AGENTS.md` file to your own repository.
+> CodeScene MCP comes with a set of [example prompts](.github/prompts), an [AGENTS.md](AGENTS.md) file to capture the key use cases, and a downloadable set of public [skills](skills). Copy the `AGENTS.md` file and any relevant skills to your own repository.
 
 With the CodeScene MCP Server in place, your AI tools can:
 
