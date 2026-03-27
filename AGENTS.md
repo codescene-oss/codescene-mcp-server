@@ -23,29 +23,25 @@ Two tools enforce Code Health at different scopes:
 If either reports a regression:
 
 1. Run `code_health_review` for details.
-2. Refactor until Code Health is restored. Use `code_health_auto_refactor` (ACE) if available.
+2. Refactor until Code Health is restored.
 3. Do **not** mark changes as ready unless risks are explicitly accepted.
 
 ---
 
-## 2️⃣ Guide Refactoring with Code Health (Preferred via ACE)
+## 2️⃣ Guide Refactoring with Code Health
 
 When refactoring or improving code:
 
 1. Inspect with `code_health_review`.
 2. Identify complexity, size, coupling, or other code health issues.
-3. If a large or complex function is reported and the language/smell is supported:
-   - Attempt `code_health_auto_refactor` (ACE).
-   - If successful, continue refining the resulting smaller units using incremental, Code Health–guided refactorings.
-   - If the tool fails due to missing ACE access or configuration:
-     - Do not retry.
-     - Continue with manual, incremental refactoring guided by Code Health.
-4. Refactor in **3–5 small, reviewable steps**.
-5. After each significant step:
+3. Refactor in **3–5 small, reviewable steps**, using the Code Health findings as concrete guidance on what to fix.
+4. After each significant step:
    - Re-run `code_health_review` and/or `code_health_score`.
    - Confirm measurable improvement or no regression.
 
-ACE is optional. Refactoring must always proceed, with or without ACE.
+This workflow works with MCP alone and is often enough to safely improve legacy code.
+
+If [CodeScene ACE](https://codescene.com/product/integrations/ide-extensions/ai-refactoring) is available, `code_health_auto_refactor` can accelerate the first restructuring step for some large functions. ACE is optional and requires a separate add-on license.
 
 ---
 
