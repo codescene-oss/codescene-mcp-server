@@ -13,12 +13,12 @@ The repository also includes a downloadable set of public agent skills in [skill
 
 ## Getting Started with CodeScene MCP
 
+Want AI to perform the setup? Start with [skills/installing-and-activating-codescene-mcp/SKILL.md](skills/installing-and-activating-codescene-mcp/SKILL.md).
+
 1. Get an Access Token for the MCP Server — see [Getting a Personal Access Token](docs/getting-a-personal-access-token.md).
 2. Install the MCP Server using one of the [installation options](#installation) below.
 3. Add the MCP Server to your AI assistant. See the detailed instructions for your environment in the installation guide.
-4. Copy the file [AGENTS.md](AGENTS.md) to your repository. This file guides AI agents on how to use the MCP, e.g. rules to safeguard AI coding.
-   * If you use Amazon Q, then you want to copy our [.amazonq/rules](.amazonq/rules) to your repository instead.
-5. If you want reusable workflow prompts for your agents, copy one or more public skills from [skills/](skills).
+4. Copy the agent guidance you want in your repository: [AGENTS.md](AGENTS.md) by default, [.amazonq/rules](.amazonq/rules) for Amazon Q, and any relevant public [skills](skills) for reusable workflow prompts.
 
 ## Installation
 

@@ -12,6 +12,7 @@ skills/
 
 Available skills:
 
+- `installing-and-activating-codescene-mcp`: Install the MCP server, configure required environment variables, and activate it in an AI assistant.
 - `safeguarding-ai-generated-code`: Apply Code Health safeguards before commit or pull request.
 - `guiding-refactoring-with-code-health`: Use Code Health findings to plan and validate small refactors.
 - `making-the-business-case-for-code-health`: Quantify delivery and defect impact to justify refactoring work.
