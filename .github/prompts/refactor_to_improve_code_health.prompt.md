@@ -1,29 +1,18 @@
 ---
+name: refactor_to_improve_code_health
 description: Plan a prioritized, low-risk refactoring to remediate detected Code Health issues.
-tools:
-  - code_health_review
-  - code_health_refactoring_business_case
 ---
 
 Your task is to produce a practical, developer-friendly refactoring plan based on a CodeScene Code Health Review.
 
 Follow these steps:
 
-1. Run the `code_health_review` tool on the selected files or code changes to detect code smells.
-2. Focus the plan exclusively on the **functions/methods with the most severe and highest-impact code smells**.
-3. For each selected function/method, propose a **specific, concise remediation action**, explaining *what to change* and *why it improves readability and maintainability*.
-4. Motivate each action with the **expected impact on Code Health** and its **business value** (e.g., reduced defects, faster development, lower cognitive load).
-5. If the code is already healthy, then aim for an optimal Code Health of 10.0. Such code is optimized for both human and AI comprehension.
-6. Include a **one-sentence justification of the effort–risk tradeoff** for every proposed action.
-
-**ACE (auto_refactor) guidance:**
-If the Code Health Review reports a large or complex function in a supported language and CodeScene ACE (auto-refactor) is available, use the `code_health_auto_refactor` tool to split the function into smaller, cohesive units as the first remediation step. ACE supports these code smells:
-  - Complex Conditional
-  - Bumpy Road Ahead
-  - Complex Method
-  - Deep, Nested Complexity
-  - Large Method
-Then refine the resulting units using targeted refactorings. If ACE is unavailable or the function is not supported, proceed with manual, incremental refactorings.
+1. Run `code_health_review` on the selected file or code changes to establish the structural problems that need attention.
+2. Capture the current `code_health_score` if available so the plan starts from a measurable baseline.
+3. Focus the plan on the functions, methods, or areas with the most severe and highest-impact structural issues.
+4. Propose 3 to 5 small, low-risk refactoring steps that reduce responsibilities, nesting, coupling, or hard-to-follow logic.
+5. For each step, explain what to change, why it improves maintainability, and how the improvement will be validated.
+6. Use `code_health_refactoring_business_case` only when the user wants ROI or stakeholder justification.
 
 **Deliverable format:**
 - **Short summary** (1–2 sentences) describing the overall refactoring plan and its expected outcome.
@@ -31,11 +20,14 @@ Then refine the resulting units using targeted refactorings. If ACE is unavailab
   - Function/method name  
   - Detected code smells  
   - Proposed remediation action  
-  - 1-line business/Code Health motivation  
+  - Validation step using `code_health_review` and, when available, `code_health_score`
   - 1-sentence effort–risk justification
+- **Stop condition**: what would count as a meaningful improvement, and when to pause if only a partial uplift is realistic.
 
 Guidelines:
 - Keep the plan **pragmatic and low-risk**, emphasizing high-impact improvements first.
 - If details are missing, make **reasonable assumptions** and briefly state them.
-- When ACE is available, always prefer automated modularization for large/complex functions with supported code smells as an inital refactoring that you then iterate on.
-- If ACE is unavailable, proceed with manual, incremental refactorings.
+- Treat Code Health 10.0 as the ideal target, and aim for measurable progress toward it even when a full uplift is not realistic in one pass.
+- Prefer structural refactorings over cosmetic cleanup.
+- Do not treat formatting, renaming, or minor edits alone as meaningful Code Health improvement.
+- Use `code_health_review` as the main feedback loop and `code_health_score` as the compact trend check.
