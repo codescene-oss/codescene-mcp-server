@@ -7,19 +7,17 @@ Use the **CodeScene MCP** to assess whether a refactor is an objective improveme
 
 ### Before refactoring:
   - Run `codescene.code_health_review` to identify problem areas.
-  - Use `codescene.list_technical_debt_hotspots` when working in risky or frequently changed code.
+  - Capture the current `codescene.code_health_score` so the work starts from a measurable baseline.
 
 ### During refactoring
 - Prefer **small, incremental improvements** that are easy to review and validate.
-- When Code Health indicates **large or complex functions** in languages supported by ACE, and ACE is available:
-  - Use `codescene.code_health_auto_refactor` as an **initial step** to increase modularity by splitting functions into smaller, cohesive units.
-- After ACE (or if ACE is not available):
-  - Continue refactoring manually by simplifying structure, reducing nesting, improving naming, and clarifying responsibilities.
-  - Treat ACE as a **modularity booster**, not a replacement for thoughtful refactoring.
+- Focus on **structural refactorings** that reduce responsibilities, nesting, coupling, and hard-to-follow control flow.
+- Do not treat formatting, renaming, or other cosmetic cleanup alone as meaningful Code Health improvement.
 
 
 ### After refactoring:
-  - Re-run `codescene.code_health_review` to ensure identified issues were actually improved and confirm no Code Health regression.
+  - Re-run `codescene.code_health_review` after each meaningful step to ensure identified issues were actually improved and confirm no Code Health regression.
+  - Use `codescene.code_health_score` as the compact trend check across iterations.
 
 ## Success Criteria
 
@@ -28,6 +26,8 @@ A refactoring is successful only if:
 - Code Health improves or at minimum does not decline.
 - Readability and structure are improved.
 - No new technical debt is introduced.
+
+Code Health 10.0 is the ideal long-term target. Aim for measurable progress toward it even when a full uplift is not realistic in one pass.
 
 ## Business Alignment
 
