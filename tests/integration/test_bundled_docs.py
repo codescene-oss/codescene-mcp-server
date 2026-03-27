@@ -10,8 +10,8 @@ This test suite validates:
 2. The docs directory is properly bundled and accessible at runtime
 3. No file not found errors occur when accessing bundled docs
 
-Issue this prevents: When the src/docs directory is not correctly included
-in the Nuitka build or the path resolution is wrong, the tools fail with
+Issue this prevents: When the docs directory is not correctly embedded
+in the binary or the path resolution is wrong, the tools fail with
 file not found errors.
 """
 
@@ -25,7 +25,7 @@ from fixtures import get_sample_files
 
 from test_utils import (
     MCPClient,
-    NuitkaBackend,
+    CargoBackend,
     ServerBackend,
     create_git_repo,
     extract_result_text,
@@ -46,7 +46,7 @@ def run_bundled_docs_tests(executable: Path) -> int:
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    backend = NuitkaBackend(executable=executable)
+    backend = CargoBackend(executable=executable)
     return run_bundled_docs_tests_with_backend(backend)
 
 
@@ -181,7 +181,7 @@ def test_no_doc_file_errors(command: list[str], env: dict, repo_dir: Path) -> bo
     Test that documentation tools do not fail with file not found errors.
 
     This is a regression test to ensure the docs directory is properly
-    bundled in the Nuitka build with the correct path mapping.
+    bundled in the binary with the correct path mapping.
     """
     print_header("Test: No Documentation File Errors")
 
@@ -218,8 +218,8 @@ def test_no_doc_file_errors(command: list[str], env: dict, repo_dir: Path) -> bo
             if has_file_error:
                 print(f"\n  ERROR: Documentation file not found: {doc_file}")
                 print("  This likely means the docs directory is not correctly")
-                print("  included in the Nuitka build. Check for:")
-                print("    --include-data-dir=./src/docs=src/docs")
+                print("  embedded in the binary. Check build.rs for:")
+                print("    include_bytes! or similar doc embedding logic")
                 all_passed = False
 
             # Check for traceback
@@ -252,7 +252,7 @@ def main() -> int:
     print("\nThese tests verify the explain_code_health and")
     print("explain_code_health_productivity tools work correctly,")
     print("including that documentation files are properly bundled")
-    print("in the Nuitka executable.")
+    print("in the executable.")
 
     return run_bundled_docs_tests(executable)
 

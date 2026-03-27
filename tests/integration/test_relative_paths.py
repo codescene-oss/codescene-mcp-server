@@ -10,7 +10,7 @@ Issue: When using bundled CLI (no CS_CLI_PATH set), relative paths failed with
 "'path' is not in the subpath of 'git_root'" because find_git_root() resolves
 paths but the subsequent relative_to() used the unresolved original path.
 
-NOTE: Relative paths are only supported in native/Nuitka mode, NOT in Docker mode.
+NOTE: Relative paths are only supported in native/binary mode, NOT in Docker mode.
 Docker mode requires absolute paths because it needs to translate host paths to
 container paths via CS_MOUNT_PATH. When running with DockerBackend, relative path
 tests are skipped and only the absolute path test runs.
@@ -28,7 +28,7 @@ from fixtures import get_sample_files
 from test_utils import (
     DockerBackend,
     MCPClient,
-    NuitkaBackend,
+    CargoBackend,
     ServerBackend,
     create_git_repo,
     extract_code_health_score,
@@ -73,7 +73,7 @@ def run_relative_path_tests(executable: Path) -> int:
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    backend = NuitkaBackend(executable=executable)
+    backend = CargoBackend(executable=executable)
     return run_relative_path_tests_with_backend(backend)
 
 
@@ -119,7 +119,7 @@ def run_relative_path_tests_with_backend(backend: ServerBackend) -> int:
                 ),
             ]
         else:
-            # Native/Nuitka mode: run all tests including relative paths
+            # Native/binary mode: run all tests including relative paths
             results = [
                 (
                     "Relative Path (simple)",

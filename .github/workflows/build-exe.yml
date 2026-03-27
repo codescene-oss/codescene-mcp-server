@@ -42,84 +42,80 @@ jobs:
           - os: ubuntu-22.04
             arch: amd64
             variant: linux-amd64
+            rust-target: x86_64-unknown-linux-musl
             artifact-name: cs-mcp-linux-amd64
-            output-path: cs-mcp
           - os: ubuntu-22.04-arm
             arch: aarch64
             variant: linux-aarch64
+            rust-target: aarch64-unknown-linux-musl
             artifact-name: cs-mcp-linux-aarch64
-            output-path: cs-mcp
           - os: macos-14-large
             arch: amd64
             variant: macos-amd64
-            cli-url: https://downloads.codescene.io/enterprise/cli/cs-macos-amd64-latest.zip
+            rust-target: x86_64-apple-darwin
             artifact-name: cs-mcp-macos-amd64
-            output-path: cs-mcp
           - os: macos-latest
             arch: aarch64
             variant: macos-aarch64
-            cli-url: https://downloads.codescene.io/enterprise/cli/cs-macos-aarch64-latest.zip
+            rust-target: aarch64-apple-darwin
             artifact-name: cs-mcp-macos-aarch64
-            output-path: cs-mcp
-            
+
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
         with:
           fetch-depth: 0
-      
-      - uses: actions/setup-python@v6
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
+
+      - name: Set up Rust toolchain
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
+        uses: dtolnay/rust-toolchain@stable
         with:
-          python-version: '3.13' 
+          targets: ${{ matrix.rust-target }}
 
-      - name: Install deps
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
-        run: |
-          python -m venv .venv/
-          source .venv/bin/activate
-          pip install -r src/requirements.txt
-          pip install Nuitka
-
-      - name: Download CodeScene CLI
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
-        run: |
-          wget ${{ matrix.cli-url }} -O codescene-cli.zip
-          unzip codescene-cli.zip -d .
-
-      - name: Inject version into version.py
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
-        run: |
-          VERSION="${{ github.ref_name }}"
-          sed -i.bak "s/__version__ = \"dev\"/__version__ = \"${VERSION}\"/" src/version.py
-          echo "Injected version: $VERSION"
-          cat src/version.py
-
-      - name: Build Executable
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
-        run: |
-          source .venv/bin/activate
-          make create-executable
-
-      - name: Build Linux executable in manylinux (glibc 2.28)
+      - name: Install musl toolchain (Linux)
         if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
         shell: bash
-        env:
-          VERSION: ${{ github.ref_name }}
         run: |
-          ./scripts/build-linux-exe.sh "${{ matrix.arch }}"
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
 
-      - name: Rename binary to include platform info
+      - name: Build Linux binary (musl static)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
+        run: cargo build --release --locked --target "${{ matrix.rust-target }}"
+
+      - name: Build macOS binary
         if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
-        run: mv ${{ matrix.output-path }} ${{ matrix.artifact-name }}
+        run: cargo build --release --locked
 
-      # - name: Validate Linux GLIBC floor (max 2.28)
-      #   if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
-      #   shell: bash
-      #   run: |
-      #     chmod +x ./scripts/check_glibc_max.py
-      #     ./scripts/check_glibc_max.py --max 2.28 "${{ matrix.artifact-name }}" cs-linux-bundled
+      - name: Copy and rename Linux binary
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          cp "target/${{ matrix.rust-target }}/release/cs-mcp" "${{ matrix.artifact-name }}"
+          chmod +x "${{ matrix.artifact-name }}"
+
+      - name: Copy and rename macOS binary
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
+        shell: bash
+        run: |
+          cp target/release/cs-mcp "${{ matrix.artifact-name }}"
+          chmod +x "${{ matrix.artifact-name }}"
+
+      - name: Verify Linux binary is static (musl)
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          BIN="${{ matrix.artifact-name }}"
+          file "$BIN"
+          LDD_OUTPUT="$(ldd "$BIN" 2>&1 || true)"
+          if echo "$LDD_OUTPUT" | grep -Eqi "statically linked|not a dynamic executable|not a valid dynamic"; then
+            echo "Verified static musl binary: $BIN"
+          else
+            echo "::error::Expected a static musl binary, but '$BIN' appears to be dynamically linked"
+            echo "$LDD_OUTPUT"
+            exit 1
+          fi
 
       - name: Verify Linux executable (optional)
         if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
@@ -172,7 +168,6 @@ jobs:
               --output "${BIN}.sha256.asc" \
               --sign "${BIN}.sha256"
 
-        
       - name: Check for macOS signing secrets
         if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
         id: check-mac-secrets
@@ -202,15 +197,13 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PWD" build.keychain
           security set-keychain-settings -t 3600 -u build.keychain
 
-          # Decode certificate using printf to avoid newline issues
           printf '%s' "$MACOS_CERTIFICATE" | base64 -D -o certificate.p12
-          
-          # Verify the file was created and has content
+
           if [[ ! -s certificate.p12 ]]; then
             echo "::error::Failed to decode certificate - file is empty or missing"
             exit 1
           fi
-          
+
           security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" build.keychain
           rm -f certificate.p12
@@ -253,9 +246,6 @@ jobs:
         if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-mac-secrets.outputs.can-sign == 'true'
         shell: bash
         run: |
-          BIN="${{ matrix.artifact-name }}"
-          # Stapling doesn't work for standalone executables (only .app, .dmg, .pkg)
-          # The notarization is still valid - macOS checks with Apple servers at runtime
           echo "::notice::Skipping staple for standalone executable (not supported by Apple)"
           echo "Notarization is valid - Gatekeeper will verify online"
 
@@ -280,13 +270,7 @@ jobs:
         run: |
           BIN="${{ matrix.artifact-name }}"
           chmod +x "$BIN"
-          # Include binary and any checksum files in the zip
           zip "${BIN}.zip" "$BIN" ${BIN}.sha256 ${BIN}.sha256.asc 2>/dev/null || zip "${BIN}.zip" "$BIN" ${BIN}.sha256 2>/dev/null || zip "${BIN}.zip" "$BIN"
-
-      - name: Remove Linux bundled CLI copy
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
-        shell: bash
-        run: rm -f cs-linux-bundled
 
       - name: Upload Executable Artifact (zipped binary)
         if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && (github.event_name == 'push' || inputs.upload_binaries)
@@ -305,54 +289,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
-      - uses: actions/setup-python@v5 # Standard stable version
-        with:
-          python-version: '3.13'
 
-      - name: Install deps
-        run: |
-          python -m venv venv
-          .\venv\Scripts\python -m pip install --upgrade pip
-          .\venv\Scripts\pip install -r src/requirements.txt
-          .\venv\Scripts\pip install Nuitka
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Download CodeScene CLI zip
-        run: |
-          Invoke-WebRequest -Uri "https://downloads.codescene.io/enterprise/cli/cs-windows-amd64-latest.zip" -OutFile "codescene-cli-windows.zip"
-          Expand-Archive -Path "codescene-cli-windows.zip" -DestinationPath "."
-
-      - name: Inject version into version.py
-        run: |
-          $version = "${{ github.ref_name }}"
-          (Get-Content src/version.py) -replace '__version__ = "dev"', "__version__ = `"$version`"" | Set-Content src/version.py
-          Write-Host "Injected version: $version"
-          Get-Content src/version.py
-
-      - name: Build Executable
-        run: |
-          $nuitka_version = "${{ github.ref_name }}" -replace '^MCP-','' -replace '-.*$',''
-          .\venv\Scripts\python -m nuitka --onefile `
-            --assume-yes-for-downloads `
-            --lto=yes `
-            --company-name="CodeScene AB" `
-            --product-name="CodeHealth MCP" `
-            --file-version="$nuitka_version" `
-            --product-version="$nuitka_version" `
-            --onefile-tempdir-spec="{CACHE_DIR}/codescene-mcp-server" `
-            --noinclude-pytest-mode=nofollow `
-            --noinclude-unittest-mode=nofollow `
-            --noinclude-setuptools-mode=nofollow `
-            --noinclude-pydoc-mode=nofollow `
-            --include-windows-runtime-dlls=no `
-            --include-data-dir=./src/docs=src/docs `
-            --include-data-dir=./src/code_health_refactoring_business_case/s_curve/regression=code_health_refactoring_business_case/s_curve/regression `
-            --include-data-files=./cs.exe=cs.exe `
-            --output-filename=cs-mcp.exe `
-            src/cs_mcp_server.py
+      - name: Build executable
+        run: cargo build --release --locked
 
       - name: Rename binary to include platform info
-        run: Rename-Item -Path "cs-mcp.exe" -NewName "cs-mcp-windows-amd64.exe"
+        run: Copy-Item -Path "target\release\cs-mcp.exe" -Destination "cs-mcp-windows-amd64.exe"
 
       - name: Azure Login (OIDC)
         uses: azure/login@v1
@@ -361,7 +306,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Sign with Azure Trusted Signing (OIDC)
+      - name: Sign binary with Azure Trusted Signing (OIDC)
         uses: azure/trusted-signing-action@v0
         with:
           endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
@@ -380,346 +325,11 @@ jobs:
           name: cs-mcp-windows-amd64
           path: cs-mcp-windows-amd64.exe
 
-  build-rust-unix:
-    permissions:
-      contents: read
-
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            arch: amd64
-            variant: linux-amd64
-            rust-target: x86_64-unknown-linux-musl
-            artifact-name: cs-mcp-linux-amd64-beta
-          - os: ubuntu-22.04-arm
-            arch: aarch64
-            variant: linux-aarch64
-            rust-target: aarch64-unknown-linux-musl
-            artifact-name: cs-mcp-linux-aarch64-beta
-          - os: macos-14-large
-            arch: amd64
-            variant: macos-amd64
-            rust-target: x86_64-apple-darwin
-            artifact-name: cs-mcp-macos-amd64-beta
-          - os: macos-latest
-            arch: aarch64
-            variant: macos-aarch64
-            rust-target: aarch64-apple-darwin
-            artifact-name: cs-mcp-macos-aarch64-beta
-
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-        if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
-        with:
-          fetch-depth: 0
-
-      - name: Set up Rust toolchain
-        if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.rust-target }}
-
-      - name: Install musl toolchain (Rust Linux)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
-
-      - name: Build Rust Linux binary (musl static)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
-        working-directory: rust
-        run: cargo build --release --locked --target "${{ matrix.rust-target }}"
-
-      - name: Build Rust macOS binary
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
-        working-directory: rust
-        run: cargo build --release --locked
-
-      - name: Copy and rename Rust Linux binary
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
-        shell: bash
-        run: |
-          cp "rust/target/${{ matrix.rust-target }}/release/cs-mcp" "${{ matrix.artifact-name }}"
-          chmod +x "${{ matrix.artifact-name }}"
-
-      - name: Copy and rename Rust macOS binary
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
-        shell: bash
-        run: |
-          cp rust/target/release/cs-mcp "${{ matrix.artifact-name }}"
-          chmod +x "${{ matrix.artifact-name }}"
-
-      - name: Verify Rust Linux binary is static (musl)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
-        shell: bash
-        run: |
-          BIN="${{ matrix.artifact-name }}"
-          file "$BIN"
-          LDD_OUTPUT="$(ldd "$BIN" 2>&1 || true)"
-          if echo "$LDD_OUTPUT" | grep -Eqi "statically linked|not a dynamic executable|not a valid dynamic"; then
-            echo "Verified static musl binary: $BIN"
-          else
-            echo "::error::Expected a static musl binary, but '$BIN' appears to be dynamically linked"
-            echo "$LDD_OUTPUT"
-            exit 1
-          fi
-
-      - name: Verify Rust Linux executable (optional)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
-        shell: bash
-        run: |
-          BIN="${{ matrix.artifact-name }}"
-          chmod +x "$BIN" || true
-          ./"$BIN" --help >/dev/null 2>&1 || true
-
-      - name: Generate checksum (Rust Linux)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
-        shell: bash
-        run: |
-          BIN="${{ matrix.artifact-name }}"
-          sha256sum "$BIN" > "${BIN}.sha256"
-
-      - name: Check for Linux signing secrets (Rust)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
-        id: check-rust-linux-secrets
-        shell: bash
-        run: |
-          if [[ -n "${{ secrets.LINUX_GPG_PRIVATE_KEY }}" \
-             && -n "${{ secrets.LINUX_GPG_KEY_ID }}" \
-             && -n "${{ secrets.LINUX_GPG_PASSPHRASE }}" ]]; then
-            echo "can-sign=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "can-sign=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Import GPG key (Rust Linux)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu') && steps.check-rust-linux-secrets.outputs.can-sign == 'true'
-        shell: bash
-        env:
-          LINUX_GPG_PRIVATE_KEY: ${{ secrets.LINUX_GPG_PRIVATE_KEY }}
-        run: |
-          echo "$LINUX_GPG_PRIVATE_KEY" | gpg --batch --import
-
-      - name: Sign checksum (Rust Linux)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu') && steps.check-rust-linux-secrets.outputs.can-sign == 'true'
-        shell: bash
-        env:
-          LINUX_GPG_KEY_ID: ${{ secrets.LINUX_GPG_KEY_ID }}
-          LINUX_GPG_PASSPHRASE: ${{ secrets.LINUX_GPG_PASSPHRASE }}
-        run: |
-          BIN="${{ matrix.artifact-name }}"
-          gpg --batch --yes --pinentry-mode loopback \
-              --passphrase "$LINUX_GPG_PASSPHRASE" \
-              --local-user "$LINUX_GPG_KEY_ID" \
-              --armor \
-              --output "${BIN}.sha256.asc" \
-              --sign "${BIN}.sha256"
-
-      - name: Check for macOS signing secrets (Rust)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
-        id: check-rust-mac-secrets
-        shell: bash
-        run: |
-          if [[ -n "${{ secrets.MACOS_CERTIFICATE }}" \
-             && -n "${{ secrets.MACOS_CERTIFICATE_PWD }}" \
-             && -n "${{ secrets.APPLE_DEVELOPER_ID }}" \
-             && -n "${{ secrets.APPLE_ID }}" \
-             && -n "${{ secrets.APPLE_APP_PASSWORD }}" \
-             && -n "${{ secrets.APPLE_TEAM_ID }}" ]]; then
-            echo "can-sign=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "can-sign=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Import Apple Developer Certificate (Rust keychain)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-rust-mac-secrets.outputs.can-sign == 'true'
-        shell: bash
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
-          KEYCHAIN_PWD: keychainpassword
-        run: |
-          security create-keychain -p "$KEYCHAIN_PWD" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "$KEYCHAIN_PWD" build.keychain
-          security set-keychain-settings -t 3600 -u build.keychain
-
-          printf '%s' "$MACOS_CERTIFICATE" | base64 -D -o certificate.p12
-
-          if [[ ! -s certificate.p12 ]]; then
-            echo "::error::Failed to decode certificate - file is empty or missing"
-            exit 1
-          fi
-
-          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" build.keychain
-          rm -f certificate.p12
-
-      - name: Codesign Rust macOS executable
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-rust-mac-secrets.outputs.can-sign == 'true'
-        shell: bash
-        env:
-          APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
-        run: |
-          BIN="${{ matrix.artifact-name }}"
-          if [[ ! -f "$BIN" ]]; then
-            echo "::error::Expected macOS Rust binary at '$BIN' but it was not found."
-            ls -la
-            exit 1
-          fi
-
-          codesign --force --options runtime --sign "$APPLE_DEVELOPER_ID" --timestamp "$BIN"
-          codesign --verify --verbose "$BIN"
-
-      - name: Notarize Rust macOS executable
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-rust-mac-secrets.outputs.can-sign == 'true'
-        shell: bash
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          BIN="${{ matrix.artifact-name }}"
-          ZIP="notarize-rust-${{ matrix.arch }}.zip"
-
-          ditto -c -k --keepParent "$BIN" "$ZIP"
-          xcrun notarytool submit "$ZIP" \
-            --apple-id "$APPLE_ID" \
-            --password "$APPLE_APP_PASSWORD" \
-            --team-id "$APPLE_TEAM_ID" \
-            --wait
-
-      - name: Staple notarization ticket (Rust)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-rust-mac-secrets.outputs.can-sign == 'true'
-        shell: bash
-        run: |
-          echo "::notice::Skipping staple for standalone executable (not supported by Apple)"
-          echo "Notarization is valid - Gatekeeper will verify online"
-
-      - name: Clean up Rust macOS keychain
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos') && steps.check-rust-mac-secrets.outputs.can-sign == 'true' && always()
-        shell: bash
-        run: |
-          security default-keychain -s login.keychain
-          security delete-keychain build.keychain || true
-          rm -f notarize-rust-*.zip || true
-
-      - name: Set executable permissions and zip (Rust macOS)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'macos')
-        shell: bash
-        run: |
-          chmod +x "${{ matrix.artifact-name }}"
-          zip "${{ matrix.artifact-name }}.zip" "${{ matrix.artifact-name }}"
-
-      - name: Zip binary with checksums (Rust Linux)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && startsWith(matrix.os, 'ubuntu')
-        shell: bash
-        run: |
-          BIN="${{ matrix.artifact-name }}"
-          chmod +x "$BIN"
-          zip "${BIN}.zip" "$BIN" ${BIN}.sha256 ${BIN}.sha256.asc 2>/dev/null || zip "${BIN}.zip" "$BIN" ${BIN}.sha256 2>/dev/null || zip "${BIN}.zip" "$BIN"
-
-      - name: Upload Rust Executable Artifact (zipped binary)
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && (github.event_name == 'push' || inputs.upload_binaries)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.artifact-name }}.zip
-
-  build-rust-windows-amd64:
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == 'windows-amd64'
-    runs-on: windows-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build Rust executable
-        run: cargo build --release --locked
-        working-directory: rust
-
-      - name: Rename Rust binary to include platform info
-        run: Copy-Item -Path "rust\target\release\cs-mcp.exe" -Destination "cs-mcp-windows-amd64-beta.exe"
-
-      - name: Azure Login (OIDC)
-        uses: azure/login@v1
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Sign Rust binary with Azure Trusted Signing (OIDC)
-        uses: azure/trusted-signing-action@v0
-        with:
-          endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
-          certificate-profile-name: ${{ secrets.AZURE_TRUSTED_SIGNING_CERT_PROFILE }}
-          files: |
-            ${{ github.workspace }}\cs-mcp-windows-amd64-beta.exe
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
-
-      - name: Upload Rust Executable Artifact
-        if: github.event_name == 'push' || inputs.upload_binaries
-        uses: actions/upload-artifact@v4
-        with:
-          name: cs-mcp-windows-amd64-beta
-          path: cs-mcp-windows-amd64-beta.exe
-
-  # build-exe-windows-aarch64:
-  #   runs-on: windows-11-arm
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
-      
-  #     - uses: actions/setup-python@v5 # Standard stable version
-  #       with:
-  #         python-version: '3.13'
-
-  #     - name: Install deps
-  #       run: |
-  #         python -m venv venv
-  #         .\venv\Scripts\python -m pip install --upgrade pip
-  #         .\venv\Scripts\pip install -r src/requirements.txt
-  #         .\venv\Scripts\pip install Nuitka
-
-  #     - name: Download CodeScene CLI zip
-  #       run: |
-  #         Invoke-WebRequest -Uri "https://downloads.codescene.io/enterprise/cli/cs-windows-amd64-latest.zip" -OutFile "codescene-cli-windows.zip"
-  #         Expand-Archive -Path "codescene-cli-windows.zip" -DestinationPath "."
-
-  #     - name: Build Executable
-  #       run: |
-  #         .\venv\Scripts\python -m nuitka --onefile `
-  #           --assume-yes-for-downloads `
-  #           --company-name="CodeScene AB" `
-  #           --product-name="CodeHealth MCP" `
-  #           --include-data-dir=./src/docs=src/docs `
-  #           --include-data-files=./cs.exe=cs `
-  #           --output-filename=cs-mcp.exe `
-  #           src/cs_mcp_server.py
-
-  #     - name: Upload Executable Artifact
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: cs-mcp-aarch64.exe
-        
   publish-to-release:
     if: github.event_name == 'push'
     permissions:
       contents: write 
-    needs: [build-exe-unix, build-exe-windows-amd64, build-rust-unix, build-rust-windows-amd64]
+    needs: [build-exe-unix, build-exe-windows-amd64]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts

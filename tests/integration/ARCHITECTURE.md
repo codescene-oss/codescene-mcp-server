@@ -13,18 +13,16 @@
 │  - Python 3.10+                                                 │
 │  - Git available                                                │
 │  - CS_ACCESS_TOKEN set                                          │
-│  - Nuitka installed                                             │
+│  - Rust toolchain (cargo)                                      │
 └────────────────────┬────────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  ExecutableBuilder.build()                                       │
+│  CargoBuilder.build()                                            │
 │                                                                  │
-│  1. Create isolated build dir: /tmp/cs_mcp_build_xyz/          │
-│  2. Copy src/ files to build dir                                │
-│  3. Copy cs CLI to build dir                                    │
-│  4. Run Nuitka to create static executable                      │
-│  5. Move executable OUTSIDE repo:                               │
+│  1. Run `cargo build --release` in repo root                    │
+│  2. Locate binary in target/release/                             │
+│  3. Move executable OUTSIDE repo:                               │
 │     /path/to/parent/cs_mcp_test_bin/cs-mcp                     │
 └────────────────────┬────────────────────────────────────────────┘
                      │
@@ -85,10 +83,8 @@ Repository (dev-mcp):
 ├── run-integration-tests.sh        ← Test runner
 └── tests/integration/              ← Test suite
 
-Build Directory (temporary):
-/tmp/cs_mcp_build_xyz/
-├── src/                            ← Copied source
-├── cs                              ← Copied CLI
+Build Directory (cargo target):
+target/release/
 └── cs-mcp                          ← Built executable
 
 Executable Location (isolated):
@@ -219,18 +215,16 @@ Test Process                  MCP Server Process
 
 ## Key Components
 
-### ExecutableBuilder
+### CargoBuilder
 
 ```python
-class ExecutableBuilder:
-    """Builds static executable in isolated environment."""
+def build_executable() -> Path:
+    """Builds static executable using cargo build --release."""
     
-    def build(self) -> Path:
-        # 1. Create build dir outside repo
-        # 2. Copy source files
-        # 3. Copy CS CLI
-        # 4. Run Nuitka
-        # 5. Return path to executable
+    # 1. Run cargo build --release
+    # 2. Locate binary in target/release/
+    # 3. Copy to isolated location outside repo
+    # 4. Return path to executable
 ```
 
 ### MCPClient

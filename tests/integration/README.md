@@ -2,7 +2,7 @@
 
 Comprehensive integration test suite for the CodeScene MCP server. These tests validate the MCP server in realistic user environments by:
 
-1. **Building the static executable** using Nuitka in an isolated environment
+1. **Building the static executable** using `cargo build` (Rust)
 2. **Moving the executable outside the repo** to avoid interference from bundled CLI tools
 3. **Testing actual MCP tools** with real Code Health analysis
 4. **Validating across different scenarios** (git repos, worktrees, platform-specific paths, etc.)
@@ -17,7 +17,7 @@ tests/integration/
 ├── run_all_tests.py               # Main test runner (builds and runs all tests)
 ├── test_utils.py                  # Re-exports from all infrastructure modules
 ├── mcp_client.py                  # MCPClient class (JSON-RPC over stdio)
-├── server_backends.py             # ServerBackend ABC, NuitkaBackend, DockerBackend, BuildConfig
+├── server_backends.py             # ServerBackend ABC, CargoBackend, DockerBackend
 ├── file_utils.py                  # create_git_repo(), safe_temp_directory(), etc.
 ├── response_parsers.py            # extract_result_text(), extract_code_health_score()
 ├── test_output.py                 # print_header(), print_test(), print_summary()
@@ -43,7 +43,7 @@ The test suite supports two backends for running the MCP server:
 
 | Backend | Flag | Description | Use Case |
 |---------|------|-------------|----------|
-| **Static** | (default) | Builds static executable with Nuitka | CI/CD, release testing |
+| **Static** | (default) | Builds static executable with Cargo | CI/CD, release testing |
 | **Docker** | `--docker` | Runs in Docker container | Container testing (Linux/macOS) |
 
 ### Backend Examples
@@ -65,7 +65,7 @@ python tests/integration/run_all_tests.py --backend docker
 - **Python 3.10+** (Python 3.13 recommended for building)
 - **Git** (for repository operations)
 - **CS_ACCESS_TOKEN** environment variable set to a valid CodeScene access token
-- **Nuitka** for building the static executable (`pip install nuitka`)
+- **Rust toolchain** for building the static executable (`rustup` with stable toolchain)
 
 ### Optional
 
@@ -150,7 +150,7 @@ python test_git_worktree.py C:\path\to\cs-mcp.exe
 - **Code Health Review**: Tests `code_health_review` tool for detailed analysis
 - **Pre-commit Safeguard**: Tests `pre_commit_code_health_safeguard` with modified files
 - **Outside Git Repo**: Tests tool behavior with files outside git repositories
-- **No Bundled CLI Interference**: Validates test environment isolation (Nuitka backend only)
+- **No Bundled CLI Interference**: Validates test environment isolation (Cargo backend only)
 
 ### 2. Git Worktree Tests (`test_git_worktree.py`)
 
@@ -169,7 +169,7 @@ python test_git_worktree.py C:\path\to\cs-mcp.exe
 
 - **Relative Path Resolution**: Tests that relative file paths are handled correctly
 - **Prevents "not in subpath" Regression**: Validates the fix for `find_git_root()` path resolution
-- **Docker Skipping**: Relative paths are only supported in native/Nuitka mode; Docker tests are skipped
+- **Docker Skipping**: Relative paths are only supported in native/binary mode; Docker tests are skipped
 
 ### 5. Business Case Tests (`test_business_case.py`)
 
@@ -227,11 +227,10 @@ The test suite uses sample code files with known Code Health characteristics:
 
 ### Build Process
 
-1. Creates an isolated build directory **outside the repo**
-2. Copies source files and CLI tools to build directory
-3. Runs Nuitka to create static executable
-4. Moves executable to persistent location outside repo
-5. This ensures the test environment mimics actual user installations
+1. Runs `cargo build --release` in the project root
+2. Locates the resulting binary in `target/release/`
+3. Moves executable to persistent location outside repo
+4. This ensures the test environment mimics actual user installations
 
 ### Test Execution
 
@@ -267,7 +266,7 @@ Prerequisites OK
 ======================================================================
 
   Copying source files to build directory...
-  Building with Nuitka (this may take several minutes)...
+  Building with Cargo (this may take several minutes)...
   Build successful: /tmp/cs_mcp_build_xyz/build/cs-mcp
 
 Executable ready: /path/to/cs_mcp_test_bin/cs-mcp
@@ -318,18 +317,10 @@ If a test fails, you'll see detailed error information:
 
 ### Build Failures
 
-**Error**: `Nuitka not found`
+**Error**: `cargo not found`
 ```bash
-pip install nuitka
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
-
-**Error**: `cs/cs.exe not found`
-- Ensure the CodeScene CLI is present in the repo root
-- Download from: https://downloads.codescene.io/
-
-**Error**: `Python 3.13 not found`
-- Update `BuildConfig.python_executable` in code
-- Or install Python 3.13
 
 ### Test Failures
 
@@ -349,11 +340,11 @@ export CS_ACCESS_TOKEN="your_token_here"
 
 ### Platform Issues
 
-**Windows**: Ensure you have Visual Studio Build Tools installed for Nuitka
+**Windows**: Ensure you have Visual Studio Build Tools installed for Rust
 
 **Linux**: Ensure you have `gcc` and development headers:
 ```bash
-sudo apt-get install build-essential python3-dev
+sudo apt-get install build-essential
 ```
 
 **macOS**: Ensure Xcode Command Line Tools are installed:
@@ -393,10 +384,8 @@ jobs:
         with:
           python-version: '3.13'
       
-      - name: Install dependencies
-        run: |
-          pip install nuitka
-          pip install -r src/requirements.txt
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
       
       - name: Run integration tests
         env:
@@ -427,7 +416,7 @@ When adding new MCP tools:
 
 ### Performance Considerations
 
-- Building with Nuitka takes 2-5 minutes
+- Building with Cargo takes 2-5 minutes
 - Each test run creates fresh git repos
 - Full test suite takes 5-10 minutes depending on network
 - Use `--executable` flag to skip build during development

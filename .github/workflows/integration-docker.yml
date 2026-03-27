@@ -48,11 +48,6 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Install Python dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r src/requirements.txt
-
       - name: Build Docker image
         run: docker build --build-arg VERSION=MCP-0.0.0-test -t codescene-mcp-test .
 

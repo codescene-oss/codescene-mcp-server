@@ -28,7 +28,7 @@ from fixtures import get_sample_files
 from test_utils import (
     DockerBackend,
     MCPClient,
-    NuitkaBackend,
+    CargoBackend,
     ServerBackend,
     create_git_repo,
     extract_code_health_score,
@@ -80,8 +80,8 @@ class _FakeGitHubHandler(BaseHTTPRequestHandler):
 
 
 def run_version_check_tests(executable: Path) -> int:
-    """Run all version check tests using a Nuitka executable."""
-    backend = NuitkaBackend(executable=executable)
+    """Run all version check tests using a Cargo executable."""
+    backend = CargoBackend(executable=executable)
     return run_version_check_tests_with_backend(backend)
 
 

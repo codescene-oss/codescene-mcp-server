@@ -44,11 +44,11 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r src/requirements.txt
-          pip install Nuitka
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install musl-tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Run comprehensive integration tests
         run: ./tests/run-integration-tests.sh
@@ -72,11 +72,8 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r src/requirements.txt
-          pip install Nuitka
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Run comprehensive integration tests
         run: ./tests/run-integration-tests.sh
@@ -100,12 +97,8 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Install dependencies
-        shell: pwsh
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r src/requirements.txt
-          pip install Nuitka
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Run comprehensive integration tests
         shell: pwsh

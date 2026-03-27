@@ -1,68 +1,27 @@
 # Building a Static Executable Locally
 
-If you prefer a standalone binary instead of Docker, you can compile the MCP server into a single executable using [Nuitka](https://nuitka.net/).
+You can compile the MCP server from source using Rust's Cargo build system.
 
 ## Prerequisites
 
-- **Python 3.13** (required)
-- **Nuitka** (`pip install Nuitka`)
-- **CodeScene CLI** binary (`cs`) for your platform, downloaded from:
-  - Linux amd64: https://downloads.codescene.io/enterprise/cli/cs-linux-amd64-latest.zip
-  - Linux aarch64: https://downloads.codescene.io/enterprise/cli/cs-linux-aarch64-latest.zip
-  - macOS amd64: https://downloads.codescene.io/enterprise/cli/cs-macos-amd64-latest.zip
-  - macOS aarch64: https://downloads.codescene.io/enterprise/cli/cs-macos-aarch64-latest.zip
-  - Windows amd64: https://downloads.codescene.io/enterprise/cli/cs-windows-amd64-latest.zip
+- **Rust toolchain** (1.75 or later) — install via [rustup](https://rustup.rs/)
 
 ## Build Steps
 
-1. Clone the repository and set up a virtual environment:
+1. Clone the repository:
 
 ```sh
 git clone https://github.com/codescene-oss/codescene-mcp.git
 cd codescene-mcp
-python3.13 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
-2. Install dependencies:
+2. Build the release binary:
 
 ```sh
-pip install -r src/requirements.txt
-pip install Nuitka
+cargo build --release
 ```
 
-3. Download and extract the CodeScene CLI for your platform. For example, on macOS aarch64:
-
-```sh
-wget https://downloads.codescene.io/enterprise/cli/cs-macos-aarch64-latest.zip -O codescene-cli.zip
-unzip codescene-cli.zip -d .
-```
-
-4. Build the executable:
-
-**Linux / macOS:**
-```sh
-python3.13 -m nuitka --onefile \
-  --assume-yes-for-downloads \
-  --include-data-dir=./src/docs=src/docs \
-  --include-data-dir=./src/code_health_refactoring_business_case/s_curve/regression=code_health_refactoring_business_case/s_curve/regression \
-  --include-data-files=./cs=cs \
-  --output-filename=cs-mcp \
-  src/cs_mcp_server.py
-```
-
-**Windows:**
-```powershell
-python -m nuitka --onefile `
-  --assume-yes-for-downloads `
-  --include-data-dir=./src/docs=src/docs `
-  --include-data-dir=./src/code_health_refactoring_business_case/s_curve/regression=code_health_refactoring_business_case/s_curve/regression `
-  --include-data-files=./cs.exe=cs.exe `
-  --output-filename=cs-mcp.exe `
-  src/cs_mcp_server.py
-```
-
-This will produce a single `cs-mcp` (or `cs-mcp.exe` on Windows) executable that bundles the MCP server, its dependencies, and the CodeScene CLI.
+This produces a single `cs-mcp` binary at `target/release/cs-mcp` (or `target\release\cs-mcp.exe` on Windows).
 
 ## Using the Executable
 

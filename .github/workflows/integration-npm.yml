@@ -46,11 +46,8 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install Python dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r src/requirements.txt
-          pip install Nuitka
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Run NPM integration tests
         run: ./tests/run-integration-tests.sh --npm

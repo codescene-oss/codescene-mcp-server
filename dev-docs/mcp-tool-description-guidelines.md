@@ -109,5 +109,5 @@ Before merging a new or edited tool description:
 
 Apply these rules to:
 
-- MCP tools registered via `mcp_instance.tool(...)`
-- MCP prompts registered via `@mcp.prompt` (adapt components where applicable)
+- MCP tools registered via the `#[tool]` macro (rmcp)
+- MCP prompts (adapt components where applicable)

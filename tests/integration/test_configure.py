@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from test_utils import (
     MCPClient,
-    NuitkaBackend,
+    CargoBackend,
     ServerBackend,
     create_git_repo,
     extract_result_text,
@@ -454,7 +454,7 @@ def run_configure_tests_with_backend(backend: ServerBackend) -> int:
 
 
 def run_configure_tests(executable: Path) -> int:
-    """Run all configure tests with a Nuitka executable.
+    """Run all configure tests with a Cargo executable.
 
     Args:
         executable: Path to the cs-mcp executable
@@ -462,7 +462,7 @@ def run_configure_tests(executable: Path) -> int:
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    backend = NuitkaBackend(executable=executable)
+    backend = CargoBackend(executable=executable)
     return run_configure_tests_with_backend(backend)
 
 
