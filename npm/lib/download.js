@@ -220,6 +220,12 @@ async function renameExtractedBinary(cacheDir, binaryPath) {
  * @returns {Promise<string>} Path to the binary
  */
 export async function ensureBinary(version) {
+  if (typeof version !== "string" || !version) {
+    throw new Error(
+      `ensureBinary requires a non-empty version string, got: ${JSON.stringify(version)}`
+    );
+  }
+
   const binaryPath = getCachedBinaryPath(version);
 
   if (existsSync(binaryPath)) {

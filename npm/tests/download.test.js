@@ -136,6 +136,32 @@ describe("getCachedBinaryPath", () => {
   });
 });
 
+describe("ensureBinary input validation", () => {
+  it("rejects when version is undefined", async () => {
+    await assert.rejects(() => ensureBinary(undefined), {
+      message: /non-empty version string/,
+    });
+  });
+
+  it("rejects when version is null", async () => {
+    await assert.rejects(() => ensureBinary(null), {
+      message: /non-empty version string/,
+    });
+  });
+
+  it("rejects when version is an empty string", async () => {
+    await assert.rejects(() => ensureBinary(""), {
+      message: /non-empty version string/,
+    });
+  });
+
+  it("rejects when version is a number", async () => {
+    await assert.rejects(() => ensureBinary(123), {
+      message: /non-empty version string/,
+    });
+  });
+});
+
 describe("ensureBinary", () => {
   let testServer;
   let baseUrl;

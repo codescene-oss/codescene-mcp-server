@@ -27,16 +27,29 @@ function createTempBinary(name) {
 }
 
 /**
- * Sets up module mocks for download.js and run.js.
+ * Sets up module mocks for download.js, run.js, and node:timers/promises.
  * Returns a tracker object to inspect what was called.
+ *
+ * The node:timers/promises mock makes the retry delay resolve instantly
+ * so tests don't wait for real timeouts.
  */
 function setupMocks({ ensureBinaryFn, runBinaryFn }) {
-  const tracker = { ensureBinaryCalled: false, runBinaryArgs: null };
+  const tracker = {
+    ensureBinaryCalled: false,
+    runBinaryArgs: null,
+    ensureBinaryCallCount: 0,
+  };
 
+  mock.module("node:timers/promises", {
+    namedExports: {
+      setTimeout: async () => {},
+    },
+  });
   mock.module("../lib/download.js", {
     namedExports: {
       ensureBinary: async (version) => {
         tracker.ensureBinaryCalled = true;
+        tracker.ensureBinaryCallCount++;
         tracker.ensureBinaryVersion = version;
         return ensureBinaryFn(version);
       },
@@ -221,5 +234,173 @@ describe("getPackageVersion", () => {
     });
     const pkg = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf8"));
     assert.equal(tracker.ensureBinaryVersion, pkg.version);
+  });
+});
+
+describe("retry on transient errors", () => {
+  let originalExit;
+  let originalArgv;
+  let stderrOutput;
+  let originalStderrWrite;
+
+  beforeEach(() => {
+    originalExit = process.exit;
+    originalArgv = process.argv;
+    process.exit = (code) => {
+      throw new ExitCalled(code);
+    };
+    stderrOutput = "";
+    originalStderrWrite = process.stderr.write;
+    process.stderr.write = (chunk) => {
+      stderrOutput += chunk;
+      return true;
+    };
+    process.argv = ["node", "cs-mcp.js"];
+  });
+
+  afterEach(() => {
+    process.exit = originalExit;
+    process.argv = originalArgv;
+    process.stderr.write = originalStderrWrite;
+    mock.restoreAll();
+  });
+
+  it("retries on ENOENT and succeeds when file becomes available", async () => {
+    let callCount = 0;
+    const tracker = setupMocks({
+      ensureBinaryFn: () => {
+        callCount++;
+        if (callCount <= 2) {
+          const err = new Error("ENOENT: no such file or directory");
+          err.code = "ENOENT";
+          throw err;
+        }
+        return "/mock/cs-mcp";
+      },
+    });
+
+    await withEnvPath(undefined, async () => {
+      const { main } = await importIndex();
+      await main();
+    });
+
+    assert.equal(callCount, 3, "Should have retried twice before succeeding");
+    assert.ok(tracker.runBinaryArgs, "runBinary should have been called");
+    assert.ok(stderrOutput.includes("retrying"), "Should log retry messages");
+  });
+
+  it("retries on SyntaxError from malformed package.json", async () => {
+    let callCount = 0;
+    const tracker = setupMocks({
+      ensureBinaryFn: () => {
+        callCount++;
+        if (callCount <= 1) {
+          throw new SyntaxError("Unexpected end of JSON input");
+        }
+        return "/mock/cs-mcp";
+      },
+    });
+
+    await withEnvPath(undefined, async () => {
+      const { main } = await importIndex();
+      await main();
+    });
+
+    assert.equal(callCount, 2, "Should have retried once before succeeding");
+    assert.ok(tracker.runBinaryArgs, "runBinary should have been called");
+  });
+
+  it("retries on missing version error", async () => {
+    let callCount = 0;
+    const tracker = setupMocks({
+      ensureBinaryFn: () => {
+        callCount++;
+        if (callCount <= 1) {
+          throw new Error("Invalid or missing version in package.json");
+        }
+        return "/mock/cs-mcp";
+      },
+    });
+
+    await withEnvPath(undefined, async () => {
+      const { main } = await importIndex();
+      await main();
+    });
+
+    assert.equal(callCount, 2, "Should have retried once before succeeding");
+    assert.ok(tracker.runBinaryArgs, "runBinary should have been called");
+  });
+
+  it("does not retry on non-transient errors", async () => {
+    let callCount = 0;
+    setupMocks({
+      ensureBinaryFn: () => {
+        callCount++;
+        throw new Error("Network failure");
+      },
+    });
+
+    await withEnvPath(undefined, async () => {
+      const { main } = await importIndex();
+      await assert.rejects(
+        () => main(),
+        (err) => err instanceof ExitCalled && err.exitCode === 1
+      );
+    });
+
+    assert.equal(callCount, 1, "Should not retry on non-transient errors");
+    assert.ok(
+      stderrOutput.includes("Network failure"),
+      "Should report the error"
+    );
+  });
+
+  it("gives up after MAX_RETRIES and exits with error", async () => {
+    let callCount = 0;
+    setupMocks({
+      ensureBinaryFn: () => {
+        callCount++;
+        const err = new Error("ENOENT: no such file or directory");
+        err.code = "ENOENT";
+        throw err;
+      },
+    });
+
+    await withEnvPath(undefined, async () => {
+      const { main } = await importIndex();
+      await assert.rejects(
+        () => main(),
+        (err) => err instanceof ExitCalled && err.exitCode === 1
+      );
+    });
+
+    // MAX_RETRIES is 5 — initial attempt + 5 retries = 6 calls total
+    assert.equal(callCount, 6, "Should attempt 1 + MAX_RETRIES times");
+    assert.ok(
+      stderrOutput.includes("retrying"),
+      "Should log retry messages"
+    );
+  });
+
+  it("does not retry when CS_MCP_BINARY_PATH is set (non-transient path)", async () => {
+    let callCount = 0;
+    setupMocks({
+      ensureBinaryFn: () => {
+        callCount++;
+        return "/mock/cs-mcp";
+      },
+    });
+
+    await withEnvPath("/nonexistent/binary", async () => {
+      const { main } = await importIndex();
+      await assert.rejects(
+        () => main(),
+        (err) => err instanceof ExitCalled && err.exitCode === 1
+      );
+    });
+
+    // CS_MCP_BINARY_PATH pointing to nonexistent file throws a non-transient error
+    assert.equal(callCount, 0, "ensureBinary should not be called");
+    assert.ok(stderrOutput.includes("does not exist"));
   });
 });
