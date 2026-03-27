@@ -35,7 +35,7 @@ Do not use this skill for refactoring, safeguards, or technical debt prioritizat
 2. Get or configure `CS_ACCESS_TOKEN`.
 3. Choose the installation method that fits the user environment:
    - `npx @codescene/codehealth-mcp` or `npm install -g @codescene/codehealth-mcp`
-   - `brew install cs-mcp`
+   - `brew tap codescene-oss/codescene-mcp-server https://github.com/codescene-oss/codescene-mcp-server && brew install cs-mcp`
    - Windows PowerShell installer
    - Manual binary download
    - Docker image
