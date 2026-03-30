@@ -43,8 +43,14 @@ from test_utils import (
 # ---------------------------------------------------------------------------
 
 def _build_env(backend: ServerBackend, repo_dir: Path) -> dict:
-    """Build the subprocess environment for auto-refactor tests."""
+    """Build the subprocess environment for auto-refactor tests.
+
+    Sets CS_ACE_ACCESS_TOKEN to the same value as CS_ACCESS_TOKEN when
+    no explicit ACE token is provided, since both use the same PAT.
+    """
     env = backend.get_env(os.environ.copy(), repo_dir)
+    if not env.get("CS_ACE_ACCESS_TOKEN"):
+        env["CS_ACE_ACCESS_TOKEN"] = env.get("CS_ACCESS_TOKEN", "")
     env["CS_DISABLE_VERSION_CHECK"] = "1"
     env["CS_DISABLE_TRACKING"] = "1"
     return env
