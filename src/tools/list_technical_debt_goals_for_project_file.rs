@@ -2,10 +2,12 @@ use std::path::Path;
 
 use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
+use serde_json::json;
 
 use crate::api_client;
 use crate::docker;
 use crate::event_properties;
+use crate::tools::codescene_links;
 use crate::tools::common::{make_relative_for_api, tool_error};
 use crate::tools::ProjectFileParam;
 use crate::CodeSceneServer;
@@ -23,6 +25,18 @@ pub(crate) async fn handle(
         ));
     }
     server.version_checker.check_in_background();
+
+    let analysis_id = api_client::get_latest_analysis_id(params.project_id, &*server.http_client)
+        .await
+        .map_err(|e| format!("Error fetching latest analysis: {e}"));
+    let analysis_id = match analysis_id {
+        Ok(id) => id,
+        Err(e) => {
+            server.track_err("list-technical-debt-goals-file", &e);
+            return Ok(tool_error(&e));
+        }
+    };
+
     let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
     let relative = make_relative_for_api(Path::new(&file_path));
     let endpoint = format!("v2/projects/{}/analyses/latest/files", params.project_id);
@@ -41,7 +55,10 @@ pub(crate) async fn handle(
         Ok(data) => {
             let props = event_properties::goals_file_properties(Path::new(&params.file_path));
             server.track("list-technical-debt-goals-file", props);
-            let text = serde_json::to_string(&data).unwrap_or_default();
+            let link =
+                codescene_links::biomarkers_link(params.project_id, analysis_id, Some(&relative));
+            let response = json!({ "data": data, "link": link });
+            let text = serde_json::to_string(&response).unwrap_or_default();
             let text = server.maybe_version_warning(&text).await;
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
@@ -63,8 +80,8 @@ mod tests {
     };
     use crate::tools::ProjectFileParam;
 
-    fn make_api_mock(response: HttpResponse) -> MockHttpClient {
-        MockHttpClient::new(vec![response, HttpResponse::ok("[]")])
+    fn make_api_mock(analysis_resp: HttpResponse, data_resp: HttpResponse) -> MockHttpClient {
+        MockHttpClient::new(vec![analysis_resp, data_resp, HttpResponse::ok("[]")])
     }
 
     #[tokio::test]
@@ -98,9 +115,12 @@ mod tests {
     #[tokio::test]
     async fn file_success() {
         let _g = set_token("tok");
-        let http = make_api_mock(HttpResponse::ok(
-            r#"{"files":[{"goals":[{"goal":"reduce complexity"}]}],"page":1,"max_pages":1}"#,
-        ));
+        let http = make_api_mock(
+            HttpResponse::ok(r#"{"id":5000}"#),
+            HttpResponse::ok(
+                r#"{"files":[{"goals":[{"goal":"reduce complexity"}]}],"page":1,"max_pages":1}"#,
+            ),
+        );
         let server = make_server_with_mocks(false, MockCliRunner::with_responses(vec![]), http);
         let params = ProjectFileParam {
             project_id: 42,
@@ -110,7 +130,10 @@ mod tests {
             .list_technical_debt_goals_for_project_file(Parameters(params))
             .await
             .unwrap();
-        assert!(crate::tests::result_text(&result).contains("reduce complexity"));
+        let text = crate::tests::result_text(&result);
+        assert!(text.contains("reduce complexity"));
+        assert!(text.contains("\"link\""));
+        assert!(text.contains("biomarkers"));
     }
 
     #[tokio::test]
@@ -120,6 +143,28 @@ mod tests {
             false,
             MockCliRunner::with_responses(vec![]),
             MockHttpClient::new(vec![HttpResponse::error(404, "Not Found")]),
+        );
+        let params = ProjectFileParam {
+            project_id: 42,
+            file_path: "/tmp/f.rs".to_string(),
+        };
+        let result = server
+            .list_technical_debt_goals_for_project_file(Parameters(params))
+            .await
+            .unwrap();
+        assert_eq!(result.is_error, Some(true));
+    }
+
+    #[tokio::test]
+    async fn file_data_api_error() {
+        let _g = set_token("tok");
+        let server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_responses(vec![]),
+            MockHttpClient::new(vec![
+                HttpResponse::ok(r#"{"id":5000}"#),
+                HttpResponse::error(500, "Server Error"),
+            ]),
         );
         let params = ProjectFileParam {
             project_id: 42,
