@@ -257,10 +257,7 @@ mod tests {
     #[test]
     fn build_ace_headers_with_token_includes_authorization() {
         let headers = build_ace_headers("my-token");
-        assert_eq!(
-            headers.get("Authorization").unwrap(),
-            "Bearer my-token"
-        );
+        assert_eq!(headers.get("Authorization").unwrap(), "Bearer my-token");
         assert_common_ace_headers(&headers);
     }
 
