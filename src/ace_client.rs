@@ -30,11 +30,7 @@ pub async fn refactor_with_client(
         let request = HttpRequest {
             method: Method::Post,
             url: url.clone(),
-            headers: HashMap::from([
-                ("Authorization".to_string(), format!("Bearer {token}")),
-                ("Content-Type".to_string(), "application/json".to_string()),
-                ("Accept".to_string(), "application/json".to_string()),
-            ]),
+            headers: build_ace_headers(&token),
             body: Some(body.clone()),
             timeout_secs: 120,
         };
@@ -74,6 +70,21 @@ pub async fn refactor_with_client(
 
 fn ace_url() -> String {
     std::env::var("CS_ACE_API_URL").unwrap_or_else(|_| ACE_API_URL.to_string())
+}
+
+fn build_ace_headers(token: &str) -> HashMap<String, String> {
+    let mut headers = HashMap::from([
+        ("Content-Type".to_string(), "application/json".to_string()),
+        ("Accept".to_string(), "application/json".to_string()),
+        (
+            "User-Agent".to_string(),
+            format!("codescene-mcp/{}", env!("CS_MCP_VERSION")),
+        ),
+    ]);
+    if !token.is_empty() {
+        headers.insert("Authorization".to_string(), format!("Bearer {token}"));
+    }
+    headers
 }
 
 #[cfg(test)]
@@ -210,15 +221,12 @@ mod tests {
             reqs[0].headers.get("Authorization").unwrap(),
             "Bearer my-ace-token"
         );
-        assert_eq!(
-            reqs[0].headers.get("Content-Type").unwrap(),
-            "application/json"
-        );
+        assert_common_ace_headers(&reqs[0].headers);
         cleanup_ace_env();
     }
 
     #[tokio::test]
-    async fn refactor_with_empty_token_sends_empty_bearer() {
+    async fn refactor_with_empty_token_omits_authorization() {
         let _lock = config::lock_test_env();
         std::env::remove_var("CS_ACE_ACCESS_TOKEN");
 
@@ -227,7 +235,8 @@ mod tests {
         let _ = call_refactor(&mock).await;
 
         let reqs = captured.lock().unwrap();
-        assert_eq!(reqs[0].headers.get("Authorization").unwrap(), "Bearer ");
+        assert!(reqs[0].headers.get("Authorization").is_none());
+        assert_common_ace_headers(&reqs[0].headers);
     }
 
     #[tokio::test]
@@ -243,5 +252,31 @@ mod tests {
             other => panic!("Expected ApiError::Status, got: {other:?}"),
         }
         cleanup_ace_env();
+    }
+
+    #[test]
+    fn build_ace_headers_with_token_includes_authorization() {
+        let headers = build_ace_headers("my-token");
+        assert_eq!(
+            headers.get("Authorization").unwrap(),
+            "Bearer my-token"
+        );
+        assert_common_ace_headers(&headers);
+    }
+
+    #[test]
+    fn build_ace_headers_without_token_omits_authorization() {
+        let headers = build_ace_headers("");
+        assert!(headers.get("Authorization").is_none());
+        assert_common_ace_headers(&headers);
+    }
+
+    /// Assert the headers that every ACE request must include.
+    fn assert_common_ace_headers(headers: &HashMap<String, String>) {
+        assert_eq!(headers.get("Content-Type").unwrap(), "application/json");
+        assert_eq!(headers.get("Accept").unwrap(), "application/json");
+        assert!(headers
+            .get("User-Agent")
+            .is_some_and(|v| v.starts_with("codescene-mcp/")));
     }
 }

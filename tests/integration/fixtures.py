@@ -181,6 +181,100 @@ class AuthService {
 module.exports = AuthService;
 """
 
+# Complex JavaScript code with code smells (many args, deep nesting, high complexity).
+# Uses top-level functions so the CLI parser can find them by name.
+# ACE supports js/ts/java/cs/cpp — Python is NOT supported.
+COMPLEX_JAVASCRIPT_CODE = """/**
+ * Order processing module with maintainability issues.
+ */
+
+function processOrder(orderData, customerInfo, inventory, pricingRules, discountCodes, shippingOptions, paymentMethod) {
+    if (!orderData || !customerInfo) {
+        return { error: "Missing data" };
+    }
+
+    const items = orderData.items || [];
+    if (items.length === 0) {
+        return { error: "No items" };
+    }
+
+    let total = 0;
+    const validItems = [];
+
+    for (const item of items) {
+        if (!(item.id in inventory)) {
+            continue;
+        }
+
+        const stock = inventory[item.id];
+        if (stock.quantity < item.quantity) {
+            continue;
+        }
+
+        let price = stock.price;
+
+        for (const rule of pricingRules) {
+            if (rule.type === "bulk") {
+                if (item.quantity >= rule.minQuantity) {
+                    price = price * (1 - rule.discount);
+                }
+            } else if (rule.type === "category") {
+                if (stock.category === rule.category) {
+                    price = price * (1 - rule.discount);
+                }
+            }
+        }
+
+        for (const code of discountCodes) {
+            if (code.code === orderData.discountCode) {
+                if (code.type === "percentage") {
+                    price = price * (1 - code.value);
+                } else if (code.type === "fixed") {
+                    price = Math.max(0, price - code.value);
+                }
+            }
+        }
+
+        const itemTotal = price * item.quantity;
+        total += itemTotal;
+        validItems.push({ item, price, total: itemTotal });
+    }
+
+    let shippingCost = 0;
+    if (orderData.shippingMethod in shippingOptions) {
+        const option = shippingOptions[orderData.shippingMethod];
+        if (total < option.freeThreshold) {
+            shippingCost = option.cost;
+        }
+    }
+
+    const taxRate = customerInfo.taxRate || 0.1;
+    const tax = total * taxRate;
+    const finalTotal = total + shippingCost + tax;
+
+    if (paymentMethod === "credit_card") {
+        if (!customerInfo.creditCard) {
+            return { error: "No credit card" };
+        }
+        if (!validateCard(customerInfo.creditCard)) {
+            return { error: "Invalid credit card" };
+        }
+    } else if (paymentMethod === "paypal") {
+        if (!customerInfo.paypalEmail) {
+            return { error: "No PayPal email" };
+        }
+    }
+
+    return { items: validItems, subtotal: total, shipping: shippingCost, tax, total: finalTotal };
+}
+
+function validateCard(cardInfo) {
+    return cardInfo && cardInfo.number && cardInfo.number.length === 16;
+}
+
+module.exports = { processOrder, validateCard };
+"""
+
 # Java code sample with nested complexity
 JAVA_CODE = """package com.example.service;
 
@@ -262,6 +356,7 @@ def get_sample_files() -> dict[str, str]:
         "src/utils/calculator.py": GOOD_PYTHON_CODE,
         "src/services/order_processor.py": COMPLEX_PYTHON_CODE,
         "src/auth/AuthService.js": JAVASCRIPT_CODE,
+        "src/services/order_processor.js": COMPLEX_JAVASCRIPT_CODE,
         "src/main/java/com/example/OrderProcessor.java": JAVA_CODE,
     }
 
@@ -277,5 +372,6 @@ def get_expected_scores() -> dict[str, tuple[float, float]]:
         "src/utils/calculator.py": (8.5, 10.0),  # High quality
         "src/services/order_processor.py": (7.0, 9.0),  # Medium complexity
         "src/auth/AuthService.js": (7.0, 10.0),  # Good quality
+        "src/services/order_processor.js": (5.0, 9.0),  # Complex, many smells
         "src/main/java/com/example/OrderProcessor.java": (9.0, 10.0),  # High quality
     }
