@@ -7,6 +7,7 @@ pub mod code_health_refactoring_business_case;
 pub mod code_health_review;
 pub mod code_health_score;
 pub mod code_ownership_for_path;
+pub mod codescene_links;
 pub mod common;
 pub mod explain_code_health;
 pub mod explain_code_health_productivity;

@@ -136,6 +136,17 @@ pub async fn query_api_keyed_list_with_client(
     Ok(all_items)
 }
 
+pub async fn get_latest_analysis_id(
+    project_id: i64,
+    client: &dyn HttpClient,
+) -> Result<i64, ApiError> {
+    let endpoint = format!("v2/projects/{project_id}/analyses/latest");
+    let data = query_api_with_client(&endpoint, client).await?;
+    data.get("id")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| ApiError::Transport("Missing 'id' in analysis response".into()))
+}
+
 fn endpoint_with_query_params(
     endpoint: &str,
     params: &[(String, String)],
@@ -466,5 +477,36 @@ mod tests {
         assert!(headers
             .get("User-Agent")
             .is_some_and(|v| v.starts_with("codescene-mcp/")));
+    }
+
+    #[tokio::test]
+    async fn get_latest_analysis_id_success() {
+        let _g = lock_api_env("tok");
+        let mock = MockHttpClient::always(HttpResponse::ok(
+            r#"{"id":37888,"name":"latest analysis"}"#,
+        ));
+        let id = get_latest_analysis_id(147, &mock).await.unwrap();
+        assert_eq!(id, 37888);
+        cleanup_api_env();
+    }
+
+    #[tokio::test]
+    async fn get_latest_analysis_id_missing_id_field() {
+        let _g = lock_api_env("tok");
+        let mock = MockHttpClient::always(HttpResponse::ok(r#"{"name":"no id here"}"#));
+        let err = get_latest_analysis_id(147, &mock).await.unwrap_err();
+        match err {
+            ApiError::Transport(msg) => assert!(msg.contains("Missing 'id'")),
+            other => panic!("Expected Transport error, got {other:?}"),
+        }
+        cleanup_api_env();
+    }
+
+    #[tokio::test]
+    async fn get_latest_analysis_id_api_error() {
+        let _g = lock_api_env("tok");
+        let mock = MockHttpClient::new(vec![HttpResponse::error(500, "Server Error")]);
+        assert!(get_latest_analysis_id(147, &mock).await.is_err());
+        cleanup_api_env();
     }
 }
