@@ -137,7 +137,9 @@ pub fn format_version_warning(info: &VersionInfo) -> String {
         ⚠️  VERSION UPDATE AVAILABLE: {current} → {latest}\n\
         \n\
         Update instructions:\n\
-        - Homebrew: brew upgrade codescene-mcp-server\n\
+        - NPX: npx @codescene/codehealth-mcp\n\
+        - NPM: npm update @codescene/codehealth-mcp
+        - Homebrew: brew update && brew upgrade codescene-mcp-server\n\
         - Windows: winget upgrade CodeScene.MCP\n\
         - Docker: docker pull codescene/codescene-mcp:latest\n\
         - Manual: https://github.com/codescene-oss/codescene-mcp-server/releases/latest\n",
