@@ -482,9 +482,8 @@ mod tests {
     #[tokio::test]
     async fn get_latest_analysis_id_success() {
         let _g = lock_api_env("tok");
-        let mock = MockHttpClient::always(HttpResponse::ok(
-            r#"{"id":37888,"name":"latest analysis"}"#,
-        ));
+        let mock =
+            MockHttpClient::always(HttpResponse::ok(r#"{"id":37888,"name":"latest analysis"}"#));
         let id = get_latest_analysis_id(147, &mock).await.unwrap();
         assert_eq!(id, 37888);
         cleanup_api_env();

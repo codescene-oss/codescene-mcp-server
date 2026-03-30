@@ -26,10 +26,9 @@ pub(crate) async fn handle(
     }
     server.version_checker.check_in_background();
 
-    let analysis_id =
-        api_client::get_latest_analysis_id(params.project_id, &*server.http_client)
-            .await
-            .map_err(|e| format!("Error fetching latest analysis: {e}"));
+    let analysis_id = api_client::get_latest_analysis_id(params.project_id, &*server.http_client)
+        .await
+        .map_err(|e| format!("Error fetching latest analysis: {e}"));
     let analysis_id = match analysis_id {
         Ok(id) => id,
         Err(e) => {

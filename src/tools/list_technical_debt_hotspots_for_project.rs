@@ -23,10 +23,9 @@ pub(crate) async fn handle(
     }
     server.version_checker.check_in_background();
 
-    let analysis_id =
-        api_client::get_latest_analysis_id(params.project_id, &*server.http_client)
-            .await
-            .map_err(|e| format!("Error fetching latest analysis: {e}"));
+    let analysis_id = api_client::get_latest_analysis_id(params.project_id, &*server.http_client)
+        .await
+        .map_err(|e| format!("Error fetching latest analysis: {e}"));
     let analysis_id = match analysis_id {
         Ok(id) => id,
         Err(e) => {
@@ -107,9 +106,7 @@ mod tests {
         let _g = set_token("tok");
         let http = make_api_mock(
             HttpResponse::ok(r#"{"id":5000}"#),
-            HttpResponse::ok(
-                r#"{"result":[{"file":"b.rs","score":3.5}],"page":1,"max_pages":1}"#,
-            ),
+            HttpResponse::ok(r#"{"result":[{"file":"b.rs","score":3.5}],"page":1,"max_pages":1}"#),
         );
         let server = make_server_with_mocks(false, MockCliRunner::with_responses(vec![]), http);
         let params = ProjectParam { project_id: 10 };
