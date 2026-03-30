@@ -440,8 +440,10 @@ def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool
     """Run all self-contained test modules and return their results."""
     from test_analytics_tracking import run_analytics_tracking_tests_with_backend
     from test_analyze_change_set import run_analyze_change_set_tests_with_backend
+    from test_auto_refactor import run_auto_refactor_tests_with_backend
     from test_bundled_docs import run_bundled_docs_tests_with_backend
     from test_business_case import run_business_case_tests_with_backend
+    from test_cloudfront_headers import run_cloudfront_headers_tests_with_backend
     from test_configure import run_configure_tests_with_backend
     from test_git_subtree import run_subtree_tests_with_backend
     from test_git_worktree import run_worktree_tests_with_backend
@@ -462,6 +464,8 @@ def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool
         ("Standalone License Tests", run_standalone_license_tests_with_backend),
         ("Configure Tests", run_configure_tests_with_backend),
         ("Access Token Guard Tests", run_require_access_token_tests_with_backend),
+        ("CloudFront Headers Tests", run_cloudfront_headers_tests_with_backend),
+        ("Auto-Refactor Tests", run_auto_refactor_tests_with_backend),
     ]
     return [_run_test_module(name, func, backend) for name, func in modules]
 
