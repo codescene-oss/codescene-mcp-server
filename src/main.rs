@@ -71,6 +71,7 @@ enum CliAction {
     RunServer,
     PrintHelp,
     PrintVersion(String),
+    PrintCliVersion,
 }
 
 fn display_version(raw_version: &str) -> &str {
@@ -78,7 +79,7 @@ fn display_version(raw_version: &str) -> &str {
 }
 
 fn help_text() -> &'static str {
-    "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help       Show this help message and exit\n  -v, --version    Show version and exit"
+    "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help       Show this help message and exit\n  -v, --version    Show version and exit\n  --cli-version    Show embedded CLI version and exit"
 }
 
 fn parse_cli_args(args: &[String], raw_version: &str) -> Result<CliAction, String> {
@@ -92,6 +93,7 @@ fn parse_cli_args(args: &[String], raw_version: &str) -> Result<CliAction, Strin
             "-v" | "--version" => Ok(CliAction::PrintVersion(
                 display_version(raw_version).to_string(),
             )),
+            "--cli-version" => Ok(CliAction::PrintCliVersion),
             other => Err(format!("Unknown argument: {other}")),
         };
     }
@@ -817,6 +819,13 @@ mod tests {
         assert!(err.contains("Unexpected arguments"));
     }
 
+    #[test]
+    fn parse_cli_args_supports_cli_version() {
+        let args = vec!["--cli-version".to_string()];
+        let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
+        assert!(matches!(action, CliAction::PrintCliVersion));
+    }
+
     #[tokio::test]
     async fn require_token_returns_error_when_missing() {
         let _g = clear_token();
@@ -921,6 +930,11 @@ async fn main() -> anyhow::Result<()> {
         }
         Ok(CliAction::PrintVersion(version)) => {
             println!("{version}");
+            return Ok(());
+        }
+        Ok(CliAction::PrintCliVersion) => {
+            let output = cli::run_cli(&["version"], None).await?;
+            print!("{output}");
             return Ok(());
         }
         Err(message) => {
