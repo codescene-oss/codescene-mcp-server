@@ -101,6 +101,10 @@ fn parse_cli_args(args: &[String], raw_version: &str) -> Result<CliAction, Strin
     Err(format!("Unexpected arguments: {}", args.join(" ")))
 }
 
+async fn fetch_cli_version(cli_runner: &dyn cli::CliRunner) -> anyhow::Result<String> {
+    Ok(cli_runner.run(&["version"], None).await?)
+}
+
 fn inlined_schema_for<T: JsonSchema + 'static>() -> Arc<serde_json::Map<String, serde_json::Value>>
 {
     let mut settings = schemars::generate::SchemaSettings::draft2020_12();
@@ -827,6 +831,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn fetch_cli_version_returns_cli_output() {
+        let runner = MockCliRunner::with_ok("cs version 1.5.0\n");
+        let result = fetch_cli_version(&runner).await.unwrap();
+        assert_eq!(result, "cs version 1.5.0\n");
+    }
+
+    #[tokio::test]
+    async fn fetch_cli_version_propagates_cli_error() {
+        let runner = MockCliRunner::with_err(1, "not found");
+        let result = fetch_cli_version(&runner).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
     async fn require_token_returns_error_when_missing() {
         let _g = clear_token();
         assert!(make_server(false).require_token().is_some());
@@ -933,7 +951,7 @@ async fn main() -> anyhow::Result<()> {
             return Ok(());
         }
         Ok(CliAction::PrintCliVersion) => {
-            let output = cli::run_cli(&["version"], None).await?;
+            let output = fetch_cli_version(&cli::ProductionCliRunner).await?;
             print!("{output}");
             return Ok(());
         }
