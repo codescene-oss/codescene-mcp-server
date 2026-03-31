@@ -71,6 +71,7 @@ enum CliAction {
     RunServer,
     PrintHelp,
     PrintVersion(String),
+    PrintCliVersion,
 }
 
 fn display_version(raw_version: &str) -> &str {
@@ -78,7 +79,7 @@ fn display_version(raw_version: &str) -> &str {
 }
 
 fn help_text() -> &'static str {
-    "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help       Show this help message and exit\n  -v, --version    Show version and exit"
+    "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help       Show this help message and exit\n  -v, --version    Show version and exit\n  --cli-version    Show embedded CLI version and exit"
 }
 
 fn parse_cli_args(args: &[String], raw_version: &str) -> Result<CliAction, String> {
@@ -92,11 +93,16 @@ fn parse_cli_args(args: &[String], raw_version: &str) -> Result<CliAction, Strin
             "-v" | "--version" => Ok(CliAction::PrintVersion(
                 display_version(raw_version).to_string(),
             )),
+            "--cli-version" => Ok(CliAction::PrintCliVersion),
             other => Err(format!("Unknown argument: {other}")),
         };
     }
 
     Err(format!("Unexpected arguments: {}", args.join(" ")))
+}
+
+async fn fetch_cli_version(cli_runner: &dyn cli::CliRunner) -> anyhow::Result<String> {
+    Ok(cli_runner.run(&["version"], None).await?)
 }
 
 fn inlined_schema_for<T: JsonSchema + 'static>() -> Arc<serde_json::Map<String, serde_json::Value>>
@@ -817,6 +823,27 @@ mod tests {
         assert!(err.contains("Unexpected arguments"));
     }
 
+    #[test]
+    fn parse_cli_args_supports_cli_version() {
+        let args = vec!["--cli-version".to_string()];
+        let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
+        assert!(matches!(action, CliAction::PrintCliVersion));
+    }
+
+    #[tokio::test]
+    async fn fetch_cli_version_returns_cli_output() {
+        let runner = MockCliRunner::with_ok("cs version 1.5.0\n");
+        let result = fetch_cli_version(&runner).await.unwrap();
+        assert_eq!(result, "cs version 1.5.0\n");
+    }
+
+    #[tokio::test]
+    async fn fetch_cli_version_propagates_cli_error() {
+        let runner = MockCliRunner::with_err(1, "not found");
+        let result = fetch_cli_version(&runner).await;
+        assert!(result.is_err());
+    }
+
     #[tokio::test]
     async fn require_token_returns_error_when_missing() {
         let _g = clear_token();
@@ -921,6 +948,11 @@ async fn main() -> anyhow::Result<()> {
         }
         Ok(CliAction::PrintVersion(version)) => {
             println!("{version}");
+            return Ok(());
+        }
+        Ok(CliAction::PrintCliVersion) => {
+            let output = fetch_cli_version(&cli::ProductionCliRunner).await?;
+            print!("{output}");
             return Ok(());
         }
         Err(message) => {
