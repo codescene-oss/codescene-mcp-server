@@ -43,7 +43,7 @@ pub fn hotspots_link(project_id: i64, analysis_id: i64) -> String {
 /// with the file name percent-encoded.
 pub fn biomarkers_link(project_id: i64, analysis_id: i64, file_name: Option<&str>) -> String {
     let base = analysis_base(project_id, analysis_id);
-    let path = format!("{base}/code/hotspots/biomarkers");
+    let path = format!("{base}/code/biomarkers");
     match file_name {
         Some(name) => {
             let encoded = percent_encode_path(name);
@@ -164,7 +164,7 @@ mod tests {
         let link = biomarkers_link(72308, 6006312, None);
         assert_eq!(
             link,
-            "https://codescene.io/projects/72308/jobs/6006312/results/code/hotspots/biomarkers"
+            "https://codescene.io/projects/72308/jobs/6006312/results/code/biomarkers"
         );
     }
 
@@ -178,7 +178,7 @@ mod tests {
         );
         assert_eq!(
             link,
-            "https://codescene.io/projects/72308/jobs/6006312/results/code/hotspots/biomarkers\
+            "https://codescene.io/projects/72308/jobs/6006312/results/code/biomarkers\
              ?name=code-coverage-examples-single-component/src/main/java/com/codescene/ConditionalExample.java"
         );
     }
@@ -189,7 +189,7 @@ mod tests {
         let link = biomarkers_link(147, 37888, None);
         assert_eq!(
             link,
-            "https://test-env.enterprise.codescene.io/147/analyses/37888/code/hotspots/biomarkers"
+            "https://test-env.enterprise.codescene.io/147/analyses/37888/code/biomarkers"
         );
     }
 
@@ -199,7 +199,7 @@ mod tests {
         let link = biomarkers_link(147, 37888, Some("seata/mmil-test.java"));
         assert_eq!(
             link,
-            "https://test-env.enterprise.codescene.io/147/analyses/37888/code/hotspots/biomarkers\
+            "https://test-env.enterprise.codescene.io/147/analyses/37888/code/biomarkers\
              ?name=seata/mmil-test.java"
         );
     }
