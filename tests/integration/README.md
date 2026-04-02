@@ -32,6 +32,7 @@ tests/integration/
 ├── test_version_check.py          # Version check endpoint tests
 ├── test_analytics_tracking.py     # Analytics tracking non-blocking tests
 ├── test_analyze_change_set.py     # Branch-level change set analysis tests
+├── test_ssl_cli_truststore.py     # SSL truststore injection E2E tests
 │
 │   # Standalone-only test suite (not in run_all_tests.py)
 └── test_platform_specific.py      # Platform-specific path handling tests
@@ -211,6 +212,12 @@ python test_git_worktree.py C:\path\to\cs-mcp.exe
 - **Symlinks**: Tests symlink handling (Unix-like systems only)
 - **Spaces in Paths**: Tests paths with spaces (e.g., `"My Documents/file.py"`)
 - **Unicode in Paths**: Tests Unicode characters in file/directory names
+
+### 11. SSL Truststore CLI Tests (`test_ssl_cli_truststore.py`)
+
+- **Truststore Args Injected**: Validates that `REQUESTS_CA_BUNDLE` triggers Java truststore argument injection for CLI invocations
+- **Truststore File Exists**: Ensures injected `-Djavax.net.ssl.trustStore=...` points to a real generated truststore file
+- **No Silent Fallback**: Verifies that when CA env vars are absent, truststore args are not injected
 
 ## Test Fixtures
 

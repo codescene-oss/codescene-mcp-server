@@ -450,6 +450,7 @@ def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool
     from test_relative_paths import run_relative_path_tests_with_backend
     from test_require_access_token import run_require_access_token_tests_with_backend
     from test_standalone_license import run_standalone_license_tests_with_backend
+    from test_ssl_cli_truststore import run_ssl_cli_truststore_tests_with_backend
     from test_version_check import run_version_check_tests_with_backend
 
     modules = [
@@ -465,6 +466,7 @@ def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool
         ("Configure Tests", run_configure_tests_with_backend),
         ("Access Token Guard Tests", run_require_access_token_tests_with_backend),
         ("CloudFront Headers Tests", run_cloudfront_headers_tests_with_backend),
+        ("SSL Truststore CLI Tests", run_ssl_cli_truststore_tests_with_backend),
         ("Auto-Refactor Tests", run_auto_refactor_tests_with_backend),
     ]
     return [_run_test_module(name, func, backend) for name, func in modules]

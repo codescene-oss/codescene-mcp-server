@@ -40,6 +40,10 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 # Cryptography (SHA-256 hashing)
 sha2 = "0.10"
 
+# Pure Rust truststore generation from PEM certificates
+p12-keystore = "0.3.0-rc3"
+rustls-pemfile = "2.2.0"
+
 # File system paths
 dirs = "6"
 
