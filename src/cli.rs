@@ -2,6 +2,8 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 
+use sha2::{Digest, Sha256};
+
 use crate::environment;
 use crate::errors::CliError;
 
@@ -25,6 +27,7 @@ const CLI_ZIP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/cs-cli.zip"));
 const CLI_BINARY_NAME: &str = if cfg!(windows) { "cs.exe" } else { "cs" };
 
 const DOCKER_CLI_PATH: &str = "/root/.local/bin/cs";
+const SSL_TRUSTSTORE_PASSWORD: &str = "changeit";
 
 /// Resolve the path to the `cs` CLI binary.
 ///
@@ -89,8 +92,9 @@ async fn run_cli_process(
     disable_tracking: bool,
 ) -> Result<Output, CliError> {
     let mut cmd = tokio::process::Command::new(cli_path);
+    let effective_args = with_ssl_cli_args_if_needed(cli_path, args);
 
-    cmd.args(args)
+    cmd.args(&effective_args)
         .env("CS_CONTEXT", "mcp-server")
         .env("CS_DISABLE_VERSION_CHECK", "1");
 
@@ -118,6 +122,103 @@ async fn run_cli_process(
 
 fn should_retry_after_telemetry_flush_error(stderr: &str) -> bool {
     stderr.contains("NoSuchFileException") && stderr.contains("codescene-cli.log.jsonl")
+}
+
+fn with_ssl_cli_args_if_needed(cli_path: &Path, args: &[&str]) -> Vec<String> {
+    let mut effective_args = Vec::new();
+
+    if is_cs_cli_binary(cli_path) {
+        effective_args.extend(ssl_cli_args_from_env());
+    }
+
+    effective_args.extend(args.iter().map(|a| a.to_string()));
+    effective_args
+}
+
+fn is_cs_cli_binary(cli_path: &Path) -> bool {
+    let Some(name) = cli_path.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+
+    let lower = name.to_ascii_lowercase();
+    lower == "cs" || lower == "cs.exe"
+}
+
+fn ssl_cli_args_from_env() -> Vec<String> {
+    let Some(ca_bundle_path) = selected_ca_bundle_path_from_env() else {
+        return Vec::new();
+    };
+
+    let Some(truststore_path) = create_or_get_truststore_from_pem(&ca_bundle_path) else {
+        return Vec::new();
+    };
+
+    vec![
+        format!(
+            "-Djavax.net.ssl.trustStore={}",
+            truststore_path.to_string_lossy()
+        ),
+        "-Djavax.net.ssl.trustStoreType=PKCS12".to_string(),
+        format!("-Djavax.net.ssl.trustStorePassword={SSL_TRUSTSTORE_PASSWORD}"),
+    ]
+}
+
+fn selected_ca_bundle_path_from_env() -> Option<PathBuf> {
+    ["REQUESTS_CA_BUNDLE", "SSL_CERT_FILE", "CURL_CA_BUNDLE"]
+        .into_iter()
+        .find_map(|env_var| {
+            std::env::var(env_var)
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from)
+                .filter(|p| p.is_file())
+        })
+}
+
+fn create_or_get_truststore_from_pem(ca_bundle_path: &Path) -> Option<PathBuf> {
+    let pem_data = std::fs::read(ca_bundle_path).ok()?;
+    let truststore_path = truststore_path_for_pem(&pem_data);
+    if truststore_path.exists() {
+        return Some(truststore_path);
+    }
+
+    if run_openssl_pkcs12_export(ca_bundle_path, &truststore_path) {
+        return Some(truststore_path);
+    }
+
+    None
+}
+
+fn truststore_path_for_pem(pem_data: &[u8]) -> PathBuf {
+    let mut hasher = Sha256::new();
+    hasher.update(pem_data);
+    let digest = hasher.finalize();
+    let digest_hex = format!("{:x}", digest);
+    let short_hash = &digest_hex[..16];
+    std::env::temp_dir().join(format!("cs-mcp-truststore-{short_hash}.p12"))
+}
+
+fn run_openssl_pkcs12_export(ca_bundle_path: &Path, truststore_path: &Path) -> bool {
+    if let Some(parent) = truststore_path.parent() {
+        if std::fs::create_dir_all(parent).is_err() {
+            return false;
+        }
+    }
+
+    let status = std::process::Command::new("openssl")
+        .arg("pkcs12")
+        .arg("-export")
+        .arg("-nokeys")
+        .arg("-in")
+        .arg(ca_bundle_path)
+        .arg("-out")
+        .arg(truststore_path)
+        .arg("-passout")
+        .arg(format!("pass:{SSL_TRUSTSTORE_PASSWORD}"))
+        .status();
+
+    matches!(status, Ok(s) if s.success())
 }
 
 fn is_license_check_failure(stderr: &str) -> bool {
@@ -281,6 +382,60 @@ mod tests {
     #[test]
     fn cli_binary_name_is_cs() {
         assert_eq!(CLI_BINARY_NAME, "cs");
+    }
+
+    #[test]
+    fn is_cs_cli_binary_detects_cs_names() {
+        assert!(is_cs_cli_binary(Path::new("/tmp/cs")));
+        assert!(is_cs_cli_binary(Path::new("C:/tools/cs.exe")));
+        assert!(is_cs_cli_binary(Path::new("cs")));
+        assert!(!is_cs_cli_binary(Path::new("/bin/sh")));
+    }
+
+    #[test]
+    fn selected_ca_bundle_prefers_requests_ca_bundle() {
+        let _lock = config::lock_test_env();
+        let requests = tempfile::NamedTempFile::new().unwrap();
+        let ssl_cert_file = tempfile::NamedTempFile::new().unwrap();
+
+        std::env::set_var("REQUESTS_CA_BUNDLE", requests.path());
+        std::env::set_var("SSL_CERT_FILE", ssl_cert_file.path());
+        std::env::remove_var("CURL_CA_BUNDLE");
+
+        let selected = selected_ca_bundle_path_from_env().unwrap();
+        assert_eq!(selected, requests.path());
+
+        std::env::remove_var("REQUESTS_CA_BUNDLE");
+        std::env::remove_var("SSL_CERT_FILE");
+    }
+
+    #[test]
+    fn ssl_cli_args_use_existing_truststore_file() {
+        let _lock = config::lock_test_env();
+        let mut pem = tempfile::NamedTempFile::new().unwrap();
+        let pem_contents = format!(
+            "-----BEGIN CERTIFICATE-----\n{}\n-----END CERTIFICATE-----\n",
+            pem.path().display()
+        );
+        use std::io::Write;
+        pem.write_all(pem_contents.as_bytes()).unwrap();
+
+        std::env::set_var("REQUESTS_CA_BUNDLE", pem.path());
+        std::env::remove_var("SSL_CERT_FILE");
+        std::env::remove_var("CURL_CA_BUNDLE");
+
+        let truststore = truststore_path_for_pem(pem_contents.as_bytes());
+        std::fs::write(&truststore, b"dummy").unwrap();
+
+        let args = ssl_cli_args_from_env();
+        assert_eq!(args.len(), 3);
+        assert!(args[0].contains("-Djavax.net.ssl.trustStore="));
+        assert!(args[1].contains("-Djavax.net.ssl.trustStoreType=PKCS12"));
+        assert!(args[2].contains("-Djavax.net.ssl.trustStorePassword=changeit"));
+        assert!(args[0].contains(truststore.to_string_lossy().as_ref()));
+
+        std::fs::remove_file(&truststore).ok();
+        std::env::remove_var("REQUESTS_CA_BUNDLE");
     }
 
     #[test]
