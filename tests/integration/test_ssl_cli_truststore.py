@@ -8,10 +8,13 @@ These tests validate the full MCP -> embedded CLI argument path for SSL:
 
 The test uses a fake CLI binary (CS_CLI_PATH) that verifies whether
 `-Djavax.net.ssl.trustStore=...` is present and points to an existing file.
+The fake CLI is compiled from a tiny Rust source at runtime so it works
+consistently on macOS, Linux, and Windows.
 """
 
 import os
 import stat
+import subprocess
 import sys
 from pathlib import Path
 
@@ -20,9 +23,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 from fixtures import get_sample_files
 
 from test_utils import (
+    CargoBackend,
     DockerBackend,
     MCPClient,
-    CargoBackend,
     ServerBackend,
     create_git_repo,
     extract_code_health_score,
@@ -57,50 +60,55 @@ sC0Nc9QdNQt5Tos5Je5S7CWL0w==
 """
 
 
-FAKE_CLI_SH = """#!/bin/sh
-set -eu
+FAKE_CLI_RS = r'''use std::env;
+use std::path::Path;
+use std::process;
 
-cmd=""
-has_truststore=0
+fn main() {
+    let mut cmd = String::new();
+    let mut has_truststore = false;
 
-for arg in "$@"; do
-  case "$arg" in
-    -Djavax.net.ssl.trustStore=*)
-      ts="${arg#-Djavax.net.ssl.trustStore=}"
-      if [ ! -f "$ts" ]; then
-        echo "truststore file missing: $ts" 1>&2
-        exit 21
-      fi
-      has_truststore=1
-      ;;
-    -D*)
-      ;;
-    *)
-      if [ -z "$cmd" ]; then
-        cmd="$arg"
-      fi
-      ;;
-  esac
-done
+    for arg in env::args().skip(1) {
+        if let Some(ts) = arg.strip_prefix("-Djavax.net.ssl.trustStore=") {
+            if !Path::new(ts).is_file() {
+                eprintln!("truststore file missing: {ts}");
+                process::exit(21);
+            }
+            has_truststore = true;
+            continue;
+        }
 
-if [ "${REQUIRE_TRUSTSTORE:-0}" = "1" ] && [ "$has_truststore" -ne 1 ]; then
-  echo "missing truststore arg" 1>&2
-  exit 22
-fi
+        if arg.starts_with("-D") {
+            continue;
+        }
 
-if [ "$cmd" = "version" ]; then
-  echo "fake-cli-version"
-  exit 0
-fi
+        if cmd.is_empty() {
+            cmd = arg;
+        }
+    }
 
-if [ "$cmd" = "review" ]; then
-  echo '{"score":9.5,"review":[]}'
-  exit 0
-fi
+    let require = env::var("REQUIRE_TRUSTSTORE").unwrap_or_else(|_| "0".to_string()) == "1";
+    if require && !has_truststore {
+        eprintln!("missing truststore arg");
+        process::exit(22);
+    }
 
-echo "unsupported command: $cmd" 1>&2
-exit 23
-"""
+    match cmd.as_str() {
+        "version" => {
+            println!("fake-cli-version");
+            process::exit(0);
+        }
+        "review" => {
+            println!("{{\"score\":9.5,\"review\":[]}}");
+            process::exit(0);
+        }
+        _ => {
+            eprintln!("unsupported command: {cmd}");
+            process::exit(23);
+        }
+    }
+}
+'''
 
 
 def run_ssl_cli_truststore_tests(executable: Path) -> int:
@@ -146,8 +154,19 @@ def run_ssl_cli_truststore_tests_with_backend(backend: ServerBackend) -> int:
 
 
 def _make_fake_cli(test_dir: Path) -> Path:
-    fake_cli = test_dir / "cs"
-    fake_cli.write_text(FAKE_CLI_SH)
+    source = test_dir / "fake_cs.rs"
+    source.write_text(FAKE_CLI_RS)
+
+    fake_cli = test_dir / ("cs.exe" if os.name == "nt" else "cs")
+    proc = subprocess.run(
+        ["rustc", str(source), "-O", "-o", str(fake_cli)],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout).strip()
+        raise RuntimeError(f"Failed to compile fake CLI with rustc: {err}")
+
     mode = fake_cli.stat().st_mode
     fake_cli.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return fake_cli
