@@ -1,14 +1,20 @@
-# Getting a Personal Access Token (PAT)
+# Getting an Access Token
 
-A Personal Access Token (PAT) is required to authenticate with the CodeScene MCP Server. This token grants access to the Code Health analysis capability.
+An access token is required to authenticate with the CodeScene MCP Server.
 
-## CodeScene Cloud
+## 1) Standalone MCP Token
+
+If you want a standalone MCP token (without connecting through a CodeScene Cloud or on-prem instance), sign up here:
+
+👉 **[CodeScene MCP Server](https://codescene.com/product/mcp-server)**
+
+## 2) CodeScene Cloud Personal Access Token (PAT)
 
 If you're using CodeScene Cloud, create your token here:
 
 👉 **[Create a Personal Access Token](https://codescene.io/users/me/pat)**
 
-## CodeScene On-Prem
+## 3) CodeScene On-Prem Personal Access Token (PAT)
 
 If you're using CodeScene on-prem, follow these steps to create a Personal Access Token:
 
