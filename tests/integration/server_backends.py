@@ -197,6 +197,8 @@ class DockerBackend(ServerBackend):
             "CS_ACE_API_URL",
             "-e",
             "CS_CONFIG_DIR",
+            "-e",
+            "CS_ENABLED_TOOLS",
             "--add-host=host.docker.internal:host-gateway",
             "--mount",
             f"type=bind,src={working_dir},dst={self.CONTAINER_MOUNT_DEST}",
