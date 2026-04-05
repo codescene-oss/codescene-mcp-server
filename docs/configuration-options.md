@@ -411,7 +411,7 @@ Changes to this setting require a server restart to take effect.
 | `code_health_refactoring_business_case` | Quantified business case for refactoring |
 | `code_health_auto_refactor` | AI-assisted auto-refactoring (requires ACE) |
 
-**API tools** — require a CodeScene instance and `access_token`:
+**API tools** — require CodeScene Cloud or CodeScene On-prem:
 
 | Tool name | Description |
 |-----------|-------------|
