@@ -398,6 +398,8 @@ Changes to this setting require a server restart to take effect.
 
 ### Available tool names
 
+**Standalone tools** — work without a CodeScene API connection:
+
 | Tool name | Description |
 |-----------|-------------|
 | `explain_code_health` | Explains the Code Health metric |
@@ -408,12 +410,19 @@ Changes to this setting require a server restart to take effect.
 | `analyze_change_set` | Branch-level Code Health analysis (PR pre-flight) |
 | `code_health_refactoring_business_case` | Quantified business case for refactoring |
 | `code_health_auto_refactor` | AI-assisted auto-refactoring (requires ACE) |
+
+**API tools** — require a CodeScene instance and `access_token`:
+
+| Tool name | Description |
+|-----------|-------------|
 | `select_project` | List and select CodeScene projects |
 | `list_technical_debt_goals_for_project` | Technical debt goals for a project |
 | `list_technical_debt_goals_for_project_file` | Technical debt goals for a specific file |
 | `list_technical_debt_hotspots_for_project` | Technical debt hotspots for a project |
 | `list_technical_debt_hotspots_for_project_file` | Technical debt hotspots for a specific file |
 | `code_ownership_for_path` | Code ownership lookup for a file or directory |
+
+In standalone mode (no `access_token`), the API tools are automatically removed regardless of the `enabled_tools` setting.
 
 ### Examples
 
