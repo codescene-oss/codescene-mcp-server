@@ -18,7 +18,7 @@ Want AI to perform the setup? Start with [skills/installing-and-activating-codes
 1. Get an Access Token for the MCP Server — see [Getting a Personal Access Token](docs/getting-a-personal-access-token.md).
 2. Install the MCP Server using one of the [installation options](#installation) below.
 3. Add the MCP Server to your AI assistant. See the detailed instructions for your environment in the installation guide.
-4. Copy the agent guidance you want in your repository: [AGENTS.md](AGENTS.md) by default, [.amazonq/rules](.amazonq/rules) for Amazon Q, and any relevant public [skills](skills) for reusable workflow prompts.
+4. Copy the agent guidance that matches your license into your repository: [AGENTS-full.md](docs/AGENTS-full.md) for CodeScene Core users, [AGENTS-standalone.md](docs/AGENTS-standalone.md) for standalone license users, or [.amazonq/rules](.amazonq/rules) for Amazon Q. Also copy any relevant public [skills](skills) for reusable workflow prompts.
 
 ## Installation
 
@@ -109,7 +109,7 @@ docker pull codescene/codescene-mcp
 > Watch the [demo video of the CodeScene MCP](https://www.youtube.com/watch?v=AycLVxKmVSY).
 
 > [!NOTE]
-> CodeScene MCP comes with a set of [example prompts](.github/prompts), an [AGENTS.md](AGENTS.md) file to capture the key use cases, and a downloadable set of public [skills](skills). Copy the `AGENTS.md` file and any relevant skills to your own repository.
+> CodeScene MCP comes with a set of [example prompts](.github/prompts), agent guidance files to capture the key use cases, and a downloadable set of public [skills](skills). Copy the agent guidance that matches your license — [AGENTS-full.md](docs/AGENTS-full.md) for CodeScene Core users or [AGENTS-standalone.md](docs/AGENTS-standalone.md) for standalone users — and any relevant skills to your own repository.
 
 With the CodeScene MCP Server in place, your AI tools can:
 

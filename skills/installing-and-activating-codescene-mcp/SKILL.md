@@ -23,7 +23,7 @@ Do not use this skill for configuring tokens, URLs, or other server options. Use
 
 - Install using the method that matches the environment: `npx` or `npm`, Homebrew, Windows installer script, manual download, or Docker.
 - Register the server in the AI assistant so it launches `cs-mcp`.
-- Copy `AGENTS.md` into the repository, or `.amazonq/rules` for Amazon Q.
+- Copy the appropriate agent guidance file into the repository: `docs/AGENTS-full.md` for CodeScene Core users, or `docs/AGENTS-standalone.md` for standalone license users. For Amazon Q, copy `.amazonq/rules` instead.
 - Copy any relevant skills from the CodeScene MCP skills catalogue at `https://github.com/codescene-oss/codescene-mcp-server/tree/main/skills`.
 - After installation, use `set_config` or ask the assistant to configure the access token and any other options.
 
@@ -40,8 +40,8 @@ Do not use this skill for configuring tokens, URLs, or other server options. Use
    - For VS Code or GitHub Copilot, add a `codescene` server entry in `settings.json` or `.vscode/mcp.json`.
    - For Claude Code, add the MCP with `claude mcp add`.
 4. Configure the server by asking the assistant to set the access token (this uses the `set_config` tool under the hood). See the `configuring-codescene-mcp` skill for full details.
-5. Copy `AGENTS.md` to the repository so the agent knows how to use the MCP safely.
-6. If the user is on Amazon Q, copy `.amazonq/rules` instead of `AGENTS.md`.
+5. Copy the appropriate agent guidance file to the repository: `docs/AGENTS-full.md` for CodeScene Core users, or `docs/AGENTS-standalone.md` for standalone license users. Rename it to `AGENTS.md` in the target repository so the agent picks it up automatically.
+6. If the user is on Amazon Q, copy `.amazonq/rules` instead of the AGENTS file.
 7. Copy any relevant skills from `https://github.com/codescene-oss/codescene-mcp-server/tree/main/skills` for safeguarding, refactoring, prioritization, or business-case workflows.
 
 ## Common Mistakes
