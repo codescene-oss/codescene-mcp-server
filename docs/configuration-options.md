@@ -422,7 +422,7 @@ Changes to this setting require a server restart to take effect.
 | `list_technical_debt_hotspots_for_project_file` | Technical debt hotspots for a specific file |
 | `code_ownership_for_path` | Code ownership lookup for a file or directory |
 
-In standalone mode (no `access_token`), the API tools are automatically removed regardless of the `enabled_tools` setting.
+In standalone mode, the API tools are automatically removed regardless of the `enabled_tools` setting.
 
 ### Examples
 
