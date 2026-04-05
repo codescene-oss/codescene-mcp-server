@@ -17,6 +17,7 @@ This test suite validates:
 
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -32,6 +33,15 @@ from test_utils import (
     print_test,
     safe_temp_directory,
 )
+
+
+@dataclass
+class ServerContext:
+    """Bundles the three values needed to start an MCP server."""
+
+    command: list[str]
+    env: dict
+    cwd: str
 
 
 # --- Helpers ---
@@ -50,8 +60,8 @@ def _make_config_dir(test_dir: Path) -> Path:
     return config_dir
 
 
-def _start_client(command: list[str], env: dict, cwd: str) -> MCPClient | None:
-    client = MCPClient(command, env=env, cwd=cwd)
+def _start_client(ctx: ServerContext) -> MCPClient | None:
+    client = MCPClient(ctx.command, env=ctx.env, cwd=ctx.cwd)
     if not client.start():
         print_test("Server started", False, client.get_stderr())
         return None
@@ -63,11 +73,11 @@ def _start_client(command: list[str], env: dict, cwd: str) -> MCPClient | None:
 # --- Test functions ---
 
 
-def test_all_tools_without_filter(command: list[str], env: dict, cwd: str) -> bool:
+def test_all_tools_without_filter(ctx: ServerContext) -> bool:
     """Without enabled_tools set, all tools are available."""
     print_header("Test: All Tools Without Filter")
 
-    client = _start_client(command, env, cwd)
+    client = _start_client(ctx)
     if client is None:
         return False
 
@@ -103,16 +113,15 @@ def test_all_tools_without_filter(command: list[str], env: dict, cwd: str) -> bo
         client.stop()
 
 
-def test_filter_restricts_tools(
-    command: list[str], base_env: dict, cwd: str, config_dir: Path,
-) -> bool:
+def test_filter_restricts_tools(ctx: ServerContext, config_dir: Path) -> bool:
     """Setting CS_ENABLED_TOOLS restricts tools/list to the allowlist."""
     print_header("Test: Filter Restricts Tools")
 
-    env = base_env.copy()
+    env = ctx.env.copy()
     env["CS_ENABLED_TOOLS"] = "code_health_review,code_health_score"
+    filtered_ctx = ServerContext(ctx.command, env, ctx.cwd)
 
-    client = _start_client(command, env, cwd)
+    client = _start_client(filtered_ctx)
     if client is None:
         return False
 
@@ -155,17 +164,16 @@ def test_filter_restricts_tools(
         client.stop()
 
 
-def test_config_tools_always_present(
-    command: list[str], base_env: dict, cwd: str, config_dir: Path,
-) -> bool:
+def test_config_tools_always_present(ctx: ServerContext, config_dir: Path) -> bool:
     """get_config and set_config cannot be disabled."""
     print_header("Test: Config Tools Always Present")
 
-    env = base_env.copy()
+    env = ctx.env.copy()
     # Enable only a single non-config tool
     env["CS_ENABLED_TOOLS"] = "explain_code_health"
+    filtered_ctx = ServerContext(ctx.command, env, ctx.cwd)
 
-    client = _start_client(command, env, cwd)
+    client = _start_client(filtered_ctx)
     if client is None:
         return False
 
@@ -189,71 +197,72 @@ def test_config_tools_always_present(
         client.stop()
 
 
-def test_set_enabled_tools_restart_warning(command: list[str], env: dict, cwd: str) -> bool:
+def _test_set_enabled_tools(
+    ctx: ServerContext,
+    value: str,
+    checks: list[tuple[str, str]],
+) -> bool:
+    """Start a client, call set_config for enabled_tools, and verify substrings.
+
+    Args:
+        ctx: Server connection context (command, env, cwd).
+        value: The value to set for enabled_tools.
+        checks: List of (description, substring) pairs. Each substring is checked
+                case-insensitively against the response text.
+    """
+    client = _start_client(ctx)
+    if client is None:
+        return False
+
+    try:
+        resp = client.call_tool(
+            "set_config",
+            {"key": "enabled_tools", "value": value},
+            timeout=30,
+        )
+        text = extract_result_text(resp)
+
+        all_passed = True
+        for description, substring in checks:
+            found = substring.lower() in text.lower()
+            print_test(description, found, text[:200])
+            all_passed = all_passed and found
+        return all_passed
+    except Exception as e:
+        print_test(checks[0][0] if checks else "set_config call", False, str(e))
+        return False
+    finally:
+        client.stop()
+
+
+def test_set_enabled_tools_restart_warning(ctx: ServerContext) -> bool:
     """Setting enabled_tools via set_config includes a restart warning."""
     print_header("Test: Set Enabled Tools Restart Warning")
-
-    client = _start_client(command, env, cwd)
-    if client is None:
-        return False
-
-    try:
-        resp = client.call_tool(
-            "set_config",
-            {"key": "enabled_tools", "value": "code_health_review,code_health_score"},
-            timeout=30,
-        )
-        text = extract_result_text(resp)
-
-        has_restart = "restart" in text.lower()
-        has_saved = "saved" in text.lower()
-        print_test("Response says saved", has_saved, text[:200])
-        print_test("Restart warning present", has_restart)
-
-        return has_saved and has_restart
-
-    except Exception as e:
-        print_test("Set enabled_tools restart warning", False, str(e))
-        return False
-    finally:
-        client.stop()
+    return _test_set_enabled_tools(
+        ctx,
+        value="code_health_review,code_health_score",
+        checks=[("Response says saved", "saved"), ("Restart warning present", "restart")],
+    )
 
 
-def test_set_invalid_tool_name_warning(command: list[str], env: dict, cwd: str) -> bool:
+def test_set_invalid_tool_name_warning(ctx: ServerContext) -> bool:
     """Setting enabled_tools with unknown tool names includes a warning."""
     print_header("Test: Invalid Tool Name Warning")
-
-    client = _start_client(command, env, cwd)
-    if client is None:
-        return False
-
-    try:
-        resp = client.call_tool(
-            "set_config",
-            {"key": "enabled_tools", "value": "code_health_review,nonexistent_tool"},
-            timeout=30,
-        )
-        text = extract_result_text(resp)
-
-        has_warning = "nonexistent_tool" in text
-        has_unrecognized = "unrecognized" in text.lower()
-        print_test("Warning mentions unknown tool name", has_warning, text[:200])
-        print_test("Warning says unrecognized", has_unrecognized)
-
-        return has_warning and has_unrecognized
-
-    except Exception as e:
-        print_test("Invalid tool name warning", False, str(e))
-        return False
-    finally:
-        client.stop()
+    return _test_set_enabled_tools(
+        ctx,
+        value="code_health_review,nonexistent_tool",
+        checks=[
+            ("Warning mentions unknown tool name", "nonexistent_tool"),
+            ("Warning says unrecognized", "unrecognized"),
+        ],
+    )
 
 
-def test_get_enabled_tools_shows_available(command: list[str], env: dict, cwd: str) -> bool:
+def test_get_enabled_tools_shows_available(ctx: ServerContext) -> bool:
     """Querying enabled_tools via get_config includes available_tools."""
     print_header("Test: Get Enabled Tools Shows Available")
 
-    client = _start_client(command, env, cwd)
+    client = _start_client(ctx)
     if client is None:
         return False
 
@@ -305,14 +314,15 @@ def run_enabled_tools_tests_with_backend(backend: ServerBackend) -> int:
         env = base_env.copy()
         env["CS_CONFIG_DIR"] = str(config_dir)
         cwd = str(repo_dir)
+        ctx = ServerContext(command, env, cwd)
 
         results: list[tuple[str, bool]] = [
-            ("All tools without filter", test_all_tools_without_filter(command, env, cwd)),
-            ("Filter restricts tools", test_filter_restricts_tools(command, env, cwd, config_dir)),
-            ("Config tools always present", test_config_tools_always_present(command, env, cwd, config_dir)),
-            ("Set enabled_tools restart warning", test_set_enabled_tools_restart_warning(command, env, cwd)),
-            ("Invalid tool name warning", test_set_invalid_tool_name_warning(command, env, cwd)),
-            ("Get enabled_tools shows available", test_get_enabled_tools_shows_available(command, env, cwd)),
+            ("All tools without filter", test_all_tools_without_filter(ctx)),
+            ("Filter restricts tools", test_filter_restricts_tools(ctx, config_dir)),
+            ("Config tools always present", test_config_tools_always_present(ctx, config_dir)),
+            ("Set enabled_tools restart warning", test_set_enabled_tools_restart_warning(ctx)),
+            ("Invalid tool name warning", test_set_invalid_tool_name_warning(ctx)),
+            ("Get enabled_tools shows available", test_get_enabled_tools_shows_available(ctx)),
         ]
 
         return print_summary(results)

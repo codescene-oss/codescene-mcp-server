@@ -174,29 +174,40 @@ impl CodeSceneServer {
     }
 }
 
+fn remove_standalone_tools(router: &mut ToolRouter<CodeSceneServer>) {
+    for name in API_ONLY_TOOLS {
+        router.remove_route(name);
+    }
+}
+
+fn apply_enabled_tools_filter(
+    router: &mut ToolRouter<CodeSceneServer>,
+    config_data: &ConfigData,
+) {
+    let enabled = match config::enabled_tools(config_data) {
+        Some(set) => set,
+        None => return,
+    };
+    let all_names: Vec<String> = router
+        .list_all()
+        .iter()
+        .map(|t| t.name.to_string())
+        .collect();
+    for name in all_names {
+        if !ALWAYS_ENABLED_TOOLS.contains(&name.as_str()) && !enabled.contains(&name) {
+            router.remove_route(&name);
+        }
+    }
+}
+
 #[tool_router]
 impl CodeSceneServer {
     fn new(deps: ServerDeps) -> Self {
         let mut router = Self::tool_router();
         if deps.is_standalone {
-            for name in API_ONLY_TOOLS {
-                router.remove_route(name);
-            }
+            remove_standalone_tools(&mut router);
         }
-
-        // Filter tools based on enabled_tools allowlist
-        if let Some(enabled) = config::enabled_tools(&deps.config_data) {
-            let all_names: Vec<String> = router
-                .list_all()
-                .iter()
-                .map(|t| t.name.to_string())
-                .collect();
-            for name in all_names {
-                if !ALWAYS_ENABLED_TOOLS.contains(&name.as_str()) && !enabled.contains(&name) {
-                    router.remove_route(&name);
-                }
-            }
-        }
+        apply_enabled_tools_filter(&mut router, &deps.config_data);
 
         Self {
             tool_router: router,
@@ -995,18 +1006,24 @@ mod tests {
         })
     }
 
+    fn assert_has_config_tools(names: &[String]) {
+        assert!(names.contains(&"get_config".to_string()), "missing get_config");
+        assert!(names.contains(&"set_config".to_string()), "missing set_config");
+    }
+
+    fn assert_tool_count_and_config(names: &[String], expected: usize) {
+        assert_eq!(names.len(), expected, "expected {expected} tools, got: {names:?}");
+        assert_has_config_tools(names);
+    }
+
     #[test]
     fn enabled_tools_unset_keeps_all_tools() {
         let _lock = config::lock_test_env();
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server(false);
         let names = tool_names(&server);
-        // All 16 tools should be present
-        assert_eq!(names.len(), 16, "expected 16 tools, got: {:?}", names);
-        assert!(names.contains(&"get_config".to_string()));
-        assert!(names.contains(&"set_config".to_string()));
+        assert_tool_count_and_config(&names, 16);
         assert!(names.contains(&"code_health_review".to_string()));
-        assert!(names.contains(&"select_project".to_string()));
     }
 
     #[test]
@@ -1017,11 +1034,9 @@ mod tests {
             make_server_with_enabled_tools(false, "code_health_review,code_health_score");
         let names = tool_names(&server);
         // Should have the 2 enabled tools + 2 always-on = 4
-        assert_eq!(names.len(), 4, "expected 4 tools, got: {:?}", names);
+        assert_tool_count_and_config(&names, 4);
         assert!(names.contains(&"code_health_review".to_string()));
         assert!(names.contains(&"code_health_score".to_string()));
-        assert!(names.contains(&"get_config".to_string()));
-        assert!(names.contains(&"set_config".to_string()));
     }
 
     #[test]
@@ -1031,8 +1046,7 @@ mod tests {
         // Only enable one tool — config tools must still be present
         let server = make_server_with_enabled_tools(false, "code_health_review");
         let names = tool_names(&server);
-        assert!(names.contains(&"get_config".to_string()));
-        assert!(names.contains(&"set_config".to_string()));
+        assert_has_config_tools(&names);
     }
 
     #[test]
@@ -1047,8 +1061,7 @@ mod tests {
         // select_project is api-only, so removed in standalone even if in enabled_tools
         assert!(!names.contains(&"select_project".to_string()));
         assert!(names.contains(&"code_health_review".to_string()));
-        assert!(names.contains(&"get_config".to_string()));
-        assert!(names.contains(&"set_config".to_string()));
+        assert_has_config_tools(&names);
     }
 
     #[test]
@@ -1057,10 +1070,8 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server_with_enabled_tools(false, "analyze_change_set");
         let names = tool_names(&server);
-        assert_eq!(names.len(), 3, "expected 3 tools, got: {:?}", names);
+        assert_tool_count_and_config(&names, 3);
         assert!(names.contains(&"analyze_change_set".to_string()));
-        assert!(names.contains(&"get_config".to_string()));
-        assert!(names.contains(&"set_config".to_string()));
     }
 
     #[test]
