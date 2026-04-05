@@ -12,7 +12,10 @@ pub fn get_single(key: &str, data: &ConfigData, is_standalone: bool) -> String {
         return api_only_error(key, is_standalone);
     }
 
-    let result = format_option_json(option, data);
+    let mut result = format_option_json(option, data);
+    if option.key == "enabled_tools" {
+        result["available_tools"] = json!(config::CONFIGURABLE_TOOL_NAMES);
+    }
     serde_json::to_string(&result).unwrap_or_default()
 }
 
@@ -126,8 +129,11 @@ fn save_key(option: &config::ConfigOption, value: &str, data: &mut ConfigData) -
     if let Some(warning) = env_override_warning(option) {
         result["warning"] = json!(warning);
     }
-    if let Some(restart) = restart_warning(option.key) {
+    if let Some(restart) = restart_warning(option) {
         result["restart_required"] = json!(restart);
+    }
+    if let Some(tool_warning) = unknown_tool_names_warning(option, value) {
+        result["tool_name_warning"] = json!(tool_warning);
     }
     attach_docs_url(&mut result, option);
     serde_json::to_string(&result).unwrap_or_default()
@@ -144,15 +150,37 @@ fn env_override_warning(option: &config::ConfigOption) -> Option<String> {
     ))
 }
 
-fn restart_warning(key: &str) -> Option<&'static str> {
-    if key != "access_token" {
+fn restart_warning(option: &config::ConfigOption) -> Option<&'static str> {
+    match option.key {
+        "access_token" => Some(
+            "Changing the access token may affect which tools are \
+             available (API vs standalone mode). A server restart is required \
+             for tool registration changes to take effect.",
+        ),
+        "enabled_tools" => {
+            Some("A server restart is required for tool registration changes to take effect.")
+        }
+        _ => None,
+    }
+}
+
+fn unknown_tool_names_warning(option: &config::ConfigOption, value: &str) -> Option<String> {
+    if option.key != "enabled_tools" || value.is_empty() {
         return None;
     }
-    Some(
-        "Changing the access token may affect which tools are \
-         available (API vs standalone mode). A server restart is required \
-         for tool registration changes to take effect.",
-    )
+    let unknown: Vec<&str> = value
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty() && !config::CONFIGURABLE_TOOL_NAMES.contains(s))
+        .collect();
+    if unknown.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "Unrecognized tool name(s): {}. Valid names: {}",
+        unknown.join(", "),
+        config::CONFIGURABLE_TOOL_NAMES.join(", "),
+    ))
 }
 
 fn attach_docs_url(result: &mut serde_json::Value, option: &config::ConfigOption) {
@@ -324,13 +352,16 @@ mod tests {
 
     #[test]
     fn restart_warning_for_access_token() {
-        assert!(restart_warning("access_token").is_some());
+        let option = config::find_option("access_token").unwrap();
+        assert!(restart_warning(option).is_some());
     }
 
     #[test]
     fn restart_warning_for_other_key() {
-        assert!(restart_warning("onprem_url").is_none());
-        assert!(restart_warning("ca_bundle").is_none());
+        let onprem = config::find_option("onprem_url").unwrap();
+        let ca = config::find_option("ca_bundle").unwrap();
+        assert!(restart_warning(onprem).is_none());
+        assert!(restart_warning(ca).is_none());
     }
 
     // ---- attach_docs_url ----
@@ -481,6 +512,114 @@ mod tests {
         std::env::remove_var("CS_CONFIG_DIR");
         result
     }
+
+    // ---- restart_warning for enabled_tools ----
+
+    #[test]
+    fn restart_warning_for_enabled_tools() {
+        let option = config::find_option("enabled_tools").unwrap();
+        let result = restart_warning(option);
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("restart"));
+    }
+
+    // ---- unknown_tool_names_warning ----
+
+    #[test]
+    fn unknown_tool_names_warning_returns_none_for_other_keys() {
+        let option = config::find_option("access_token").unwrap();
+        assert!(unknown_tool_names_warning(option, "some-value").is_none());
+    }
+
+    #[test]
+    fn unknown_tool_names_warning_returns_none_for_empty_value() {
+        let option = config::find_option("enabled_tools").unwrap();
+        assert!(unknown_tool_names_warning(option, "").is_none());
+    }
+
+    #[test]
+    fn unknown_tool_names_warning_returns_none_for_valid_tools() {
+        let option = config::find_option("enabled_tools").unwrap();
+        assert!(
+            unknown_tool_names_warning(option, "code_health_review,code_health_score").is_none()
+        );
+    }
+
+    #[test]
+    fn unknown_tool_names_warning_returns_warning_for_unknown_tools() {
+        let option = config::find_option("enabled_tools").unwrap();
+        let result = unknown_tool_names_warning(option, "code_health_review,nonexistent_tool");
+        assert!(result.is_some());
+        let warning = result.unwrap();
+        assert!(warning.contains("nonexistent_tool"));
+        assert!(warning.contains("Unrecognized"));
+    }
+
+    #[test]
+    fn unknown_tool_names_warning_ignores_always_enabled_tools() {
+        // get_config and set_config are not in CONFIGURABLE_TOOL_NAMES, so they
+        // should be flagged as unknown if someone puts them in the allowlist
+        let option = config::find_option("enabled_tools").unwrap();
+        let result = unknown_tool_names_warning(option, "get_config");
+        assert!(result.is_some());
+    }
+
+    // ---- get_single for enabled_tools shows available_tools ----
+
+    #[test]
+    fn get_single_enabled_tools_includes_available_tools() {
+        let data = empty_config();
+        let result = get_single("enabled_tools", &data, false);
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(parsed.get("available_tools").is_some());
+        let tools = parsed["available_tools"].as_array().unwrap();
+        assert!(tools.len() > 0);
+        // Should include configurable tools
+        assert!(tools
+            .iter()
+            .any(|t| t.as_str() == Some("code_health_review")));
+        // Should NOT include always-on tools
+        assert!(!tools.iter().any(|t| t.as_str() == Some("get_config")));
+    }
+
+    // ---- set_value for enabled_tools ----
+
+    #[test]
+    fn set_value_enabled_tools_includes_restart_warning() {
+        with_temp_config_dir(|| {
+            let result = set_value("enabled_tools", "code_health_review,code_health_score");
+            std::env::remove_var("CS_ENABLED_TOOLS");
+            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+            assert_eq!(parsed["status"], json!("saved"));
+            assert!(parsed.get("restart_required").is_some());
+        });
+    }
+
+    #[test]
+    fn set_value_enabled_tools_with_unknown_name_includes_warning() {
+        with_temp_config_dir(|| {
+            let result = set_value("enabled_tools", "code_health_review,bogus_tool");
+            std::env::remove_var("CS_ENABLED_TOOLS");
+            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+            assert_eq!(parsed["status"], json!("saved"));
+            assert!(parsed.get("tool_name_warning").is_some());
+            let warning = parsed["tool_name_warning"].as_str().unwrap();
+            assert!(warning.contains("bogus_tool"));
+        });
+    }
+
+    #[test]
+    fn set_value_enabled_tools_valid_names_no_tool_warning() {
+        with_temp_config_dir(|| {
+            let result = set_value("enabled_tools", "code_health_review,code_health_score");
+            std::env::remove_var("CS_ENABLED_TOOLS");
+            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+            assert_eq!(parsed["status"], json!("saved"));
+            assert!(parsed.get("tool_name_warning").is_none());
+        });
+    }
+
+    // ---- save failure paths ----
 
     #[test]
     fn save_key_returns_error_when_save_fails() {

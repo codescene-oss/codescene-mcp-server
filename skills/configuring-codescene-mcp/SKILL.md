@@ -16,6 +16,7 @@ Use this skill when the task is to configure the CodeScene MCP Server after it h
 - The user wants to enable ACE auto-refactoring.
 - The user wants to pre-select a default CodeScene project.
 - The user needs to configure a custom CA certificate for SSL/TLS.
+- The user wants to limit which tools are exposed to reduce token usage (`enabled_tools`).
 - The user asks what their current configuration is.
 - The user is troubleshooting a configuration issue (wrong token, missing URL, SSL errors).
 
@@ -37,6 +38,7 @@ Do not use this skill for installing or registering the MCP server in an AI assi
 | `ace_access_token` | Token for CodeScene ACE auto-refactoring (add-on license). |
 | `default_project_id` | Pre-select a CodeScene project by numeric ID (API-mode only). |
 | `ca_bundle` | Path to a custom PEM-format CA certificate bundle. |
+| `enabled_tools` | Comma-separated allowlist of tool names to expose (empty = all). |
 
 ### Precedence
 
@@ -68,3 +70,6 @@ For individual, interactive use, prefer the `set_config` tool.
 - Confusing the config key name with the environment variable name. Use the short key (e.g., `access_token`) with `set_config`, not the env var name (`CS_ACCESS_TOKEN`).
 - Setting `onprem_url` or `default_project_id` when using a standalone license. These options are only available with a CodeScene Personal Access Token.
 - Providing a CA bundle path that is not accessible to the MCP server process or Docker container.
+- Setting `enabled_tools` with misspelled tool names. The server warns about unknown names, but the misspelled tools are silently ignored. Use `get_config` with key `enabled_tools` to see the list of available tool names.
+- Forgetting that `enabled_tools` changes require a server restart. The tool list is built once at startup.
+- Trying to disable `get_config` or `set_config` via `enabled_tools`. These tools are always enabled to prevent configuration lockout.
