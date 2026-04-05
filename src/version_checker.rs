@@ -151,6 +151,7 @@ pub fn format_version_warning(info: &VersionInfo) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config;
     use crate::http::tests::MockHttpClient;
     use crate::http::HttpResponse;
 
@@ -191,12 +192,14 @@ mod tests {
 
     #[test]
     fn is_disabled_when_not_set() {
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_DISABLE_VERSION_CHECK");
         assert!(!is_disabled());
     }
 
     #[test]
     fn is_disabled_when_empty() {
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_VERSION_CHECK", "");
         assert!(!is_disabled());
         std::env::remove_var("CS_DISABLE_VERSION_CHECK");
@@ -204,6 +207,7 @@ mod tests {
 
     #[test]
     fn is_disabled_when_zero() {
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_VERSION_CHECK", "0");
         assert!(!is_disabled());
         std::env::remove_var("CS_DISABLE_VERSION_CHECK");
@@ -211,6 +215,7 @@ mod tests {
 
     #[test]
     fn is_disabled_when_false() {
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_VERSION_CHECK", "false");
         assert!(!is_disabled());
         std::env::remove_var("CS_DISABLE_VERSION_CHECK");
@@ -218,6 +223,7 @@ mod tests {
 
     #[test]
     fn is_disabled_when_true() {
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_VERSION_CHECK", "true");
         assert!(is_disabled());
         std::env::remove_var("CS_DISABLE_VERSION_CHECK");
@@ -225,6 +231,7 @@ mod tests {
 
     #[test]
     fn is_disabled_when_one() {
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_VERSION_CHECK", "1");
         assert!(is_disabled());
         std::env::remove_var("CS_DISABLE_VERSION_CHECK");
@@ -234,12 +241,14 @@ mod tests {
 
     #[test]
     fn check_url_default() {
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_VERSION_CHECK_URL");
         assert!(check_url().contains("github.com"));
     }
 
     #[test]
     fn check_url_override() {
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_VERSION_CHECK_URL", "https://custom.url/check");
         assert_eq!(check_url(), "https://custom.url/check");
         std::env::remove_var("CS_VERSION_CHECK_URL");
@@ -284,6 +293,7 @@ mod tests {
 
     #[test]
     fn check_in_background_disabled_does_nothing() {
+        let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_VERSION_CHECK", "1");
         let vc = VersionChecker::new("1.0.0");
         vc.check_in_background();
@@ -292,12 +302,14 @@ mod tests {
 
     #[test]
     fn check_in_background_dev_version_does_nothing() {
+        let _lock = config::lock_test_env();
         let vc = VersionChecker::new("dev");
         vc.check_in_background();
     }
 
     #[tokio::test]
     async fn check_in_background_enabled_spawns_without_panic() {
+        let _lock = config::lock_test_env();
         std::env::remove_var("CS_DISABLE_VERSION_CHECK");
         std::env::set_var("CS_VERSION_CHECK_URL", "http://192.0.2.1:1/check");
         let vc = VersionChecker::new("1.0.0");
