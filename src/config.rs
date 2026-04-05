@@ -112,6 +112,35 @@ pub const OPTIONS: &[ConfigOption] = &[
         aliases: &["ssl_cert", "cert"],
         docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
     },
+    ConfigOption {
+        key: "enabled_tools",
+        env_var: "CS_ENABLED_TOOLS",
+        description: "Comma-separated allowlist of tool names to enable (unset = all enabled). Requires restart.",
+        sensitive: false,
+        hidden: false,
+        api_only: false,
+        aliases: &["tools"],
+        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
+    },
+];
+
+/// Tool names that can be enabled/disabled via the `enabled_tools` config.
+/// Excludes `get_config` and `set_config` which are always available.
+pub const CONFIGURABLE_TOOL_NAMES: &[&str] = &[
+    "explain_code_health",
+    "explain_code_health_productivity",
+    "code_health_review",
+    "code_health_score",
+    "pre_commit_code_health_safeguard",
+    "analyze_change_set",
+    "code_health_refactoring_business_case",
+    "code_health_auto_refactor",
+    "select_project",
+    "list_technical_debt_goals_for_project",
+    "list_technical_debt_goals_for_project_file",
+    "list_technical_debt_hotspots_for_project",
+    "list_technical_debt_hotspots_for_project_file",
+    "code_ownership_for_path",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -271,6 +300,24 @@ pub fn config_file_path() -> PathBuf {
 #[allow(dead_code)]
 pub fn is_valid_key(key: &str) -> bool {
     find_option(key).is_some()
+}
+
+/// Parse the `enabled_tools` config value into a set of tool names.
+/// Returns `None` when unset or empty (meaning all tools are enabled).
+pub fn enabled_tools(data: &ConfigData) -> Option<HashSet<String>> {
+    let option = find_option("enabled_tools")?;
+    let value = get_effective(option, data)?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(
+        trimmed
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect(),
+    )
 }
 
 /// Mask sensitive values for display.
@@ -673,5 +720,108 @@ mod tests {
 
         // Cleanup
         std::env::remove_var("CS_DISABLE_TRACKING");
+    }
+
+    // ---- enabled_tools ----
+
+    #[test]
+    fn enabled_tools_returns_none_when_unset() {
+        let data = ConfigData::default();
+        assert!(enabled_tools(&data).is_none());
+    }
+
+    #[test]
+    fn enabled_tools_returns_none_when_empty() {
+        let mut data = ConfigData::default();
+        data.values
+            .insert("enabled_tools".to_string(), "".to_string());
+        assert!(enabled_tools(&data).is_none());
+    }
+
+    #[test]
+    fn enabled_tools_returns_none_when_whitespace_only() {
+        let mut data = ConfigData::default();
+        data.values
+            .insert("enabled_tools".to_string(), "  ".to_string());
+        assert!(enabled_tools(&data).is_none());
+    }
+
+    #[test]
+    fn enabled_tools_parses_single_tool() {
+        let mut data = ConfigData::default();
+        data.values.insert(
+            "enabled_tools".to_string(),
+            "code_health_review".to_string(),
+        );
+        let result = enabled_tools(&data).unwrap();
+        assert_eq!(result.len(), 1);
+        assert!(result.contains("code_health_review"));
+    }
+
+    #[test]
+    fn enabled_tools_parses_multiple_tools() {
+        let mut data = ConfigData::default();
+        data.values.insert(
+            "enabled_tools".to_string(),
+            "code_health_review,code_health_score,analyze_change_set".to_string(),
+        );
+        let result = enabled_tools(&data).unwrap();
+        assert_eq!(result.len(), 3);
+        assert!(result.contains("code_health_review"));
+        assert!(result.contains("code_health_score"));
+        assert!(result.contains("analyze_change_set"));
+    }
+
+    #[test]
+    fn enabled_tools_trims_whitespace() {
+        let mut data = ConfigData::default();
+        data.values.insert(
+            "enabled_tools".to_string(),
+            " code_health_review , code_health_score ".to_string(),
+        );
+        let result = enabled_tools(&data).unwrap();
+        assert_eq!(result.len(), 2);
+        assert!(result.contains("code_health_review"));
+        assert!(result.contains("code_health_score"));
+    }
+
+    #[test]
+    fn enabled_tools_ignores_empty_segments() {
+        let mut data = ConfigData::default();
+        data.values.insert(
+            "enabled_tools".to_string(),
+            "code_health_review,,code_health_score,".to_string(),
+        );
+        let result = enabled_tools(&data).unwrap();
+        assert_eq!(result.len(), 2);
+    }
+
+    // ---- CONFIGURABLE_TOOL_NAMES ----
+
+    #[test]
+    fn configurable_tool_names_excludes_config_tools() {
+        assert!(!CONFIGURABLE_TOOL_NAMES.contains(&"get_config"));
+        assert!(!CONFIGURABLE_TOOL_NAMES.contains(&"set_config"));
+    }
+
+    #[test]
+    fn configurable_tool_names_includes_core_tools() {
+        assert!(CONFIGURABLE_TOOL_NAMES.contains(&"code_health_review"));
+        assert!(CONFIGURABLE_TOOL_NAMES.contains(&"code_health_score"));
+        assert!(CONFIGURABLE_TOOL_NAMES.contains(&"analyze_change_set"));
+    }
+
+    #[test]
+    fn find_option_enabled_tools() {
+        let opt = find_option("enabled_tools");
+        assert!(opt.is_some());
+        assert_eq!(opt.unwrap().env_var, "CS_ENABLED_TOOLS");
+    }
+
+    #[test]
+    fn find_option_enabled_tools_by_alias() {
+        let opt = find_option("tools");
+        assert!(opt.is_some());
+        assert_eq!(opt.unwrap().key, "enabled_tools");
     }
 }

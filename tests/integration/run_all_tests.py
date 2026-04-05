@@ -445,6 +445,7 @@ def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool
     from test_business_case import run_business_case_tests_with_backend
     from test_cloudfront_headers import run_cloudfront_headers_tests_with_backend
     from test_configure import run_configure_tests_with_backend
+    from test_enabled_tools import run_enabled_tools_tests_with_backend
     from test_git_subtree import run_subtree_tests_with_backend
     from test_git_worktree import run_worktree_tests_with_backend
     from test_relative_paths import run_relative_path_tests_with_backend
@@ -464,6 +465,7 @@ def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool
         ("Analyze Change Set Tests", run_analyze_change_set_tests_with_backend),
         ("Standalone License Tests", run_standalone_license_tests_with_backend),
         ("Configure Tests", run_configure_tests_with_backend),
+        ("Enabled Tools Tests", run_enabled_tools_tests_with_backend),
         ("Access Token Guard Tests", run_require_access_token_tests_with_backend),
         ("CloudFront Headers Tests", run_cloudfront_headers_tests_with_backend),
         ("SSL Truststore CLI Tests", run_ssl_cli_truststore_tests_with_backend),

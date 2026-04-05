@@ -380,3 +380,113 @@ If you have multiple certificates or a certificate bundle directory, mount the e
 - The certificate file must be in PEM format (the standard format with `-----BEGIN CERTIFICATE-----` headers)
 - The path must be accessible to the MCP server process (or mounted into the container for Docker)
 - If your certificate chain includes intermediate certificates, include them all in the same file
+
+## `enabled_tools`
+
+| | |
+|---|---|
+| **Environment variable** | `CS_ENABLED_TOOLS` |
+| **Sensitive** | No |
+
+Controls which MCP tools the server exposes to the AI assistant. When set, only the listed tools are registered — all others are hidden. When unset or empty, all tools are enabled (the default behavior).
+
+This is useful for reducing token usage by limiting the number of tool descriptions sent to the AI model. Each exposed tool adds to the prompt context, so disabling tools you don't need can lower costs and improve response times.
+
+The `get_config` and `set_config` tools are always enabled and cannot be disabled. This prevents accidental lockout from the configuration system.
+
+Changes to this setting require a server restart to take effect.
+
+### Available tool names
+
+| Tool name | Description |
+|-----------|-------------|
+| `explain_code_health` | Explains the Code Health metric |
+| `explain_code_health_productivity` | Explains Code Health productivity impact |
+| `code_health_review` | Detailed Code Health review of a file |
+| `code_health_score` | Quick numeric Code Health score for a file |
+| `pre_commit_code_health_safeguard` | Pre-commit check for Code Health regressions |
+| `analyze_change_set` | Branch-level Code Health analysis (PR pre-flight) |
+| `code_health_refactoring_business_case` | Quantified business case for refactoring |
+| `code_health_auto_refactor` | AI-assisted auto-refactoring (requires ACE) |
+| `select_project` | List and select CodeScene projects |
+| `list_technical_debt_goals_for_project` | Technical debt goals for a project |
+| `list_technical_debt_goals_for_project_file` | Technical debt goals for a specific file |
+| `list_technical_debt_hotspots_for_project` | Technical debt hotspots for a project |
+| `list_technical_debt_hotspots_for_project_file` | Technical debt hotspots for a specific file |
+| `code_ownership_for_path` | Code ownership lookup for a file or directory |
+
+### Examples
+
+To enable only the local Code Health analysis tools (no project-level features):
+
+**Example — npx:**
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@codescene/codehealth-mcp"],
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ENABLED_TOOLS": "code_health_review,code_health_score,pre_commit_code_health_safeguard,analyze_change_set"
+      }
+    }
+  }
+}
+```
+
+**Example — Static binary (Homebrew / Windows):**
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "cs-mcp",
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ENABLED_TOOLS": "code_health_review,code_health_score,pre_commit_code_health_safeguard,analyze_change_set"
+      }
+    }
+  }
+}
+```
+
+**Example — Docker:**
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "CS_ACCESS_TOKEN",
+        "-e", "CS_ENABLED_TOOLS",
+        "-e", "CS_MOUNT_PATH=/path/to/your/code",
+        "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
+        "codescene/codescene-mcp"
+      ],
+      "env": {
+        "CS_ACCESS_TOKEN": "your-token-here",
+        "CS_ENABLED_TOOLS": "code_health_review,code_health_score,pre_commit_code_health_safeguard,analyze_change_set"
+      }
+    }
+  }
+}
+```
+
+You can also set this interactively via the AI assistant:
+
+> "Only enable code_health_review, code_health_score, and analyze_change_set"
+
+Or use `set_config` directly:
+
+> "Set enabled_tools to code_health_review,code_health_score,analyze_change_set"
+
+To re-enable all tools, set the value to an empty string:
+
+> "Clear the enabled_tools setting"

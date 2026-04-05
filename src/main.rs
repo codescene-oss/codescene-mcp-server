@@ -66,6 +66,9 @@ const API_ONLY_TOOLS: &[&str] = &[
     "code_ownership_for_path",
 ];
 
+/// Tools that cannot be disabled via `enabled_tools` config.
+const ALWAYS_ENABLED_TOOLS: &[&str] = &["get_config", "set_config"];
+
 #[derive(Debug)]
 enum CliAction {
     RunServer,
@@ -178,6 +181,20 @@ impl CodeSceneServer {
         if deps.is_standalone {
             for name in API_ONLY_TOOLS {
                 router.remove_route(name);
+            }
+        }
+
+        // Filter tools based on enabled_tools allowlist
+        if let Some(enabled) = config::enabled_tools(&deps.config_data) {
+            let all_names: Vec<String> = router
+                .list_all()
+                .iter()
+                .map(|t| t.name.to_string())
+                .collect();
+            for name in all_names {
+                if !ALWAYS_ENABLED_TOOLS.contains(&name.as_str()) && !enabled.contains(&name) {
+                    router.remove_route(&name);
+                }
             }
         }
 
@@ -379,7 +396,10 @@ impl ServerHandler for CodeSceneServer {
             "codescene-mcp-server",
             env!("CS_MCP_VERSION"),
         ))
-        .with_instructions(build_instructions(self.is_standalone))
+        .with_instructions(build_instructions(
+            self.is_standalone,
+            config::enabled_tools(&self.config_data).is_some(),
+        ))
     }
 
     async fn list_resources(
@@ -480,7 +500,7 @@ fn resolve_resource_content(uri: &str) -> Result<&'static str, ErrorData> {
     }
 }
 
-fn build_instructions(is_standalone: bool) -> String {
+fn build_instructions(is_standalone: bool, tools_filtered: bool) -> String {
     let mut text = String::from(
         "CodeScene MCP Server - Code Health analysis tools for AI-assisted development.\n\n\
          TOOLS (always available):\n\
@@ -504,6 +524,13 @@ fn build_instructions(is_standalone: bool) -> String {
              - list_technical_debt_hotspots_for_project: View hotspots.\n\
              - list_technical_debt_hotspots_for_project_file: File-level hotspots.\n\
              - code_ownership_for_path: Find code owners.\n",
+        );
+    }
+
+    if tools_filtered {
+        text.push_str(
+            "\nNote: Tool availability is restricted by the 'enabled_tools' configuration. \
+             Use get_config with key 'enabled_tools' to see the current setting.\n",
         );
     }
 
@@ -912,17 +939,128 @@ mod tests {
 
     #[test]
     fn build_instructions_standalone_omits_api_tools() {
-        let text = build_instructions(true);
+        let text = build_instructions(true, false);
         assert!(text.contains("code_health_review"));
         assert!(!text.contains("select_project"));
     }
 
     #[test]
     fn build_instructions_api_mode_includes_all_tools() {
-        let text = build_instructions(false);
+        let text = build_instructions(false, false);
         assert!(text.contains("code_health_review"));
         assert!(text.contains("select_project"));
         assert!(text.contains("code_ownership_for_path"));
+    }
+
+    #[test]
+    fn build_instructions_tools_filtered_adds_note() {
+        let text = build_instructions(false, true);
+        assert!(text.contains("enabled_tools"));
+        assert!(text.contains("restricted"));
+    }
+
+    #[test]
+    fn build_instructions_tools_not_filtered_no_note() {
+        let text = build_instructions(false, false);
+        assert!(!text.contains("restricted"));
+    }
+
+    // --- Tool filtering via enabled_tools ---
+
+    fn tool_names(server: &CodeSceneServer) -> Vec<String> {
+        server
+            .tool_router
+            .list_all()
+            .iter()
+            .map(|t| t.name.to_string())
+            .collect()
+    }
+
+    fn make_server_with_enabled_tools(
+        is_standalone: bool,
+        enabled_tools: &str,
+    ) -> CodeSceneServer {
+        let mut values = HashMap::new();
+        values.insert("enabled_tools".to_string(), enabled_tools.to_string());
+        CodeSceneServer::new(ServerDeps {
+            config_data: ConfigData {
+                instance_id: Some("test-filter".to_string()),
+                values,
+            },
+            instance_id: "test-filter".to_string(),
+            is_standalone,
+            version_checker: VersionChecker::new("dev"),
+            cli_runner: Arc::new(cli::ProductionCliRunner),
+            http_client: Arc::new(http::ReqwestClient),
+        })
+    }
+
+    #[test]
+    fn enabled_tools_unset_keeps_all_tools() {
+        let _lock = config::lock_test_env();
+        std::env::remove_var("CS_ENABLED_TOOLS");
+        let server = make_server(false);
+        let names = tool_names(&server);
+        // All 16 tools should be present
+        assert_eq!(names.len(), 16, "expected 16 tools, got: {:?}", names);
+        assert!(names.contains(&"get_config".to_string()));
+        assert!(names.contains(&"set_config".to_string()));
+        assert!(names.contains(&"code_health_review".to_string()));
+        assert!(names.contains(&"select_project".to_string()));
+    }
+
+    #[test]
+    fn enabled_tools_filters_to_allowlist() {
+        let _lock = config::lock_test_env();
+        std::env::remove_var("CS_ENABLED_TOOLS");
+        let server =
+            make_server_with_enabled_tools(false, "code_health_review,code_health_score");
+        let names = tool_names(&server);
+        // Should have the 2 enabled tools + 2 always-on = 4
+        assert_eq!(names.len(), 4, "expected 4 tools, got: {:?}", names);
+        assert!(names.contains(&"code_health_review".to_string()));
+        assert!(names.contains(&"code_health_score".to_string()));
+        assert!(names.contains(&"get_config".to_string()));
+        assert!(names.contains(&"set_config".to_string()));
+    }
+
+    #[test]
+    fn enabled_tools_cannot_remove_config_tools() {
+        let _lock = config::lock_test_env();
+        std::env::remove_var("CS_ENABLED_TOOLS");
+        // Only enable one tool — config tools must still be present
+        let server = make_server_with_enabled_tools(false, "code_health_review");
+        let names = tool_names(&server);
+        assert!(names.contains(&"get_config".to_string()));
+        assert!(names.contains(&"set_config".to_string()));
+    }
+
+    #[test]
+    fn enabled_tools_combines_with_standalone_filtering() {
+        let _lock = config::lock_test_env();
+        std::env::remove_var("CS_ENABLED_TOOLS");
+        // In standalone mode, API_ONLY_TOOLS are removed first,
+        // then enabled_tools further restricts the list
+        let server =
+            make_server_with_enabled_tools(true, "code_health_review,select_project");
+        let names = tool_names(&server);
+        // select_project is api-only, so removed in standalone even if in enabled_tools
+        assert!(!names.contains(&"select_project".to_string()));
+        assert!(names.contains(&"code_health_review".to_string()));
+        assert!(names.contains(&"get_config".to_string()));
+        assert!(names.contains(&"set_config".to_string()));
+    }
+
+    #[test]
+    fn enabled_tools_single_tool() {
+        let _lock = config::lock_test_env();
+        std::env::remove_var("CS_ENABLED_TOOLS");
+        let server = make_server_with_enabled_tools(false, "analyze_change_set");
+        let names = tool_names(&server);
+        assert_eq!(names.len(), 3, "expected 3 tools, got: {:?}", names);
+        assert!(names.contains(&"analyze_change_set".to_string()));
+        assert!(names.contains(&"get_config".to_string()));
+        assert!(names.contains(&"set_config".to_string()));
     }
 
     #[test]
