@@ -76,6 +76,39 @@ async function importIndex() {
 }
 
 /**
+ * Captures process.exit, process.argv, and stderr for test isolation.
+ * Call setup() in beforeEach and teardown() in afterEach.
+ */
+function createProcessCapture() {
+  let originalExit, originalArgv, originalStderrWrite;
+  let stderrOutput = "";
+  return {
+    get stderrOutput() {
+      return stderrOutput;
+    },
+    setup() {
+      originalExit = process.exit;
+      originalArgv = process.argv;
+      process.exit = (code) => {
+        throw new ExitCalled(code);
+      };
+      stderrOutput = "";
+      originalStderrWrite = process.stderr.write;
+      process.stderr.write = (chunk) => {
+        stderrOutput += chunk;
+        return true;
+      };
+    },
+    teardown() {
+      process.exit = originalExit;
+      process.argv = originalArgv;
+      process.stderr.write = originalStderrWrite;
+      mock.restoreAll();
+    },
+  };
+}
+
+/**
  * Saves and restores the CS_MCP_BINARY_PATH env var around a callback.
  */
 async function withEnvPath(value, fn) {
@@ -97,31 +130,10 @@ async function withEnvPath(value, fn) {
 }
 
 describe("main", () => {
-  let originalExit;
-  let originalArgv;
-  let stderrOutput;
-  let originalStderrWrite;
+  const capture = createProcessCapture();
 
-  beforeEach(() => {
-    originalExit = process.exit;
-    originalArgv = process.argv;
-    process.exit = (code) => {
-      throw new ExitCalled(code);
-    };
-    stderrOutput = "";
-    originalStderrWrite = process.stderr.write;
-    process.stderr.write = (chunk) => {
-      stderrOutput += chunk;
-      return true;
-    };
-  });
-
-  afterEach(() => {
-    process.exit = originalExit;
-    process.argv = originalArgv;
-    process.stderr.write = originalStderrWrite;
-    mock.restoreAll();
-  });
+  beforeEach(() => capture.setup());
+  afterEach(() => capture.teardown());
 
   it("uses CS_MCP_BINARY_PATH when set to a valid file", async () => {
     const { dir, filePath } = createTempBinary("cs-mcp");
@@ -158,7 +170,7 @@ describe("main", () => {
       );
     });
     assert.ok(
-      stderrOutput.includes(expectedMessage),
+      capture.stderrOutput.includes(expectedMessage),
       `Expected stderr to include "${expectedMessage}"`
     );
   }
@@ -238,32 +250,14 @@ describe("getPackageVersion", () => {
 });
 
 describe("retry on transient errors", () => {
-  let originalExit;
-  let originalArgv;
-  let stderrOutput;
-  let originalStderrWrite;
+  const capture = createProcessCapture();
 
   beforeEach(() => {
-    originalExit = process.exit;
-    originalArgv = process.argv;
-    process.exit = (code) => {
-      throw new ExitCalled(code);
-    };
-    stderrOutput = "";
-    originalStderrWrite = process.stderr.write;
-    process.stderr.write = (chunk) => {
-      stderrOutput += chunk;
-      return true;
-    };
+    capture.setup();
     process.argv = ["node", "cs-mcp.js"];
   });
 
-  afterEach(() => {
-    process.exit = originalExit;
-    process.argv = originalArgv;
-    process.stderr.write = originalStderrWrite;
-    mock.restoreAll();
-  });
+  afterEach(() => capture.teardown());
 
   it("retries on ENOENT and succeeds when file becomes available", async () => {
     let callCount = 0;
@@ -286,17 +280,18 @@ describe("retry on transient errors", () => {
 
     assert.equal(callCount, 3, "Should have retried twice before succeeding");
     assert.ok(tracker.runBinaryArgs, "runBinary should have been called");
-    assert.ok(stderrOutput.includes("retrying"), "Should log retry messages");
+    assert.ok(capture.stderrOutput.includes("retrying"), "Should log retry messages");
   });
 
-  it("retries on SyntaxError from malformed package.json", async () => {
+  /**
+   * Asserts that a transient error is retried and succeeds after failCount failures.
+   */
+  async function assertTransientRetrySucceeds(errorFactory, failCount) {
     let callCount = 0;
     const tracker = setupMocks({
       ensureBinaryFn: () => {
         callCount++;
-        if (callCount <= 1) {
-          throw new SyntaxError("Unexpected end of JSON input");
-        }
+        if (callCount <= failCount) throw errorFactory();
         return "/mock/cs-mcp";
       },
     });
@@ -306,29 +301,20 @@ describe("retry on transient errors", () => {
       await main();
     });
 
-    assert.equal(callCount, 2, "Should have retried once before succeeding");
+    assert.equal(callCount, failCount + 1, `Should have retried ${failCount} time(s) before succeeding`);
     assert.ok(tracker.runBinaryArgs, "runBinary should have been called");
+  }
+
+  it("retries on SyntaxError from malformed package.json", async () => {
+    await assertTransientRetrySucceeds(
+      () => new SyntaxError("Unexpected end of JSON input"), 1
+    );
   });
 
   it("retries on missing version error", async () => {
-    let callCount = 0;
-    const tracker = setupMocks({
-      ensureBinaryFn: () => {
-        callCount++;
-        if (callCount <= 1) {
-          throw new Error("Invalid or missing version in package.json");
-        }
-        return "/mock/cs-mcp";
-      },
-    });
-
-    await withEnvPath(undefined, async () => {
-      const { main } = await importIndex();
-      await main();
-    });
-
-    assert.equal(callCount, 2, "Should have retried once before succeeding");
-    assert.ok(tracker.runBinaryArgs, "runBinary should have been called");
+    await assertTransientRetrySucceeds(
+      () => new Error("Invalid or missing version in package.json"), 1
+    );
   });
 
   it("does not retry on non-transient errors", async () => {
@@ -350,7 +336,7 @@ describe("retry on transient errors", () => {
 
     assert.equal(callCount, 1, "Should not retry on non-transient errors");
     assert.ok(
-      stderrOutput.includes("Network failure"),
+      capture.stderrOutput.includes("Network failure"),
       "Should report the error"
     );
   });
@@ -377,7 +363,7 @@ describe("retry on transient errors", () => {
     // MAX_RETRIES is 5 — initial attempt + 5 retries = 6 calls total
     assert.equal(callCount, 6, "Should attempt 1 + MAX_RETRIES times");
     assert.ok(
-      stderrOutput.includes("retrying"),
+      capture.stderrOutput.includes("retrying"),
       "Should log retry messages"
     );
   });
@@ -401,6 +387,6 @@ describe("retry on transient errors", () => {
 
     // CS_MCP_BINARY_PATH pointing to nonexistent file throws a non-transient error
     assert.equal(callCount, 0, "ensureBinary should not be called");
-    assert.ok(stderrOutput.includes("does not exist"));
+    assert.ok(capture.stderrOutput.includes("does not exist"));
   });
 });
