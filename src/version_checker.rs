@@ -138,7 +138,7 @@ pub fn format_version_warning(info: &VersionInfo) -> String {
         \n\
         Update instructions:\n\
         - NPX: npx @codescene/codehealth-mcp\n\
-        - NPM: npm update @codescene/codehealth-mcp
+        - NPM: npm update @codescene/codehealth-mcp\n\
         - Homebrew: brew update && brew upgrade cs-mcp\n\
         - Windows: irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/install.ps1 | iex\n\
         - Docker: docker pull codescene/codescene-mcp:latest\n\
