@@ -332,11 +332,126 @@ jobs:
     needs: [build-exe-unix, build-exe-windows-amd64]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install MCPB CLI
+        run: npm install -g @anthropic-ai/mcpb
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: ./all-binaries
           merge-multiple: true
+
+      - name: Build cross-platform MCPB bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          STAGING_DIR="./mcpb-staging"
+          rm -rf "$STAGING_DIR"
+          mkdir -p "$STAGING_DIR/bin/darwin" "$STAGING_DIR/bin/linux" "$STAGING_DIR/bin/win32"
+
+          unzip -q "./all-binaries/cs-mcp-macos-amd64.zip" -d "$STAGING_DIR/bin/darwin"
+          mv "$STAGING_DIR/bin/darwin/cs-mcp-macos-amd64" "$STAGING_DIR/bin/darwin/cs-mcp-amd64"
+
+          unzip -q "./all-binaries/cs-mcp-macos-aarch64.zip" -d "$STAGING_DIR/bin/darwin"
+          mv "$STAGING_DIR/bin/darwin/cs-mcp-macos-aarch64" "$STAGING_DIR/bin/darwin/cs-mcp-aarch64"
+
+          unzip -q "./all-binaries/cs-mcp-linux-amd64.zip" -d "$STAGING_DIR/bin/linux"
+          mv "$STAGING_DIR/bin/linux/cs-mcp-linux-amd64" "$STAGING_DIR/bin/linux/cs-mcp-amd64"
+
+          unzip -q "./all-binaries/cs-mcp-linux-aarch64.zip" -d "$STAGING_DIR/bin/linux"
+          mv "$STAGING_DIR/bin/linux/cs-mcp-linux-aarch64" "$STAGING_DIR/bin/linux/cs-mcp-aarch64"
+
+          cp "./all-binaries/cs-mcp-windows-amd64.exe" "$STAGING_DIR/bin/win32/cs-mcp.exe"
+
+          cat > "$STAGING_DIR/bin/darwin/cs-mcp" <<'EOF'
+          #!/usr/bin/env sh
+          set -eu
+          arch="$(uname -m)"
+          case "$arch" in
+            arm64|aarch64)
+              exec "$(dirname "$0")/cs-mcp-aarch64" "$@"
+              ;;
+            x86_64|amd64)
+              exec "$(dirname "$0")/cs-mcp-amd64" "$@"
+              ;;
+            *)
+              echo "Unsupported macOS architecture: $arch" >&2
+              exit 1
+              ;;
+          esac
+          EOF
+
+          cat > "$STAGING_DIR/bin/linux/cs-mcp" <<'EOF'
+          #!/usr/bin/env sh
+          set -eu
+          arch="$(uname -m)"
+          case "$arch" in
+            arm64|aarch64)
+              exec "$(dirname "$0")/cs-mcp-aarch64" "$@"
+              ;;
+            x86_64|amd64)
+              exec "$(dirname "$0")/cs-mcp-amd64" "$@"
+              ;;
+            *)
+              echo "Unsupported Linux architecture: $arch" >&2
+              exit 1
+              ;;
+          esac
+          EOF
+
+          chmod +x "$STAGING_DIR/bin/darwin/cs-mcp" "$STAGING_DIR/bin/linux/cs-mcp"
+          chmod +x "$STAGING_DIR/bin/darwin/cs-mcp-aarch64" "$STAGING_DIR/bin/darwin/cs-mcp-amd64"
+          chmod +x "$STAGING_DIR/bin/linux/cs-mcp-aarch64" "$STAGING_DIR/bin/linux/cs-mcp-amd64"
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          source = Path("manifest.json")
+          target = Path("mcpb-staging/manifest.json")
+
+          manifest = json.loads(source.read_text())
+          manifest["manifest_version"] = "0.3"
+          manifest["server"] = {
+            "type": "binary",
+            "entry_point": "bin/darwin/cs-mcp",
+            "mcp_config": {
+              "command": "${__dirname}/bin/darwin/cs-mcp",
+              "args": [],
+              "env": {},
+              "platform_overrides": {
+                "linux": {
+                  "command": "${__dirname}/bin/linux/cs-mcp"
+                },
+                "win32": {
+                  "command": "${__dirname}/bin/win32/cs-mcp.exe"
+                }
+              }
+            }
+          }
+          manifest["compatibility"] = {
+            "platforms": ["darwin", "linux", "win32"]
+          }
+
+          target.write_text(json.dumps(manifest, indent=2) + "\n")
+          PY
+
+          mcpb pack "$STAGING_DIR" "./all-binaries/codehealth-mcp-${{ github.ref_name }}.mcpb"
+
+      - name: Upload MCPB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codehealth-mcp-mcpb
+          path: ./all-binaries/codehealth-mcp-${{ github.ref_name }}.mcpb
 
       - name: Upload to Existing Release
         uses: softprops/action-gh-release@v2
