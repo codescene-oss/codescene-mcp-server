@@ -46,6 +46,17 @@ The first run automatically downloads the correct platform-specific binary for y
 </details>
 
 <details>
+<summary><b>Claude Desktop</b></summary>
+
+Download the MCP bundle from the [latest release page](https://github.com/codescene-oss/codescene-mcp-server/releases/latest):
+
+- `codehealth-mcp-{version}.mcpb`
+
+Then open the `.mcpb` file with Claude Desktop to install the MCP server.
+
+</details>
+
+<details>
 <summary><b>Homebrew (macOS / Linux)</b></summary>
 
 ```bash

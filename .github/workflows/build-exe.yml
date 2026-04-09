@@ -356,6 +356,8 @@ jobs:
         run: |
           set -euo pipefail
 
+          RELEASE_VERSION="${RELEASE_TAG#MCP-}"
+
           STAGING_DIR="./mcpb-staging"
           rm -rf "$STAGING_DIR"
           mkdir -p "$STAGING_DIR/bin/darwin" "$STAGING_DIR/bin/linux" "$STAGING_DIR/bin/win32"
@@ -451,13 +453,13 @@ jobs:
           target.write_text(json.dumps(manifest, indent=2) + "\n")
           PY
 
-          mcpb pack "$STAGING_DIR" "./all-binaries/codehealth-mcp-${{ github.ref_name }}.mcpb"
+          mcpb pack "$STAGING_DIR" "./all-binaries/codehealth-mcp-${RELEASE_VERSION}.mcpb"
 
       - name: Upload MCPB artifact
         uses: actions/upload-artifact@v4
         with:
           name: codehealth-mcp-mcpb
-          path: ./all-binaries/codehealth-mcp-${{ github.ref_name }}.mcpb
+          path: ./all-binaries/codehealth-mcp-*.mcpb
 
       - name: Upload to Existing Release
         uses: softprops/action-gh-release@v2
