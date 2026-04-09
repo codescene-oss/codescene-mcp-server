@@ -351,6 +351,8 @@ jobs:
 
       - name: Build cross-platform MCPB bundle
         shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
 
@@ -414,6 +416,7 @@ jobs:
 
           python3 - <<'PY'
           import json
+          import os
           from pathlib import Path
 
           source = Path("manifest.json")
@@ -421,6 +424,9 @@ jobs:
 
           manifest = json.loads(source.read_text())
           manifest["manifest_version"] = "0.3"
+          tag = os.environ.get("RELEASE_TAG", "")
+          if tag.startswith("MCP-"):
+            manifest["version"] = tag[len("MCP-"):]
           manifest["server"] = {
             "type": "binary",
             "entry_point": "bin/darwin/cs-mcp",
