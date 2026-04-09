@@ -1,0 +1,47 @@
+{
+  "manifest_version": "0.3",
+  "name": "codehealth-mcp",
+  "version": "1.1.2",
+  "description": "CodeScene's Code Health analysis as local AI-friendly tools.",
+  "author": {
+    "name": "CodeScene",
+    "url": "https://codescene.com"
+  },
+  "homepage": "https://github.com/codescene-oss/codescene-mcp-server",
+  "documentation": "https://github.com/codescene-oss/codescene-mcp-server",
+  "support": "https://github.com/codescene-oss/codescene-mcp-server/issues",
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/darwin/cs-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/bin/darwin/cs-mcp",
+      "args": [],
+      "env": {},
+      "platform_overrides": {
+        "linux": {
+          "command": "${__dirname}/bin/linux/cs-mcp"
+        },
+        "win32": {
+          "command": "${__dirname}/bin/win32/cs-mcp.exe"
+        }
+      }
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ]
+  },
+  "keywords": [
+    "codehealth",
+    "uplift",
+    "analyze"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codescene-oss/codescene-mcp-server/tree/main"
+  }
+}
