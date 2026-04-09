@@ -19,6 +19,7 @@ impl ServerHandler for CodeSceneServer {
                 .enable_resources()
                 .build(),
         )
+        .with_protocol_version(protocol_version_2025_11_25())
         .with_server_info(Implementation::new(
             "codescene-mcp-server",
             env!("CS_MCP_VERSION"),
@@ -113,6 +114,10 @@ impl ServerHandler for CodeSceneServer {
     }
 }
 
+fn protocol_version_2025_11_25() -> rmcp::model::ProtocolVersion {
+    serde_json::from_str("\"2025-11-25\"").expect("valid MCP protocol version literal")
+}
+
 pub(crate) fn resolve_resource_content(uri: &str) -> Result<&'static str, ErrorData> {
     if uri == resources::HOW_IT_WORKS_URI {
         Ok(resources::HOW_IT_WORKS)
@@ -171,4 +176,14 @@ pub(crate) fn extract_md_title(content: &str) -> &str {
         }
     }
     "Untitled"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn protocol_version_is_2025_11_25() {
+        assert_eq!(protocol_version_2025_11_25().as_str(), "2025-11-25");
+    }
 }
