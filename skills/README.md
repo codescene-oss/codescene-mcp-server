@@ -20,5 +20,6 @@ Available skills:
 - `prioritizing-technical-debt`: Use CodeScene project data to rank what to improve first.
 - `routing-work-with-code-ownership`: Use CodeScene ownership data to find likely reviewers and domain experts.
 - `explaining-code-health`: Explain Code Health concepts and why they matter.
+- `risk-based-testing-with-code-health`: Turn CodeScene risk signals into practical testing priorities for PRs and releases.
 
 These public skills are separate from the repo-local contributor skills under `.agents/skills`.
