@@ -39,6 +39,7 @@ from fixtures import get_sample_files
 
 from test_utils import (
     CargoBackend,
+    DockerBackend,
     MCPClient,
     ServerBackend,
     create_git_repo,
@@ -208,6 +209,15 @@ def run_ssl_api_ca_bundle_tests(executable: Path) -> int:
 
 
 def run_ssl_api_ca_bundle_tests_with_backend(backend: ServerBackend) -> int:
+    if isinstance(backend, DockerBackend):
+        # The HTTPS test server runs on the host. Docker containers cannot
+        # reach host 127.0.0.1, and the CA cert file is not mounted into the
+        # container, so these tests are not applicable for the Docker backend.
+        return print_summary([
+            ("API tool trusts custom CA bundle (REQUESTS_CA_BUNDLE)", "SKIPPED"),
+            ("API tool rejects unknown CA without bundle", "SKIPPED"),
+        ])
+
     with safe_temp_directory(prefix="cs_mcp_ssl_api_test_") as test_dir:
         print(f"\nTest directory: {test_dir}")
 
