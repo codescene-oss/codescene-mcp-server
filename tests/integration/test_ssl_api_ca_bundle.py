@@ -151,19 +151,11 @@ def _call_select_project(command: list[str], env: dict[str, str], cwd: str) -> t
 
 def test_api_uses_ca_bundle(
     command: list[str], env: dict[str, str], repo_dir: Path,
-    cert_path: Path, port: int,
 ) -> bool:
     """Test that select_project succeeds when REQUESTS_CA_BUNDLE is set."""
     print_header("Test: API Tool Trusts Custom CA Bundle")
 
-    case_env = env.copy()
-    case_env["CS_ONPREM_URL"] = f"https://127.0.0.1:{port}"
-    case_env["REQUESTS_CA_BUNDLE"] = str(cert_path)
-    # Remove other SSL env vars to isolate the test
-    case_env.pop("SSL_CERT_FILE", None)
-    case_env.pop("CURL_CA_BUNDLE", None)
-
-    result, _stderr = _call_select_project(command, case_env, str(repo_dir))
+    result, _stderr = _call_select_project(command, env, str(repo_dir))
     print(f"  Response preview: {result[:300]}")
 
     # If the CA bundle is honoured, the TLS handshake succeeds and we
@@ -184,13 +176,11 @@ def test_api_uses_ca_bundle(
 
 def test_api_fails_without_ca_bundle(
     command: list[str], env: dict[str, str], repo_dir: Path,
-    port: int,
 ) -> bool:
     """Test that select_project fails when connecting to self-signed without CA bundle."""
     print_header("Test: API Tool Rejects Unknown CA Without Bundle")
 
     case_env = env.copy()
-    case_env["CS_ONPREM_URL"] = f"https://127.0.0.1:{port}"
     case_env.pop("REQUESTS_CA_BUNDLE", None)
     case_env.pop("SSL_CERT_FILE", None)
     case_env.pop("CURL_CA_BUNDLE", None)
@@ -243,15 +233,17 @@ def run_ssl_api_ca_bundle_tests_with_backend(backend: ServerBackend) -> int:
             base_env["CS_ACCESS_TOKEN"] = base_env.get("CS_ACCESS_TOKEN", "test-token")
             base_env["CS_DISABLE_VERSION_CHECK"] = "1"
             base_env["CS_DISABLE_TRACKING"] = "1"
+            base_env["CS_ONPREM_URL"] = f"https://127.0.0.1:{port}"
+            base_env["REQUESTS_CA_BUNDLE"] = str(ca_cert_path)
 
             results = [
                 (
                     "API tool trusts custom CA bundle (REQUESTS_CA_BUNDLE)",
-                    test_api_uses_ca_bundle(command, base_env, repo_dir, ca_cert_path, port),
+                    test_api_uses_ca_bundle(command, base_env, repo_dir),
                 ),
                 (
                     "API tool rejects unknown CA without bundle",
-                    test_api_fails_without_ca_bundle(command, base_env, repo_dir, port),
+                    test_api_fails_without_ca_bundle(command, base_env, repo_dir),
                 ),
             ]
 
