@@ -232,4 +232,53 @@ pub mod tests {
         assert_eq!(captured[0].method, Method::Post);
         assert_eq!(captured[0].url, "http://example.com/api");
     }
+
+    #[test]
+    fn build_reqwest_client_loads_valid_pem_bundle() {
+        let _lock = crate::config::lock_test_env();
+        let dir = tempfile::tempdir().unwrap();
+        let pem_path = dir.path().join("ca.pem");
+        // A minimal self-signed PEM certificate for testing parsing only.
+        // Generated with: openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=test
+        std::fs::write(&pem_path, include_str!("../tests/fixtures/test_ca.pem")).unwrap();
+
+        std::env::set_var("REQUESTS_CA_BUNDLE", pem_path.to_str().unwrap());
+        std::env::remove_var("SSL_CERT_FILE");
+        std::env::remove_var("CURL_CA_BUNDLE");
+
+        let client = build_reqwest_client();
+        assert!(client.is_ok(), "Expected Ok, got: {client:?}");
+
+        std::env::remove_var("REQUESTS_CA_BUNDLE");
+    }
+
+    #[test]
+    fn build_reqwest_client_ignores_invalid_pem_gracefully() {
+        let _lock = crate::config::lock_test_env();
+        let dir = tempfile::tempdir().unwrap();
+        let bad_pem = dir.path().join("bad.pem");
+        std::fs::write(&bad_pem, "not a valid PEM file").unwrap();
+
+        std::env::set_var("REQUESTS_CA_BUNDLE", bad_pem.to_str().unwrap());
+        std::env::remove_var("SSL_CERT_FILE");
+        std::env::remove_var("CURL_CA_BUNDLE");
+
+        // reqwest silently ignores non-PEM content (returns empty cert list),
+        // so the client builds successfully with no extra roots added.
+        let result = build_reqwest_client();
+        assert!(result.is_ok());
+
+        std::env::remove_var("REQUESTS_CA_BUNDLE");
+    }
+
+    #[test]
+    fn build_reqwest_client_succeeds_without_ca_bundle() {
+        let _lock = crate::config::lock_test_env();
+        std::env::remove_var("REQUESTS_CA_BUNDLE");
+        std::env::remove_var("SSL_CERT_FILE");
+        std::env::remove_var("CURL_CA_BUNDLE");
+
+        let client = build_reqwest_client();
+        assert!(client.is_ok());
+    }
 }
