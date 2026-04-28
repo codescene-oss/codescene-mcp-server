@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct HttpResponse {
@@ -53,10 +54,42 @@ pub trait HttpClient: Send + Sync {
 
 pub struct ReqwestClient;
 
+/// Return the first existing CA bundle file from the standard env vars.
+fn ca_bundle_path_from_env() -> Option<PathBuf> {
+    ["REQUESTS_CA_BUNDLE", "SSL_CERT_FILE", "CURL_CA_BUNDLE"]
+        .into_iter()
+        .find_map(|var| {
+            std::env::var(var)
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from)
+                .filter(|p| p.is_file())
+        })
+}
+
+/// Build a reqwest client, adding custom CA certificates when configured.
+fn build_reqwest_client() -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder();
+
+    if let Some(ca_path) = ca_bundle_path_from_env() {
+        let pem_data = std::fs::read(&ca_path).map_err(|e| {
+            format!("Failed to read CA bundle {}: {e}", ca_path.display())
+        })?;
+        let certs = reqwest::Certificate::from_pem_bundle(&pem_data)
+            .map_err(|e| format!("Failed to parse CA bundle: {e}"))?;
+        for cert in certs {
+            builder = builder.add_root_certificate(cert);
+        }
+    }
+
+    builder.build().map_err(|e| format!("Failed to build HTTP client: {e}"))
+}
+
 #[async_trait::async_trait]
 impl HttpClient for ReqwestClient {
     async fn send(&self, request: HttpRequest) -> Result<HttpResponse, String> {
-        let client = reqwest::Client::new();
+        let client = build_reqwest_client()?;
         let builder = match request.method {
             Method::Get => client.get(&request.url),
             Method::Post => client.post(&request.url),
