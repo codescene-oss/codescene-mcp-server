@@ -95,8 +95,8 @@ describe("runBinary", () => {
   const exitCodeCases = [
     { name: "child exit code 0", input: { status: 0 }, expected: 0 },
     { name: "child exit code 42", input: { status: 42 }, expected: 42 },
-    { name: "SIGTERM signal", input: { signal: "SIGTERM" }, expected: 0 },
-    { name: "SIGINT signal", input: { signal: "SIGINT" }, expected: 0 },
+    { name: "SIGTERM signal", input: { signal: "SIGTERM" }, expected: 143 },
+    { name: "SIGINT signal", input: { signal: "SIGINT" }, expected: 130 },
     { name: "SIGKILL signal", input: { signal: "SIGKILL" }, expected: 137 },
     { name: "SIGHUP signal", input: { signal: "SIGHUP" }, expected: 129 },
     { name: "unknown signal", input: { signal: "SIGUSR1" }, expected: 129 },
