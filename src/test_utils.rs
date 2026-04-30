@@ -193,6 +193,7 @@ pub(crate) fn assert_standalone_error(result: &CallToolResult) {
 mod tests {
     use std::collections::HashMap;
 
+    use rmcp::service::ServerInitializeError;
     use rmcp::ServerHandler;
 
     use super::*;
@@ -542,4 +543,28 @@ mod tests {
     fn extract_md_title_falls_back_to_resource() {
         assert_eq!(extract_md_title("no heading here"), "Untitled");
     }
+
+    #[test]
+    fn handle_serve_error_connection_closed_initialize_request_is_ok() {
+        let result = crate::handle_serve_error(ServerInitializeError::ConnectionClosed(
+            "initialize request".to_string(),
+        ));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn handle_serve_error_connection_closed_initialize_notification_is_ok() {
+        let result = crate::handle_serve_error(ServerInitializeError::ConnectionClosed(
+            "initialize notification".to_string(),
+        ));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn handle_serve_error_non_connection_closed_returns_err() {
+        let err = ServerInitializeError::Cancelled;
+        let result = crate::handle_serve_error(err);
+        assert!(result.is_err());
+    }
+
 }

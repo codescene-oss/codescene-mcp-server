@@ -466,7 +466,7 @@ async fn main() -> anyhow::Result<()> {
 /// initialization, but is a normal shutdown from the client's
 /// perspective. Treat it as a clean exit so the client does not
 /// surface a "fatal error" dialog.
-fn handle_serve_error(err: ServerInitializeError) -> anyhow::Result<()> {
+pub(crate) fn handle_serve_error(err: ServerInitializeError) -> anyhow::Result<()> {
     if let ServerInitializeError::ConnectionClosed(context) = &err {
         tracing::info!(
             "MCP client disconnected during initialization ({context}); shutting down cleanly"
