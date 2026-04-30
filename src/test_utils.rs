@@ -191,9 +191,16 @@ pub(crate) fn assert_standalone_error(result: &CallToolResult) {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, VecDeque};
+    use std::io;
+    use std::sync::{Arc, Mutex};
 
+    use rmcp::model::{ClientJsonRpcMessage, ServerJsonRpcMessage};
+    use rmcp::service::ServerInitializeError;
+    use rmcp::service::RoleServer;
+    use rmcp::transport::Transport;
     use rmcp::ServerHandler;
+    use serde_json::json;
 
     use super::*;
     use crate::config::{self, ConfigData};
@@ -203,6 +210,72 @@ mod tests {
         display_version, fetch_cli_version, help_text, parse_cli_args,
         resources, CliAction, API_ONLY_TOOLS,
     };
+
+    #[derive(Clone)]
+    struct ScriptedTransport {
+        incoming: Arc<Mutex<VecDeque<ClientJsonRpcMessage>>>,
+        sent: Arc<Mutex<Vec<ServerJsonRpcMessage>>>,
+    }
+
+    impl ScriptedTransport {
+        fn from_messages(messages: Vec<ClientJsonRpcMessage>) -> Self {
+            Self {
+                incoming: Arc::new(Mutex::new(VecDeque::from(messages))),
+                sent: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+    }
+
+    impl Transport<RoleServer> for ScriptedTransport {
+        type Error = io::Error;
+
+        fn send(
+            &mut self,
+            item: ServerJsonRpcMessage,
+        ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send + 'static {
+            let sent = self.sent.clone();
+            async move {
+                sent.lock().unwrap().push(item);
+                Ok(())
+            }
+        }
+
+        fn receive(
+            &mut self,
+        ) -> impl std::future::Future<Output = Option<ClientJsonRpcMessage>> + Send {
+            let next = self.incoming.lock().unwrap().pop_front();
+            std::future::ready(next)
+        }
+
+        fn close(&mut self) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
+            std::future::ready(Ok(()))
+        }
+    }
+
+    fn initialize_request_message() -> ClientJsonRpcMessage {
+        serde_json::from_value(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "unit-test-client",
+                    "version": "1.0.0"
+                }
+            }
+        }))
+        .unwrap()
+    }
+
+    fn initialized_notification_message() -> ClientJsonRpcMessage {
+        serde_json::from_value(json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        }))
+        .unwrap()
+    }
 
     #[test]
     fn api_only_tools_has_expected_entries() {
@@ -542,4 +615,57 @@ mod tests {
     fn extract_md_title_falls_back_to_resource() {
         assert_eq!(extract_md_title("no heading here"), "Untitled");
     }
+
+    #[test]
+    fn handle_serve_error_connection_closed_initialize_request_is_ok() {
+        let result = crate::handle_serve_error(ServerInitializeError::ConnectionClosed(
+            "initialize request".to_string(),
+        ));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn handle_serve_error_connection_closed_initialize_notification_is_ok() {
+        let result = crate::handle_serve_error(ServerInitializeError::ConnectionClosed(
+            "initialize notification".to_string(),
+        ));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn handle_serve_error_non_connection_closed_returns_err() {
+        let err = ServerInitializeError::Cancelled;
+        let result = crate::handle_serve_error(err);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn serve_or_handle_disconnect_returns_none_when_client_closes_early() {
+        let server = make_server(false);
+        let transport = ScriptedTransport::from_messages(vec![]);
+
+        let result = crate::serve_or_handle_disconnect(server, transport)
+            .await
+            .unwrap();
+
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn serve_or_handle_disconnect_returns_service_on_successful_handshake() {
+        let server = make_server(false);
+        let transport = ScriptedTransport::from_messages(vec![
+            initialize_request_message(),
+            initialized_notification_message(),
+        ]);
+
+        let mut service = crate::serve_or_handle_disconnect(server, transport)
+            .await
+            .unwrap()
+            .expect("expected initialized service");
+
+        let close_result = service.close().await;
+        assert!(close_result.is_ok());
+    }
+
 }

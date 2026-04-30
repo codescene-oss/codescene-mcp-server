@@ -30,10 +30,9 @@ use std::sync::Arc;
 
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{
-    CallToolResult, Content,
-};
+use rmcp::model::{CallToolResult, Content};
 use rmcp::schemars::{self, JsonSchema};
+use rmcp::service::ServerInitializeError;
 use rmcp::{tool, tool_router, ErrorData, ServiceExt};
 use tracing_subscriber::EnvFilter;
 
@@ -110,8 +109,8 @@ pub(crate) async fn fetch_cli_version(cli_runner: &dyn cli::CliRunner) -> anyhow
     Ok(cli_runner.run(&["version"], None).await?)
 }
 
-pub(crate) fn inlined_schema_for<T: JsonSchema + 'static>() -> Arc<serde_json::Map<String, serde_json::Value>>
-{
+pub(crate) fn inlined_schema_for<T: JsonSchema + 'static>(
+) -> Arc<serde_json::Map<String, serde_json::Value>> {
     let mut settings = schemars::generate::SchemaSettings::draft2020_12();
     settings.inline_subschemas = true;
     settings.transforms = vec![Box::new(schemars::transform::AddNullable::default())];
@@ -182,10 +181,7 @@ fn remove_standalone_tools(router: &mut ToolRouter<CodeSceneServer>) {
     }
 }
 
-fn apply_enabled_tools_filter(
-    router: &mut ToolRouter<CodeSceneServer>,
-    config_data: &ConfigData,
-) {
+fn apply_enabled_tools_filter(router: &mut ToolRouter<CodeSceneServer>, config_data: &ConfigData) {
     let enabled = match config::enabled_tools(config_data) {
         Some(set) => set,
         None => return,
@@ -451,18 +447,55 @@ async fn main() -> anyhow::Result<()> {
         http_client: Arc::new(http::ReqwestClient),
     });
 
-    let service = server
-        .serve(rmcp::transport::stdio())
-        .await
-        .inspect_err(|e| {
-            if e.to_string().contains("initialize request") {
-                tracing::info!("No MCP initialize request received. If you ran `cs-mcp` directly in a terminal, run it through an MCP client instead.");
-            }
-            tracing::error!("serving error: {:?}", e);
-        })?;
+    // Covered by e2e test: test_shutdown_during_handshake.py
+    let Some(service) = serve_or_handle_disconnect(server, rmcp::transport::stdio()).await? else {
+        return Ok(());
+    };
 
     tracing::info!("CodeScene MCP server ready");
 
     service.waiting().await?;
     Ok(())
+}
+
+pub(crate) async fn serve_or_handle_disconnect<T, E, A>(
+    server: CodeSceneServer,
+    transport: T,
+) -> anyhow::Result<Option<rmcp::service::RunningService<rmcp::service::RoleServer, CodeSceneServer>>>
+where
+    T: rmcp::transport::IntoTransport<rmcp::service::RoleServer, E, A>,
+    E: std::error::Error + Send + Sync + 'static,
+{
+    match server.serve(transport).await {
+        Ok(service) => Ok(Some(service)),
+        Err(err) => {
+            handle_serve_error(err)?;
+            Ok(None)
+        }
+    }
+}
+
+/// Convert a `serve()` error into the desired process exit behavior.
+///
+/// MCP clients (e.g. VS Code, Zed) routinely close the server's stdin
+/// when the user closes the agent — sometimes before the MCP handshake
+/// has completed. That looks like a `ConnectionClosed` error during
+/// initialization, but is a normal shutdown from the client's
+/// perspective. Treat it as a clean exit so the client does not
+/// surface a "fatal error" dialog.
+pub(crate) fn handle_serve_error(err: ServerInitializeError) -> anyhow::Result<()> {
+    if let ServerInitializeError::ConnectionClosed(context) = &err {
+        tracing::info!(
+            "MCP client disconnected during initialization ({context}); shutting down cleanly"
+        );
+        if context.contains("initialize request") {
+            tracing::info!(
+                "No MCP initialize request received. If you ran `cs-mcp` directly in a terminal, run it through an MCP client instead."
+            );
+        }
+        return Ok(());
+    }
+
+    tracing::error!("serving error: {err:?}");
+    Err(err.into())
 }
