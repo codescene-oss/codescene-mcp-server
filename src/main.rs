@@ -447,15 +447,31 @@ async fn main() -> anyhow::Result<()> {
         http_client: Arc::new(http::ReqwestClient),
     });
 
-    let service = match server.serve(rmcp::transport::stdio()).await {
-        Ok(service) => service,
-        Err(err) => return handle_serve_error(err),
+    let Some(service) = serve_or_handle_disconnect(server, rmcp::transport::stdio()).await? else {
+        return Ok(());
     };
 
     tracing::info!("CodeScene MCP server ready");
 
     service.waiting().await?;
     Ok(())
+}
+
+pub(crate) async fn serve_or_handle_disconnect<T, E, A>(
+    server: CodeSceneServer,
+    transport: T,
+) -> anyhow::Result<Option<rmcp::service::RunningService<rmcp::service::RoleServer, CodeSceneServer>>>
+where
+    T: rmcp::transport::IntoTransport<rmcp::service::RoleServer, E, A>,
+    E: std::error::Error + Send + Sync + 'static,
+{
+    match server.serve(transport).await {
+        Ok(service) => Ok(Some(service)),
+        Err(err) => {
+            handle_serve_error(err)?;
+            Ok(None)
+        }
+    }
 }
 
 /// Convert a `serve()` error into the desired process exit behavior.
