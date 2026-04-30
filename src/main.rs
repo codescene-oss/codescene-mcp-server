@@ -447,6 +447,7 @@ async fn main() -> anyhow::Result<()> {
         http_client: Arc::new(http::ReqwestClient),
     });
 
+    // Covered by e2e test: test_shutdown_during_handshake.py
     let Some(service) = serve_or_handle_disconnect(server, rmcp::transport::stdio()).await? else {
         return Ok(());
     };
