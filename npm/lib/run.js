@@ -50,8 +50,15 @@ export function runBinary(binaryPath, args) {
     process.exit(result.status);
   }
   if (result.signal) {
-    // Convert signal name to number (e.g. SIGTERM -> 15)
-    const signalNumbers = { SIGTERM: 15, SIGINT: 2, SIGKILL: 9, SIGHUP: 1 };
+    // SIGTERM and SIGINT are normal shutdown signals sent by MCP clients
+    // (e.g. VS Code, Zed) when the user closes the agent. Exiting with
+    // a non-zero code causes the client to surface a "fatal error" dialog,
+    // so treat these as clean exits.
+    if (result.signal === "SIGTERM" || result.signal === "SIGINT") {
+      process.exit(0);
+    }
+    // For other signals, use the 128 + signal number convention.
+    const signalNumbers = { SIGKILL: 9, SIGHUP: 1 };
     const sigNum = signalNumbers[result.signal] || 1;
     process.exit(128 + sigNum);
   }
