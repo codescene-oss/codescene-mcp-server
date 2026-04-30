@@ -39,7 +39,8 @@ def _get_status_color(passed: bool) -> str:
 def _print_details(details: str) -> None:
     """Print test result details, limited to first 10 lines."""
     for line in details.split("\n")[:10]:
-        print(f"         {line}")
+        safe_line = line if not _needs_ascii_fallback() else line.encode("ascii", errors="replace").decode("ascii")
+        print(f"         {safe_line}")
 
 
 def print_header(msg: str) -> None:
