@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 /**
  * Tests for the run module which spawns the cs-mcp binary.
  *
- * Since runBinary calls process.exit() and spawnSync, we test by
- * mocking those functions and verifying the correct behavior.
+ * Since runBinary calls process.exit() and spawns a child process,
+ * we test by mocking those functions and verifying the correct behavior.
  */
 
 /** Sentinel error thrown when process.exit is called, to stop execution. */
@@ -17,30 +17,49 @@ class ExitCalled extends Error {
 }
 
 /**
- * Dynamically imports the run module with a mocked spawnSync.
+ * Dynamically imports the run module with a mocked spawn.
  */
-async function importRun(spawnSyncMock) {
+async function importRun(spawnMock) {
   mock.module("node:child_process", {
-    namedExports: { spawnSync: spawnSyncMock },
+    namedExports: { spawn: spawnMock },
   });
   return import(`../lib/run.js?v=${Date.now()}_${Math.random()}`);
 }
 
 /**
- * Creates a spawnSync mock that returns the given result shape.
+ * Creates a lightweight child-process mock used by runBinary.
  */
-function createSpawnResult({ status = null, signal = null, error = null }) {
-  return () => ({ status, signal, error });
+function createChildMock() {
+  const handlers = new Map();
+  return {
+    handlers,
+    exitCode: null,
+    signalCode: null,
+    once(event, cb) {
+      handlers.set(event, cb);
+      return this;
+    },
+    emit(event, ...args) {
+      const cb = handlers.get(event);
+      if (cb) cb(...args);
+    },
+    kill(signal) {
+      this.lastKillSignal = signal;
+      return true;
+    },
+  };
 }
 
 /**
- * Runs runBinary with a mocked spawnSync and captures the exit code.
+ * Runs runBinary with a mocked spawn and captures the exit code.
  * Returns the exit code thrown via process.exit.
  */
-async function runAndCaptureExit(spawnResult, binaryPath = "/bin/test") {
-  const { runBinary } = await importRun(createSpawnResult(spawnResult));
+async function runAndCaptureExit(triggerExit, binaryPath = "/bin/test") {
+  const child = createChildMock();
+  const { runBinary } = await importRun(() => child);
   try {
     runBinary(binaryPath, []);
+    triggerExit(child);
     assert.fail("Expected process.exit to be called");
   } catch (err) {
     if (!(err instanceof ExitCalled)) throw err;
@@ -65,14 +84,18 @@ describe("runBinary", () => {
 
   it("calls spawnSync with correct arguments", async () => {
     let capturedArgs;
-    const spawnSyncMock = (binary, args, opts) => {
+    const child = createChildMock();
+    const spawnMock = (binary, args, opts) => {
       capturedArgs = { binary, args, opts };
-      return { status: 0, signal: null, error: null };
+      return child;
     };
 
-    const { runBinary } = await importRun(spawnSyncMock);
+    const { runBinary } = await importRun(spawnMock);
 
-    assert.throws(() => runBinary("/usr/bin/cs-mcp", ["--version"]), ExitCalled);
+    assert.throws(() => {
+      runBinary("/usr/bin/cs-mcp", ["--version"]);
+      child.emit("exit", 0, null);
+    }, ExitCalled);
 
     assert.equal(capturedArgs.binary, "/usr/bin/cs-mcp");
     assert.deepEqual(capturedArgs.args, ["--version"]);
@@ -81,31 +104,63 @@ describe("runBinary", () => {
   });
 
   it("throws on unknown spawn error", async () => {
-    const { runBinary } = await importRun(
-      createSpawnResult({
-        error: new Error("Something unexpected"),
-      })
-    );
+    const child = createChildMock();
+    const { runBinary } = await importRun(() => child);
 
-    assert.throws(() => runBinary("/bin/test", []), {
+    assert.throws(() => {
+      runBinary("/bin/test", []);
+      child.emit("error", new Error("Something unexpected"));
+    }, {
       message: "Something unexpected",
     });
   });
 
   const exitCodeCases = [
-    { name: "child exit code 0", input: { status: 0 }, expected: 0 },
-    { name: "child exit code 42", input: { status: 42 }, expected: 42 },
-    { name: "SIGTERM signal", input: { signal: "SIGTERM" }, expected: 143 },
-    { name: "SIGINT signal", input: { signal: "SIGINT" }, expected: 130 },
-    { name: "SIGKILL signal", input: { signal: "SIGKILL" }, expected: 137 },
-    { name: "SIGHUP signal", input: { signal: "SIGHUP" }, expected: 129 },
-    { name: "unknown signal", input: { signal: "SIGUSR1" }, expected: 129 },
-    { name: "no status or signal", input: {}, expected: 1 },
+    {
+      name: "child exit code 0",
+      trigger: (child) => child.emit("exit", 0, null),
+      expected: 0,
+    },
+    {
+      name: "child exit code 42",
+      trigger: (child) => child.emit("exit", 42, null),
+      expected: 42,
+    },
+    {
+      name: "SIGTERM signal",
+      trigger: (child) => child.emit("exit", null, "SIGTERM"),
+      expected: 0,
+    },
+    {
+      name: "SIGINT signal",
+      trigger: (child) => child.emit("exit", null, "SIGINT"),
+      expected: 0,
+    },
+    {
+      name: "SIGKILL signal",
+      trigger: (child) => child.emit("exit", null, "SIGKILL"),
+      expected: 137,
+    },
+    {
+      name: "SIGHUP signal",
+      trigger: (child) => child.emit("exit", null, "SIGHUP"),
+      expected: 129,
+    },
+    {
+      name: "unknown signal",
+      trigger: (child) => child.emit("exit", null, "SIGUSR1"),
+      expected: 129,
+    },
+    {
+      name: "no status or signal",
+      trigger: (child) => child.emit("exit", null, null),
+      expected: 1,
+    },
   ];
 
   for (const tc of exitCodeCases) {
     it(`exits with ${tc.expected} on ${tc.name}`, async () => {
-      const code = await runAndCaptureExit(tc.input);
+      const code = await runAndCaptureExit(tc.trigger);
       assert.equal(code, tc.expected);
     });
   }
@@ -125,10 +180,12 @@ describe("runBinary", () => {
       };
 
       try {
-        const error = Object.assign(new Error(tc.errorCode), {
-          code: tc.errorCode,
+        const code = await runAndCaptureExit((child) => {
+          const error = Object.assign(new Error(tc.errorCode), {
+            code: tc.errorCode,
+          });
+          child.emit("error", error);
         });
-        const code = await runAndCaptureExit({ error });
         assert.equal(code, tc.exitCode);
         assert.ok(stderrOutput.includes(tc.message));
       } finally {
@@ -136,4 +193,19 @@ describe("runBinary", () => {
       }
     });
   }
+
+  it("forwards SIGTERM to child process", async () => {
+    let child;
+    const { runBinary } = await importRun(() => {
+      child = createChildMock();
+      return child;
+    });
+
+    assert.throws(() => {
+      runBinary("/bin/test", []);
+      process.emit("SIGTERM");
+      assert.equal(child.lastKillSignal, "SIGTERM");
+      child.emit("exit", null, "SIGTERM");
+    }, ExitCalled);
+  });
 });

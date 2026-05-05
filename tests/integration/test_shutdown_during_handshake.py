@@ -20,10 +20,13 @@ This test suite validates:
    notifications/initialized notification results in exit code 0.
 3. A full handshake followed by stdin close still results in exit
    code 0 (sanity check that the happy path also stays clean).
+4. (Unix only) SIGTERM before any input results in exit code 0.
+5. (Unix only) SIGTERM after a full handshake results in exit code 0.
 """
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -33,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from test_utils import (
     CargoBackend,
+    NpmBackend,
     ServerBackend,
     print_header,
     print_summary,
@@ -68,10 +72,11 @@ def _send_message(process: subprocess.Popen, message: dict) -> None:
     process.stdin.flush()
 
 
-def _close_stdin_and_wait(process: subprocess.Popen) -> tuple[int | None, str]:
-    """Close stdin, wait for the process to exit, return (exit_code, stderr)."""
-    assert process.stdin is not None
-    process.stdin.close()
+def _stop_and_wait(
+    process: subprocess.Popen, stop: callable
+) -> tuple[int | None, str]:
+    """Execute *stop* action, wait for the process to exit, return (exit_code, stderr)."""
+    stop(process)
     try:
         process.wait(timeout=_EXIT_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
@@ -79,6 +84,16 @@ def _close_stdin_and_wait(process: subprocess.Popen) -> tuple[int | None, str]:
         process.wait(timeout=5)
         return None, _drain_stderr(process)
     return process.returncode, _drain_stderr(process)
+
+
+def _close_stdin(process: subprocess.Popen) -> None:
+    assert process.stdin is not None
+    process.stdin.close()
+
+
+def _close_stdin_and_wait(process: subprocess.Popen) -> tuple[int | None, str]:
+    """Close stdin, wait for the process to exit, return (exit_code, stderr)."""
+    return _stop_and_wait(process, _close_stdin)
 
 
 def _drain_stderr(process: subprocess.Popen) -> str:
@@ -137,6 +152,13 @@ def _check_clean_exit(exit_code: int | None, stderr: str, scenario: str) -> bool
 def _tail(text: str, max_lines: int = 10) -> str:
     lines = text.strip().splitlines()
     return "\n".join(lines[-max_lines:]) if lines else "<empty>"
+
+
+def _sigterm_and_wait(process: subprocess.Popen) -> tuple[int | None, str]:
+    """Send SIGTERM to the process, wait for exit, return (exit_code, stderr)."""
+    return _stop_and_wait(
+        process, lambda p: p.send_signal(signal.SIGTERM)
+    )
 
 
 # --- Scenarios ---
@@ -205,6 +227,46 @@ def test_stdin_closed_after_full_handshake(
     return _check_clean_exit(exit_code, stderr, "post-handshake")
 
 
+def test_sigterm_before_any_input(
+    command: list[str], env: dict, cwd: str
+) -> bool:
+    """
+    Sending SIGTERM before any JSON-RPC message must exit cleanly.
+
+    MCP clients like Zed may terminate the server process with SIGTERM
+    instead of (or in addition to) closing stdin. The npm wrapper must
+    translate that into exit code 0 so the client does not surface a
+    "fatal error" dialog.
+    """
+    print_header("Test: SIGTERM before any input")
+
+    process = _spawn_server(command, env, cwd)
+    time.sleep(0.3)
+    exit_code, stderr = _sigterm_and_wait(process)
+    return _check_clean_exit(exit_code, stderr, "SIGTERM, no input")
+
+
+def test_sigterm_after_full_handshake(
+    command: list[str], env: dict, cwd: str
+) -> bool:
+    """
+    Sending SIGTERM after a complete handshake must exit cleanly.
+
+    This is the most common real-world scenario: the user closes the
+    agent after it has been fully initialized, and the client sends
+    SIGTERM to the server process group.
+    """
+    print_header("Test: SIGTERM after full handshake")
+
+    process = _spawn_server(command, env, cwd)
+    _send_message(process, _initialize_request())
+    time.sleep(0.3)
+    _send_message(process, _initialized_notification())
+    time.sleep(0.3)
+    exit_code, stderr = _sigterm_and_wait(process)
+    return _check_clean_exit(exit_code, stderr, "SIGTERM, post-handshake")
+
+
 # --- Runner ---
 
 
@@ -231,6 +293,21 @@ def run_shutdown_during_handshake_tests_with_backend(backend: ServerBackend) -> 
                 test_stdin_closed_after_full_handshake(command, env, cwd),
             ),
         ]
+
+        # SIGTERM tests only apply on Unix and only when running through the
+        # npm wrapper, which is responsible for translating signals into a
+        # clean exit code. The bare Rust binary does not trap SIGTERM.
+        if sys.platform != "win32" and isinstance(backend, NpmBackend):
+            results.extend([
+                (
+                    "SIGTERM Before Any Input",
+                    test_sigterm_before_any_input(command, env, cwd),
+                ),
+                (
+                    "SIGTERM After Full Handshake",
+                    test_sigterm_after_full_handshake(command, env, cwd),
+                ),
+            ])
 
         return print_summary(results)
 
