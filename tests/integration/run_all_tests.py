@@ -438,6 +438,9 @@ def _run_test_module(module_name: str, run_func, backend: ServerBackend) -> tupl
 
 def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool]]:
     """Run all self-contained test modules and return their results."""
+    from test_analytics_environment_override import (
+        run_analytics_environment_override_tests_with_backend,
+    )
     from test_analytics_tracking import run_analytics_tracking_tests_with_backend
     from test_analyze_change_set import run_analyze_change_set_tests_with_backend
     from test_auto_refactor import run_auto_refactor_tests_with_backend
@@ -459,6 +462,10 @@ def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool
     from test_version_check import run_version_check_tests_with_backend
 
     modules = [
+        (
+            "Analytics Environment Override Tests",
+            run_analytics_environment_override_tests_with_backend,
+        ),
         ("Git Worktree Tests", run_worktree_tests_with_backend),
         ("Git Subtree Tests", run_subtree_tests_with_backend),
         ("Relative Path Tests", run_relative_path_tests_with_backend),

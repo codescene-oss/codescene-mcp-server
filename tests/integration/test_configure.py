@@ -13,7 +13,7 @@ This test suite validates:
 5. Using an invalid key returns a helpful error.
 6. Deleting a value (empty string) removes it from the config file.
 7. Environment variables take precedence over config-file values.
-8. Hidden options (disable_tracking, disable_version_check) never appear
+8. Hidden options (disable_tracking, disable_version_check, tracking_environment) never appear
    in the listing but are still accessible by explicit key.
 9. API-only options (onprem_url, default_project_id) are hidden from
    the listing when running with a standalone license.
@@ -204,7 +204,7 @@ def test_list_all(command: list[str], env: dict, cwd: str) -> bool:
             "default_project_id",
             "ca_bundle",
         ]
-        hidden_keys = ["disable_tracking", "disable_version_check"]
+        hidden_keys = ["disable_tracking", "disable_version_check", "tracking_environment"]
 
         found_visible = [k for k in visible_keys if k in text]
         all_visible = len(found_visible) == len(visible_keys)
@@ -357,12 +357,19 @@ def test_hidden_option_accessible_by_key(command: list[str], env: dict, cwd: str
         return False
 
     try:
-        saved_ok, value_present = _set_then_read(
+        disable_saved_ok, disable_value_present = _set_then_read(
             client, "disable_tracking", "true", "true",
         )
-        print_test("set_config on hidden key acknowledged", saved_ok)
-        print_test("get_config returns hidden key value", value_present)
-        return saved_ok and value_present
+
+        env_saved_ok, env_value_present = _set_then_read(
+            client, "tracking_environment", "my-agent-name", "my-agent-name",
+        )
+
+        print_test("set_config on hidden disable_tracking acknowledged", disable_saved_ok)
+        print_test("get_config returns hidden disable_tracking value", disable_value_present)
+        print_test("set_config on hidden tracking_environment acknowledged", env_saved_ok)
+        print_test("get_config returns hidden tracking_environment value", env_value_present)
+        return disable_saved_ok and disable_value_present and env_saved_ok and env_value_present
 
     except Exception as e:
         print_test("Hidden option accessible by key", False, str(e))

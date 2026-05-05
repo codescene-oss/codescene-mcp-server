@@ -25,7 +25,7 @@ pub fn track_event(event: &str, properties: Value, instance_id: &str) {
         url: tracking_url(),
         event: format!("mcp-{event}"),
         instance_id: instance_id.to_string(),
-        environment: crate::environment::detect().to_string(),
+        environment: tracking_environment(),
         version: env!("CS_MCP_VERSION"),
         properties,
     };
@@ -92,6 +92,13 @@ fn tracking_url() -> String {
         .unwrap_or_else(|_| DEFAULT_API_URL.to_string());
 
     format!("{api_url}/v2/analytics/track")
+}
+
+fn tracking_environment() -> String {
+    std::env::var("CS_ENVIRONMENT")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| crate::environment::detect().to_string())
 }
 
 fn normalize_tracking_override(url: &str) -> String {
@@ -204,6 +211,29 @@ mod tests {
             "https://my-instance.example.com/api/v2/analytics/track"
         );
         std::env::remove_var("CS_ONPREM_URL");
+    }
+
+    #[test]
+    fn tracking_environment_uses_detected_environment_when_unset() {
+        let _lock = config::lock_test_env();
+        std::env::remove_var("CS_ENVIRONMENT");
+        assert_eq!(tracking_environment(), crate::environment::detect().to_string());
+    }
+
+    #[test]
+    fn tracking_environment_uses_override_when_set() {
+        let _lock = config::lock_test_env();
+        std::env::set_var("CS_ENVIRONMENT", "my-agent-name");
+        assert_eq!(tracking_environment(), "my-agent-name");
+        std::env::remove_var("CS_ENVIRONMENT");
+    }
+
+    #[test]
+    fn tracking_environment_ignores_blank_override() {
+        let _lock = config::lock_test_env();
+        std::env::set_var("CS_ENVIRONMENT", "   ");
+        assert_eq!(tracking_environment(), crate::environment::detect().to_string());
+        std::env::remove_var("CS_ENVIRONMENT");
     }
 
     #[test]
