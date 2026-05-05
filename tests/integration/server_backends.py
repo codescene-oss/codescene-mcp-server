@@ -192,6 +192,8 @@ class DockerBackend(ServerBackend):
             "-e",
             "CS_DISABLE_TRACKING",
             "-e",
+            "CS_ENVIRONMENT",
+            "-e",
             "CS_ACE_ACCESS_TOKEN",
             "-e",
             "CS_ACE_API_URL",
