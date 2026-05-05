@@ -15,7 +15,7 @@ jobs:
     name: NPM Wrapper Unit Tests
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -37,7 +37,7 @@ jobs:
     name: Rust Unit Tests + Coverage
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install coverage tooling
@@ -55,7 +55,7 @@ jobs:
     needs: [test-npm, test-rust]
     if: always()
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # fetch everything so that `cs-coverage check` can find merge-base
           fetch-depth: 0
