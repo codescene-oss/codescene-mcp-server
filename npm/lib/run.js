@@ -10,7 +10,7 @@
  * works as expected.
  */
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 
 /** Signals that indicate a normal client-initiated shutdown. */
 const CLEAN_SHUTDOWN_SIGNALS = new Set(["SIGTERM", "SIGINT"]);
@@ -69,21 +69,68 @@ function exitCodeForSignal(signal) {
  * @returns {never}
  */
 export function runBinary(binaryPath, args) {
-  const result = spawnSync(binaryPath, args, {
+  const child = spawn(binaryPath, args, {
     stdio: "inherit",
     env: process.env,
     windowsHide: true,
   });
 
-  if (result.error) {
-    handleSpawnError(result.error, binaryPath);
+  let exited = false;
+
+  /**
+   * Exit exactly once and unregister signal handlers.
+   *
+   * @param {number} code
+   */
+  function exitOnce(code) {
+    if (exited) {
+      return;
+    }
+    exited = true;
+
+    process.off("SIGTERM", forwardSigterm);
+    process.off("SIGINT", forwardSigint);
+    process.exit(code);
   }
 
-  if (result.status !== null) {
-    process.exit(result.status);
+  /**
+   * Forward a signal to the child process.
+   *
+   * @param {NodeJS.Signals} signal
+   */
+  function forwardSignal(signal) {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      return;
+    }
+    try {
+      child.kill(signal);
+    } catch {
+      // Ignore race conditions where the child exits before kill().
+    }
   }
-  if (result.signal) {
-    process.exit(exitCodeForSignal(result.signal));
-  }
-  process.exit(1);
+
+  const forwardSigterm = () => forwardSignal("SIGTERM");
+  const forwardSigint = () => forwardSignal("SIGINT");
+
+  process.on("SIGTERM", forwardSigterm);
+  process.on("SIGINT", forwardSigint);
+
+  child.once("error", (error) => {
+    handleSpawnError(error, binaryPath);
+  });
+
+  child.once("exit", (status, signal) => {
+    if (status !== null) {
+      exitOnce(status);
+      return;
+    }
+    if (signal) {
+      exitOnce(exitCodeForSignal(signal));
+      return;
+    }
+    exitOnce(1);
+  });
+
+  // Keep the wrapper process alive while the child is running.
+  // Actual exit happens in the child "exit" event handler above.
 }
