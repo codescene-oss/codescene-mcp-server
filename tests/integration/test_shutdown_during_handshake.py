@@ -72,10 +72,11 @@ def _send_message(process: subprocess.Popen, message: dict) -> None:
     process.stdin.flush()
 
 
-def _close_stdin_and_wait(process: subprocess.Popen) -> tuple[int | None, str]:
-    """Close stdin, wait for the process to exit, return (exit_code, stderr)."""
-    assert process.stdin is not None
-    process.stdin.close()
+def _stop_and_wait(
+    process: subprocess.Popen, stop: callable
+) -> tuple[int | None, str]:
+    """Execute *stop* action, wait for the process to exit, return (exit_code, stderr)."""
+    stop(process)
     try:
         process.wait(timeout=_EXIT_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
@@ -83,6 +84,16 @@ def _close_stdin_and_wait(process: subprocess.Popen) -> tuple[int | None, str]:
         process.wait(timeout=5)
         return None, _drain_stderr(process)
     return process.returncode, _drain_stderr(process)
+
+
+def _close_stdin(process: subprocess.Popen) -> None:
+    assert process.stdin is not None
+    process.stdin.close()
+
+
+def _close_stdin_and_wait(process: subprocess.Popen) -> tuple[int | None, str]:
+    """Close stdin, wait for the process to exit, return (exit_code, stderr)."""
+    return _stop_and_wait(process, _close_stdin)
 
 
 def _drain_stderr(process: subprocess.Popen) -> str:
@@ -145,14 +156,9 @@ def _tail(text: str, max_lines: int = 10) -> str:
 
 def _sigterm_and_wait(process: subprocess.Popen) -> tuple[int | None, str]:
     """Send SIGTERM to the process, wait for exit, return (exit_code, stderr)."""
-    process.send_signal(signal.SIGTERM)
-    try:
-        process.wait(timeout=_EXIT_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait(timeout=5)
-        return None, _drain_stderr(process)
-    return process.returncode, _drain_stderr(process)
+    return _stop_and_wait(
+        process, lambda p: p.send_signal(signal.SIGTERM)
+    )
 
 
 # --- Scenarios ---
