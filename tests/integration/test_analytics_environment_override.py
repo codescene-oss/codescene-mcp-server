@@ -125,24 +125,33 @@ def _first_score_event_properties(payloads: list[dict]) -> dict | None:
     return None
 
 
-def test_default_environment_is_sent(backend: ServerBackend, repo_dir: Path) -> bool:
-    """When CS_ENVIRONMENT is unset, analytics should send detected runtime environment."""
-    print_header("Test: Default Environment Is Sent")
-
-    score, payloads = _run_with_fake_server(backend, repo_dir)
+def _score_event_environment(
+    backend: ServerBackend, repo_dir: Path, extra_env: dict[str, str] | None = None
+) -> str | None:
+    """Return the score-event environment value after a successful tool call."""
+    score, payloads = _run_with_fake_server(backend, repo_dir, extra_env)
 
     has_score = score is not None
     print_test("Valid Code Health score", has_score, f"Score: {score}")
     if not has_score:
-        return False
+        return None
 
     props = _first_score_event_properties(payloads)
     has_event = props is not None
     print_test("Found mcp-code-health-score event", has_event)
     if not has_event:
-        return False
+        return None
 
-    value = props.get("environment")
+    return props.get("environment")
+
+
+def test_default_environment_is_sent(backend: ServerBackend, repo_dir: Path) -> bool:
+    """When CS_ENVIRONMENT is unset, analytics should send detected runtime environment."""
+    print_header("Test: Default Environment Is Sent")
+
+    value = _score_event_environment(backend, repo_dir)
+    if value is None:
+        return False
     is_default = value in ("binary", "docker")
     print_test("Environment is default runtime value", is_default, f"Value: {value}")
     return is_default
@@ -153,20 +162,10 @@ def test_overridden_environment_is_sent(backend: ServerBackend, repo_dir: Path) 
     print_header("Test: Overridden Environment Is Sent")
 
     override = "my-agent-name"
-    score, payloads = _run_with_fake_server(backend, repo_dir, {"CS_ENVIRONMENT": override})
-
-    has_score = score is not None
-    print_test("Valid Code Health score", has_score, f"Score: {score}")
-    if not has_score:
+    value = _score_event_environment(backend, repo_dir, {"CS_ENVIRONMENT": override})
+    if value is None:
         return False
 
-    props = _first_score_event_properties(payloads)
-    has_event = props is not None
-    print_test("Found mcp-code-health-score event", has_event)
-    if not has_event:
-        return False
-
-    value = props.get("environment")
     is_override = value == override
     print_test("Environment override propagated", is_override, f"Value: {value}")
     return is_override
