@@ -103,6 +103,16 @@ pub const OPTIONS: &[ConfigOption] = &[
         docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
     },
     ConfigOption {
+        key: "tracking_environment",
+        env_var: "CS_ENVIRONMENT",
+        description: "Override analytics environment label sent in tracking events",
+        sensitive: false,
+        hidden: true,
+        api_only: false,
+        aliases: &["environment"],
+        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
+    },
+    ConfigOption {
         key: "ca_bundle",
         env_var: "REQUESTS_CA_BUNDLE",
         description: "Path to custom CA certificate bundle (PEM)",
@@ -823,5 +833,19 @@ mod tests {
         let opt = find_option("tools");
         assert!(opt.is_some());
         assert_eq!(opt.unwrap().key, "enabled_tools");
+    }
+
+    #[test]
+    fn find_option_tracking_environment_by_env_var() {
+        let opt = find_option("CS_ENVIRONMENT");
+        assert!(opt.is_some());
+        assert_eq!(opt.unwrap().key, "tracking_environment");
+    }
+
+    #[test]
+    fn find_option_tracking_environment_by_alias() {
+        let opt = find_option("environment");
+        assert!(opt.is_some());
+        assert_eq!(opt.unwrap().key, "tracking_environment");
     }
 }
