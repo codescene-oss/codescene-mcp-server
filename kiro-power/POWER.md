@@ -109,3 +109,10 @@ Use these tools to identify what to improve first:
 
 - Use `select_project` before project-scoped tools.
 - Use `code_ownership_for_path` to identify likely reviewers.
+
+## License and support
+
+This power integrates with [CodeScene MCP Server](https://github.com/codescene-oss/codescene-mcp-server) (MIT).
+
+- [Privacy Policy](https://codescene.com/policies)
+- [Support](https://github.com/codescene-oss/codescene-mcp-server/issues)
