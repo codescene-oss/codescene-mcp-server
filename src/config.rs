@@ -132,6 +132,17 @@ pub const OPTIONS: &[ConfigOption] = &[
         aliases: &["tools"],
         docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
     },
+    ConfigOption {
+        key: "hooks_block_on_regression",
+        env_var: "CS_HOOKS_BLOCK_ON_REGRESSION",
+        description:
+            "Whether agent hooks should block commits on Code Health regression (true/false)",
+        sensitive: false,
+        hidden: false,
+        api_only: false,
+        aliases: &["block_on_regression"],
+        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
+    },
 ];
 
 /// Tool names that can be enabled/disabled via the `enabled_tools` config.
@@ -151,6 +162,7 @@ pub const CONFIGURABLE_TOOL_NAMES: &[&str] = &[
     "list_technical_debt_hotspots_for_project",
     "list_technical_debt_hotspots_for_project_file",
     "code_ownership_for_path",
+    "setup_hooks",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

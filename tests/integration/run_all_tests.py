@@ -460,6 +460,7 @@ def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool
     from test_ssl_api_ca_bundle import run_ssl_api_ca_bundle_tests_with_backend
     from test_ssl_cli_truststore import run_ssl_cli_truststore_tests_with_backend
     from test_version_check import run_version_check_tests_with_backend
+    from test_setup_hooks import run_setup_hooks_tests_with_backend
 
     modules = [
         (
@@ -486,6 +487,7 @@ def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool
         ("SSL Truststore CLI Tests", run_ssl_cli_truststore_tests_with_backend),
         ("SSL API CA Bundle Tests", run_ssl_api_ca_bundle_tests_with_backend),
         ("Auto-Refactor Tests", run_auto_refactor_tests_with_backend),
+        ("Setup Hooks Tests", run_setup_hooks_tests_with_backend),
     ]
     return [_run_test_module(name, func, backend) for name, func in modules]
 
