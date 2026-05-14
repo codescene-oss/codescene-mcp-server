@@ -54,6 +54,12 @@ jobs:
               print(f"Updated {path} to {version}")
           PY
 
+      - name: Sync skills to Claude Code plugin
+        run: |
+          rm -rf claude-code-plugin/skills
+          cp -r skills claude-code-plugin/skills
+          echo "Synced skills/ to claude-code-plugin/skills/"
+
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v8
         with:
@@ -61,6 +67,6 @@ jobs:
           commit-message: "chore: update version files to ${{ steps.version.outputs.version }}"
           title: "Update version files to ${{ steps.version.outputs.version }}"
           body: |
-            This PR updates version strings in `manifest.json` and `claude-code-plugin/.claude-plugin/plugin.json` to ${{ steps.version.outputs.version }}.
+            This PR updates version strings in `manifest.json` and `claude-code-plugin/.claude-plugin/plugin.json` to ${{ steps.version.outputs.version }}, and syncs `skills/` into the Claude Code plugin.
           branch: update-versions-${{ steps.version.outputs.version }}
           delete-branch: true
