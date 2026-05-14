@@ -29,8 +29,15 @@ RUN apt-get update \
 # "dubious ownership" safe-directory check (git 2.35.2+).
 RUN git config --global safe.directory '*'
 
-# Install the CodeScene CLI (cs-tool)
-RUN curl https://downloads.codescene.io/enterprise/cli/install-cs-tool.sh | bash -s -- -y
+# Install the CodeScene CLI (cs-tool) with integrity verification.
+# Update the checksum when upgrading the CLI version.
+ARG CS_CLI_INSTALLER_SHA256="6a119bd0746de31740bb899fbcc16f44b31df2392740642d5a29616961501f06"
+RUN set -eu; \
+    curl --proto '=https' --tlsv1.2 -fsSL -o /tmp/install-cs-tool.sh \
+         https://downloads.codescene.io/enterprise/cli/install-cs-tool.sh && \
+    echo "${CS_CLI_INSTALLER_SHA256}  /tmp/install-cs-tool.sh" | sha256sum -c - && \
+    bash /tmp/install-cs-tool.sh -y && \
+    rm /tmp/install-cs-tool.sh
 
 # Copy the binary from the builder stage
 COPY --from=builder /build/target/release/cs-mcp /usr/local/bin/cs-mcp

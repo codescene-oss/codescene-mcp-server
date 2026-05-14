@@ -1,0 +1,8 @@
+# SHA-256 checksums for CodeScene CLI v1.0.28
+# Verify with: shasum -a 256 -c cli-checksums.sha256
+# Update by downloading each variant and running: shasum -a 256 <file>
+2a69494926aac406fff60a3c605425899f2b0bd4998c058dda7e368f97c4a017  cs-macos-aarch64-latest.zip
+fc3b96203c52c92ed1aace9cb3104c658643c40783654c63001a61c1258e5647  cs-macos-amd64-latest.zip
+e4c81fb27537caa168bcd89d843a8534e8caeb8d70c92304496a551cb389d7b3  cs-linux-amd64-latest.zip
+fa43f064f366c18ffd627c75251361668b9407ad7926623f28faec28cae99046  cs-linux-aarch64-latest.zip
+0d76e300f58547e2a4ed4c6a031a96386d4c802f444ee220383ac243c4ffd3e3  cs-windows-amd64-latest.zip
