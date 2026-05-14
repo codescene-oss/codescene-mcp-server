@@ -65,6 +65,7 @@ async fn send_event(mut te: TrackingEvent, client: &dyn HttpClient) -> Result<()
             "User-Agent".to_string(),
             format!("codescene-mcp/{}", env!("CS_MCP_VERSION")),
         ),
+        ("X-CS-Source".to_string(), "mcp".to_string()),
     ]);
     if !token.is_empty() {
         headers.insert("Authorization".to_string(), format!("Bearer {token}"));

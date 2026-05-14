@@ -9,7 +9,7 @@ use rmcp::{tool_handler, ErrorData, RoleServer, ServerHandler};
 
 use crate::{config, prompts, resources, CodeSceneServer};
 
-#[tool_handler]
+#[tool_handler(router = "self.tool_router")]
 impl ServerHandler for CodeSceneServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(
