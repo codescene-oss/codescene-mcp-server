@@ -16,7 +16,7 @@
       "description": "CodeScene Code Health analysis — review, refactor, and safeguard code quality with AI-friendly tools.",
       "homepage": "https://codescene.com",
       "repository": "https://github.com/codescene-oss/codescene-mcp-server",
-      "license": "MIT",
+      "license": "Apache-2.0",
       "keywords": ["code-health", "code-quality", "refactoring", "technical-debt", "codescene"],
       "category": "code-quality"
     }
