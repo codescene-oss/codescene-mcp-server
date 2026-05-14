@@ -60,13 +60,46 @@ jobs:
           cp -r skills claude-code-plugin/skills
           echo "Synced skills/ to claude-code-plugin/skills/"
 
+      - name: Update skills table in README
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          rows = ["| Skill | Description |", "|-------|-------------|"]
+          for skill_dir in sorted(Path("skills").iterdir()):
+              skill_file = skill_dir / "SKILL.md"
+              if not skill_file.is_file():
+                  continue
+              name = skill_dir.name
+              text = skill_file.read_text()
+              match = re.search(r"^description:\s*(.+)$", text, re.MULTILINE)
+              desc = match.group(1).strip() if match else ""
+              rows.append(f"| `/codescene:{name}` | {desc} |")
+
+          table = "\n".join(rows) + "\n"
+          readme = Path("claude-code-plugin/README.md")
+          content = readme.read_text()
+          content = re.sub(
+              r"<!-- SKILLS-TABLE:START -->\n.*?<!-- SKILLS-TABLE:END -->",
+              f"<!-- SKILLS-TABLE:START -->\n{table}<!-- SKILLS-TABLE:END -->",
+              content,
+              flags=re.DOTALL,
+          )
+          readme.write_text(content)
+          print("Updated skills table in README")
+          PY
+
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.PAT_TOKEN }}
-          commit-message: "chore: update version files to ${{ steps.version.outputs.version }}"
-          title: "Update version files to ${{ steps.version.outputs.version }}"
+          commit-message: "chore: update Claude Code plugin to ${{ steps.version.outputs.version }}"
+          title: "Update Claude Code plugin to ${{ steps.version.outputs.version }}"
           body: |
-            This PR updates version strings in `manifest.json` and `claude-code-plugin/.claude-plugin/plugin.json` to ${{ steps.version.outputs.version }}, and syncs `skills/` into the Claude Code plugin.
-          branch: update-versions-${{ steps.version.outputs.version }}
+            This PR updates the Claude Code plugin to version ${{ steps.version.outputs.version }}:
+            - Version strings in `manifest.json` and `plugin.json`
+            - Skills synced from `skills/`
+            - README skills table regenerated
+          branch: update-claude-code-plugin-${{ steps.version.outputs.version }}
           delete-branch: true

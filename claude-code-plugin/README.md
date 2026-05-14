@@ -22,12 +22,10 @@ claude --plugin-dir ./claude-code-plugin
 
 Once installed, the following skills are available:
 
+<!-- SKILLS-TABLE:START -->
 | Skill | Description |
 |-------|-------------|
-| `/codescene:review` | Review Code Health of files — scores, smells, and prioritized actions |
-| `/codescene:refactor` | Guided refactoring using Code Health findings |
-| `/codescene:safeguard` | Pre-commit and pre-PR Code Health regression checks |
-| `/codescene:tech-debt` | Identify and prioritize technical debt hotspots |
+<!-- SKILLS-TABLE:END -->
 
 ## MCP Tools
 
