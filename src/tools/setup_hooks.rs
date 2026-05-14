@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
@@ -37,56 +37,149 @@ pub(crate) async fn handle(
         )));
     }
 
+    let cfg = HookConfig {
+        project_dir,
+        server_name,
+    };
+
     match agent.as_str() {
-        "claude-code" => install_claude_code_hooks(project_dir, server_name),
-        "opencode" | "cursor" | "copilot" => Ok(unsupported_agent_response(&agent)),
+        "claude-code" => install_claude_code_hooks(&cfg),
+        "opencode" => install_opencode_hooks(&cfg),
+        "cursor" | "copilot" => Ok(unsupported_agent_response(&agent)),
         _ => Ok(tool_error(&format!(
-            "Unknown agent \"{agent}\". Supported: claude-code. \
-             Placeholders: opencode, cursor, copilot."
+            "Unknown agent \"{agent}\". Supported: claude-code, opencode. \
+             Placeholders: cursor, copilot."
         ))),
     }
 }
 
-fn install_claude_code_hooks(
-    project_dir: &Path,
-    server_name: &str,
-) -> Result<CallToolResult, ErrorData> {
-    let claude_dir = project_dir.join(".claude");
-    let settings_path = claude_dir.join("settings.json");
-
-    let mut settings = load_existing_settings(&settings_path);
-    let our_hooks = build_hooks_object(server_name);
-    merge_hooks(&mut settings, &our_hooks);
-
-    if let Err(e) = fs::create_dir_all(&claude_dir) {
-        return Ok(tool_error(&format!(
-            "Failed to create .claude directory: {e}"
-        )));
+/// Write content to a file, creating parent directories as needed.
+/// Returns the path on success or a tool error on failure.
+fn write_hook_file(path: &Path, content: &str) -> Result<(), CallToolResult> {
+    if let Some(parent) = path.parent() {
+        if let Err(e) = fs::create_dir_all(parent) {
+            return Err(tool_error(&format!(
+                "Failed to create directory {}: {e}",
+                parent.display()
+            )));
+        }
     }
-
-    let json_str = serde_json::to_string_pretty(&settings).unwrap_or_default();
-    if let Err(e) = fs::write(&settings_path, &json_str) {
-        return Ok(tool_error(&format!(
+    if let Err(e) = fs::write(path, content) {
+        return Err(tool_error(&format!(
             "Failed to write {}: {e}",
-            settings_path.display()
+            path.display()
         )));
     }
+    Ok(())
+}
 
-    let msg = format!(
-        "Successfully installed Code Health hooks for Claude Code.\n\n\
+fn success_message(result: &InstallResult) -> String {
+    format!(
+        "Successfully installed Code Health hooks for {agent}.\n\n\
          Written to: {path}\n\n\
-         Hooks installed:\n  \
-         - PostToolUse (Write|Edit): Runs code_health_review after every file change\n  \
-         - PreToolUse (Bash): Runs pre_commit_code_health_safeguard before git commits\n\n\
+         Hooks installed:\n{hooks}\n\n\
          IMPORTANT: Restart or refresh your agent session to activate the hooks.\n\n\
          Configuration:\n  \
          - To disable commit blocking: \
          set_config key=\"hooks_block_on_regression\" value=\"false\"\n  \
          - Server name used: \"{server}\" (override with server_name parameter)",
-        path = settings_path.display(),
-        server = server_name,
-    );
+        agent = result.agent_label,
+        path = result.written_path.display(),
+        hooks = result.hooks_description,
+        server = result.server_name,
+    )
+}
+
+struct HookConfig<'a> {
+    project_dir: &'a Path,
+    server_name: &'a str,
+}
+
+struct InstallResult {
+    agent_label: &'static str,
+    written_path: PathBuf,
+    hooks_description: &'static str,
+    server_name: String,
+}
+
+fn install_claude_code_hooks(cfg: &HookConfig) -> Result<CallToolResult, ErrorData> {
+    let settings_path = cfg.project_dir.join(".claude").join("settings.json");
+
+    let mut settings = load_existing_settings(&settings_path);
+    let our_hooks = build_hooks_object(cfg.server_name);
+    merge_hooks(&mut settings, &our_hooks);
+
+    let json_str = serde_json::to_string_pretty(&settings).unwrap_or_default();
+    if let Err(e) = write_hook_file(&settings_path, &json_str) {
+        return Ok(e);
+    }
+
+    let msg = success_message(&InstallResult {
+        agent_label: "Claude Code",
+        written_path: settings_path,
+        hooks_description: "  - PostToolUse (Write|Edit): Runs code_health_review after every file change\n  \
+         - PreToolUse (Bash): Runs pre_commit_code_health_safeguard before git commits",
+        server_name: cfg.server_name.to_string(),
+    });
     Ok(CallToolResult::success(vec![Content::text(msg)]))
+}
+
+fn install_opencode_hooks(cfg: &HookConfig) -> Result<CallToolResult, ErrorData> {
+    let plugin_path = cfg.project_dir.join(".opencode").join("plugins").join("codescene.ts");
+    let plugin_content = build_opencode_plugin(cfg.server_name);
+
+    if let Err(e) = write_hook_file(&plugin_path, &plugin_content) {
+        return Ok(e);
+    }
+
+    let msg = success_message(&InstallResult {
+        agent_label: "OpenCode",
+        written_path: plugin_path,
+        hooks_description: "  - tool.execute.after (edit/write/apply_patch): Runs code_health_review after file changes\n  \
+         - tool.execute.before (bash): Runs pre_commit_code_health_safeguard before git commits",
+        server_name: cfg.server_name.to_string(),
+    });
+    Ok(CallToolResult::success(vec![Content::text(msg)]))
+}
+
+fn build_opencode_plugin(server_name: &str) -> String {
+    format!(
+        r#"import type {{ Plugin }} from "@opencode-ai/plugin"
+
+/**
+ * CodeScene Code Health plugin.
+ * Auto-generated by the CodeScene MCP setup_hooks tool.
+ *
+ * - Runs code_health_review after every file edit/write
+ * - Runs pre_commit_code_health_safeguard before git commits
+ */
+export const CodeScenePlugin: Plugin = async ({{ client }}) => {{
+  const SERVER = "{server_name}"
+
+  return {{
+    "tool.execute.after": async (input, _output) => {{
+      if (input.tool === "edit" || input.tool === "write" || input.tool === "apply_patch") {{
+        const filePath = input.args?.filePath || input.args?.file_path
+        if (filePath) {{
+          await client.mcp.call(SERVER, "code_health_review", {{ file_path: filePath }})
+        }}
+      }}
+    }},
+
+    "tool.execute.before": async (input, _output) => {{
+      if (input.tool === "bash") {{
+        const cmd = input.args?.command || ""
+        if (cmd.startsWith("git commit")) {{
+          await client.mcp.call(SERVER, "pre_commit_code_health_safeguard", {{
+            git_repository_path: input.cwd,
+          }})
+        }}
+      }}
+    }},
+  }}
+}}
+"#
+    )
 }
 
 fn load_existing_settings(path: &Path) -> Value {
@@ -180,7 +273,7 @@ fn unsupported_agent_response(agent: &str) -> CallToolResult {
          tool invocation. This tool will be updated when support becomes available.\n\n\
          In the meantime, the AGENTS.md file and skills in this repository guide \
          the agent to use Code Health tools.\n\n\
-         Currently supported agents: claude-code"
+         Currently supported agents: claude-code, opencode"
     );
     CallToolResult::success(vec![Content::text(msg)])
 }
@@ -274,9 +367,9 @@ mod tests {
     #[tokio::test]
     async fn unsupported_agent_returns_info() {
         let tmp = tempdir().unwrap();
-        let text = run_setup(tmp.path().to_str().unwrap(), Some("opencode"), None).await;
+        let text = run_setup(tmp.path().to_str().unwrap(), Some("cursor"), None).await;
         assert!(text.contains("not yet supported"));
-        assert!(text.contains("opencode"));
+        assert!(text.contains("cursor"));
     }
 
     #[tokio::test]
@@ -313,5 +406,49 @@ mod tests {
         let tmp = tempdir().unwrap();
         let text = run_setup(tmp.path().to_str().unwrap(), Some("vscode"), None).await;
         assert!(text.contains("Unknown agent"));
+    }
+
+    #[tokio::test]
+    async fn creates_opencode_plugin() {
+        let tmp = tempdir().unwrap();
+        let text = run_setup(tmp.path().to_str().unwrap(), Some("opencode"), None).await;
+        assert!(text.contains("Successfully installed"));
+        assert!(text.contains("OpenCode"));
+
+        let plugin_path = tmp.path().join(".opencode/plugins/codescene.ts");
+        assert!(plugin_path.exists());
+
+        let content = std::fs::read_to_string(&plugin_path).unwrap();
+        assert!(content.contains("code_health_review"));
+        assert!(content.contains("pre_commit_code_health_safeguard"));
+        assert!(content.contains("\"codescene\""));
+    }
+
+    #[tokio::test]
+    async fn opencode_plugin_uses_custom_server_name() {
+        let tmp = tempdir().unwrap();
+        run_setup(tmp.path().to_str().unwrap(), Some("opencode"), Some("my-cs")).await;
+
+        let content = std::fs::read_to_string(
+            tmp.path().join(".opencode/plugins/codescene.ts"),
+        )
+        .unwrap();
+        assert!(content.contains("\"my-cs\""));
+    }
+
+    #[tokio::test]
+    async fn opencode_plugin_overwrites_on_rerun() {
+        let tmp = tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+
+        run_setup(dir, Some("opencode"), Some("first")).await;
+        run_setup(dir, Some("opencode"), Some("second")).await;
+
+        let content = std::fs::read_to_string(
+            tmp.path().join(".opencode/plugins/codescene.ts"),
+        )
+        .unwrap();
+        assert!(content.contains("\"second\""));
+        assert!(!content.contains("\"first\""));
     }
 }

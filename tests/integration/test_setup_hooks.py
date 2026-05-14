@@ -51,6 +51,7 @@ def run_setup_hooks_tests_with_backend(backend: ServerBackend) -> int:
 
         results = [
             ("Setup Hooks - Creates Claude Settings", test_creates_claude_settings(command, env, project_dir)),
+            ("Setup Hooks - Creates OpenCode Plugin", test_creates_opencode_plugin(command, env, test_dir)),
             ("Setup Hooks - Merges Existing Settings", test_merges_existing_settings(command, env, test_dir)),
             ("Setup Hooks - Skips Duplicates", test_skips_duplicates(command, env, test_dir)),
             ("Setup Hooks - Custom Server Name", test_custom_server_name(command, env, test_dir)),
@@ -112,6 +113,41 @@ def test_creates_claude_settings(command: list[str], env: dict, project_dir: Pat
 
     hooks_valid = _validate_claude_hooks(project_dir / ".claude" / "settings.json")
     return has_success and hooks_valid
+
+
+def test_creates_opencode_plugin(command: list[str], env: dict, test_dir: Path) -> bool:
+    """Test that setup_hooks creates .opencode/plugins/codescene.ts with correct content."""
+    print_header("Test: Creates OpenCode Plugin")
+
+    oc_dir = test_dir / "opencode_project"
+    oc_dir.mkdir(exist_ok=True)
+
+    result_text = _call_setup_hooks(
+        command, env, oc_dir,
+        {"project_dir": str(oc_dir), "agent": "opencode"},
+    )
+    if result_text is None:
+        return False
+
+    has_success = "successfully installed" in result_text.lower()
+    print_test("Success message returned", has_success, result_text[:200])
+
+    plugin_path = oc_dir / ".opencode" / "plugins" / "codescene.ts"
+    file_exists = plugin_path.exists()
+    print_test("Plugin file created", file_exists)
+
+    if not file_exists:
+        return False
+
+    content = plugin_path.read_text()
+    has_review = "code_health_review" in content
+    has_safeguard = "pre_commit_code_health_safeguard" in content
+    has_server = '"codescene"' in content
+    print_test("Contains code_health_review", has_review)
+    print_test("Contains pre_commit_code_health_safeguard", has_safeguard)
+    print_test("Contains server name", has_server)
+
+    return has_success and file_exists and has_review and has_safeguard and has_server
 
 
 def test_merges_existing_settings(command: list[str], env: dict, test_dir: Path) -> bool:
@@ -234,7 +270,7 @@ def _test_agent_message(
 def test_unsupported_agent(command: list[str], env: dict, project_dir: Path) -> bool:
     """Test that unsupported agents return an informative message."""
     print_header("Test: Unsupported Agent")
-    result = _test_agent_message(command, env, project_dir, agent="opencode")
+    result = _test_agent_message(command, env, project_dir, agent="cursor")
     if result is None:
         return False
     has_expected = "not yet supported" in result.lower()
