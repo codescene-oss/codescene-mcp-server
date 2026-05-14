@@ -49,7 +49,12 @@ pub(crate) async fn run_delta(
     // The command may return non-zero when file stats differ across the
     // bind-mount boundary — that is expected and harmless.
     if environment::is_docker() {
-        let _ = tokio::process::Command::new("git")
+        let mut git_cmd = tokio::process::Command::new("git");
+        // Scrub sensitive env vars — git never needs tokens.
+        for var in crate::config::sensitive_env_vars() {
+            git_cmd.env_remove(var);
+        }
+        let _ = git_cmd
             .args(["update-index", "--refresh"])
             .current_dir(repo_path)
             .output()

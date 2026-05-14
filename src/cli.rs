@@ -95,6 +95,14 @@ async fn run_cli_process(
     let mut cmd = tokio::process::Command::new(cli_path);
     let effective_args = with_ssl_cli_args_if_needed(cli_path, args);
 
+    // Scrub sensitive env vars (tokens) from the inherited environment so
+    // child processes that don't need them can't read them from /proc or
+    // inherit them to further subprocesses.  We then selectively add back
+    // only CS_ACCESS_TOKEN, which the CLI needs for on-prem authentication.
+    for var in crate::config::sensitive_env_vars() {
+        cmd.env_remove(var);
+    }
+
     cmd.args(&effective_args)
         .env("CS_CONTEXT", "mcp-server")
         .env("CS_DISABLE_VERSION_CHECK", "1");
