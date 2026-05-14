@@ -348,14 +348,15 @@ pub fn enabled_tools(data: &ConfigData) -> Option<HashSet<String>> {
 }
 
 /// Mask sensitive values for display.
-const SENSITIVE_TAIL_LENGTH: usize = 6;
+/// Shows a short prefix to identify the token kind, without revealing entropy.
+const SENSITIVE_PREFIX_LENGTH: usize = 4;
 
 pub fn mask_if_sensitive(option: &ConfigOption, value: &str) -> String {
     if option.sensitive && !value.is_empty() {
-        if value.len() <= SENSITIVE_TAIL_LENGTH {
+        if value.len() <= SENSITIVE_PREFIX_LENGTH {
             return "***".to_string();
         }
-        format!("...{}", &value[value.len() - SENSITIVE_TAIL_LENGTH..])
+        format!("{}...", &value[..SENSITIVE_PREFIX_LENGTH])
     } else {
         value.to_string()
     }
@@ -407,13 +408,13 @@ mod tests {
     fn mask_sensitive_long_value() {
         let opt = find_option("access_token").unwrap();
         let masked = mask_if_sensitive(opt, "my-super-secret-token-value");
-        assert_eq!(masked, "...-value");
+        assert_eq!(masked, "my-s...");
     }
 
     #[test]
     fn mask_sensitive_short_value() {
         let opt = find_option("access_token").unwrap();
-        let masked = mask_if_sensitive(opt, "short");
+        let masked = mask_if_sensitive(opt, "abcd");
         assert_eq!(masked, "***");
     }
 
