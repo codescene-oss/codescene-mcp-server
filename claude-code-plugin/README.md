@@ -29,14 +29,35 @@ Once installed, the following skills are available:
 
 ## MCP Tools
 
-The plugin registers the CodeScene MCP server, which provides tools for:
+The plugin registers the CodeScene MCP server, which provides the following tools:
 
-- `code_health_score` / `code_health_review` — file-level Code Health analysis
-- `pre_commit_code_health_safeguard` — pre-commit regression check
-- `analyze_change_set` — branch-level PR pre-flight check
-- `code_health_auto_refactor` — AI-assisted refactoring (requires CodeScene ACE)
-- `list_technical_debt_hotspots` / `list_technical_debt_goals` — debt prioritization
-- `code_health_refactoring_business_case` — ROI quantification
+### Standalone (no CodeScene account required)
+
+| Tool | Description |
+|------|-------------|
+| `code_health_review` | Review a file's Code Health with score and code smell findings |
+| `code_health_score` | Calculate the numeric Code Health score (1.0–10.0) for a file |
+| `pre_commit_code_health_safeguard` | Check all modified/staged files for Code Health regressions before commit |
+| `analyze_change_set` | Branch-level Code Health review for PR pre-flight checks |
+| `code_health_refactoring_business_case` | Generate a data-driven business case for refactoring a file |
+| `code_health_auto_refactor` | Auto-refactor a function to fix code health smells (requires CodeScene ACE add-on) |
+| `explain_code_health` | Explain the Code Health metric and how to interpret scores |
+| `explain_code_health_productivity` | Describe the productivity and defect-risk impact of Code Health |
+| `get_config` | Read current MCP server configuration |
+| `set_config` | Write MCP server configuration values |
+
+### Requires CodeScene instance
+
+These tools require a CodeScene API access token and are removed in standalone mode:
+
+| Tool | Description |
+|------|-------------|
+| `select_project` | List and select a CodeScene project |
+| `list_technical_debt_hotspots_for_project` | List technical debt hotspots across a project |
+| `list_technical_debt_hotspots_for_project_file` | List hotspot metrics for a specific file |
+| `list_technical_debt_goals_for_project` | List technical debt goals for a project |
+| `list_technical_debt_goals_for_project_file` | List technical debt goals for a specific file |
+| `code_ownership_for_path` | Find owners of a file or directory |
 
 ## Requirements
 
