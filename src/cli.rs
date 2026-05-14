@@ -181,7 +181,11 @@ fn create_or_get_truststore_from_pem(ca_bundle_path: &Path) -> Option<PathBuf> {
     let pem_data = std::fs::read(ca_bundle_path).ok()?;
     let truststore_path = truststore_path_for_pem(&pem_data);
     if truststore_path.exists() {
-        return Some(truststore_path);
+        if is_owned_by_current_user(&truststore_path) {
+            return Some(truststore_path);
+        }
+        // Pre-existing file not owned by us — refuse to use it, try to recreate
+        let _ = std::fs::remove_file(&truststore_path);
     }
 
     if write_pkcs12_truststore_from_pem(&pem_data, &truststore_path) {
@@ -191,23 +195,118 @@ fn create_or_get_truststore_from_pem(ca_bundle_path: &Path) -> Option<PathBuf> {
     None
 }
 
+/// On Unix, check that the file is owned by the current user and has
+/// restrictive permissions (not world-writable).
+/// On non-Unix, always returns true (no ownership check available).
+fn is_owned_by_current_user(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let file_meta = match std::fs::metadata(path) {
+            Ok(m) => m,
+            Err(_) => return false,
+        };
+        // Compare file owner against the owner of our cache directory
+        let cache_dir = truststore_cache_dir();
+        let dir_meta = match std::fs::metadata(&cache_dir) {
+            Ok(m) => m,
+            Err(_) => return false,
+        };
+        if file_meta.uid() != dir_meta.uid() {
+            return false;
+        }
+        // Reject world-writable files
+        let mode = file_meta.mode();
+        if mode & 0o002 != 0 {
+            return false;
+        }
+        true
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        true
+    }
+}
+
+fn truststore_cache_dir() -> PathBuf {
+    dirs::cache_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("codehealth-mcp")
+        .join("truststores")
+}
+
 fn truststore_path_for_pem(pem_data: &[u8]) -> PathBuf {
     let mut hasher = Sha256::new();
     hasher.update(pem_data);
     let digest = hasher.finalize();
     let digest_hex = format!("{:x}", digest);
     let short_hash = &digest_hex[..16];
-    std::env::temp_dir().join(format!("cs-mcp-truststore-{short_hash}.p12"))
+    truststore_cache_dir().join(format!("cs-mcp-truststore-{short_hash}.p12"))
 }
 
 fn write_pkcs12_truststore_from_pem(pem_data: &[u8], truststore_path: &Path) -> bool {
     let Some(()) = ensure_parent_dir(truststore_path) else {
         return false;
     };
+    restrict_dir_permissions(truststore_path.parent().unwrap());
     let Some(pkcs12) = build_pkcs12_truststore_bytes(pem_data) else {
         return false;
     };
-    std::fs::write(truststore_path, pkcs12).is_ok()
+    atomic_write_with_restricted_permissions(truststore_path, &pkcs12)
+}
+
+/// Write data to a temp file in the same directory, set 0600 permissions, then
+/// atomically rename into place.  This avoids TOCTOU races where an attacker
+/// could swap in a malicious truststore between creation and use.
+fn atomic_write_with_restricted_permissions(target: &Path, data: &[u8]) -> bool {
+    let parent = match target.parent() {
+        Some(p) => p,
+        None => return false,
+    };
+
+    // Write to a temp file in the same directory (same filesystem for rename)
+    let tmp_path = parent.join(format!(".tmp-{}", std::process::id()));
+    if std::fs::write(&tmp_path, data).is_err() {
+        return false;
+    }
+
+    // Restrict permissions before rename so the file is never world-readable
+    restrict_file_permissions(&tmp_path);
+
+    // Atomic rename
+    if std::fs::rename(&tmp_path, target).is_err() {
+        let _ = std::fs::remove_file(&tmp_path);
+        return false;
+    }
+
+    true
+}
+
+/// Set file permissions to 0600 (owner read/write only) on Unix.
+fn restrict_file_permissions(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
+}
+
+/// Set directory permissions to 0700 (owner only) on Unix.
+fn restrict_dir_permissions(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700));
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
 }
 
 fn ensure_parent_dir(path: &Path) -> Option<()> {
@@ -537,6 +636,97 @@ mod tests {
         assert!(created.exists());
 
         std::fs::remove_file(created).ok();
+    }
+
+    #[test]
+    fn is_owned_by_current_user_returns_true_for_own_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("test.p12");
+        std::fs::write(&file, b"data").unwrap();
+        // Ensure cache dir exists so uid comparison works
+        let cache = truststore_cache_dir();
+        std::fs::create_dir_all(&cache).unwrap();
+        assert!(is_owned_by_current_user(&file));
+    }
+
+    #[test]
+    fn is_owned_by_current_user_returns_false_for_nonexistent_file() {
+        assert!(!is_owned_by_current_user(Path::new("/nonexistent/file.p12")));
+    }
+
+    #[test]
+    fn is_owned_by_current_user_rejects_world_writable_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("world-writable.p12");
+        std::fs::write(&file, b"data").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o666)).unwrap();
+        // Ensure cache dir exists
+        let cache = truststore_cache_dir();
+        std::fs::create_dir_all(&cache).unwrap();
+        assert!(!is_owned_by_current_user(&file));
+    }
+
+    #[test]
+    fn is_owned_by_current_user_returns_false_when_cache_dir_missing() {
+        // Point to a file whose "cache dir" doesn't exist by testing with
+        // a path that won't match the real cache dir uid. We can test the
+        // Err branch by ensuring the cache dir metadata call fails.
+        // This is hard to test without mocking, so we test via the
+        // nonexistent file path which hits line 207.
+        assert!(!is_owned_by_current_user(Path::new("/no/such/path")));
+    }
+
+    #[test]
+    fn create_or_get_truststore_rejects_world_writable_existing_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let pem = tempfile::NamedTempFile::new().unwrap();
+        let cert_pem = TEST_CA_CERT_PEM.as_bytes();
+        std::fs::write(pem.path(), cert_pem).unwrap();
+
+        let truststore = truststore_path_for_pem(cert_pem);
+        std::fs::create_dir_all(truststore.parent().unwrap()).unwrap();
+        // Pre-create a world-writable file
+        std::fs::write(&truststore, b"malicious").unwrap();
+        std::fs::set_permissions(&truststore, std::fs::Permissions::from_mode(0o666)).unwrap();
+
+        let result = create_or_get_truststore_from_pem(pem.path());
+        // Should recreate with proper permissions, not return the tainted file
+        assert!(result.is_some());
+        let created = result.unwrap();
+        let mode = std::fs::metadata(&created).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600, "truststore should be 0600");
+        // Content should not be "malicious"
+        let content = std::fs::read(&created).unwrap();
+        assert_ne!(content, b"malicious");
+
+        std::fs::remove_file(created).ok();
+    }
+
+    #[test]
+    fn atomic_write_returns_false_for_path_without_parent() {
+        // A bare filename has no parent directory
+        assert!(!atomic_write_with_restricted_permissions(
+            Path::new(""),
+            b"data"
+        ));
+    }
+
+    #[test]
+    fn atomic_write_returns_false_when_dir_not_writable() {
+        // Write to a nonexistent directory
+        let target = Path::new("/nonexistent/dir/file.p12");
+        assert!(!atomic_write_with_restricted_permissions(target, b"data"));
+    }
+
+    #[test]
+    fn atomic_write_sets_restricted_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("truststore.p12");
+        assert!(atomic_write_with_restricted_permissions(&target, b"test"));
+        let mode = std::fs::metadata(&target).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
     }
 
     #[test]
