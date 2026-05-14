@@ -197,10 +197,27 @@ pub fn load() -> Result<ConfigData, ConfigError> {
 pub fn save(data: &ConfigData) -> Result<(), ConfigError> {
     let dir = config_dir();
     std::fs::create_dir_all(&dir)?;
+    restrict_path_permissions(&dir);
     let path = dir.join("config.json");
     let content = serde_json::to_string_pretty(data)?;
-    std::fs::write(path, content)?;
+    // Atomic write: temp file + rename to avoid truncation on crash
+    let temp = tempfile::NamedTempFile::new_in(&dir)?;
+    std::fs::write(temp.path(), &content)?;
+    restrict_path_permissions(temp.path());
+    temp.persist(&path).map_err(|e| {
+        ConfigError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+    })?;
     Ok(())
+}
+
+/// Restrict path permissions to owner-only (0700 for dirs, 0600 for files) on Unix.
+fn restrict_path_permissions(path: &std::path::Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = if path.is_dir() { 0o700 } else { 0o600 };
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode));
+    }
 }
 
 /// Record which config-related env vars are already set by the MCP client.
