@@ -51,7 +51,7 @@ def run_setup_hooks_tests_with_backend(backend: ServerBackend) -> int:
 
         results = [
             ("Setup Hooks - Creates Claude Settings", test_creates_claude_settings(command, env, project_dir)),
-            ("Setup Hooks - Creates OpenCode Plugin", test_creates_opencode_plugin(command, env, test_dir)),
+            ("Setup Hooks - OpenCode Unsupported", test_opencode_unsupported(command, env, test_dir)),
             ("Setup Hooks - Merges Existing Settings", test_merges_existing_settings(command, env, test_dir)),
             ("Setup Hooks - Skips Duplicates", test_skips_duplicates(command, env, test_dir)),
             ("Setup Hooks - Custom Server Name", test_custom_server_name(command, env, test_dir)),
@@ -88,16 +88,10 @@ def _validate_claude_hooks(settings_path: Path) -> bool:
         return False
 
     content = json.loads(settings_path.read_text())
-    has_post = "PostToolUse" in content.get("hooks", {})
     has_pre = "PreToolUse" in content.get("hooks", {})
-    print_test("PostToolUse hooks present", has_post)
     print_test("PreToolUse hooks present", has_pre)
 
-    post_hooks = content["hooks"]["PostToolUse"]
-    has_review = any(hook.get("matcher") == "Write|Edit" for hook in post_hooks)
-    print_test("Write|Edit matcher configured", has_review)
-
-    return has_post and has_pre and has_review
+    return has_pre
 
 
 def test_creates_claude_settings(command: list[str], env: dict, project_dir: Path) -> bool:
@@ -115,9 +109,9 @@ def test_creates_claude_settings(command: list[str], env: dict, project_dir: Pat
     return has_success and hooks_valid
 
 
-def test_creates_opencode_plugin(command: list[str], env: dict, test_dir: Path) -> bool:
-    """Test that setup_hooks creates .opencode/plugins/codescene.ts with correct content."""
-    print_header("Test: Creates OpenCode Plugin")
+def test_opencode_unsupported(command: list[str], env: dict, test_dir: Path) -> bool:
+    """Test that setup_hooks reports opencode as unsupported."""
+    print_header("Test: OpenCode Unsupported")
 
     oc_dir = test_dir / "opencode_project"
     oc_dir.mkdir(exist_ok=True)
@@ -129,25 +123,10 @@ def test_creates_opencode_plugin(command: list[str], env: dict, test_dir: Path) 
     if result_text is None:
         return False
 
-    has_success = "successfully installed" in result_text.lower()
-    print_test("Success message returned", has_success, result_text[:200])
+    is_unsupported = "not yet supported" in result_text.lower() or "unknown agent" in result_text.lower()
+    print_test("Reports unsupported", is_unsupported, result_text[:200])
 
-    plugin_path = oc_dir / ".opencode" / "plugins" / "codescene.ts"
-    file_exists = plugin_path.exists()
-    print_test("Plugin file created", file_exists)
-
-    if not file_exists:
-        return False
-
-    content = plugin_path.read_text()
-    has_review = "code_health_review" in content
-    has_safeguard = "pre_commit_code_health_safeguard" in content
-    has_server = '"codescene"' in content
-    print_test("Contains code_health_review", has_review)
-    print_test("Contains pre_commit_code_health_safeguard", has_safeguard)
-    print_test("Contains server name", has_server)
-
-    return has_success and file_exists and has_review and has_safeguard and has_server
+    return is_unsupported
 
 
 def test_merges_existing_settings(command: list[str], env: dict, test_dir: Path) -> bool:
@@ -183,12 +162,10 @@ def test_merges_existing_settings(command: list[str], env: dict, test_dir: Path)
 
     post_hooks = content.get("hooks", {}).get("PostToolUse", [])
     has_original = any(h.get("matcher") == "CustomLint" for h in post_hooks)
-    has_ours = any(h.get("matcher") == "Write|Edit" for h in post_hooks)
     print_test("Original hook preserved", has_original)
-    print_test("Our hook appended", has_ours)
-    print_test("Total PostToolUse groups", len(post_hooks) == 2, f"count={len(post_hooks)}")
+    print_test("Total PostToolUse groups", len(post_hooks) == 1, f"count={len(post_hooks)}")
 
-    return has_success and permissions_kept and has_original and has_ours
+    return has_success and permissions_kept and has_original
 
 
 def test_skips_duplicates(command: list[str], env: dict, test_dir: Path) -> bool:
@@ -212,15 +189,12 @@ def test_skips_duplicates(command: list[str], env: dict, test_dir: Path) -> bool
         client.call_tool("setup_hooks", {"project_dir": str(dup_dir)}, timeout=30)
 
         content = json.loads((dup_dir / ".claude" / "settings.json").read_text())
-        post_count = len(content.get("hooks", {}).get("PostToolUse", []))
         pre_count = len(content.get("hooks", {}).get("PreToolUse", []))
 
-        no_dup_post = post_count == 1
         no_dup_pre = pre_count == 1
-        print_test("No duplicate PostToolUse", no_dup_post, f"count={post_count}")
         print_test("No duplicate PreToolUse", no_dup_pre, f"count={pre_count}")
 
-        return no_dup_post and no_dup_pre
+        return no_dup_pre
 
     except Exception as e:
         print_test("Skips duplicates", False, str(e))
@@ -247,8 +221,8 @@ def test_custom_server_name(command: list[str], env: dict, test_dir: Path) -> bo
     print_test("Custom name in response", has_name_in_msg)
 
     content = json.loads((custom_dir / ".claude" / "settings.json").read_text())
-    post_hooks = content["hooks"]["PostToolUse"][0]["hooks"]
-    server_in_config = post_hooks[0].get("server") == "my-cs-server"
+    pre_hooks = content["hooks"]["PreToolUse"][0]["hooks"]
+    server_in_config = pre_hooks[0].get("server") == "my-cs-server"
     print_test("Custom name in config", server_in_config)
 
     return has_name_in_msg and server_in_config

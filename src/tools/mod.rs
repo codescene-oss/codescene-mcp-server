@@ -121,7 +121,7 @@ pub struct SetupHooksParam {
     pub project_dir: String,
 
     /// Agent tool to configure hooks for.
-    /// Supported: "claude-code", "opencode". Placeholders: "cursor", "copilot".
+    /// Supported: "claude-code". Placeholders: "cursor", "copilot".
     /// Defaults to "claude-code" if omitted.
     #[serde(default)]
     pub agent: Option<String>,
