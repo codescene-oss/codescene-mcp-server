@@ -274,7 +274,7 @@ fn atomic_write_with_restricted_permissions(target: &Path, data: &[u8]) -> bool 
     };
 
     // Write to a temp file in the same directory (same filesystem for rename)
-    let tmp_path = parent.join(format!(".tmp-{}", std::process::id()));
+    let tmp_path = parent.join(format!(".tmp-{}-{:?}", std::process::id(), std::thread::current().id()));
     if std::fs::write(&tmp_path, data).is_err() {
         return false;
     }
@@ -475,6 +475,10 @@ mod tests {
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
 
+    /// Serialize tests that touch the shared truststore cache directory
+    /// to prevent parallel filesystem races on the same hash-derived path.
+    static TRUSTSTORE_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     /// Create a temp directory containing a `.git` dir and an optional subdirectory.
     /// Returns `(tempdir_handle, repo_root_path)`.
     fn make_git_repo(subdir: Option<&str>) -> (tempfile::TempDir, PathBuf) {
@@ -631,6 +635,7 @@ mod tests {
 
     #[test]
     fn create_or_get_truststore_from_pem_creates_pkcs12_truststore() {
+        let _lock = TRUSTSTORE_TEST_MUTEX.lock().unwrap();
         let pem = tempfile::NamedTempFile::new().unwrap();
         let cert_pem = TEST_CA_CERT_PEM.as_bytes();
         std::fs::write(pem.path(), cert_pem).unwrap();
@@ -688,6 +693,7 @@ mod tests {
     #[test]
     fn create_or_get_truststore_rejects_world_writable_existing_file() {
         use std::os::unix::fs::PermissionsExt;
+        let _lock = TRUSTSTORE_TEST_MUTEX.lock().unwrap();
         let pem = tempfile::NamedTempFile::new().unwrap();
         let cert_pem = TEST_CA_CERT_PEM.as_bytes();
         std::fs::write(pem.path(), cert_pem).unwrap();
