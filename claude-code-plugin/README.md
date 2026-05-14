@@ -31,7 +31,7 @@ Once installed, the following skills are available:
 
 The plugin registers the CodeScene MCP server, which provides the following tools:
 
-### Standalone (no CodeScene account required)
+### Standalone mode (standalone MCP license)
 
 | Tool | Description |
 |------|-------------|
@@ -46,9 +46,9 @@ The plugin registers the CodeScene MCP server, which provides the following tool
 | `get_config` | Read current MCP server configuration |
 | `set_config` | Write MCP server configuration values |
 
-### Requires CodeScene instance
+### CodeScene Cloud or On-prem mode (PAT/API token)
 
-These tools require a CodeScene API access token and are removed in standalone mode:
+Includes all standalone tools, plus project-level API tools:
 
 | Tool | Description |
 |------|-------------|
