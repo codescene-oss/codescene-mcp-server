@@ -451,12 +451,6 @@ jobs:
           }
 
           target.write_text(json.dumps(manifest, indent=2) + "\n")
-
-          plugin = Path("claude-code-plugin/.claude-plugin/plugin.json")
-          if plugin.exists() and tag.startswith("MCP-"):
-            data = json.loads(plugin.read_text())
-            data["version"] = tag[len("MCP-"):]
-            plugin.write_text(json.dumps(data, indent=2) + "\n")
           PY
 
           mcpb pack "$STAGING_DIR" "./all-binaries/codehealth-mcp-${RELEASE_VERSION}.mcpb"

@@ -1,0 +1,66 @@
+name: Update version files
+
+on:
+  workflow_run:
+    workflows: ["Build and publish executables"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to process (e.g., MCP-1.1.6)"
+        required: true
+        type: string
+
+jobs:
+  update-versions:
+    runs-on: ubuntu-latest
+    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'MCP-')) || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.tag, 'MCP-')) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Get release version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.tag }}"
+          else
+            VERSION="${{ github.event.workflow_run.head_branch }}"
+          fi
+          VERSION="${VERSION#MCP-}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update version in manifest and plugin files
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          python3 - <<PY
+          import json
+          from pathlib import Path
+
+          version = "$VERSION"
+
+          for path in [
+            Path("manifest.json"),
+            Path("claude-code-plugin/.claude-plugin/plugin.json"),
+          ]:
+            if path.exists():
+              data = json.loads(path.read_text())
+              data["version"] = version
+              path.write_text(json.dumps(data, indent=2) + "\n")
+              print(f"Updated {path} to {version}")
+          PY
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+          commit-message: "chore: update version files to ${{ steps.version.outputs.version }}"
+          title: "Update version files to ${{ steps.version.outputs.version }}"
+          body: |
+            This PR updates version strings in `manifest.json` and `claude-code-plugin/.claude-plugin/plugin.json` to ${{ steps.version.outputs.version }}.
+          branch: update-versions-${{ steps.version.outputs.version }}
+          delete-branch: true
