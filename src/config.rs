@@ -619,6 +619,26 @@ mod tests {
     }
 
     #[test]
+    fn save_persist_failure_returns_io_error() {
+        with_temp_config_dir(|dir| {
+            // Create a directory where config.json should be, so persist (rename) fails
+            let blocker = dir.join("config.json");
+            std::fs::create_dir_all(&blocker).unwrap();
+            std::fs::write(blocker.join("block"), "x").unwrap(); // non-empty dir can't be replaced
+
+            let data = ConfigData {
+                instance_id: Some("persist-fail".to_string()),
+                values: HashMap::new(),
+            };
+            let err = save(&data).unwrap_err();
+            assert!(
+                matches!(err, ConfigError::Io(_)),
+                "expected ConfigError::Io, got: {err:?}"
+            );
+        });
+    }
+
+    #[test]
     fn load_creates_default_when_missing() {
         with_temp_config_dir(|dir| {
             let data = load().unwrap();
