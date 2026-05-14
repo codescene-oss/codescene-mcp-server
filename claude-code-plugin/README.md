@@ -25,6 +25,15 @@ Once installed, the following skills are available:
 <!-- SKILLS-TABLE:START -->
 | Skill | Description |
 |-------|-------------|
+| `/codescene:configuring-codescene-mcp` | Use when the user wants to view, set, or troubleshoot CodeScene MCP configuration such as access tokens, on-prem URLs, ACE tokens, default projects, or SSL certificates. |
+| `/codescene:explaining-code-health` | Use when a user asks what Code Health means, how to interpret scores, or why Code Health matters in daily development. |
+| `/codescene:guiding-refactoring-with-code-health` | Use when refactoring unhealthy code and needing Code Health findings to choose small safe steps and verify improvement. |
+| `/codescene:installing-and-activating-codescene-mcp` | Use when installing the CodeScene MCP Server binary or package, registering it in an AI assistant, or copying agent guidance files into a repository. |
+| `/codescene:making-the-business-case-for-code-health` | Use when a user asks for ROI, stakeholder justification, delivery impact, or defect-risk reduction from improving Code Health in a file. |
+| `/codescene:prioritizing-technical-debt` | Use when users with a CodeScene instance ask what to improve first across a project, which hotspots matter most, or how to rank refactoring candidates. |
+| `/codescene:risk-based-testing-with-code-health` | Use when a user asks what to test first based on CodeScene findings, especially for high-risk hotspots or pull-request change sets. |
+| `/codescene:routing-work-with-code-ownership` | Use when choosing reviewers, domain experts, or likely owners for a file or directory from CodeScene project data. |
+| `/codescene:safeguarding-ai-generated-code` | Use when AI-generated or AI-modified changes need a Code Health gate before commit, handoff, or pull request. |
 <!-- SKILLS-TABLE:END -->
 
 ## MCP Tools
