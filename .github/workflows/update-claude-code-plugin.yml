@@ -1,4 +1,4 @@
-name: Update version files
+name: Update Claude Code plugin
 
 on:
   workflow_run:
