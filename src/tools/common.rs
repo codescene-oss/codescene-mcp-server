@@ -11,6 +11,19 @@ use crate::environment;
 use crate::errors;
 use crate::http::HttpClient;
 
+/// Reject any user-supplied argument that looks like a CLI flag.
+/// This prevents option-injection when untrusted strings are passed
+/// as positional arguments to the `cs` CLI.
+fn reject_flag_like(value: &str, param_name: &str) -> Result<(), errors::CliError> {
+    let trimmed = value.trim();
+    if trimmed.starts_with('-') {
+        return Err(errors::CliError::InvalidInput(format!(
+            "{param_name} must not start with '-': {trimmed}"
+        )));
+    }
+    Ok(())
+}
+
 pub(crate) async fn run_review(
     file_path: &Path,
     cli_runner: &dyn CliRunner,
@@ -18,6 +31,7 @@ pub(crate) async fn run_review(
     let resolved = resolve_file_path(file_path);
     let git_root = cli::find_git_root(Path::new(&resolved));
     let cli_path = make_cli_path(&resolved, git_root.as_deref());
+    reject_flag_like(&cli_path, "file_path")?;
     let args = vec!["review", "--output-format=json", &cli_path];
     cli_runner.run(&args, git_root.as_deref()).await
 }
@@ -44,6 +58,7 @@ pub(crate) async fn run_delta(
 
     let mut args = vec!["delta", "--output-format=json"];
     if let Some(br) = base_ref {
+        reject_flag_like(br, "base_ref")?;
         args.push(br);
     }
     cli_runner.run(&args, Some(repo_path)).await
@@ -72,6 +87,7 @@ pub(crate) async fn run_auto_refactor(
     let git_root = cli::find_git_root(Path::new(&docker_path))
         .ok_or_else(|| format!("Error: Could not find git root for {}", file_str))?;
     let cli_path = make_cli_path(&docker_path, Some(&git_root));
+    reject_flag_like(&cli_path, "file_path").map_err(|e| format!("Error: {e}"))?;
 
     let parse_output = cli_runner
         .run(&["parse-fns", "--path", &cli_path], Some(&git_root))
@@ -358,5 +374,66 @@ mod tests {
     fn tool_error_returns_error_result() {
         let result = tool_error("something went wrong");
         assert!(result.is_error.unwrap_or(false));
+    }
+
+    #[test]
+    fn reject_flag_like_accepts_normal_path() {
+        assert!(reject_flag_like("src/main.rs", "file_path").is_ok());
+        assert!(reject_flag_like("/absolute/path.rs", "file_path").is_ok());
+        assert!(reject_flag_like("main", "base_ref").is_ok());
+    }
+
+    #[test]
+    fn reject_flag_like_rejects_single_dash() {
+        let err = reject_flag_like("-o/tmp/evil", "file_path");
+        assert!(err.is_err());
+        assert!(err.unwrap_err().to_string().contains("must not start with '-'"));
+    }
+
+    #[test]
+    fn reject_flag_like_rejects_double_dash_flag() {
+        let err = reject_flag_like("--output=/tmp/evil", "base_ref");
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn reject_flag_like_rejects_with_leading_whitespace() {
+        let err = reject_flag_like("  --sneaky", "base_ref");
+        assert!(err.is_err());
+    }
+
+    #[tokio::test]
+    async fn run_review_rejects_flag_like_path() {
+        use crate::tests::MockCliRunner;
+        let cli = MockCliRunner::with_ok("unused");
+        // A path that resolves to something starting with - can't happen
+        // via normal filesystem, but reject_flag_like catches it after
+        // make_cli_path. We test run_delta which is easier to trigger.
+        let result = run_delta(Path::new("/tmp"), Some("--output=/tmp/evil"), &cli).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("must not start with '-'"));
+    }
+
+    #[tokio::test]
+    async fn run_delta_passes_base_ref_as_positional_arg() {
+        use std::sync::{Arc, Mutex};
+
+        struct CapturingCli {
+            captured: Arc<Mutex<Vec<String>>>,
+        }
+
+        #[async_trait::async_trait]
+        impl CliRunner for CapturingCli {
+            async fn run(&self, args: &[&str], _working_dir: Option<&Path>) -> Result<String, errors::CliError> {
+                *self.captured.lock().unwrap() = args.iter().map(|s| s.to_string()).collect();
+                Ok("{}".to_string())
+            }
+        }
+
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let cli = CapturingCli { captured: captured.clone() };
+        let _ = run_delta(Path::new("/tmp"), Some("main"), &cli).await;
+        let args = captured.lock().unwrap();
+        assert_eq!(args.as_slice(), &["delta", "--output-format=json", "main"]);
     }
 }

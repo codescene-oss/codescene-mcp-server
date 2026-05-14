@@ -9,6 +9,9 @@ pub enum CliError {
     #[error("Failed to run CS CLI: {0}")]
     Io(#[from] std::io::Error),
 
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
     #[error(
         "Access token is invalid or expired.\n\n\
          Please update your access token using one of these methods:\n\
@@ -89,6 +92,12 @@ mod tests {
             .to_string()
             .contains("Access token is invalid or expired"));
         assert!(err.to_string().contains("set_config"));
+    }
+
+    #[test]
+    fn cli_error_invalid_input_display() {
+        let err = CliError::InvalidInput("bad value".into());
+        assert_eq!(err.to_string(), "Invalid input: bad value");
     }
 
     #[test]
