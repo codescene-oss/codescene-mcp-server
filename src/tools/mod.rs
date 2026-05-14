@@ -19,6 +19,7 @@ pub mod list_technical_debt_hotspots_for_project_file;
 pub mod pre_commit_code_health_safeguard;
 pub mod select_project;
 pub mod set_config;
+pub mod setup_hooks;
 
 /// Optional context parameter used by explain tools.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -113,6 +114,23 @@ pub struct SetConfigParam {
     pub value: String,
 }
 
+/// Parameters for setting up agent hooks in a project.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SetupHooksParam {
+    /// Absolute path to the project root where hook configs will be written.
+    pub project_dir: String,
+
+    /// Agent tool to configure hooks for.
+    /// Supported: "claude-code". Placeholders: "cursor", "copilot".
+    /// Defaults to "claude-code" if omitted.
+    #[serde(default)]
+    pub agent: Option<String>,
+
+    /// MCP server name as registered in the agent. Defaults to "codescene".
+    #[serde(default)]
+    pub server_name: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -204,5 +222,24 @@ mod tests {
         let p: SetConfigParam = serde_json::from_str(json).unwrap();
         assert_eq!(p.key, "access_token");
         assert_eq!(p.value, "abc123");
+    }
+
+    #[test]
+    fn setup_hooks_param_deserializes_full() {
+        let json =
+            r#"{"project_dir": "/repo", "agent": "claude-code", "server_name": "my-server"}"#;
+        let p: SetupHooksParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.project_dir, "/repo");
+        assert_eq!(p.agent.as_deref(), Some("claude-code"));
+        assert_eq!(p.server_name.as_deref(), Some("my-server"));
+    }
+
+    #[test]
+    fn setup_hooks_param_deserializes_minimal() {
+        let json = r#"{"project_dir": "/repo"}"#;
+        let p: SetupHooksParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.project_dir, "/repo");
+        assert!(p.agent.is_none());
+        assert!(p.server_name.is_none());
     }
 }

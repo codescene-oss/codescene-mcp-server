@@ -41,7 +41,7 @@ use crate::config::ConfigData;
 use crate::http::HttpClient;
 use crate::tools::{
     ChangeSetParam, FilePathParam, GetConfigParam, GitRepoParam, OptionalContext, OwnershipParam,
-    ProjectFileParam, ProjectParam, RefactorParam, SetConfigParam,
+    ProjectFileParam, ProjectParam, RefactorParam, SetConfigParam, SetupHooksParam,
 };
 use crate::version_checker::VersionChecker;
 
@@ -388,6 +388,17 @@ impl CodeSceneServer {
         Parameters(params): Parameters<SetConfigParam>,
     ) -> Result<CallToolResult, ErrorData> {
         tools::set_config::handle(self, params).await
+    }
+
+    #[tool(
+        description = "Install deterministic Code Health agent hooks in a project.\n\nWhen to use:\n    Use this tool to set up automatic Code Health safeguards that\n    run deterministically before every commit, without relying\n    on agent instructions.\n\nCurrently supports:\n    - Claude Code: writes .claude/settings.json with a PreToolUse\n      hook that runs pre_commit_code_health_safeguard before\n      every git commit.\n\nPlaceholder support (hooks not yet available in these tools):\n    - OpenCode, Cursor, GitHub Copilot\n\nIMPORTANT: Always pass the agent parameter to specify which\nagent you are. Use your own identity (e.g. \"opencode\",\n\"claude-code\") so the correct hook format is generated.\n\nAfter running, restart or refresh your agent session to\nactivate the hooks.\n\nThe pre-commit hook blocks commits on Code Health regression\nby default. To disable blocking, use:\n    set_config key=\"hooks_block_on_regression\" value=\"false\"\n\nReturns:\n    A success message with the path to the written config file\n    and instructions for activating the hooks, or an informative\n    message for unsupported agents.\n\nExample:\n    Call with project_dir=\"/path/to/repo\" agent=\"claude-code\"\n    or project_dir=\"/path/to/repo\" agent=\"opencode\".",
+        input_schema = inlined_schema_for::<SetupHooksParam>()
+    )]
+    async fn setup_hooks(
+        &self,
+        Parameters(params): Parameters<SetupHooksParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::setup_hooks::handle(self, params).await
     }
 }
 
