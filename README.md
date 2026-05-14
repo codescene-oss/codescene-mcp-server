@@ -46,6 +46,20 @@ The first run automatically downloads the correct platform-specific binary for y
 </details>
 
 <details>
+<summary><b>Claude Code</b></summary>
+
+Add the CodeScene marketplace and install the plugin:
+
+```
+/plugin marketplace add codescene-oss/codescene-mcp-server
+/plugin install codescene@codescene
+```
+
+This installs the MCP server and Code Health skills. Requires [Node.js](https://nodejs.org/) 18 or later.
+
+</details>
+
+<details>
 <summary><b>Claude Desktop</b></summary>
 
 Download the MCP bundle from the [latest release page](https://github.com/codescene-oss/codescene-mcp-server/releases/latest):
