@@ -1,0 +1,12 @@
+{
+  "name": "codescene",
+  "description": "CodeScene Code Health analysis — review, refactor, and safeguard code quality with AI-friendly tools.",
+  "version": "1.1.2",
+  "author": {
+    "name": "CodeScene",
+    "url": "https://codescene.com"
+  },
+  "homepage": "https://github.com/codescene-oss/codescene-mcp-server",
+  "repository": "https://github.com/codescene-oss/codescene-mcp-server",
+  "license": "MIT"
+}
