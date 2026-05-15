@@ -351,6 +351,16 @@ pub fn enabled_tools(data: &ConfigData) -> Option<HashSet<String>> {
 /// Shows a short prefix to identify the token kind, without revealing entropy.
 const SENSITIVE_PREFIX_LENGTH: usize = 4;
 
+/// Returns the env var names of all sensitive config options (tokens, keys, etc.).
+/// Used to scrub secrets from child process environments.
+pub fn sensitive_env_vars() -> Vec<&'static str> {
+    OPTIONS
+        .iter()
+        .filter(|o| o.sensitive)
+        .map(|o| o.env_var)
+        .collect()
+}
+
 pub fn mask_if_sensitive(option: &ConfigOption, value: &str) -> String {
     if option.sensitive && !value.is_empty() {
         if value.len() <= SENSITIVE_PREFIX_LENGTH {
@@ -885,5 +895,27 @@ mod tests {
         let opt = find_option("environment");
         assert!(opt.is_some());
         assert_eq!(opt.unwrap().key, "tracking_environment");
+    }
+
+    #[test]
+    fn sensitive_env_vars_includes_tokens() {
+        let vars = sensitive_env_vars();
+        assert!(
+            vars.contains(&"CS_ACCESS_TOKEN"),
+            "should include CS_ACCESS_TOKEN"
+        );
+        assert!(
+            vars.contains(&"CS_ACE_ACCESS_TOKEN"),
+            "should include CS_ACE_ACCESS_TOKEN"
+        );
+    }
+
+    #[test]
+    fn sensitive_env_vars_excludes_non_sensitive() {
+        let vars = sensitive_env_vars();
+        assert!(
+            !vars.contains(&"CS_ONPREM_URL"),
+            "should not include non-sensitive CS_ONPREM_URL"
+        );
     }
 }
