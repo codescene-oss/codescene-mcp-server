@@ -218,7 +218,7 @@ Replace `/path/to/your/code` with the actual absolute path to your code director
 
 ## Configuration
 
-For additional configuration — including CodeScene on-prem, ACE auto-refactoring, custom SSL/TLS certificates, and more — see [Configuration Options](configuration-options.md).
+For additional configuration — including CodeScene on-prem, custom SSL/TLS certificates, and more — see [Configuration Options](configuration-options.md).
 
 ## Building Docker Image Locally
 

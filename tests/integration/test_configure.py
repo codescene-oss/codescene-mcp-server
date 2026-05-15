@@ -200,7 +200,6 @@ def test_list_all(command: list[str], env: dict, cwd: str) -> bool:
         visible_keys = [
             "access_token",
             "onprem_url",
-            "ace_access_token",
             "default_project_id",
             "ca_bundle",
         ]

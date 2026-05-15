@@ -145,7 +145,7 @@ q mcp add --name codescene-mcp --command cs-mcp
 
 ## Configuration
 
-For additional configuration — including CodeScene on-prem, ACE auto-refactoring, custom SSL/TLS certificates, and more — see [Configuration Options](configuration-options.md).
+For additional configuration — including CodeScene on-prem, custom SSL/TLS certificates, and more — see [Configuration Options](configuration-options.md).
 
 ## Troubleshooting
 

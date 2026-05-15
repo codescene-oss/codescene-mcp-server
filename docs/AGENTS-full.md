@@ -41,8 +41,6 @@ When refactoring or improving code:
 
 This workflow works with MCP alone and is often enough to safely improve legacy code.
 
-If [CodeScene ACE](https://codescene.com/product/integrations/ide-extensions/ai-refactoring) is available, `code_health_auto_refactor` can accelerate the first restructuring step for some large functions. ACE is optional and requires a separate add-on license.
-
 ---
 
 # Technical Debt & Prioritization

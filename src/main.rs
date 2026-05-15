@@ -1,4 +1,3 @@
-mod ace_client;
 mod api_client;
 mod business_case;
 mod cli;
@@ -41,7 +40,7 @@ use crate::config::ConfigData;
 use crate::http::HttpClient;
 use crate::tools::{
     ChangeSetParam, FilePathParam, GetConfigParam, GitRepoParam, OptionalContext, OwnershipParam,
-    ProjectFileParam, ProjectParam, RefactorParam, SetConfigParam,
+    ProjectFileParam, ProjectParam, SetConfigParam,
 };
 use crate::version_checker::VersionChecker;
 
@@ -293,17 +292,6 @@ impl CodeSceneServer {
         Parameters(params): Parameters<FilePathParam>,
     ) -> Result<CallToolResult, ErrorData> {
         tools::code_health_refactoring_business_case::handle(self, params).await
-    }
-
-    #[tool(
-        description = "Refactor a single function to fix specific code health problems.\nThis auto-refactor uses CodeScene ACE, and is intended as an initial\nrefactoring to increase the modularity of the code so that you as an\nAI agent can continue and iterate with more specific refactorings.\n\nWhen to use:\n    Use this tool after a Code Health review has identified one of the\n    supported smells in a specific function.\n\nThe code_health_auto_refactor tool is supported for these languages:\n    - JavaScript/TypeScript\n    - Java\n    - C#\n    - C++\nand for these code smells:\n    - Complex Conditional\n    - Bumpy Road Ahead\n    - Complex Method\n    - Deep, Nested Complexity\n    - Large Method\n\nIMPORTANT:\n    - Only use this tool for functions shorter than 300 lines of code.\n    - Insert any new functions close to the refactored function.\n    - Requires ACE access to be configured (use set_config with key \"ace_access_token\").\n\nReturns:\n    A JSON object describing the refactoring, with these properties:\n      - code: The refactored function plus new extracted functions.\n      - declarations: Optional (used for languages like C++). Declarations of additional functions introduced when refactoring.\n        When present, find the right include file and insert the declarations there. Note that some C++ refactorings result\n        in standalone functions; standalone functions should just be inserted in the implementation unit, not declared in\n        include files.\n      - confidence: The confidence level of the resulting refactoring. For low confidence, review the\n        refactoring and fix any introduced problems.\n      - reasons: A list of strings describing the reasons for the assigned confidence level.\n        Use this list of strings to direct fixes of the refactored code.\n\nExample:\n    Call with file_path=\"/repo/src/service.ts\" and\n    function_name=\"OrderService.calculateTotal\", then apply returned\n    code and declarations and re-run Code Health checks.",
-        input_schema = inlined_schema_for::<RefactorParam>()
-    )]
-    async fn code_health_auto_refactor(
-        &self,
-        Parameters(params): Parameters<RefactorParam>,
-    ) -> Result<CallToolResult, ErrorData> {
-        tools::code_health_auto_refactor::handle(self, params).await
     }
 
     #[tool(

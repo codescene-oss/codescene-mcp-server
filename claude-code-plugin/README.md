@@ -49,7 +49,6 @@ The plugin registers the CodeScene MCP server, which provides the following tool
 | `pre_commit_code_health_safeguard` | Check all modified/staged files for Code Health regressions before commit |
 | `analyze_change_set` | Branch-level Code Health review for PR pre-flight checks |
 | `code_health_refactoring_business_case` | Generate a data-driven business case for refactoring a file |
-| `code_health_auto_refactor` | Auto-refactor a function to fix code health smells (requires CodeScene ACE add-on) |
 | `explain_code_health` | Explain the Code Health metric and how to interpret scores |
 | `explain_code_health_productivity` | Describe the productivity and defect-risk impact of Code Health |
 | `get_config` | Read current MCP server configuration |

@@ -2,7 +2,6 @@ use rmcp::schemars;
 use serde::Deserialize;
 
 pub mod analyze_change_set;
-pub mod code_health_auto_refactor;
 pub mod code_health_refactoring_business_case;
 pub mod code_health_review;
 pub mod code_health_score;
@@ -52,17 +51,6 @@ pub struct ChangeSetParam {
 
     /// Absolute path to the local git repository.
     pub git_repository_path: String,
-}
-
-/// Parameters for auto-refactoring a function.
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct RefactorParam {
-    /// Absolute path to the source file containing the target function.
-    pub file_path: String,
-
-    /// Exact function name to refactor. Include class scope prefix
-    /// when relevant.
-    pub function_name: String,
 }
 
 /// Parameters for selecting/listing projects.
@@ -151,14 +139,6 @@ mod tests {
         let p: ChangeSetParam = serde_json::from_str(json).unwrap();
         assert_eq!(p.base_ref, "main");
         assert_eq!(p.git_repository_path, "/repo");
-    }
-
-    #[test]
-    fn refactor_param_deserializes() {
-        let json = r#"{"file_path": "/src/lib.rs", "function_name": "do_stuff"}"#;
-        let p: RefactorParam = serde_json::from_str(json).unwrap();
-        assert_eq!(p.file_path, "/src/lib.rs");
-        assert_eq!(p.function_name, "do_stuff");
     }
 
     #[test]

@@ -13,7 +13,6 @@ Use this skill when the task is to configure the CodeScene MCP Server after it h
 
 - The user wants to set or change their CodeScene access token.
 - The user needs to connect to a self-hosted CodeScene instance.
-- The user wants to enable ACE auto-refactoring.
 - The user wants to pre-select a default CodeScene project.
 - The user needs to configure a custom CA certificate for SSL/TLS.
 - The user wants to limit which tools are exposed to reduce token usage (`enabled_tools`).
@@ -35,7 +34,6 @@ Do not use this skill for installing or registering the MCP server in an AI assi
 |-----|---------|
 | `access_token` | CodeScene Personal Access Token or standalone MCP license token. |
 | `onprem_url` | Base URL for a self-hosted CodeScene instance (API-mode only). |
-| `ace_access_token` | Token for CodeScene ACE auto-refactoring (add-on license). |
 | `default_project_id` | Pre-select a CodeScene project by numeric ID (API-mode only). |
 | `ca_bundle` | Path to a custom PEM-format CA certificate bundle. |
 | `enabled_tools` | Comma-separated allowlist of tool names to expose (empty = all). |

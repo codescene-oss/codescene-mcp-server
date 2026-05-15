@@ -2,20 +2,18 @@
 """
 CloudFront-compatible HTTP header integration tests.
 
-Verifies that both the API client and ACE client send the HTTP headers
+Verifies that the API client sends the HTTP headers
 required for CloudFront compatibility:
 
   - User-Agent: codescene-mcp/<version>
   - Accept: application/json
   - Authorization: Bearer <token>  (only when the token is non-empty)
-  - Content-Type: application/json (ACE client only)
 
 This test suite validates:
 1. API client headers (exercised via select_project -> api_client.rs)
-2. ACE client headers (exercised via code_health_auto_refactor -> ace_client.rs)
 
-These tests prevent regressions like the one where ace_client.rs was missing
-the User-Agent header, causing CloudFront to return 403 errors.
+These tests prevent regressions where missing headers cause CloudFront
+to return 403 errors.
 """
 
 import json
@@ -240,50 +238,6 @@ def test_api_client_headers(backend: ServerBackend, repo_dir: Path) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Test: ACE client sends correct headers (via code_health_auto_refactor)
-# ---------------------------------------------------------------------------
-
-def test_ace_client_headers(backend: ServerBackend, repo_dir: Path) -> bool:
-    """Test that the ACE client sends User-Agent, Accept, Content-Type, and Authorization headers."""
-    print_header("Test: ACE Client Sends CloudFront-Compatible Headers")
-
-    is_docker = isinstance(backend, DockerBackend)
-    ace_response = json.dumps({"refactored-code": "def process_order(): pass"})
-    server, base_url = _start_fake_server(is_docker, [(200, ace_response)])
-
-    try:
-        extra_env = {
-            "CS_ACE_API_URL": base_url,
-            "CS_ACE_ACCESS_TOKEN": "test-ace-token-for-header-check",
-        }
-        test_file = str(repo_dir / "src/services/order_processor.py")
-        tool_args = {"file_path": test_file, "function_name": "process_order"}
-        requests = _call_and_capture(
-            backend, repo_dir, extra_env, ("code_health_auto_refactor", tool_args, 120),
-        )
-        if requests is None:
-            return False
-
-        headers = _extract_first_request_headers(requests, "ACE")
-        if headers is None:
-            return False
-
-        common_ok = _assert_common_headers(headers)
-        ct_ok = _assert_header(
-            headers, "Content-Type",
-            lambda v: "application/json" in v,
-            "Has Content-Type: application/json",
-        )
-        return common_ok and ct_ok
-
-    except Exception as e:
-        print_test("ACE client headers", False, str(e))
-        return False
-    finally:
-        server.shutdown()
-
-
-# ---------------------------------------------------------------------------
 # Backend-aware runner
 # ---------------------------------------------------------------------------
 
@@ -308,10 +262,6 @@ def run_cloudfront_headers_tests_with_backend(backend: ServerBackend) -> int:
             (
                 "CloudFront Headers - API client sends required headers",
                 test_api_client_headers(backend, repo_dir),
-            ),
-            (
-                "CloudFront Headers - ACE client sends required headers",
-                test_ace_client_headers(backend, repo_dir),
             ),
         ]
 
@@ -351,8 +301,8 @@ def main() -> int:
         return 1
 
     print_header("CloudFront-Compatible Headers Integration Tests")
-    print("\nThese tests verify that both the API client and ACE client")
-    print("send the HTTP headers required for CloudFront compatibility.")
+    print("\nThese tests verify that the API client")
+    print("sends the HTTP headers required for CloudFront compatibility.")
 
     return run_cloudfront_headers_tests(executable)
 

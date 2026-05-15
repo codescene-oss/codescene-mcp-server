@@ -61,7 +61,6 @@ CLI_TOOLS = frozenset({
     "code_health_review",
     "explain_code_health",
     "explain_code_health_productivity",
-    "code_health_auto_refactor",
 })
 
 # --- Test helpers ---

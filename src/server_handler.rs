@@ -143,7 +143,6 @@ pub(crate) fn build_instructions(is_standalone: bool, tools_filtered: bool) -> S
          - pre_commit_code_health_safeguard: Check staged changes before commit.\n\
          - analyze_change_set: Branch-level review before PR.\n\
          - code_health_refactoring_business_case: ROI for refactoring.\n\
-         - code_health_auto_refactor: ACE-powered function refactoring.\n\
          - get_config / set_config: Manage server configuration.\n",
     );
 

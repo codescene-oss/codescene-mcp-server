@@ -135,14 +135,12 @@ def test_filter_restricts_tools(ctx: ServerContext, config_dir: Path) -> bool:
 
         # Should NOT have tools outside the allowlist
         no_explain = "explain_code_health" not in names
-        no_refactor = "code_health_auto_refactor" not in names
 
         print_test("code_health_review listed", has_review)
         print_test("code_health_score listed", has_score)
         print_test("get_config always listed", has_get_config)
         print_test("set_config always listed", has_set_config)
         print_test("explain_code_health NOT listed", no_explain)
-        print_test("code_health_auto_refactor NOT listed", no_refactor)
 
         expected_count = 4  # 2 enabled + get_config + set_config
         correct_count = len(names) == expected_count
@@ -154,7 +152,7 @@ def test_filter_restricts_tools(ctx: ServerContext, config_dir: Path) -> bool:
 
         return all([
             has_review, has_score, has_get_config, has_set_config,
-            no_explain, no_refactor, correct_count,
+            no_explain, correct_count,
         ])
 
     except Exception as e:

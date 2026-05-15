@@ -151,8 +151,6 @@ AI refactoring quality improves when code is modular and easy to reason about. T
 
 This workflow works with MCP alone and is often enough to safely improve legacy code.
 
-If you also use [CodeScene ACE](https://codescene.com/product/integrations/ide-extensions/ai-refactoring), it can accelerate the first restructuring step for some large functions. ACE is optional and requires a separate add-on license. For details, see [ACE refactoring with MCP](docs/ace-refactoring-with-mcp.md).
-
 ### Make Targeted Refactoring  
 AI tools can refactor code, but they lack direction on *what* to fix and *how to measure* if it helped.  
 The Code Health tools solve this by giving AI assistants precise insight into design problems, as well as an objective way to assess the outcome: **did the Code Health improve?**
