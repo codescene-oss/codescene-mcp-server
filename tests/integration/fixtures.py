@@ -183,7 +183,7 @@ module.exports = AuthService;
 
 # Complex JavaScript code with code smells (many args, deep nesting, high complexity).
 # Uses top-level functions so the CLI parser can find them by name.
-# ACE supports js/ts/java/cs/cpp — Python is NOT supported.
+# Python is NOT supported for code health auto-refactoring.
 COMPLEX_JAVASCRIPT_CODE = """/**
  * Order processing module with maintainability issues.
  */

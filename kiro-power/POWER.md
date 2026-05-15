@@ -38,7 +38,6 @@ Available tools:
 - `pre_commit_code_health_safeguard`
 - `analyze_change_set`
 - `code_health_refactoring_business_case`
-- `code_health_auto_refactor` (requires ACE access)
 
 Not available in standalone mode:
 

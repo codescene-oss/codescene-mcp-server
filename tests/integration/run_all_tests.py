@@ -443,7 +443,6 @@ def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool
     )
     from test_analytics_tracking import run_analytics_tracking_tests_with_backend
     from test_analyze_change_set import run_analyze_change_set_tests_with_backend
-    from test_auto_refactor import run_auto_refactor_tests_with_backend
     from test_bundled_docs import run_bundled_docs_tests_with_backend
     from test_business_case import run_business_case_tests_with_backend
     from test_cloudfront_headers import run_cloudfront_headers_tests_with_backend
@@ -485,7 +484,6 @@ def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool
         ("CloudFront Headers Tests", run_cloudfront_headers_tests_with_backend),
         ("SSL Truststore CLI Tests", run_ssl_cli_truststore_tests_with_backend),
         ("SSL API CA Bundle Tests", run_ssl_api_ca_bundle_tests_with_backend),
-        ("Auto-Refactor Tests", run_auto_refactor_tests_with_backend),
     ]
     return [_run_test_module(name, func, backend) for name, func in modules]
 

@@ -14,7 +14,7 @@ This test suite validates:
 Background:
     The ca_bundle / REQUESTS_CA_BUNDLE config was only wired into the
     Java CLI subprocess (truststore injection). The Rust reqwest client
-    used for API tools (select_project, hotspots, goals, ownership, ACE)
+    used for API tools (select_project, hotspots, goals, ownership)
     ignored it entirely, meaning customers behind corporate proxies with
     custom CAs could not use API-based tools.
 

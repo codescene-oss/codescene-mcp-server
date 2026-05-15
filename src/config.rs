@@ -63,16 +63,6 @@ pub const OPTIONS: &[ConfigOption] = &[
         docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
     },
     ConfigOption {
-        key: "ace_access_token",
-        env_var: "CS_ACE_ACCESS_TOKEN",
-        description: "ACE (Auto Code Enhancement) access token for refactoring",
-        sensitive: true,
-        hidden: false,
-        api_only: false,
-        aliases: &["ace_token"],
-        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
-    },
-    ConfigOption {
         key: "default_project_id",
         env_var: "CS_DEFAULT_PROJECT_ID",
         description: "Default CodeScene project ID",
@@ -144,7 +134,6 @@ pub const CONFIGURABLE_TOOL_NAMES: &[&str] = &[
     "pre_commit_code_health_safeguard",
     "analyze_change_set",
     "code_health_refactoring_business_case",
-    "code_health_auto_refactor",
     "select_project",
     "list_technical_debt_goals_for_project",
     "list_technical_debt_goals_for_project_file",
@@ -903,10 +892,6 @@ mod tests {
         assert!(
             vars.contains(&"CS_ACCESS_TOKEN"),
             "should include CS_ACCESS_TOKEN"
-        );
-        assert!(
-            vars.contains(&"CS_ACE_ACCESS_TOKEN"),
-            "should include CS_ACE_ACCESS_TOKEN"
         );
     }
 

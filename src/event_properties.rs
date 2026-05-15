@@ -56,14 +56,6 @@ pub fn change_set_properties(repo_path: &Path, base_ref: &Path, result: &str) ->
     props
 }
 
-pub fn refactor_properties(file_path: &Path, result: &Value) -> Value {
-    let mut props = json!({ "file-hash": hash_path(file_path) });
-    if let Some(confidence) = result.get("confidence").and_then(|c| c.as_str()) {
-        props["confidence"] = json!(confidence);
-    }
-    props
-}
-
 pub fn business_case_properties(file_path: &Path, result: &str) -> Value {
     let mut props = json!({ "file-hash": hash_path(file_path) });
     if let Some(data) = parse_json_dict(result) {
@@ -341,24 +333,6 @@ mod tests {
         let props = change_set_properties(Path::new("/repo"), Path::new("main"), result);
         assert_eq!(props["quality-gates"], json!("failed"));
         assert_eq!(props["file-count"], json!(0));
-    }
-
-    // ---- refactor_properties ----
-
-    #[test]
-    fn refactor_properties_with_confidence() {
-        let result = json!({"confidence": "high", "code": "fn x() {}"});
-        let props = refactor_properties(Path::new("/test.rs"), &result);
-        assert!(props.get("file-hash").is_some());
-        assert_eq!(props["confidence"], json!("high"));
-    }
-
-    #[test]
-    fn refactor_properties_without_confidence() {
-        let result = json!({"code": "fn x() {}"});
-        let props = refactor_properties(Path::new("/test.rs"), &result);
-        assert!(props.get("file-hash").is_some());
-        assert!(props.get("confidence").is_none());
     }
 
     // ---- business_case_properties ----
