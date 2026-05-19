@@ -248,10 +248,8 @@ mod tests {
             .current_dir(dir.path())
             .output()
             .unwrap();
-        // Set a sensitive env var in our process
-        std::env::set_var("CS_ACCESS_TOKEN", "test-secret");
+        // Set a sensitive env var in our process (guard holds mutex + cleans up on drop)
+        let _guard = crate::test_utils::set_token("test-secret");
         refresh_git_index(dir.path()).await;
-        // Clean up
-        std::env::remove_var("CS_ACCESS_TOKEN");
     }
 }
