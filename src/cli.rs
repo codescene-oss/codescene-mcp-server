@@ -27,14 +27,14 @@ const CLI_ZIP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/cs-cli.zip"));
 
 const CLI_BINARY_NAME: &str = if cfg!(windows) { "cs.exe" } else { "cs" };
 
-const DOCKER_CLI_PATH: &str = "/root/.local/bin/cs";
+const DOCKER_CLI_PATH: &str = "/home/mcp/.local/bin/cs";
 const SSL_TRUSTSTORE_PASSWORD: &str = "changeit";
 
 /// Resolve the path to the `cs` CLI binary.
 ///
 /// Resolution order:
 /// 1. `CS_CLI_PATH` environment variable override
-/// 2. Docker container path (`/root/.local/bin/cs`)
+/// 2. Docker container path (`/home/mcp/.local/bin/cs`)
 /// 3. Extracted from embedded zip to cache directory
 pub fn resolve_cli_path() -> Result<PathBuf, CliError> {
     resolve_from_env_override()

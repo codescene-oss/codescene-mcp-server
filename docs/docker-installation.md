@@ -220,6 +220,29 @@ Replace `/path/to/your/code` with the actual absolute path to your code director
 
 For additional configuration — including CodeScene on-prem, custom SSL/TLS certificates, and more — see [Configuration Options](configuration-options.md).
 
+### Persistent Configuration and Logs
+
+By default, configuration changes made through `set_config` (e.g., setting a default project) and diagnostic log files are stored inside the container and lost when it stops. If you want these to persist across restarts, add a named volume for the config directory:
+
+```
+--mount type=volume,src=codescene-mcp-config,dst=/home/mcp/.config/codehealth-mcp
+```
+
+For example, in a JSON configuration:
+
+```json
+"args": [
+    "run", "-i", "--rm",
+    "-e", "CS_ACCESS_TOKEN",
+    "-e", "CS_MOUNT_PATH=/path/to/your/code",
+    "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
+    "--mount", "type=volume,src=codescene-mcp-config,dst=/home/mcp/.config/codehealth-mcp",
+    "codescene/codescene-mcp"
+]
+```
+
+This is entirely optional — configuration passed via environment variables (such as `CS_ACCESS_TOKEN`) is unaffected and does not require persistence. The volume is only needed to preserve settings changed at runtime through `set_config` and to retain diagnostic log files across container restarts.
+
 ## Building Docker Image Locally
 
 See [Building the Docker image locally](building-docker-locally.md) for instructions on building the image from source.

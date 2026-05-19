@@ -51,10 +51,22 @@ _VALID_STANDALONE_JWT = (
 # --- Helpers ---
 
 
-def _make_env_with_config_dir(base_env: dict, config_dir: Path) -> dict:
-    """Return env dict with CS_CONFIG_DIR pointed at *config_dir*."""
+def _make_env_with_config_dir(
+    base_env: dict, config_dir: Path, repo_dir: Path | None = None,
+    *, is_docker: bool = False,
+) -> dict:
+    """Return env dict with CS_CONFIG_DIR pointed at *config_dir*.
+
+    When running in Docker the config dir must be accessible inside the
+    container.  If *repo_dir* is provided and *config_dir* is inside it,
+    the path is translated to the container mount point.
+    """
     env = base_env.copy()
-    env["CS_CONFIG_DIR"] = str(config_dir)
+    if is_docker and repo_dir is not None:
+        relative = config_dir.relative_to(repo_dir)
+        env["CS_CONFIG_DIR"] = f"/mount/{relative}"
+    else:
+        env["CS_CONFIG_DIR"] = str(config_dir)
     return env
 
 
@@ -431,17 +443,24 @@ def run_configure_tests_with_backend(backend: ServerBackend) -> int:
     with safe_temp_directory(prefix="cs_mcp_configure_test_") as test_dir:
         print(f"\nTest directory: {test_dir}")
 
-        config_dir = test_dir / "config"
-        config_dir.mkdir()
-
         # Minimal git repo needed for server startup
         sample_files = {"hello.py": "def hello():\n    return 'world'\n"}
         repo_dir = create_git_repo(test_dir, sample_files)
         print(f"Repository: {repo_dir}")
 
+        # Place config dir inside repo_dir so it is accessible via Docker
+        # bind mount.
+        config_dir = repo_dir / ".cs_config"
+        config_dir.mkdir(exist_ok=True)
+
         command = backend.get_command(repo_dir)
         base_env = backend.get_env(os.environ.copy(), repo_dir)
-        env = _make_env_with_config_dir(base_env, config_dir)
+        from server_backends import DockerBackend
+
+        is_docker = isinstance(backend, DockerBackend)
+        env = _make_env_with_config_dir(
+            base_env, config_dir, repo_dir, is_docker=is_docker,
+        )
         cwd = str(repo_dir)
 
         results: list[tuple[str, bool]] = [

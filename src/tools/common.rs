@@ -37,13 +37,22 @@ pub(crate) async fn run_review(
 /// container's git cannot parse.  Scrubs sensitive env vars from the
 /// child process since git never needs tokens.  Non-zero exit is
 /// expected and harmless.
+///
+/// The `-c` overrides neutralize repo-level `core.*` settings that git
+/// would otherwise honor and that could lead to arbitrary command
+/// execution (e.g. `core.fsmonitor`, `core.sshCommand`, `core.hooksPath`).
 async fn refresh_git_index(repo_path: &Path) {
     let mut git_cmd = tokio::process::Command::new("git");
     for var in crate::config::sensitive_env_vars() {
         git_cmd.env_remove(var);
     }
     let _ = git_cmd
-        .args(["update-index", "--refresh"])
+        .args([
+            "-c", "core.fsmonitor=",
+            "-c", "core.sshCommand=echo",
+            "-c", "core.hooksPath=/dev/null",
+            "update-index", "--refresh",
+        ])
         .current_dir(repo_path)
         .output()
         .await;
