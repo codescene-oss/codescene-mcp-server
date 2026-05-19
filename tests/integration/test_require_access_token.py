@@ -179,12 +179,18 @@ def run_require_access_token_tests_with_backend(backend: ServerBackend) -> int:
         repo_dir = create_git_repo(test_dir, sample_files)
         print(f"Repository: {repo_dir}")
 
-        config_dir = test_dir / "config"
-        config_dir.mkdir()
+        config_dir = repo_dir / ".cs_config"
+        config_dir.mkdir(exist_ok=True)
 
         command = backend.get_command(repo_dir)
         base_env = backend.get_env(os.environ.copy(), repo_dir)
-        base_env["CS_CONFIG_DIR"] = str(config_dir)
+        # Translate config dir to container path for Docker backends
+        from server_backends import DockerBackend
+        if isinstance(backend, DockerBackend):
+            relative = config_dir.relative_to(repo_dir)
+            base_env["CS_CONFIG_DIR"] = f"/mount/{relative}"
+        else:
+            base_env["CS_CONFIG_DIR"] = str(config_dir)
         cwd = str(repo_dir)
 
         cases = _build_test_cases(repo_dir)

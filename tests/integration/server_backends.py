@@ -8,7 +8,6 @@ This module provides:
 - DockerBackend for running in containers
 - NpmBackend for testing the npm package flow
 """
-
 import json
 import os
 import platform
@@ -171,12 +170,16 @@ class DockerBackend(ServerBackend):
         - CS_MOUNT_PATH is set to the HOST path (working_dir)
         - Mount binds host path to /mount/ in container
         - Server translates paths internally
+        - --user matches the host UID/GID so the container can
+          write config and log files inside the bind mount
         """
         return [
             "docker",
             "run",
             "-i",
             "--rm",
+            "--user",
+            f"{os.getuid()}:{os.getgid()}",
             "-e",
             "CS_ACCESS_TOKEN",
             "-e",
