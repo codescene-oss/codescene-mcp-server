@@ -39,7 +39,7 @@ pub(crate) async fn handle(
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
         Err(e) => {
-            server.track_err("analyze-change-set", &e.to_string());
+            server.track_err("analyze-change-set", &e);
             Ok(tool_error(&format!("Error: {e}")))
         }
     }

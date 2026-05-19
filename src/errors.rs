@@ -23,6 +23,30 @@ pub enum CliError {
     LicenseCheckFailed,
 }
 
+impl CliError {
+    /// Returns a safe, fixed label for telemetry (no sensitive data).
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::NonZeroExit { .. } => "non_zero_exit",
+            Self::NotFound(_) => "not_found",
+            Self::Io(_) => "io",
+            Self::InvalidInput(_) => "invalid_input",
+            Self::LicenseCheckFailed => "license_check_failed",
+        }
+    }
+}
+
+impl ApiError {
+    /// Returns a safe, fixed label for telemetry (no sensitive data).
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Http(_) => "http",
+            Self::Transport(_) => "transport",
+            Self::Status { .. } => "status",
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     #[error("Config I/O error: {0}")]
@@ -144,5 +168,56 @@ mod tests {
             body: "not found".into(),
         };
         assert_eq!(err.to_string(), "API error 404: not found");
+    }
+
+    #[test]
+    fn cli_error_kind_returns_safe_labels() {
+        assert_eq!(
+            CliError::NonZeroExit {
+                code: 1,
+                stderr: "secret token=abc123 /home/user/.ssh/id_rsa".into()
+            }
+            .kind(),
+            "non_zero_exit"
+        );
+        assert_eq!(CliError::NotFound("/usr/bin/cs".into()).kind(), "not_found");
+        assert_eq!(
+            CliError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "x")).kind(),
+            "io"
+        );
+        assert_eq!(
+            CliError::InvalidInput("bad".into()).kind(),
+            "invalid_input"
+        );
+        assert_eq!(CliError::LicenseCheckFailed.kind(), "license_check_failed");
+    }
+
+    #[test]
+    fn cli_error_kind_never_contains_sensitive_data() {
+        let err = CliError::NonZeroExit {
+            code: 1,
+            stderr: "Bearer eyJhbGciOi password=secret /Users/me/.config/token".into(),
+        };
+        let kind = err.kind();
+        assert!(!kind.contains("Bearer"));
+        assert!(!kind.contains("password"));
+        assert!(!kind.contains("/Users"));
+        assert!(!kind.contains("secret"));
+    }
+
+    #[test]
+    fn api_error_kind_returns_safe_labels() {
+        assert_eq!(
+            ApiError::Transport("connection refused".into()).kind(),
+            "transport"
+        );
+        assert_eq!(
+            ApiError::Status {
+                status: 401,
+                body: "Bearer token invalid".into()
+            }
+            .kind(),
+            "status"
+        );
     }
 }

@@ -33,6 +33,8 @@ use rmcp::model::{CallToolResult, Content};
 use rmcp::schemars::{self, JsonSchema};
 use rmcp::service::ServerInitializeError;
 use rmcp::{tool, tool_router, ErrorData, ServiceExt};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
 use crate::cli::CliRunner;
@@ -169,8 +171,19 @@ impl CodeSceneServer {
         tracking::track_event(event, props, &self.instance_id);
     }
 
-    pub(crate) fn track_err(&self, tool: &str, err: &str) {
-        tracking::track_error(err, tool, &self.instance_id);
+    pub(crate) fn track_err(&self, tool: &str, err: &errors::CliError) {
+        tracing::warn!(tool, error = %err, "tool error");
+        tracking::track_error(err.kind(), tool, &self.instance_id);
+    }
+
+    pub(crate) fn track_api_err(&self, tool: &str, err: &errors::ApiError) {
+        tracing::warn!(tool, error = %err, "API error");
+        tracking::track_error(err.kind(), tool, &self.instance_id);
+    }
+
+    pub(crate) fn track_err_msg(&self, tool: &str, error_kind: &str, err: &str) {
+        tracing::warn!(tool, error = err, "tool error");
+        tracking::track_error(error_kind, tool, &self.instance_id);
     }
 }
 
@@ -405,19 +418,46 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
+    config::snapshot_client_env_vars();
+    let config_data = config::load().unwrap_or_default();
+    config::apply_to_env(&config_data);
+
+    let env_filter =
+        EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into());
+
+    let stderr_layer = tracing_subscriber::fmt::layer()
         .with_writer(std::io::stderr)
-        .with_ansi(false)
-        .init();
+        .with_ansi(false);
+
+    let retention_days = config::log_retention_days(&config_data);
+    let _file_guard = if retention_days > 0 {
+        let log_dir = config::log_dir();
+        std::fs::create_dir_all(&log_dir).ok();
+        cleanup_old_logs(&log_dir, retention_days);
+        let file_appender =
+            tracing_appender::rolling::daily(&log_dir, "mcp.log");
+        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+        let file_layer = tracing_subscriber::fmt::layer()
+            .with_writer(non_blocking)
+            .with_ansi(false);
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(stderr_layer)
+            .with(file_layer)
+            .init();
+        Some(guard)
+    } else {
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(stderr_layer)
+            .init();
+        None
+    };
 
     startup::print_startup_logo();
     tracing::info!("CodeScene MCP server started");
     tracing::info!("Waiting for MCP client initialization...");
 
-    config::snapshot_client_env_vars();
-    let config_data = config::load().unwrap_or_default();
-    config::apply_to_env(&config_data);
     let instance_id = config::instance_id(&config_data);
 
     let token = std::env::var("CS_ACCESS_TOKEN").unwrap_or_default();
@@ -486,4 +526,25 @@ pub(crate) fn handle_serve_error(err: ServerInitializeError) -> anyhow::Result<(
 
     tracing::error!("serving error: {err:?}");
     Err(err.into())
+}
+
+/// Remove log files older than `retention_days` from the given directory.
+fn cleanup_old_logs(log_dir: &std::path::Path, retention_days: u32) {
+    let cutoff = std::time::SystemTime::now()
+        - std::time::Duration::from_secs(u64::from(retention_days) * 24 * 60 * 60);
+    let entries = match std::fs::read_dir(log_dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
+        let Ok(modified) = metadata.modified() else {
+            continue;
+        };
+        if modified < cutoff {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
 }

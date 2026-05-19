@@ -452,6 +452,7 @@ def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool
     from test_git_worktree import run_worktree_tests_with_backend
     from test_relative_paths import run_relative_path_tests_with_backend
     from test_require_access_token import run_require_access_token_tests_with_backend
+    from test_error_logging import run_error_logging_tests_with_backend
     from test_shutdown_during_handshake import (
         run_shutdown_during_handshake_tests_with_backend,
     )
@@ -484,6 +485,7 @@ def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool
         ("CloudFront Headers Tests", run_cloudfront_headers_tests_with_backend),
         ("SSL Truststore CLI Tests", run_ssl_cli_truststore_tests_with_backend),
         ("SSL API CA Bundle Tests", run_ssl_api_ca_bundle_tests_with_backend),
+        ("Error Logging Tests", run_error_logging_tests_with_backend),
     ]
     return [_run_test_module(name, func, backend) for name, func in modules]
 

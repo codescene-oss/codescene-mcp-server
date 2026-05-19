@@ -31,7 +31,7 @@ pub(crate) async fn handle(
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
         Err(e) => {
-            server.track_err("code-health-score", &e.to_string());
+            server.track_err("code-health-score", &e);
             Ok(tool_error(&format!("Error: {e}")))
         }
     }

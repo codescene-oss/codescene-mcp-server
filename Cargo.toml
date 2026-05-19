@@ -22,6 +22,7 @@ schemars = "1"
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi", "std"] }
+tracing-appender = "0.2.5"
 
 # Error handling
 anyhow = "1"

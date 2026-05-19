@@ -33,7 +33,7 @@ pub(crate) async fn handle(
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
         Err(e) => {
-            server.track_err("pre-commit-code-health-safeguard", &e.to_string());
+            server.track_err("pre-commit-code-health-safeguard", &e);
             Ok(tool_error(&format!("Error: {e}")))
         }
     }

@@ -39,7 +39,7 @@ pub(crate) async fn handle(
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
         Err(e) => {
-            server.track_err("code-health-refactoring-business-case", &e.to_string());
+            server.track_err("code-health-refactoring-business-case", &e);
             Ok(tool_error(&format!("Error: {e}")))
         }
     }

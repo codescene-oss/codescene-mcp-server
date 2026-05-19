@@ -122,6 +122,16 @@ pub const OPTIONS: &[ConfigOption] = &[
         aliases: &["tools"],
         docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
     },
+    ConfigOption {
+        key: "log_retention_days",
+        env_var: "CS_LOG_RETENTION_DAYS",
+        description: "Number of days to keep log files (default: 7, set to 0 to disable file logging)",
+        sensitive: false,
+        hidden: false,
+        api_only: false,
+        aliases: &["log_days"],
+        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
+    },
 ];
 
 /// Tool names that can be enabled/disabled via the `enabled_tools` config.
@@ -334,6 +344,24 @@ pub fn enabled_tools(data: &ConfigData) -> Option<HashSet<String>> {
             .filter(|s| !s.is_empty())
             .collect(),
     )
+}
+
+/// Returns the number of days to retain log files. Defaults to 7.
+/// Returns 0 if file logging is disabled.
+pub fn log_retention_days(data: &ConfigData) -> u32 {
+    let option = match find_option("log_retention_days") {
+        Some(o) => o,
+        None => return 7,
+    };
+    match get_effective(option, data) {
+        Some(v) => v.trim().parse().unwrap_or(7),
+        None => 7,
+    }
+}
+
+/// Returns the directory for log files.
+pub fn log_dir() -> PathBuf {
+    config_dir().join("logs")
 }
 
 /// Mask sensitive values for display.
