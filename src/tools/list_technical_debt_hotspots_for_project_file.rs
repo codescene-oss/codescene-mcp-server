@@ -32,7 +32,7 @@ pub(crate) async fn handle(
     let analysis_id = match analysis_id {
         Ok(id) => id,
         Err(e) => {
-            server.track_err("list-technical-debt-hotspots-file", &e);
+            server.track_err_msg("list-technical-debt-hotspots-file", "api_error", &e);
             return Ok(tool_error(&e));
         }
     };
@@ -65,7 +65,7 @@ pub(crate) async fn handle(
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
         Err(e) => {
-            server.track_err("list-technical-debt-hotspots-file", &e.to_string());
+            server.track_api_err("list-technical-debt-hotspots-file", &e);
             Ok(tool_error(&format!("Error: {e}")))
         }
     }

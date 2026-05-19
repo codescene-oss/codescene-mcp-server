@@ -197,6 +197,8 @@ class DockerBackend(ServerBackend):
             "CS_CONFIG_DIR",
             "-e",
             "CS_ENABLED_TOOLS",
+            "-e",
+            "CS_LOG_RETENTION_DAYS",
             "--add-host=host.docker.internal:host-gateway",
             "--mount",
             f"type=bind,src={working_dir},dst={self.CONTAINER_MOUNT_DEST}",

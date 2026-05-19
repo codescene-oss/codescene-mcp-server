@@ -29,7 +29,7 @@ pub(crate) async fn handle(server: &CodeSceneServer) -> Result<CallToolResult, E
             )]))
         }
         Err(e) => {
-            server.track_err("select-project", e);
+            server.track_err_msg("select-project", "api_error", e);
             Ok(tool_error(e))
         }
     }

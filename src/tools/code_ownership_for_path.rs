@@ -47,7 +47,7 @@ pub(crate) async fn handle(
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
         Err(e) => {
-            server.track_err("code-ownership", &e.to_string());
+            server.track_api_err("code-ownership", &e);
             Ok(tool_error(&format!("Error: {e}")))
         }
     }

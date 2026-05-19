@@ -35,9 +35,9 @@ pub fn track_event(event: &str, properties: Value, instance_id: &str) {
     });
 }
 
-pub fn track_error(error_msg: &str, tool_name: &str, instance_id: &str) {
+pub fn track_error(error_kind: &str, tool_name: &str, instance_id: &str) {
     let properties = json!({
-        "error": error_msg,
+        "error": error_kind,
         "tool": tool_name,
     });
     track_event("error", properties, instance_id);
