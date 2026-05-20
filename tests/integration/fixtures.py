@@ -183,7 +183,7 @@ module.exports = AuthService;
 
 # Complex JavaScript code with code smells (many args, deep nesting, high complexity).
 # Uses top-level functions so the CLI parser can find them by name.
-# Python is NOT supported for code health auto-refactoring.
+# Python is not supported by the embedded CodeScene CLI for refactoring-target workflows.
 COMPLEX_JAVASCRIPT_CODE = """/**
  * Order processing module with maintainability issues.
  */

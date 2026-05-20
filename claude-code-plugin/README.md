@@ -25,7 +25,7 @@ Once installed, the following skills are available:
 <!-- SKILLS-TABLE:START -->
 | Skill | Description |
 |-------|-------------|
-| `/codescene:configuring-codescene-mcp` | Use when the user wants to view, set, or troubleshoot CodeScene MCP configuration such as access tokens, on-prem URLs, ACE tokens, default projects, or SSL certificates. |
+| `/codescene:configuring-codescene-mcp` | Use when the user wants to view, set, or troubleshoot CodeScene MCP configuration such as access tokens, on-prem URLs, default projects, or SSL certificates. |
 | `/codescene:explaining-code-health` | Use when a user asks what Code Health means, how to interpret scores, or why Code Health matters in daily development. |
 | `/codescene:guiding-refactoring-with-code-health` | Use when refactoring unhealthy code and needing Code Health findings to choose small safe steps and verify improvement. |
 | `/codescene:installing-and-activating-codescene-mcp` | Use when installing the CodeScene MCP Server binary or package, registering it in an AI assistant, or copying agent guidance files into a repository. |

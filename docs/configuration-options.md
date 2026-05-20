@@ -10,7 +10,7 @@ The simplest way to configure the MCP server is to ask your AI assistant directl
 
 > "Connect to our on-prem CodeScene at https://codescene.mycompany.com"
 
-> "Enable CodeScene ACE with token ace_xyz789"
+> "Set my default CodeScene project to 42"
 
 > "Disable the CodeScene version update check"
 
