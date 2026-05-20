@@ -1,6 +1,6 @@
 ---
 name: configuring-codescene-mcp
-description: Use when the user wants to view, set, or troubleshoot CodeScene MCP configuration such as access tokens, on-prem URLs, ACE tokens, default projects, or SSL certificates.
+description: Use when the user wants to view, set, or troubleshoot CodeScene MCP configuration such as access tokens, on-prem URLs, default projects, or SSL certificates.
 ---
 
 # Configuring CodeScene MCP

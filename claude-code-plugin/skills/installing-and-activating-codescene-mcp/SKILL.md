@@ -9,7 +9,7 @@ description: Use when installing the CodeScene MCP Server binary or package, reg
 
 Use this skill when the task is to get the CodeScene MCP Server installed and registered with an AI assistant. The workflow has three parts: install the server, register it in the assistant, and copy the agent guidance files into the repository.
 
-For configuring the server after installation (access tokens, on-prem URLs, ACE, SSL), use the `configuring-codescene-mcp` skill instead.
+For configuring the server after installation (access tokens, on-prem URLs, default project, SSL), use the `configuring-codescene-mcp` skill instead.
 
 ## When to Use
 
