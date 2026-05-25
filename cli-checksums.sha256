@@ -1,8 +1,8 @@
-# SHA-256 checksums for CodeScene CLI v1.0.28
+# SHA-256 checksums for CodeScene CLI v1.0.29
 # Verify with: shasum -a 256 -c cli-checksums.sha256
 # Update by downloading each variant and running: shasum -a 256 <file>
-2a69494926aac406fff60a3c605425899f2b0bd4998c058dda7e368f97c4a017  cs-macos-aarch64-latest.zip
-fc3b96203c52c92ed1aace9cb3104c658643c40783654c63001a61c1258e5647  cs-macos-amd64-latest.zip
-e4c81fb27537caa168bcd89d843a8534e8caeb8d70c92304496a551cb389d7b3  cs-linux-amd64-latest.zip
-fa43f064f366c18ffd627c75251361668b9407ad7926623f28faec28cae99046  cs-linux-aarch64-latest.zip
-0d76e300f58547e2a4ed4c6a031a96386d4c802f444ee220383ac243c4ffd3e3  cs-windows-amd64-latest.zip
+7d20c3bfc7f83f94e3bf786c81d51fdfef6043a92dc4721969ac420545d51377  cs-macos-aarch64-latest.zip
+9c01b9d4feb9e151d1e2604d25b19210a4db195310f6ba69c740d386de805979  cs-macos-amd64-latest.zip
+bfdfc0d603dfe3c7ef8c8674558bdeb4dce693098574dd105c5bd988c3a7e4b3  cs-linux-amd64-latest.zip
+ae4082064b3fe845e626e209901ec4537f5cc5dd123382888244e6b5e1537c4b  cs-linux-aarch64-latest.zip
+e18bfa35bdcc8407626c521162f1779f9a9ced0b1c851a4ebbe6df79dddf4de7  cs-windows-amd64-latest.zip
