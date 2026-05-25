@@ -4,13 +4,13 @@
 class CsMcp < Formula
   desc "MCP Server exposing Code Health analysis as AI-friendly tools"
   homepage "https://github.com/codescene-oss/codescene-mcp-server"
-  version "1.1.7"
+  version "1.2.1"
   license "MIT"
 
   on_macos do
     on_arm do
       url "https://github.com/codescene-oss/codescene-mcp-server/releases/download/MCP-#{version}/cs-mcp-macos-aarch64.zip"
-      sha256 "dd75ef7c762feb31628cd2bc593063db0f3bd3d5da6d710457809f9be96f4e29"
+      sha256 "fcdda782ef690de0ce4f8115f416bf7ade77ee0dc79e9f2cc9c735f0f4662e56"
 
       define_method(:install) do
         bin.install "cs-mcp-macos-aarch64" => "cs-mcp"
@@ -19,7 +19,7 @@ class CsMcp < Formula
 
     on_intel do
       url "https://github.com/codescene-oss/codescene-mcp-server/releases/download/MCP-#{version}/cs-mcp-macos-amd64.zip"
-      sha256 "8a3cdc1c2ff7d385920c8697aa07e66f181cb8ab7ec14f90426b17265e452a96"
+      sha256 "7b25fbe9c8a0e62f7dfff3c4685d59d596616b535bf7535a538b56e094da8015"
 
       define_method(:install) do
         bin.install "cs-mcp-macos-amd64" => "cs-mcp"
@@ -30,7 +30,7 @@ class CsMcp < Formula
   on_linux do
     on_arm do
       url "https://github.com/codescene-oss/codescene-mcp-server/releases/download/MCP-#{version}/cs-mcp-linux-aarch64.zip"
-      sha256 "81db617a812282587481799844d7fd29a1a8a56e4a9af755153b94c5797be2bc"
+      sha256 "72613d1ffbbcf769cfabd99b0533bd3db1151e1ba05e7d2727fb24e1da432e60"
 
       define_method(:install) do
         bin.install "cs-mcp-linux-aarch64" => "cs-mcp"
@@ -39,7 +39,7 @@ class CsMcp < Formula
 
     on_intel do
       url "https://github.com/codescene-oss/codescene-mcp-server/releases/download/MCP-#{version}/cs-mcp-linux-amd64.zip"
-      sha256 "dc1f74cee115bd08041d5c79821c3a7e3e4fe86f9b0aaa192d91dd9c27bc50b3"
+      sha256 "8a2a38286020b7029517ecf5c2ce82615020b788e73dc424bf53a8c542210cc5"
 
       define_method(:install) do
         bin.install "cs-mcp-linux-amd64" => "cs-mcp"
