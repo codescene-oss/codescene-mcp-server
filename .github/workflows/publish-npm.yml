@@ -7,6 +7,11 @@ on:
       - completed
   workflow_dispatch:
     inputs:
+      version:
+        description: "Version to publish (e.g. 1.2.3). Leave empty to use latest release tag."
+        required: false
+        default: ""
+        type: string
       dry_run:
         description: "Dry run (skip actual npm publish)"
         required: false
@@ -33,14 +38,19 @@ jobs:
       - name: Get release version
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+            echo "Publishing manually specified version: $VERSION"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG=$(gh release view --json tagName --jq '.tagName')
+            VERSION="${TAG#MCP-}"
+            echo "Publishing version: $VERSION (from latest release tag: $TAG)"
           else
             TAG="${{ github.event.workflow_run.head_branch }}"
+            VERSION="${TAG#MCP-}"
+            echo "Publishing version: $VERSION (from workflow_run tag: $TAG)"
           fi
-          VERSION="${TAG#MCP-}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Publishing version: $VERSION (from tag: $TAG)"
         env:
           GH_TOKEN: ${{ github.token }}
 

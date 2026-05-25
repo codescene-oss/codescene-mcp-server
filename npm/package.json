@@ -30,7 +30,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/codescene-oss/codescene-mcp-server.git",
+    "url": "git+https://github.com/codescene-oss/codescene-mcp-server.git",
     "directory": "npm"
   },
   "homepage": "https://codescene.com",
