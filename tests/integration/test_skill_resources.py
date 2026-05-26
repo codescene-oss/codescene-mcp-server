@@ -16,6 +16,7 @@ This test suite validates:
 import json
 import os
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -46,6 +47,22 @@ EXPECTED_SKILL_NAMES = [
 ]
 
 
+@contextmanager
+def _mcp_session(command, env, repo_dir):
+    """Start an MCP client, initialize it, and yield it. Stops on exit."""
+    client = MCPClient(command, env=env, cwd=str(repo_dir))
+    try:
+        if not client.start():
+            print_test("Server started", False)
+            yield None
+            return
+        print_test("Server started", True)
+        client.initialize()
+        yield client
+    finally:
+        client.stop()
+
+
 def run_skill_resources_tests(executable: Path) -> int:
     backend = CargoBackend(executable=executable)
     return run_skill_resources_tests_with_backend(backend)
@@ -69,6 +86,10 @@ def run_skill_resources_tests_with_backend(backend: ServerBackend) -> int:
             ("Read manifest resource", test_read_manifest(command, env, repo_dir)),
             ("List resource templates", test_list_resource_templates(command, env, repo_dir)),
             ("Read error cases", test_read_error_cases(command, env, repo_dir)),
+            ("list_skills tool", test_list_skills_tool(command, env, repo_dir)),
+            ("get_skill_manifest tool", test_get_skill_manifest_tool(command, env, repo_dir)),
+            ("download_skill tool", test_download_skill_tool(command, env, repo_dir, test_dir)),
+            ("sync_skills tool", test_sync_skills_tool(command, env, repo_dir, test_dir)),
         ]
 
         return print_summary(results)
@@ -78,6 +99,7 @@ def test_init_capabilities(command: list[str], env: dict, repo_dir: Path) -> boo
     """Test that initialize response advertises resources capability."""
     print_header("Test: Initialize Reports Resources Capability")
 
+    # This test needs raw client access (pre-initialize) so doesn't use _mcp_session
     client = MCPClient(command, env=env, cwd=str(repo_dir))
     try:
         if not client.start():
@@ -132,43 +154,24 @@ def test_list_resources(command: list[str], env: dict, repo_dir: Path) -> bool:
     """Test that resources/list returns all embedded skills."""
     print_header("Test: List Resources Returns All Skills")
 
-    client = MCPClient(command, env=env, cwd=str(repo_dir))
-    try:
-        if not client.start():
-            print_test("Server started", False)
+    with _mcp_session(command, env, repo_dir) as client:
+        if client is None:
             return False
-        print_test("Server started", True)
-        client.initialize()
-
         response = client.send_request("resources/list")
         resources = response.get("result", {}).get("resources", [])
-
         count_ok, skills_ok, manifests_ok = _verify_expected_uris(resources)
         metadata_ok = _verify_skill_md_metadata(resources)
-
         return count_ok and skills_ok and manifests_ok and metadata_ok
-
-    except Exception as e:
-        print_test("List resources", False, str(e))
-        return False
-    finally:
-        client.stop()
 
 
 def test_read_skill_md(command: list[str], env: dict, repo_dir: Path) -> bool:
     """Test reading a SKILL.md resource returns valid content."""
     print_header("Test: Read SKILL.md Resource")
 
-    client = MCPClient(command, env=env, cwd=str(repo_dir))
-    try:
-        if not client.start():
-            print_test("Server started", False)
+    with _mcp_session(command, env, repo_dir) as client:
+        if client is None:
             return False
-        print_test("Server started", True)
-        client.initialize()
-
-        skill_name = "safeguarding-ai-generated-code"
-        uri = f"skill://{skill_name}/SKILL.md"
+        uri = "skill://safeguarding-ai-generated-code/SKILL.md"
         response = client.send_request("resources/read", {"uri": uri})
         contents = response.get("result", {}).get("contents", [])
 
@@ -180,20 +183,9 @@ def test_read_skill_md(command: list[str], env: dict, repo_dir: Path) -> bool:
         text = contents[0].get("text", "")
         has_text = len(text) > 50
         print_test("Content has substantial text", has_text, f"Length: {len(text)} chars")
-
-        has_frontmatter = "---" in text
-        print_test("Content includes frontmatter", has_frontmatter)
-
-        has_skill_content = "code health" in text.lower() or "safeguard" in text.lower()
-        print_test("Content is skill-related", has_skill_content)
-
+        print_test("Content includes frontmatter", "---" in text)
+        print_test("Content is skill-related", "code health" in text.lower() or "safeguard" in text.lower())
         return has_text
-
-    except Exception as e:
-        print_test("Read SKILL.md", False, str(e))
-        return False
-    finally:
-        client.stop()
 
 
 def _verify_manifest_files(files: list[dict]) -> bool:
@@ -220,14 +212,9 @@ def test_read_manifest(command: list[str], env: dict, repo_dir: Path) -> bool:
     """Test that reading a _manifest resource returns valid JSON metadata."""
     print_header("Test: Read Manifest Resource")
 
-    client = MCPClient(command, env=env, cwd=str(repo_dir))
-    try:
-        if not client.start():
-            print_test("Server started", False)
+    with _mcp_session(command, env, repo_dir) as client:
+        if client is None:
             return False
-        print_test("Server started", True)
-        client.initialize()
-
         skill_name = "safeguarding-ai-generated-code"
         uri = f"skill://{skill_name}/_manifest"
         response = client.send_request("resources/read", {"uri": uri})
@@ -248,30 +235,17 @@ def test_read_manifest(command: list[str], env: dict, repo_dir: Path) -> bool:
 
         has_skill_field = manifest.get("skill") == skill_name
         print_test("Manifest has correct skill name", has_skill_field)
-
         files_ok = _verify_manifest_files(manifest.get("files", []))
-
         return has_content and has_skill_field and files_ok
-
-    except Exception as e:
-        print_test("Read manifest", False, str(e))
-        return False
-    finally:
-        client.stop()
 
 
 def test_list_resource_templates(command: list[str], env: dict, repo_dir: Path) -> bool:
     """Test that resources/templates/list returns the skill template."""
     print_header("Test: List Resource Templates")
 
-    client = MCPClient(command, env=env, cwd=str(repo_dir))
-    try:
-        if not client.start():
-            print_test("Server started", False)
+    with _mcp_session(command, env, repo_dir) as client:
+        if client is None:
             return False
-        print_test("Server started", True)
-        client.initialize()
-
         response = client.send_request("resources/templates/list")
         templates = response.get("result", {}).get("resourceTemplates", [])
 
@@ -285,25 +259,14 @@ def test_list_resource_templates(command: list[str], env: dict, repo_dir: Path) 
         print_test("Template has skill:// URI pattern", has_skill_template, f"URI: {uri_template}")
         return has_skill_template
 
-    except Exception as e:
-        print_test("List resource templates", False, str(e))
-        return False
-    finally:
-        client.stop()
-
 
 def test_read_error_cases(command: list[str], env: dict, repo_dir: Path) -> bool:
     """Test that reading invalid or unknown URIs returns errors."""
     print_header("Test: Read Error Cases")
 
-    client = MCPClient(command, env=env, cwd=str(repo_dir))
-    try:
-        if not client.start():
-            print_test("Server started", False)
+    with _mcp_session(command, env, repo_dir) as client:
+        if client is None:
             return False
-        print_test("Server started", True)
-        client.initialize()
-
         error_cases = [
             ("skill://nonexistent-skill/SKILL.md", "unknown skill"),
             ("file:///etc/passwd", "non-skill URI"),
@@ -318,11 +281,96 @@ def test_read_error_cases(command: list[str], env: dict, repo_dir: Path) -> bool
 
         return all_passed
 
-    except Exception as e:
-        print_test("Read error cases", False, str(e))
-        return False
-    finally:
-        client.stop()
+
+def test_list_skills_tool(command: list[str], env: dict, repo_dir: Path) -> bool:
+    """Test the list_skills tool returns all embedded skills."""
+    print_header("Test: list_skills Tool")
+
+    with _mcp_session(command, env, repo_dir) as client:
+        if client is None:
+            return False
+        content = _extract_tool_text(client.call_tool("list_skills", {}))
+        if content is None:
+            print_test("Tool returned content", False)
+            return False
+        print_test("Tool returned content", True)
+
+        has_count = f"Available skills ({len(EXPECTED_SKILL_NAMES)})" in content
+        print_test("Lists correct skill count", has_count)
+
+        has_skill = "safeguarding-ai-generated-code" in content
+        print_test("Contains expected skill name", has_skill)
+        return has_count and has_skill
+
+
+def test_get_skill_manifest_tool(command: list[str], env: dict, repo_dir: Path) -> bool:
+    """Test the get_skill_manifest tool returns valid JSON."""
+    print_header("Test: get_skill_manifest Tool")
+
+    with _mcp_session(command, env, repo_dir) as client:
+        if client is None:
+            return False
+        skill_name = "safeguarding-ai-generated-code"
+        content = _extract_tool_text(client.call_tool("get_skill_manifest", {"skill_name": skill_name}))
+        if content is None:
+            print_test("Tool returned content", False)
+            return False
+        print_test("Tool returned content", True)
+
+        manifest = json.loads(content)
+        has_name = manifest.get("skill") == skill_name
+        print_test("Manifest has correct skill name", has_name)
+
+        has_files = len(manifest.get("files", [])) == 1
+        print_test("Manifest lists one file", has_files)
+        return has_name and has_files
+
+
+def test_download_skill_tool(command: list[str], env: dict, repo_dir: Path, test_dir: Path) -> bool:
+    """Test the download_skill tool writes SKILL.md to disk."""
+    print_header("Test: download_skill Tool")
+
+    with _mcp_session(command, env, repo_dir) as client:
+        if client is None:
+            return False
+        dest = test_dir / "download_test"
+        skill_name = "safeguarding-ai-generated-code"
+        content = _extract_tool_text(client.call_tool("download_skill", {
+            "skill_name": skill_name,
+            "destination_dir": str(dest),
+        }))
+        has_content = content is not None and "Downloaded" in content
+        print_test("Tool reports success", has_content)
+
+        file_exists = (dest / skill_name / "SKILL.md").exists()
+        print_test("SKILL.md written to disk", file_exists)
+        return has_content and file_exists
+
+
+def test_sync_skills_tool(command: list[str], env: dict, repo_dir: Path, test_dir: Path) -> bool:
+    """Test the sync_skills tool downloads all skills."""
+    print_header("Test: sync_skills Tool")
+
+    with _mcp_session(command, env, repo_dir) as client:
+        if client is None:
+            return False
+        dest = test_dir / "sync_test"
+        content = _extract_tool_text(client.call_tool("sync_skills", {"destination_dir": str(dest)}))
+        has_content = content is not None and "Downloaded" in content
+        print_test("Tool reports success", has_content)
+
+        dirs = [d for d in dest.iterdir() if d.is_dir()] if dest.exists() else []
+        all_synced = len(dirs) == len(EXPECTED_SKILL_NAMES)
+        print_test(f"All {len(EXPECTED_SKILL_NAMES)} skills synced", all_synced, f"Actual: {len(dirs)}")
+        return has_content and all_synced
+
+
+def _extract_tool_text(response: dict) -> str | None:
+    """Extract text content from a tools/call response."""
+    content = response.get("result", {}).get("content", [])
+    if not content:
+        return None
+    return content[0].get("text")
 
 
 def main() -> int:
