@@ -148,4 +148,40 @@ mod tests {
             .unwrap();
         assert_error_contains(&result, "Unknown skill");
     }
+
+    #[tokio::test]
+    async fn returns_error_when_directory_creation_fails() {
+        let _g = set_token("tok");
+        // Use /dev/null as parent — cannot create subdirectories under a device file
+        let params = DownloadSkillParam {
+            skill_name: "safeguarding-ai-generated-code".to_string(),
+            destination_dir: "/dev/null/impossible".to_string(),
+            overwrite: false,
+        };
+        let result = make_server(false)
+            .download_skill(Parameters(params))
+            .await
+            .unwrap();
+        assert_error_contains(&result, "Failed to create directory");
+    }
+
+    #[tokio::test]
+    async fn returns_error_when_write_fails() {
+        let _g = set_token("tok");
+        let tmp = tempfile::tempdir().unwrap();
+        let skill_dir = tmp.path().join("safeguarding-ai-generated-code");
+        // Create SKILL.md as a directory so fs::write fails
+        std::fs::create_dir_all(skill_dir.join("SKILL.md")).unwrap();
+
+        let params = DownloadSkillParam {
+            skill_name: "safeguarding-ai-generated-code".to_string(),
+            destination_dir: tmp.path().to_str().unwrap().to_string(),
+            overwrite: true,
+        };
+        let result = make_server(false)
+            .download_skill(Parameters(params))
+            .await
+            .unwrap();
+        assert_error_contains(&result, "Failed to write");
+    }
 }

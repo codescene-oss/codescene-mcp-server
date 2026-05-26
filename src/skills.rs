@@ -62,13 +62,20 @@ pub(crate) struct Skill {
 /// `description` key is missing.
 fn extract_description(content: &str) -> String {
     let matter = Matter::<YAML>::new();
-    match matter.parse(content) {
-        Ok(parsed) => parsed
-            .data
-            .and_then(|d: gray_matter::Pod| d["description"].as_string().ok())
-            .unwrap_or_else(|| "No description".to_string()),
-        Err(_) => "No description".to_string(),
-    }
+    let parsed = match matter.parse(content) {
+        Ok(p) => p,
+        Err(_) => return "No description".to_string(),
+    };
+    parsed
+        .data
+        .and_then(|d: gray_matter::Pod| {
+            d.as_hashmap()
+                .ok()?
+                .get("description")?
+                .as_string()
+                .ok()
+        })
+        .unwrap_or_else(|| "No description".to_string())
 }
 
 fn sha256_hex(data: &[u8]) -> String {
@@ -218,5 +225,24 @@ mod tests {
     #[test]
     fn hex_encode_works() {
         assert_eq!(hex::encode([0xde, 0xad, 0xbe, 0xef]), "deadbeef");
+    }
+
+    #[test]
+    fn extract_description_falls_back_on_missing_frontmatter() {
+        assert_eq!(extract_description("no frontmatter here"), "No description");
+    }
+
+    #[test]
+    fn extract_description_falls_back_on_missing_key() {
+        assert_eq!(
+            extract_description("---\ntitle: foo\n---\nbody"),
+            "No description"
+        );
+    }
+
+    #[test]
+    fn extract_description_returns_value() {
+        let content = "---\ndescription: My skill\n---\nbody";
+        assert_eq!(extract_description(content), "My skill");
     }
 }
