@@ -1,13 +1,12 @@
 use rmcp::model::{
     GetPromptRequestParams, GetPromptResult, Implementation, ListPromptsResult,
-    ListResourcesResult, PaginatedRequestParams, Prompt, PromptArgument, PromptMessage,
-    PromptMessageRole, RawResource, ReadResourceRequestParams, ReadResourceResult,
-    ResourceContents, ServerCapabilities, ServerInfo,
+    PaginatedRequestParams, Prompt, PromptArgument, PromptMessage, PromptMessageRole,
+    ServerCapabilities, ServerInfo,
 };
 use rmcp::service::RequestContext;
 use rmcp::{tool_handler, ErrorData, RoleServer, ServerHandler};
 
-use crate::{config, prompts, resources, CodeSceneServer};
+use crate::{config, prompts, CodeSceneServer};
 
 #[tool_handler(router = "self.tool_router")]
 impl ServerHandler for CodeSceneServer {
@@ -16,7 +15,6 @@ impl ServerHandler for CodeSceneServer {
             ServerCapabilities::builder()
                 .enable_tools()
                 .enable_prompts()
-                .enable_resources()
                 .build(),
         )
         .with_protocol_version(protocol_version_2025_11_25())
@@ -28,45 +26,6 @@ impl ServerHandler for CodeSceneServer {
             self.is_standalone,
             config::enabled_tools(&self.config_data).is_some(),
         ))
-    }
-
-    async fn list_resources(
-        &self,
-        _request: Option<PaginatedRequestParams>,
-        _context: RequestContext<RoleServer>,
-    ) -> Result<ListResourcesResult, ErrorData> {
-        use rmcp::model::AnnotateAble;
-        let resources = vec![
-            RawResource::new(
-                resources::HOW_IT_WORKS_URI,
-                extract_md_title(resources::HOW_IT_WORKS),
-            )
-            .with_description(
-                "Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI.",
-            )
-            .with_mime_type("text/markdown")
-            .no_annotation(),
-            RawResource::new(
-                resources::BUSINESS_CASE_URI,
-                extract_md_title(resources::BUSINESS_CASE),
-            )
-            .with_description("Describes how to build a business case for Code Health improvements.")
-            .with_mime_type("text/markdown")
-            .no_annotation(),
-        ];
-        Ok(ListResourcesResult::with_all_items(resources))
-    }
-
-    async fn read_resource(
-        &self,
-        request: ReadResourceRequestParams,
-        _context: RequestContext<RoleServer>,
-    ) -> Result<ReadResourceResult, ErrorData> {
-        let uri = request.uri.as_str();
-        let content = resolve_resource_content(uri)?;
-        Ok(ReadResourceResult::new(vec![ResourceContents::text(
-            content, uri,
-        )]))
     }
 
     async fn list_prompts(
@@ -118,20 +77,6 @@ fn protocol_version_2025_11_25() -> rmcp::model::ProtocolVersion {
     serde_json::from_str("\"2025-11-25\"").expect("valid MCP protocol version literal")
 }
 
-pub(crate) fn resolve_resource_content(uri: &str) -> Result<&'static str, ErrorData> {
-    if uri == resources::HOW_IT_WORKS_URI {
-        Ok(resources::HOW_IT_WORKS)
-    } else if uri == resources::BUSINESS_CASE_URI {
-        Ok(resources::BUSINESS_CASE)
-    } else {
-        Err(ErrorData::new(
-            rmcp::model::ErrorCode::INVALID_REQUEST,
-            format!("Unknown resource: {uri}"),
-            None,
-        ))
-    }
-}
-
 pub(crate) fn build_instructions(is_standalone: bool, tools_filtered: bool) -> String {
     let mut text = String::from(
         "CodeScene MCP Server - Code Health analysis tools for AI-assisted development.\n\n\
@@ -168,14 +113,6 @@ pub(crate) fn build_instructions(is_standalone: bool, tools_filtered: bool) -> S
     text
 }
 
-pub(crate) fn extract_md_title(content: &str) -> &str {
-    for line in content.lines() {
-        if let Some(title) = line.strip_prefix("# ") {
-            return title.trim();
-        }
-    }
-    "Untitled"
-}
 
 #[cfg(test)]
 mod tests {
