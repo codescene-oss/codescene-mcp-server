@@ -88,8 +88,8 @@ def run_skill_resources_tests_with_backend(backend: ServerBackend) -> int:
             ("Read error cases", test_read_error_cases(command, env, repo_dir)),
             ("list_skills tool", test_list_skills_tool(command, env, repo_dir)),
             ("get_skill_manifest tool", test_get_skill_manifest_tool(command, env, repo_dir)),
-            ("download_skill tool", test_download_skill_tool(command, env, repo_dir, test_dir)),
-            ("sync_skills tool", test_sync_skills_tool(command, env, repo_dir, test_dir)),
+            ("download_skill tool", test_download_skill_tool(command, env, repo_dir)),
+            ("sync_skills tool", test_sync_skills_tool(command, env, repo_dir)),
         ]
 
         return print_summary(results)
@@ -326,14 +326,14 @@ def test_get_skill_manifest_tool(command: list[str], env: dict, repo_dir: Path) 
         return has_name and has_files
 
 
-def test_download_skill_tool(command: list[str], env: dict, repo_dir: Path, test_dir: Path) -> bool:
+def test_download_skill_tool(command: list[str], env: dict, repo_dir: Path) -> bool:
     """Test the download_skill tool writes SKILL.md to disk."""
     print_header("Test: download_skill Tool")
 
     with _mcp_session(command, env, repo_dir) as client:
         if client is None:
             return False
-        dest = test_dir / "download_test"
+        dest = repo_dir / "download_test"
         skill_name = "safeguarding-ai-generated-code"
         content = _extract_tool_text(client.call_tool("download_skill", {
             "skill_name": skill_name,
@@ -347,14 +347,14 @@ def test_download_skill_tool(command: list[str], env: dict, repo_dir: Path, test
         return has_content and file_exists
 
 
-def test_sync_skills_tool(command: list[str], env: dict, repo_dir: Path, test_dir: Path) -> bool:
+def test_sync_skills_tool(command: list[str], env: dict, repo_dir: Path) -> bool:
     """Test the sync_skills tool downloads all skills."""
     print_header("Test: sync_skills Tool")
 
     with _mcp_session(command, env, repo_dir) as client:
         if client is None:
             return False
-        dest = test_dir / "sync_test"
+        dest = repo_dir / "sync_test"
         content = _extract_tool_text(client.call_tool("sync_skills", {"destination_dir": str(dest)}))
         has_content = content is not None and "Downloaded" in content
         print_test("Tool reports success", has_content)
