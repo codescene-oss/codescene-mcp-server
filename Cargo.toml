@@ -56,6 +56,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # Temp files (CLI extraction)
 tempfile = "3"
+gray_matter = { version = "0.3.2", features = ["yaml"] }
 
 [profile.release]
 opt-level = "z"

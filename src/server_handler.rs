@@ -1,12 +1,13 @@
 use rmcp::model::{
-    GetPromptRequestParams, GetPromptResult, Implementation, ListPromptsResult,
-    PaginatedRequestParams, Prompt, PromptArgument, PromptMessage, PromptMessageRole,
-    ServerCapabilities, ServerInfo,
+    AnnotateAble, GetPromptRequestParams, GetPromptResult, Implementation, ListPromptsResult,
+    ListResourceTemplatesResult, ListResourcesResult, PaginatedRequestParams, Prompt,
+    PromptArgument, PromptMessage, PromptMessageRole, RawResource, RawResourceTemplate,
+    ReadResourceRequestParams, ReadResourceResult, ResourceContents, ServerCapabilities, ServerInfo,
 };
 use rmcp::service::RequestContext;
 use rmcp::{tool_handler, ErrorData, RoleServer, ServerHandler};
 
-use crate::{config, prompts, CodeSceneServer};
+use crate::{config, prompts, skills, CodeSceneServer};
 
 #[tool_handler(router = "self.tool_router")]
 impl ServerHandler for CodeSceneServer {
@@ -15,6 +16,7 @@ impl ServerHandler for CodeSceneServer {
             ServerCapabilities::builder()
                 .enable_tools()
                 .enable_prompts()
+                .enable_resources()
                 .build(),
         )
         .with_protocol_version(protocol_version_2025_11_25())
@@ -71,6 +73,104 @@ impl ServerHandler for CodeSceneServer {
             text,
         )]))
     }
+
+    async fn list_resources(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListResourcesResult, ErrorData> {
+        let skill_list = skills::load_skills();
+        let resources = skill_list
+            .iter()
+            .flat_map(|skill| {
+                let main_uri = skills::skill_uri(&skill.name, "SKILL.md");
+                let manifest_uri_str = skills::manifest_uri(&skill.name);
+                let manifest_name = format!("{} manifest", skill.name);
+                let manifest_desc =
+                    format!("File manifest for the {} skill", skill.name);
+                vec![
+                    RawResource::new(main_uri, &skill.name)
+                        .with_description(&skill.description)
+                        .with_mime_type("text/markdown")
+                        .with_size(skill.content.len() as u32)
+                        .no_annotation(),
+                    RawResource::new(manifest_uri_str, manifest_name)
+                        .with_description(manifest_desc)
+                        .with_mime_type("application/json")
+                        .no_annotation(),
+                ]
+            })
+            .collect();
+        Ok(ListResourcesResult {
+            resources,
+            next_cursor: None,
+            meta: None,
+        })
+    }
+
+    async fn read_resource(
+        &self,
+        request: ReadResourceRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ReadResourceResult, ErrorData> {
+        let (skill_name, path) =
+            skills::parse_skill_uri(&request.uri).ok_or_else(|| {
+                ErrorData::resource_not_found(
+                    format!("Invalid skill URI: {}", request.uri),
+                    None,
+                )
+            })?;
+
+        let skill_list = skills::load_skills();
+        let skill = skill_list
+            .iter()
+            .find(|s| s.name == skill_name)
+            .ok_or_else(|| {
+                ErrorData::resource_not_found(
+                    format!("Skill not found: {skill_name}"),
+                    None,
+                )
+            })?;
+
+        match path {
+            "SKILL.md" => Ok(ReadResourceResult::new(vec![
+                ResourceContents::text(skill.content, &request.uri)
+                    .with_mime_type("text/markdown"),
+            ])),
+            "_manifest" => {
+                let manifest = skills::build_manifest(skill);
+                Ok(ReadResourceResult::new(vec![
+                    ResourceContents::text(manifest, &request.uri)
+                        .with_mime_type("application/json"),
+                ]))
+            }
+            _ => Err(ErrorData::resource_not_found(
+                format!("File not found in skill {skill_name}: {path}"),
+                None,
+            )),
+        }
+    }
+
+    async fn list_resource_templates(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListResourceTemplatesResult, ErrorData> {
+        let template = RawResourceTemplate::new(
+            "skill://{skill_name}/{path}",
+            "Skill file",
+        )
+        .with_description(
+            "Access a specific file within a CodeScene skill. \
+             Use skill_name from the resource list and path from the manifest.",
+        )
+        .with_mime_type("text/markdown");
+        Ok(ListResourceTemplatesResult {
+            resource_templates: vec![template.no_annotation()],
+            next_cursor: None,
+            meta: None,
+        })
+    }
 }
 
 fn protocol_version_2025_11_25() -> rmcp::model::ProtocolVersion {
@@ -88,7 +188,12 @@ pub(crate) fn build_instructions(is_standalone: bool, tools_filtered: bool) -> S
          - pre_commit_code_health_safeguard: Check staged changes before commit.\n\
          - analyze_change_set: Branch-level review before PR.\n\
          - code_health_refactoring_business_case: ROI for refactoring.\n\
-         - get_config / set_config: Manage server configuration.\n",
+         - get_config / set_config: Manage server configuration.\n\
+         \n\
+         RESOURCES:\n\
+         - skill://<name>/SKILL.md: Agent skill instructions for Code Health workflows.\n\
+         - skill://<name>/_manifest: File listing for a skill.\n\
+         Use resources/list to discover available skills.\n",
     );
 
     if !is_standalone {

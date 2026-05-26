@@ -15,6 +15,7 @@ mod platform;
 mod prompts;
 mod resources;
 mod server_handler;
+mod skills;
 mod startup;
 #[cfg(test)]
 mod test_utils;

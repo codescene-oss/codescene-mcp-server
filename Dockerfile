@@ -10,6 +10,7 @@ WORKDIR /build
 # Copy only what the build needs (keeps layer cache friendly)
 COPY Cargo.toml Cargo.lock build.rs cli-checksums.sha256 ./
 COPY src/ src/
+COPY skills/ skills/
 
 RUN CS_MCP_VERSION="${VERSION}" cargo build --release
 
