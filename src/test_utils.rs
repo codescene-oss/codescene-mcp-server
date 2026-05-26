@@ -204,11 +204,11 @@ mod tests {
 
     use super::*;
     use crate::config::{self, ConfigData};
-    use crate::server_handler::{build_instructions, extract_md_title, resolve_resource_content};
+    use crate::server_handler::build_instructions;
     use crate::version_checker::VersionChecker;
     use crate::{
         display_version, fetch_cli_version, help_text, parse_cli_args,
-        resources, CliAction, API_ONLY_TOOLS,
+        CliAction, API_ONLY_TOOLS,
     };
 
     #[derive(Clone)]
@@ -463,24 +463,6 @@ mod tests {
     }
 
     #[test]
-    fn resolve_resource_content_returns_how_it_works() {
-        let content = resolve_resource_content(resources::HOW_IT_WORKS_URI).unwrap();
-        assert!(!content.is_empty());
-    }
-
-    #[test]
-    fn resolve_resource_content_returns_business_case() {
-        let content = resolve_resource_content(resources::BUSINESS_CASE_URI).unwrap();
-        assert!(!content.is_empty());
-    }
-
-    #[test]
-    fn resolve_resource_content_returns_error_for_unknown() {
-        let result = resolve_resource_content("unknown://resource");
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn build_instructions_standalone_omits_api_tools() {
         let text = build_instructions(true, false);
         assert!(text.contains("code_health_review"));
@@ -604,16 +586,6 @@ mod tests {
         let names = tool_names(&server);
         assert_tool_count_and_config(&names, 3);
         assert!(names.contains(&"analyze_change_set".to_string()));
-    }
-
-    #[test]
-    fn extract_md_title_returns_first_heading() {
-        assert_eq!(extract_md_title("# Hello World\nsome text"), "Hello World");
-    }
-
-    #[test]
-    fn extract_md_title_falls_back_to_resource() {
-        assert_eq!(extract_md_title("no heading here"), "Untitled");
     }
 
     #[test]
