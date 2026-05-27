@@ -4,6 +4,7 @@ use std::path::Path;
 use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 
+use crate::docker;
 use crate::skills;
 use crate::tools::common::tool_error;
 use crate::tools::SyncSkillsParam;
@@ -15,7 +16,8 @@ pub(crate) async fn handle(
 ) -> Result<CallToolResult, ErrorData> {
     server.version_checker.check_in_background();
     let skill_list = skills::load_skills();
-    let dest = Path::new(&params.destination_dir);
+    let dest_path = docker::adapt_path_for_docker(Path::new(&params.destination_dir));
+    let dest = Path::new(&dest_path);
 
     let mut downloaded = Vec::new();
     let mut skipped = Vec::new();

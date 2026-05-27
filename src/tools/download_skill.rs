@@ -4,6 +4,7 @@ use std::path::Path;
 use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 
+use crate::docker;
 use crate::skills;
 use crate::tools::common::tool_error;
 use crate::tools::DownloadSkillParam;
@@ -26,7 +27,8 @@ pub(crate) async fn handle(
         }
     };
 
-    let skill_dir = Path::new(&params.destination_dir).join(&skill.name);
+    let dest_path = docker::adapt_path_for_docker(Path::new(&params.destination_dir));
+    let skill_dir = Path::new(&dest_path).join(&skill.name);
     let skill_file = skill_dir.join("SKILL.md");
 
     if skill_file.exists() && !params.overwrite {
