@@ -41,6 +41,7 @@ use tracing_subscriber::EnvFilter;
 use crate::cli::CliRunner;
 use crate::config::ConfigData;
 use crate::http::HttpClient;
+use crate::tools::validation::Validator;
 use crate::tools::{
     ChangeSetParam, DownloadSkillParam, FilePathParam, GetConfigParam, GitRepoParam,
     OptionalContext, OwnershipParam, ProjectFileParam, ProjectParam, SetConfigParam,
@@ -133,6 +134,7 @@ pub(crate) struct ServerDeps {
     pub(crate) version_checker: VersionChecker,
     pub(crate) cli_runner: Arc<dyn CliRunner>,
     pub(crate) http_client: Arc<dyn HttpClient>,
+    pub(crate) validator: Arc<dyn Validator>,
 }
 
 #[derive(Clone)]
@@ -144,6 +146,7 @@ pub(crate) struct CodeSceneServer {
     pub(crate) is_standalone: bool,
     pub(crate) cli_runner: Arc<dyn CliRunner>,
     pub(crate) http_client: Arc<dyn HttpClient>,
+    pub(crate) validator: Arc<dyn Validator>,
 }
 
 impl CodeSceneServer {
@@ -229,6 +232,7 @@ impl CodeSceneServer {
             is_standalone: deps.is_standalone,
             cli_runner: deps.cli_runner,
             http_client: deps.http_client,
+            validator: deps.validator,
         }
     }
 
@@ -527,6 +531,7 @@ async fn main() -> anyhow::Result<()> {
         version_checker,
         cli_runner: Arc::new(cli::ProductionCliRunner),
         http_client: Arc::new(http::ReqwestClient),
+        validator: Arc::new(tools::validation::ProductionCliValidator),
     });
 
     // Covered by e2e test: test_shutdown_during_handshake.py

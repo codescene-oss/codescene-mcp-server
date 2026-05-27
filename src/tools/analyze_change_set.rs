@@ -7,6 +7,7 @@ use crate::delta;
 use crate::docker;
 use crate::event_properties;
 use crate::tools::common::{run_delta, tool_error};
+use crate::tools::validation::CliCheck;
 use crate::tools::ChangeSetParam;
 use crate::CodeSceneServer;
 
@@ -19,12 +20,12 @@ pub(crate) async fn handle(
     }
     server.version_checker.check_in_background();
     let repo_path = docker::adapt_path_for_docker(Path::new(&params.git_repository_path));
-    let result = run_delta(
-        Path::new(&repo_path),
-        Some(&params.base_ref),
-        &*server.cli_runner,
-    )
-    .await;
+    let rp = Path::new(&repo_path);
+    if let Err(e) = server.validator.run_checks(&[CliCheck::InsideGitRepo(rp)]) {
+        server.track_err_msg("analyze-change-set", e.kind, &e.message);
+        return Ok(tool_error(&e.message));
+    }
+    let result = run_delta(rp, Some(&params.base_ref), &*server.cli_runner).await;
     match result {
         Ok(output) => {
             let parsed = delta::analyze_delta_output(&output);
@@ -50,8 +51,8 @@ mod tests {
     use rmcp::handler::server::wrapper::Parameters;
 
     use crate::tests::{
-        assert_error_contains, assert_token_error, clear_token, make_cli_mock_server, make_server,
-        set_token, MockCliRunner,
+        assert_error_contains, assert_token_error, clear_token, make_cli_mock_server,
+        make_failing_validator_server, make_server, set_token, MockCliRunner,
     };
     use crate::tools::ChangeSetParam;
 
@@ -90,5 +91,17 @@ mod tests {
         let _g = set_token("tok");
         let result = run_change_set(MockCliRunner::with_err(1, "delta failed")).await;
         assert_error_contains(&result, "delta failed");
+    }
+
+    #[tokio::test]
+    async fn validation_failure_returns_error() {
+        let _g = set_token("tok");
+        let server = make_failing_validator_server("not_a_git_repo", "Not inside a git repository");
+        let params = ChangeSetParam {
+            base_ref: "main".to_string(),
+            git_repository_path: "/tmp/repo".to_string(),
+        };
+        let result = server.analyze_change_set(Parameters(params)).await.unwrap();
+        assert_error_contains(&result, "Not inside a git repository");
     }
 }

@@ -6,6 +6,7 @@ use rmcp::ErrorData;
 use crate::docker;
 use crate::event_properties;
 use crate::tools::common::{extract_score, run_review, tool_error};
+use crate::tools::validation::CliCheck;
 use crate::tools::FilePathParam;
 use crate::CodeSceneServer;
 
@@ -18,7 +19,16 @@ pub(crate) async fn handle(
     }
     server.version_checker.check_in_background();
     let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
-    let result = run_review(Path::new(&file_path), &*server.cli_runner).await;
+    let fp = Path::new(&file_path);
+    if let Err(e) = server.validator.run_checks(&[
+        CliCheck::FileExists(fp),
+        CliCheck::SupportedFileType(fp),
+        CliCheck::InsideGitRepo(fp),
+    ]) {
+        server.track_err_msg("code-health-score", e.kind, &e.message);
+        return Ok(tool_error(&e.message));
+    }
+    let result = run_review(fp, &*server.cli_runner).await;
     match result {
         Ok(output) => {
             let score = extract_score(&output);
@@ -43,7 +53,7 @@ mod tests {
 
     use crate::tests::{
         assert_error_contains, assert_success_contains, assert_token_error, clear_token,
-        make_cli_mock_server, make_server, set_token, MockCliRunner,
+        make_cli_mock_server, make_failing_validator_server, make_server, set_token, MockCliRunner,
     };
     use crate::tools::FilePathParam;
 
@@ -58,6 +68,17 @@ mod tests {
             .await
             .unwrap();
         assert_token_error(&result);
+    }
+
+    #[tokio::test]
+    async fn validation_failure_returns_error() {
+        let _g = set_token("tok");
+        let server = make_failing_validator_server("file_not_found", "File not found: /tmp/missing.rs");
+        let params = FilePathParam {
+            file_path: "/tmp/missing.rs".to_string(),
+        };
+        let result = server.code_health_score(Parameters(params)).await.unwrap();
+        assert_error_contains(&result, "File not found");
     }
 
     #[tokio::test]

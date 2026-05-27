@@ -8,6 +8,7 @@ pub mod code_health_score;
 pub mod code_ownership_for_path;
 pub mod codescene_links;
 pub mod common;
+pub mod validation;
 pub mod download_skill;
 pub mod explain_code_health;
 pub mod explain_code_health_productivity;
