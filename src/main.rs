@@ -15,6 +15,7 @@ mod platform;
 mod prompts;
 mod resources;
 mod server_handler;
+mod skills;
 mod startup;
 #[cfg(test)]
 mod test_utils;
@@ -41,8 +42,9 @@ use crate::cli::CliRunner;
 use crate::config::ConfigData;
 use crate::http::HttpClient;
 use crate::tools::{
-    ChangeSetParam, FilePathParam, GetConfigParam, GitRepoParam, OptionalContext, OwnershipParam,
-    ProjectFileParam, ProjectParam, SetConfigParam,
+    ChangeSetParam, DownloadSkillParam, FilePathParam, GetConfigParam, GitRepoParam,
+    OptionalContext, OwnershipParam, ProjectFileParam, ProjectParam, SetConfigParam,
+    SkillNameParam, SyncSkillsParam,
 };
 use crate::version_checker::VersionChecker;
 
@@ -389,6 +391,46 @@ impl CodeSceneServer {
         Parameters(params): Parameters<SetConfigParam>,
     ) -> Result<CallToolResult, ErrorData> {
         tools::set_config::handle(self, params).await
+    }
+
+    #[tool(
+        description = "List all available skills embedded in this MCP server.\n\nWhen to use:\n    Use this tool to discover what skills are available for\n    download or inspection.\n\nLimitations:\n    - Returns only skills embedded at compile time.\n    - Does not scan external skill directories.\n\nReturns:\n    A formatted list of skill names with their descriptions.\n\nExample:\n    Call this tool to see all available skills, then use\n    download_skill or sync_skills to install them locally."
+    )]
+    async fn list_skills(&self) -> Result<CallToolResult, ErrorData> {
+        tools::list_skills::handle(self).await
+    }
+
+    #[tool(
+        description = "Get the file manifest for a specific skill.\n\nWhen to use:\n    Use this tool to inspect what files a skill contains,\n    their sizes, and SHA256 hashes before downloading.\n\nLimitations:\n    - Requires a valid skill name from list_skills.\n\nReturns:\n    A JSON manifest with the skill name and an array of files,\n    each with path, size in bytes, and sha256 hash.\n\nExample:\n    Call with skill_name=\"safeguarding-ai-generated-code\" to\n    see the manifest, then use download_skill to install it.",
+        input_schema = inlined_schema_for::<SkillNameParam>()
+    )]
+    async fn get_skill_manifest(
+        &self,
+        Parameters(params): Parameters<SkillNameParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::get_skill_manifest::handle(self, params).await
+    }
+
+    #[tool(
+        description = "Download a single skill to a local directory.\n\nWhen to use:\n    Use this tool to install a specific skill into your local\n    skills directory (e.g., ~/.claude/skills/).\n\nLimitations:\n    - By default, refuses to overwrite existing skills.\n    - Set overwrite=true to replace an existing skill.\n    - Creates the destination directory if it does not exist.\n\nReturns:\n    A confirmation message with the path where the skill was written.\n\nExample:\n    Call with skill_name=\"safeguarding-ai-generated-code\" and\n    destination_dir=\"~/.claude/skills\" to install the skill.",
+        input_schema = inlined_schema_for::<DownloadSkillParam>()
+    )]
+    async fn download_skill(
+        &self,
+        Parameters(params): Parameters<DownloadSkillParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::download_skill::handle(self, params).await
+    }
+
+    #[tool(
+        description = "Download all available skills to a local directory.\n\nWhen to use:\n    Use this tool to install every embedded skill into your\n    local skills directory at once.\n\nLimitations:\n    - By default, skips skills that already exist locally.\n    - Set overwrite=true to replace all existing skills.\n    - Creates the destination directory if it does not exist.\n\nReturns:\n    A summary showing how many skills were downloaded and how\n    many were skipped (if any already existed).\n\nExample:\n    Call with destination_dir=\"~/.claude/skills\" to install\n    all skills. Use overwrite=true to force-update them.",
+        input_schema = inlined_schema_for::<SyncSkillsParam>()
+    )]
+    async fn sync_skills(
+        &self,
+        Parameters(params): Parameters<SyncSkillsParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::sync_skills::handle(self, params).await
     }
 }
 
