@@ -12,7 +12,7 @@ use crate::cli;
 /// Each variant represents an independent, composable precondition.
 /// Add new variants here to extend the validation pipeline without
 /// touching existing tool handlers.
-pub(crate) enum Check<'a> {
+pub(crate) enum CliCheck<'a> {
     /// The file at the given path must exist on disk.
     FileExists(&'a Path),
 
@@ -50,19 +50,19 @@ impl fmt::Display for ValidationError {
 /// Tests inject a [`MockValidator`] that always succeeds (or can be
 /// configured to fail for specific checks).
 pub(crate) trait Validator: Send + Sync {
-    fn run_checks(&self, checks: &[Check<'_>]) -> Result<(), ValidationError>;
+    fn run_checks(&self, checks: &[CliCheck<'_>]) -> Result<(), ValidationError>;
 }
 
 /// Production validator that performs real filesystem and git checks.
 pub(crate) struct ProductionValidator;
 
 impl Validator for ProductionValidator {
-    fn run_checks(&self, checks: &[Check<'_>]) -> Result<(), ValidationError> {
+    fn run_checks(&self, checks: &[CliCheck<'_>]) -> Result<(), ValidationError> {
         for check in checks {
             match check {
-                Check::FileExists(path) => validate_file_exists(path)?,
-                Check::SupportedFileType(path) => validate_supported_file_type(path)?,
-                Check::InsideGitRepo(path) => validate_inside_git_repo(path)?,
+                CliCheck::FileExists(path) => validate_file_exists(path)?,
+                CliCheck::SupportedFileType(path) => validate_supported_file_type(path)?,
+                CliCheck::InsideGitRepo(path) => validate_inside_git_repo(path)?,
             }
         }
         Ok(())
@@ -304,8 +304,8 @@ mod tests {
         let v = ProductionValidator;
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
         let result = v.run_checks(&[
-            Check::FileExists(&path),
-            Check::InsideGitRepo(&path),
+            CliCheck::FileExists(&path),
+            CliCheck::InsideGitRepo(&path),
         ]);
         assert!(result.is_ok());
     }
@@ -315,8 +315,8 @@ mod tests {
         let v = ProductionValidator;
         let path = Path::new("/nonexistent/file.rs");
         let err = v.run_checks(&[
-            Check::FileExists(path),
-            Check::SupportedFileType(path),
+            CliCheck::FileExists(path),
+            CliCheck::SupportedFileType(path),
         ]);
         assert!(err.is_err());
         assert!(err.unwrap_err().message.contains("does not exist"));

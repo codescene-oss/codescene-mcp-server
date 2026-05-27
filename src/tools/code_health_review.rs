@@ -6,7 +6,7 @@ use rmcp::ErrorData;
 use crate::docker;
 use crate::event_properties;
 use crate::tools::common::{run_review, tool_error};
-use crate::tools::validation::Check;
+use crate::tools::validation::CliCheck;
 use crate::tools::FilePathParam;
 use crate::CodeSceneServer;
 
@@ -21,9 +21,9 @@ pub(crate) async fn handle(
     let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
     let fp = Path::new(&file_path);
     if let Err(e) = server.validator.run_checks(&[
-        Check::FileExists(fp),
-        Check::SupportedFileType(fp),
-        Check::InsideGitRepo(fp),
+        CliCheck::FileExists(fp),
+        CliCheck::SupportedFileType(fp),
+        CliCheck::InsideGitRepo(fp),
     ]) {
         server.track_err_msg("code-health-review", e.kind, &e.message);
         return Ok(tool_error(&e.message));

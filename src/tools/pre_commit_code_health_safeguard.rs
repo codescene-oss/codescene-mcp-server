@@ -7,7 +7,7 @@ use crate::delta;
 use crate::docker;
 use crate::event_properties;
 use crate::tools::common::{run_delta, tool_error};
-use crate::tools::validation::Check;
+use crate::tools::validation::CliCheck;
 use crate::tools::GitRepoParam;
 use crate::CodeSceneServer;
 
@@ -21,7 +21,7 @@ pub(crate) async fn handle(
     server.version_checker.check_in_background();
     let repo_path = docker::adapt_path_for_docker(Path::new(&params.git_repository_path));
     let rp = Path::new(&repo_path);
-    if let Err(e) = server.validator.run_checks(&[Check::InsideGitRepo(rp)]) {
+    if let Err(e) = server.validator.run_checks(&[CliCheck::InsideGitRepo(rp)]) {
         server.track_err_msg("pre-commit-code-health-safeguard", e.kind, &e.message);
         return Ok(tool_error(&e.message));
     }

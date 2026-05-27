@@ -10,7 +10,7 @@ use crate::config::ConfigData;
 use crate::errors::CliError;
 use crate::http::{self};
 use crate::http::tests::MockHttpClient;
-use crate::tools::validation::{Check, ValidationError, Validator};
+use crate::tools::validation::{CliCheck, ValidationError, Validator};
 use crate::version_checker::VersionChecker;
 use crate::{CodeSceneServer, ServerDeps};
 
@@ -36,7 +36,7 @@ impl MockValidator {
 }
 
 impl Validator for MockValidator {
-    fn run_checks(&self, _checks: &[Check<'_>]) -> Result<(), ValidationError> {
+    fn run_checks(&self, _checks: &[CliCheck<'_>]) -> Result<(), ValidationError> {
         match &self.error {
             Some(e) => Err(ValidationError {
                 message: e.message.clone(),
