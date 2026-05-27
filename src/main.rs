@@ -531,7 +531,7 @@ async fn main() -> anyhow::Result<()> {
         version_checker,
         cli_runner: Arc::new(cli::ProductionCliRunner),
         http_client: Arc::new(http::ReqwestClient),
-        validator: Arc::new(tools::validation::ProductionValidator),
+        validator: Arc::new(tools::validation::ProductionCliValidator),
     });
 
     // Covered by e2e test: test_shutdown_during_handshake.py

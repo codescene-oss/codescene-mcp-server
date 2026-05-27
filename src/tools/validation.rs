@@ -54,9 +54,9 @@ pub(crate) trait Validator: Send + Sync {
 }
 
 /// Production validator that performs real filesystem and git checks.
-pub(crate) struct ProductionValidator;
+pub(crate) struct ProductionCliValidator;
 
-impl Validator for ProductionValidator {
+impl Validator for ProductionCliValidator {
     fn run_checks(&self, checks: &[CliCheck<'_>]) -> Result<(), ValidationError> {
         for check in checks {
             match check {
@@ -296,12 +296,12 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // ProductionValidator::run_checks
+    // ProductionCliValidator::run_checks
     // -----------------------------------------------------------------------
 
     #[test]
     fn run_checks_passes_when_all_ok() {
-        let v = ProductionValidator;
+        let v = ProductionCliValidator;
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
         let result = v.run_checks(&[
             CliCheck::FileExists(&path),
@@ -312,7 +312,7 @@ mod tests {
 
     #[test]
     fn run_checks_short_circuits_on_first_failure() {
-        let v = ProductionValidator;
+        let v = ProductionCliValidator;
         let path = Path::new("/nonexistent/file.rs");
         let err = v.run_checks(&[
             CliCheck::FileExists(path),
@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn run_checks_empty_is_ok() {
-        let v = ProductionValidator;
+        let v = ProductionCliValidator;
         assert!(v.run_checks(&[]).is_ok());
     }
 
