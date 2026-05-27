@@ -17,6 +17,7 @@ import os
 import sys
 import threading
 import time
+from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -48,6 +49,9 @@ SAFE_ERROR_KINDS = {
     "transport",
     "status",
     "api_error",
+    "file_not_found",
+    "unsupported_file_type",
+    "not_a_git_repo",
 }
 
 
@@ -133,16 +137,26 @@ def run_error_logging_tests_with_backend(backend: ServerBackend) -> int:
         return print_summary(results)
 
 
+@dataclass
+class ErrorTriggerOptions:
+    """Options for _trigger_error_with_fake_server."""
+
+    extra_env: dict[str, str] = field(default_factory=dict)
+    file_path: str | None = None
+
+
 def _trigger_error_with_fake_server(
     backend: ServerBackend,
     repo_dir: Path,
     config_dir: Path,
-    extra_env: dict[str, str] | None = None,
+    options: ErrorTriggerOptions | None = None,
 ) -> tuple[str, list[dict]]:
     """Trigger a tool error with a fake analytics server.
 
-    Calls code_health_score on a non-existent file to reliably produce a
-    CliError::NonZeroExit or CliError::InvalidInput error.
+    Calls code_health_score on the given file (defaults to a non-existent
+    file) to reliably produce an error.  Use *file_path_override* to pass
+    an existing file when you want validation to succeed and the error to
+    come from the CLI instead (e.g. license_check_failed).
 
     For Docker backends, *config_dir* must be inside *repo_dir* so it is
     accessible via the bind mount.  The env var is translated to the
@@ -150,6 +164,7 @@ def _trigger_error_with_fake_server(
 
     Returns (result_text, captured_payloads).
     """
+    opts = options or ErrorTriggerOptions()
     is_docker = isinstance(backend, DockerBackend)
     bind_host = "0.0.0.0" if is_docker else "127.0.0.1"
 
@@ -174,8 +189,8 @@ def _trigger_error_with_fake_server(
     else:
         env["CS_CONFIG_DIR"] = str(config_dir)
 
-    if extra_env:
-        env.update(extra_env)
+    if opts.extra_env:
+        env.update(opts.extra_env)
 
     command = backend.get_command(repo_dir)
     client = MCPClient(command, env=env, cwd=str(repo_dir))
@@ -188,11 +203,10 @@ def _trigger_error_with_fake_server(
         print_test("Server started", True)
         client.initialize()
 
-        # Call with a non-existent file to trigger an error
-        nonexistent = str(repo_dir / "does_not_exist_xyz.py")
-        print(f"  Calling code_health_score on non-existent file: {nonexistent}")
+        target_file = opts.file_path or str(repo_dir / "does_not_exist_xyz.py")
+        print(f"  Calling code_health_score on: {target_file}")
         response = client.call_tool(
-            "code_health_score", {"file_path": nonexistent}, timeout=60
+            "code_health_score", {"file_path": target_file}, timeout=60
         )
         result_text = extract_result_text(response)
 
@@ -296,11 +310,17 @@ def test_error_telemetry_invalid_token(
     config_dir.mkdir(parents=True, exist_ok=True)
 
     try:
+        # Use an existing file so MCP validation passes and the invalid
+        # token error reaches the CLI (producing license_check_failed).
+        existing_file = str(repo_dir / "src" / "utils" / "calculator.py")
         result_text, payloads = _trigger_error_with_fake_server(
             backend,
             repo_dir,
             config_dir,
-            extra_env={"CS_ACCESS_TOKEN": "invalid-garbage-token-xyz"},
+            ErrorTriggerOptions(
+                extra_env={"CS_ACCESS_TOKEN": "invalid-garbage-token-xyz"},
+                file_path=existing_file,
+            ),
         )
 
         ok, error_payloads = _assert_error_event_received(result_text, payloads)
@@ -334,7 +354,8 @@ def test_error_logged_to_file(
 
     try:
         result_text, _payloads = _trigger_error_with_fake_server(
-            backend, repo_dir, config_dir, extra_env={"CS_LOG_RETENTION_DAYS": "7"}
+            backend, repo_dir, config_dir,
+            ErrorTriggerOptions(extra_env={"CS_LOG_RETENTION_DAYS": "7"}),
         )
 
         has_response = len(result_text) > 0
@@ -356,7 +377,7 @@ def test_error_logged_to_file(
         has_error_logged = "error" in log_content.lower()
         print_test("Error details in log file", has_error_logged, f"Log size: {len(log_content)} chars")
 
-        detail_markers = ["does_not_exist_xyz", "no such file", "not a supported", "non_zero_exit", "invalid_input"]
+        detail_markers = ["does_not_exist_xyz", "no such file", "not a supported", "non_zero_exit", "invalid_input", "file_not_found"]
         has_detail = any(m in log_content.lower() for m in detail_markers)
         print_test("Log contains error detail", has_detail)
 
@@ -383,7 +404,8 @@ def test_file_logging_disabled_when_zero(
 
     try:
         result_text, _payloads = _trigger_error_with_fake_server(
-            backend, repo_dir, config_dir, extra_env={"CS_LOG_RETENTION_DAYS": "0"}
+            backend, repo_dir, config_dir,
+            ErrorTriggerOptions(extra_env={"CS_LOG_RETENTION_DAYS": "0"}),
         )
 
         has_response = len(result_text) > 0
