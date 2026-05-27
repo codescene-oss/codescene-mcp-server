@@ -7,6 +7,7 @@ use crate::delta;
 use crate::docker;
 use crate::event_properties;
 use crate::tools::common::{run_delta, tool_error};
+use crate::tools::validation::Check;
 use crate::tools::GitRepoParam;
 use crate::CodeSceneServer;
 
@@ -19,7 +20,12 @@ pub(crate) async fn handle(
     }
     server.version_checker.check_in_background();
     let repo_path = docker::adapt_path_for_docker(Path::new(&params.git_repository_path));
-    let result = run_delta(Path::new(&repo_path), None, &*server.cli_runner).await;
+    let rp = Path::new(&repo_path);
+    if let Err(e) = server.validator.run_checks(&[Check::InsideGitRepo(rp)]) {
+        server.track_err_msg("pre-commit-code-health-safeguard", e.kind, &e.message);
+        return Ok(tool_error(&e.message));
+    }
+    let result = run_delta(rp, None, &*server.cli_runner).await;
     match result {
         Ok(output) => {
             let parsed = delta::analyze_delta_output(&output);
@@ -44,8 +50,8 @@ mod tests {
     use rmcp::handler::server::wrapper::Parameters;
 
     use crate::tests::{
-        assert_error_contains, assert_token_error, clear_token, make_cli_mock_server, make_server,
-        set_token, MockCliRunner,
+        assert_error_contains, assert_token_error, clear_token, make_cli_mock_server,
+        make_failing_validator_server, make_server, set_token, MockCliRunner,
     };
     use crate::tools::GitRepoParam;
 
@@ -85,5 +91,19 @@ mod tests {
         let _g = set_token("tok");
         let result = run_safeguard(MockCliRunner::with_err(1, "delta failed")).await;
         assert_error_contains(&result, "delta failed");
+    }
+
+    #[tokio::test]
+    async fn validation_failure_returns_error() {
+        let _g = set_token("tok");
+        let server = make_failing_validator_server("not_a_git_repo", "Not inside a git repository");
+        let params = GitRepoParam {
+            git_repository_path: "/tmp/repo".to_string(),
+        };
+        let result = server
+            .pre_commit_code_health_safeguard(Parameters(params))
+            .await
+            .unwrap();
+        assert_error_contains(&result, "Not inside a git repository");
     }
 }

@@ -10,15 +10,50 @@ use crate::config::ConfigData;
 use crate::errors::CliError;
 use crate::http::{self};
 use crate::http::tests::MockHttpClient;
+use crate::tools::validation::{Check, ValidationError, Validator};
 use crate::version_checker::VersionChecker;
 use crate::{CodeSceneServer, ServerDeps};
 
-pub(crate) fn test_deps(
-    id: &str,
-    is_standalone: bool,
-    cli: Arc<dyn cli::CliRunner>,
-    http: Arc<dyn http::HttpClient>,
-) -> ServerDeps {
+/// Mock validator that always passes. Use [`MockValidator::failing`] to
+/// simulate validation failures in tests.
+pub(crate) struct MockValidator {
+    error: Option<ValidationError>,
+}
+
+impl MockValidator {
+    pub(crate) fn passing() -> Self {
+        Self { error: None }
+    }
+
+    pub(crate) fn failing(kind: &'static str, message: &str) -> Self {
+        Self {
+            error: Some(ValidationError {
+                message: message.to_string(),
+                kind,
+            }),
+        }
+    }
+}
+
+impl Validator for MockValidator {
+    fn run_checks(&self, _checks: &[Check<'_>]) -> Result<(), ValidationError> {
+        match &self.error {
+            Some(e) => Err(ValidationError {
+                message: e.message.clone(),
+                kind: e.kind,
+            }),
+            None => Ok(()),
+        }
+    }
+}
+
+pub(crate) struct TestMocks {
+    pub(crate) cli: Arc<dyn cli::CliRunner>,
+    pub(crate) http: Arc<dyn http::HttpClient>,
+    pub(crate) validator: Arc<dyn Validator>,
+}
+
+pub(crate) fn test_deps(id: &str, is_standalone: bool, mocks: TestMocks) -> ServerDeps {
     ServerDeps {
         config_data: ConfigData {
             instance_id: Some(id.to_string()),
@@ -27,8 +62,9 @@ pub(crate) fn test_deps(
         instance_id: id.to_string(),
         is_standalone,
         version_checker: VersionChecker::new("dev"),
-        cli_runner: cli,
-        http_client: http,
+        cli_runner: mocks.cli,
+        http_client: mocks.http,
+        validator: mocks.validator,
     }
 }
 
@@ -36,8 +72,11 @@ pub(crate) fn make_server(is_standalone: bool) -> CodeSceneServer {
     CodeSceneServer::new(test_deps(
         "test-instance",
         is_standalone,
-        Arc::new(cli::ProductionCliRunner),
-        Arc::new(http::ReqwestClient),
+        TestMocks {
+            cli: Arc::new(cli::ProductionCliRunner),
+            http: Arc::new(http::ReqwestClient),
+            validator: Arc::new(MockValidator::passing()),
+        },
     ))
 }
 
@@ -72,6 +111,7 @@ pub(crate) async fn make_server_with_version(
         version_checker: vc,
         cli_runner: Arc::new(cli::ProductionCliRunner),
         http_client: Arc::new(http::ReqwestClient),
+        validator: Arc::new(MockValidator::passing()),
     })
 }
 
@@ -139,13 +179,28 @@ pub(crate) fn make_server_with_mocks(
     CodeSceneServer::new(test_deps(
         "test-mock",
         is_standalone,
-        Arc::new(cli),
-        Arc::new(http),
+        TestMocks {
+            cli: Arc::new(cli),
+            http: Arc::new(http),
+            validator: Arc::new(MockValidator::passing()),
+        },
     ))
 }
 
 pub(crate) fn make_cli_mock_server(cli: MockCliRunner) -> CodeSceneServer {
     make_server_with_mocks(false, cli, MockHttpClient::new(vec![]))
+}
+
+pub(crate) fn make_failing_validator_server(kind: &'static str, message: &str) -> CodeSceneServer {
+    CodeSceneServer::new(test_deps(
+        "test-validation",
+        false,
+        TestMocks {
+            cli: Arc::new(MockCliRunner::with_responses(vec![])),
+            http: Arc::new(MockHttpClient::new(vec![])),
+            validator: Arc::new(MockValidator::failing(kind, message)),
+        },
+    ))
 }
 
 pub(crate) fn assert_success_contains(result: &CallToolResult, needle: &str) {
@@ -517,6 +572,7 @@ mod tests {
             version_checker: VersionChecker::new("dev"),
             cli_runner: Arc::new(cli::ProductionCliRunner),
             http_client: Arc::new(http::ReqwestClient),
+            validator: Arc::new(MockValidator::passing()),
         })
     }
 

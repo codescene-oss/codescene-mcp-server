@@ -6,6 +6,7 @@ use rmcp::ErrorData;
 use crate::docker;
 use crate::event_properties;
 use crate::tools::common::{run_review, tool_error};
+use crate::tools::validation::Check;
 use crate::tools::FilePathParam;
 use crate::CodeSceneServer;
 
@@ -18,7 +19,16 @@ pub(crate) async fn handle(
     }
     server.version_checker.check_in_background();
     let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
-    let result = run_review(Path::new(&file_path), &*server.cli_runner).await;
+    let fp = Path::new(&file_path);
+    if let Err(e) = server.validator.run_checks(&[
+        Check::FileExists(fp),
+        Check::SupportedFileType(fp),
+        Check::InsideGitRepo(fp),
+    ]) {
+        server.track_err_msg("code-health-review", e.kind, &e.message);
+        return Ok(tool_error(&e.message));
+    }
+    let result = run_review(fp, &*server.cli_runner).await;
     match &result {
         Ok(output) => {
             let props = event_properties::review_properties(Path::new(&params.file_path), output);
@@ -39,7 +49,7 @@ mod tests {
 
     use crate::tests::{
         assert_error_contains, assert_success_contains, assert_token_error, clear_token,
-        make_cli_mock_server, make_server, set_token, MockCliRunner,
+        make_cli_mock_server, make_failing_validator_server, make_server, set_token, MockCliRunner,
     };
     use crate::tools::FilePathParam;
 
@@ -54,6 +64,17 @@ mod tests {
             .await
             .unwrap();
         assert_token_error(&result);
+    }
+
+    #[tokio::test]
+    async fn validation_failure_returns_error() {
+        let _g = set_token("tok");
+        let server = make_failing_validator_server("unsupported_file_type", "File type not supported: .xyz");
+        let params = FilePathParam {
+            file_path: "/tmp/test.xyz".to_string(),
+        };
+        let result = server.code_health_review(Parameters(params)).await.unwrap();
+        assert_error_contains(&result, "File type not supported");
     }
 
     #[tokio::test]
