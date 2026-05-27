@@ -296,14 +296,18 @@ fn maybe_embed_local_cli(dest_zip: &str) -> bool {
     true
 }
 
+/// Pinned CLI version (commit hash from `cs version` output).
+/// Update this when upgrading the CLI, along with cli-checksums.sha256.
+const CLI_VERSION: &str = "379b46808f26ed3c4eaefc2e11bee6c55dc44000";
+
 fn cli_download_url() -> String {
     let (os_part, arch_part) = cli_platform_parts();
-    format!("https://downloads.codescene.io/enterprise/cli/cs-{os_part}-{arch_part}-latest.zip")
+    format!("https://downloads.codescene.io/enterprise/cli/cs-{os_part}-{arch_part}-{CLI_VERSION}.zip")
 }
 
 fn cli_zip_filename() -> String {
     let (os_part, arch_part) = cli_platform_parts();
-    format!("cs-{os_part}-{arch_part}-latest.zip")
+    format!("cs-{os_part}-{arch_part}-{CLI_VERSION}.zip")
 }
 
 fn cli_platform_parts() -> (&'static str, &'static str) {
