@@ -132,6 +132,10 @@ def run_error_logging_tests_with_backend(backend: ServerBackend) -> int:
                 "Error Logging - File logging disabled when retention is 0",
                 test_file_logging_disabled_when_zero(backend, repo_dir, test_dir),
             ),
+            (
+                "Error Telemetry - Unsupported file type detail in payload",
+                test_unsupported_file_type_detail_in_telemetry(backend, repo_dir, test_dir),
+            ),
         ]
 
         return print_summary(results)
@@ -227,6 +231,11 @@ def _extract_error_payloads(payloads: list[dict]) -> list[dict]:
 def _get_error_kind(payload: dict) -> str:
     """Extract the error kind string from a tracking payload."""
     return payload.get("event-properties", {}).get("error", "")
+
+
+def _get_error_detail(payload: dict) -> str | None:
+    """Extract the optional detail string from a tracking payload."""
+    return payload.get("event-properties", {}).get("detail")
 
 
 def _assert_error_event_received(
@@ -424,6 +433,47 @@ def test_file_logging_disabled_when_zero(
 
     except Exception as e:
         print_test("File logging disabled when zero", False, str(e))
+        return False
+
+
+def test_unsupported_file_type_detail_in_telemetry(
+    backend: ServerBackend, repo_dir: Path, test_dir: Path
+) -> bool:
+    """
+    Test that unsupported file type errors include the file extension
+    as a detail property in the telemetry payload.
+    """
+    print_header("Test: Unsupported File Type Detail in Telemetry")
+
+    config_dir = repo_dir / ".config_unsupported"
+    config_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create a file with an unsupported extension so FileExists passes
+    unsupported_file = repo_dir / "readme.txt"
+    unsupported_file.write_text("just a text file")
+
+    try:
+        result_text, payloads = _trigger_error_with_fake_server(
+            backend, repo_dir, config_dir,
+            ErrorTriggerOptions(file_path=str(unsupported_file)),
+        )
+
+        ok, error_payloads = _assert_error_event_received(result_text, payloads)
+        if not ok:
+            return False
+
+        error_value = _get_error_kind(error_payloads[0])
+        is_unsupported = error_value == "unsupported_file_type"
+        print_test("Error kind is unsupported_file_type", is_unsupported, f"Got: '{error_value}'")
+
+        detail = _get_error_detail(error_payloads[0])
+        has_detail = detail == ".txt"
+        print_test("Detail contains file extension", has_detail, f"Got: '{detail}'")
+
+        return is_unsupported and has_detail
+
+    except Exception as e:
+        print_test("Unsupported file type detail", False, str(e))
         return False
 
 
