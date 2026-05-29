@@ -35,11 +35,14 @@ pub fn track_event(event: &str, properties: Value, instance_id: &str) {
     });
 }
 
-pub fn track_error(error_kind: &str, tool_name: &str, instance_id: &str) {
-    let properties = json!({
+pub fn track_error(error_kind: &str, tool_name: &str, instance_id: &str, detail: Option<&str>) {
+    let mut properties = json!({
         "error": error_kind,
         "tool": tool_name,
     });
+    if let Some(d) = detail {
+        properties["detail"] = json!(d);
+    }
     track_event("error", properties, instance_id);
 }
 
@@ -395,7 +398,7 @@ mod tests {
     async fn track_error_disabled_does_not_panic() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_TRACKING", "1");
-        track_error("some error", "some-tool", "test-instance");
+        track_error("some error", "some-tool", "test-instance", None);
         std::env::remove_var("CS_DISABLE_TRACKING");
     }
 
@@ -414,7 +417,7 @@ mod tests {
         let _lock = config::lock_test_env();
         std::env::remove_var("CS_DISABLE_TRACKING");
         std::env::set_var("CS_TRACKING_URL", "http://192.0.2.1:1/track");
-        track_error("err msg", "tool-name", "test-id");
+        track_error("err msg", "tool-name", "test-id", Some(".txt"));
         tokio::time::sleep(Duration::from_millis(50)).await;
         std::env::remove_var("CS_TRACKING_URL");
     }

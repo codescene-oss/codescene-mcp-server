@@ -32,6 +32,9 @@ pub(crate) struct ValidationError {
     pub message: String,
     /// Fixed telemetry label (never contains sensitive data).
     pub kind: &'static str,
+    /// Optional extra detail for telemetry (e.g. the unsupported file
+    /// extension). Must never contain sensitive data such as file paths.
+    pub detail: Option<String>,
 }
 
 impl fmt::Display for ValidationError {
@@ -81,6 +84,7 @@ fn validate_file_exists(path: &Path) -> Result<(), ValidationError> {
                 path.display()
             ),
             kind: "file_not_found",
+            detail: None,
         });
     }
     Ok(())
@@ -102,6 +106,7 @@ fn validate_supported_file_type(path: &Path) -> Result<(), ValidationError> {
                 SUPPORTED_EXTENSIONS.join(", ")
             ),
             kind: "unsupported_file_type",
+            detail: Some(format!(".{e}")),
         }),
         None => Err(ValidationError {
             message: format!(
@@ -111,6 +116,7 @@ fn validate_supported_file_type(path: &Path) -> Result<(), ValidationError> {
                 path.display()
             ),
             kind: "unsupported_file_type",
+            detail: None,
         }),
     }
 }
@@ -125,6 +131,7 @@ fn validate_inside_git_repo(path: &Path) -> Result<(), ValidationError> {
                 path.display()
             ),
             kind: "not_a_git_repo",
+            detail: None,
         });
     }
     Ok(())
@@ -268,6 +275,7 @@ mod tests {
         assert!(err.message.contains(".txt"));
         assert!(err.message.contains("codescene.io"));
         assert_eq!(err.kind, "unsupported_file_type");
+        assert_eq!(err.detail.as_deref(), Some(".txt"));
     }
 
     #[test]
@@ -275,11 +283,11 @@ mod tests {
         let err = validate_supported_file_type(Path::new("Makefile")).unwrap_err();
         assert!(err.message.contains("no file extension"));
         assert_eq!(err.kind, "unsupported_file_type");
+        assert_eq!(err.detail, None);
     }
 
     // -----------------------------------------------------------------------
-    // validate_inside_git_repo
-    // -----------------------------------------------------------------------
+    // validate_inside_git_repo    // -----------------------------------------------------------------------
 
     #[test]
     fn inside_git_repo_passes_for_repo_path() {

@@ -32,7 +32,7 @@ pub(crate) async fn handle(
     let analysis_id = match analysis_id {
         Ok(id) => id,
         Err(e) => {
-            server.track_err_msg("list-technical-debt-hotspots-file", "api_error", &e);
+            server.track_err_msg("list-technical-debt-hotspots-file", "api_error", &e, None);
             return Ok(tool_error(&e));
         }
     };

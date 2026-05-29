@@ -26,7 +26,7 @@ pub(crate) async fn handle(
         CliCheck::SupportedFileType(fp),
         CliCheck::InsideGitRepo(fp),
     ]) {
-        server.track_err_msg("code-health-refactoring-business-case", e.kind, &e.message);
+        server.track_err_msg("code-health-refactoring-business-case", e.kind, &e.message, e.detail.as_deref());
         return Ok(tool_error(&e.message));
     }
     let review_result = run_review(fp, &*server.cli_runner).await;

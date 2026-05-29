@@ -178,17 +178,17 @@ impl CodeSceneServer {
 
     pub(crate) fn track_err(&self, tool: &str, err: &errors::CliError) {
         tracing::warn!(tool, error = %err, "tool error");
-        tracking::track_error(err.kind(), tool, &self.instance_id);
+        tracking::track_error(err.kind(), tool, &self.instance_id, None);
     }
 
     pub(crate) fn track_api_err(&self, tool: &str, err: &errors::ApiError) {
         tracing::warn!(tool, error = %err, "API error");
-        tracking::track_error(err.kind(), tool, &self.instance_id);
+        tracking::track_error(err.kind(), tool, &self.instance_id, None);
     }
 
-    pub(crate) fn track_err_msg(&self, tool: &str, error_kind: &str, err: &str) {
+    pub(crate) fn track_err_msg(&self, tool: &str, error_kind: &str, err: &str, detail: Option<&str>) {
         tracing::warn!(tool, error = err, "tool error");
-        tracking::track_error(error_kind, tool, &self.instance_id);
+        tracking::track_error(error_kind, tool, &self.instance_id, detail);
     }
 }
 
