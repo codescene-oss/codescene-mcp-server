@@ -41,7 +41,7 @@ use tracing_subscriber::EnvFilter;
 use crate::cli::CliRunner;
 use crate::config::ConfigData;
 use crate::http::HttpClient;
-use crate::tools::validation::Validator;
+use crate::tools::validation::{ValidationError, Validator};
 use crate::tools::{
     ChangeSetParam, DownloadSkillParam, FilePathParam, GetConfigParam, GitRepoParam,
     OptionalContext, OwnershipParam, ProjectFileParam, ProjectParam, SetConfigParam,
@@ -178,17 +178,34 @@ impl CodeSceneServer {
 
     pub(crate) fn track_err(&self, tool: &str, err: &errors::CliError) {
         tracing::warn!(tool, error = %err, "tool error");
-        tracking::track_error(err.kind(), tool, &self.instance_id, None);
+        tracking::track_error(&tracking::ErrorEvent {
+            error_kind: err.kind(), tool_name: tool,
+            instance_id: &self.instance_id, detail: None,
+        });
     }
 
     pub(crate) fn track_api_err(&self, tool: &str, err: &errors::ApiError) {
         tracing::warn!(tool, error = %err, "API error");
-        tracking::track_error(err.kind(), tool, &self.instance_id, None);
+        tracking::track_error(&tracking::ErrorEvent {
+            error_kind: err.kind(), tool_name: tool,
+            instance_id: &self.instance_id, detail: None,
+        });
     }
 
-    pub(crate) fn track_err_msg(&self, tool: &str, error_kind: &str, err: &str, detail: Option<&str>) {
+    pub(crate) fn track_validation_err(&self, tool: &str, err: &ValidationError) {
+        tracing::warn!(tool, error = %err, "tool error");
+        tracking::track_error(&tracking::ErrorEvent {
+            error_kind: err.kind, tool_name: tool,
+            instance_id: &self.instance_id, detail: err.detail.as_deref(),
+        });
+    }
+
+    pub(crate) fn track_err_msg(&self, tool: &str, error_kind: &str, err: &str) {
         tracing::warn!(tool, error = err, "tool error");
-        tracking::track_error(error_kind, tool, &self.instance_id, detail);
+        tracking::track_error(&tracking::ErrorEvent {
+            error_kind, tool_name: tool,
+            instance_id: &self.instance_id, detail: None,
+        });
     }
 }
 

@@ -35,15 +35,23 @@ pub fn track_event(event: &str, properties: Value, instance_id: &str) {
     });
 }
 
-pub fn track_error(error_kind: &str, tool_name: &str, instance_id: &str, detail: Option<&str>) {
+/// Data needed to track a tool error event.
+pub struct ErrorEvent<'a> {
+    pub error_kind: &'a str,
+    pub tool_name: &'a str,
+    pub instance_id: &'a str,
+    pub detail: Option<&'a str>,
+}
+
+pub fn track_error(evt: &ErrorEvent<'_>) {
     let mut properties = json!({
-        "error": error_kind,
-        "tool": tool_name,
+        "error": evt.error_kind,
+        "tool": evt.tool_name,
     });
-    if let Some(d) = detail {
+    if let Some(d) = evt.detail {
         properties["detail"] = json!(d);
     }
-    track_event("error", properties, instance_id);
+    track_event("error", properties, evt.instance_id);
 }
 
 fn build_tracking_body(te: &mut TrackingEvent) -> Value {
@@ -295,6 +303,14 @@ mod tests {
         reqs[0].clone()
     }
 
+    fn assert_standard_headers(req: &HttpRequest) {
+        assert_eq!(req.headers.get("Accept").unwrap(), "application/json");
+        assert!(req
+            .headers
+            .get("User-Agent")
+            .is_some_and(|v| v.starts_with("codescene-mcp/")));
+    }
+
     #[tokio::test]
     async fn send_event_posts_to_correct_url() {
         let _lock = config::lock_test_env();
@@ -311,11 +327,7 @@ mod tests {
         assert_eq!(req.url, "http://track.test/v2/analytics/track");
         assert_eq!(req.method, Method::Post);
         assert_eq!(req.headers.get("Authorization").unwrap(), "Bearer test-tok");
-        assert_eq!(req.headers.get("Accept").unwrap(), "application/json");
-        assert!(req
-            .headers
-            .get("User-Agent")
-            .is_some_and(|v| v.starts_with("codescene-mcp/")));
+        assert_standard_headers(&req);
 
         std::env::remove_var("CS_ACCESS_TOKEN");
     }
@@ -335,11 +347,7 @@ mod tests {
 
         assert!(req.headers.get("Authorization").is_none());
         assert_eq!(req.headers.get("Content-Type").unwrap(), "application/json");
-        assert_eq!(req.headers.get("Accept").unwrap(), "application/json");
-        assert!(req
-            .headers
-            .get("User-Agent")
-            .is_some_and(|v| v.starts_with("codescene-mcp/")));
+        assert_standard_headers(&req);
     }
 
     #[tokio::test]
@@ -398,27 +406,36 @@ mod tests {
     async fn track_error_disabled_does_not_panic() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_TRACKING", "1");
-        track_error("some error", "some-tool", "test-instance", None);
+        track_error(&ErrorEvent {
+            error_kind: "some error", tool_name: "some-tool",
+            instance_id: "test-instance", detail: None,
+        });
         std::env::remove_var("CS_DISABLE_TRACKING");
+    }
+
+    async fn run_with_tracking_enabled(f: impl FnOnce()) {
+        let _lock = config::lock_test_env();
+        std::env::remove_var("CS_DISABLE_TRACKING");
+        std::env::set_var("CS_TRACKING_URL", "http://192.0.2.1:1/track");
+        f();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        std::env::remove_var("CS_TRACKING_URL");
     }
 
     #[tokio::test]
     async fn track_event_enabled_spawns_without_panic() {
-        let _lock = config::lock_test_env();
-        std::env::remove_var("CS_DISABLE_TRACKING");
-        std::env::set_var("CS_TRACKING_URL", "http://192.0.2.1:1/track");
-        track_event("test-enabled", json!({"key": "val"}), "test-id");
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        std::env::remove_var("CS_TRACKING_URL");
+        run_with_tracking_enabled(|| {
+            track_event("test-enabled", json!({"key": "val"}), "test-id");
+        }).await;
     }
 
     #[tokio::test]
     async fn track_error_enabled_spawns_without_panic() {
-        let _lock = config::lock_test_env();
-        std::env::remove_var("CS_DISABLE_TRACKING");
-        std::env::set_var("CS_TRACKING_URL", "http://192.0.2.1:1/track");
-        track_error("err msg", "tool-name", "test-id", Some(".txt"));
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        std::env::remove_var("CS_TRACKING_URL");
+        run_with_tracking_enabled(|| {
+            track_error(&ErrorEvent {
+                error_kind: "err msg", tool_name: "tool-name",
+                instance_id: "test-id", detail: Some(".txt"),
+            });
+        }).await;
     }
 }

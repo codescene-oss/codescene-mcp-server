@@ -22,7 +22,7 @@ pub(crate) async fn handle(
     let repo_path = docker::adapt_path_for_docker(Path::new(&params.git_repository_path));
     let rp = Path::new(&repo_path);
     if let Err(e) = server.validator.run_checks(&[CliCheck::InsideGitRepo(rp)]) {
-        server.track_err_msg("analyze-change-set", e.kind, &e.message, e.detail.as_deref());
+        server.track_validation_err("analyze-change-set", &e);
         return Ok(tool_error(&e.message));
     }
     let result = run_delta(rp, Some(&params.base_ref), &*server.cli_runner).await;
