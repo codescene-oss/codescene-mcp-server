@@ -30,6 +30,7 @@ impl MockValidator {
             error: Some(ValidationError {
                 message: message.to_string(),
                 kind,
+                detail: None,
             }),
         }
     }
@@ -41,6 +42,7 @@ impl Validator for MockValidator {
             Some(e) => Err(ValidationError {
                 message: e.message.clone(),
                 kind: e.kind,
+                detail: e.detail.clone(),
             }),
             None => Ok(()),
         }

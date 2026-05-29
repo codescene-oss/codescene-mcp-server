@@ -25,7 +25,7 @@ pub(crate) async fn handle(
         CliCheck::SupportedFileType(fp),
         CliCheck::InsideGitRepo(fp),
     ]) {
-        server.track_err_msg("code-health-review", e.kind, &e.message);
+        server.track_validation_err("code-health-review", &e);
         return Ok(tool_error(&e.message));
     }
     let result = run_review(fp, &*server.cli_runner).await;
