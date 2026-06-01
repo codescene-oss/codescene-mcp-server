@@ -453,6 +453,17 @@ impl CodeSceneServer {
     ) -> Result<CallToolResult, ErrorData> {
         tools::sync_skills::handle(self, params).await
     }
+
+    #[tool(
+        description = "Check if the CodeScene MCP Server is correctly installed and configured.\n\nWhen to use:\n    Use this tool to diagnose setup issues such as missing tokens,\n    unavailable git, or environment misconfigurations.\n\nLimitations:\n    - Does not modify any configuration.\n    - Token validation requires a git repository path.\n\nReturns:\n    A summary of verification checks with PASS/FAIL status for each:\n      - Git: whether git is installed and accessible.\n      - Git Repository: whether the given path is inside a git repository.\n      - Access Token: whether CS_ACCESS_TOKEN is set and valid (verified via the CLI).\n      - Runtime Environment: whether running as binary or Docker.\n\nExample:\n    Call this tool when a user reports issues or after initial setup\n    to confirm everything is working. Pass the project root directory\n    as git_repository_path.",
+        input_schema = inlined_schema_for::<GitRepoParam>()
+    )]
+    async fn verify_installation(
+        &self,
+        Parameters(params): Parameters<GitRepoParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::verify_installation::handle(self, params).await
+    }
 }
 
 /// Initialise tracing with stderr output and optional file logging.

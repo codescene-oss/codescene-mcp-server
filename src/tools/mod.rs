@@ -23,6 +23,7 @@ pub mod pre_commit_code_health_safeguard;
 pub mod select_project;
 pub mod set_config;
 pub mod sync_skills;
+pub mod verify_installation;
 
 /// Optional context parameter used by explain tools.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]

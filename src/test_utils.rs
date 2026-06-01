@@ -594,7 +594,7 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server(false);
         let names = tool_names(&server);
-        assert_tool_count_and_config(&names, 19);
+        assert_tool_count_and_config(&names, 20);
         assert!(names.contains(&"code_health_review".to_string()));
     }
 
