@@ -52,15 +52,21 @@ async fn check_token_via_cli(repo_path: &Path, cli_runner: &dyn CliRunner) -> Ch
             detail: "CS_ACCESS_TOKEN is not set or empty.".to_string(),
         };
     }
-    match cli_runner.run(&["delta"], Some(repo_path)).await {
-        Ok(_) => token_pass(),
-        Err(CliError::LicenseCheckFailed) => CheckResult {
+    let cli_future = cli_runner.run(&["delta"], Some(repo_path));
+    match tokio::time::timeout(std::time::Duration::from_secs(30), cli_future).await {
+        Err(_) => CheckResult {
+            name: "Access Token",
+            passed: false,
+            detail: "Token check timed out after 30 s.".to_string(),
+        },
+        Ok(Ok(_)) => token_pass(),
+        Ok(Err(CliError::LicenseCheckFailed)) => CheckResult {
             name: "Access Token",
             passed: false,
             detail: "Token is set but invalid or expired.".to_string(),
         },
         // Any other error (e.g. "no changes") still means auth passed.
-        Err(_) => token_pass(),
+        Ok(Err(_)) => token_pass(),
     }
 }
 
@@ -195,6 +201,32 @@ mod tests {
         let cli = MockCliRunner::with_err(1, "no changes found");
         let result = check_token_via_cli(Path::new("/tmp"), &cli).await;
         assert!(result.passed);
+    }
+
+    #[tokio::test]
+    async fn token_check_timeout_reports_fail() {
+        use crate::errors::CliError;
+
+        struct HangingCli;
+
+        #[async_trait::async_trait]
+        impl CliRunner for HangingCli {
+            async fn run(&self, _args: &[&str], _working_dir: Option<&Path>) -> Result<String, CliError> {
+                tokio::time::sleep(std::time::Duration::from_secs(999)).await;
+                Ok(String::new())
+            }
+        }
+
+        let _g = set_token("tok");
+        let cli_future = HangingCli.run(&["delta"], Some(Path::new("/tmp")));
+        let result = match tokio::time::timeout(std::time::Duration::from_millis(50), cli_future).await {
+            Err(_) => CheckResult { name: "Access Token", passed: false, detail: "timed out".to_string() },
+            Ok(Ok(_)) => token_pass(),
+            Ok(Err(CliError::LicenseCheckFailed)) => CheckResult { name: "Access Token", passed: false, detail: "invalid".to_string() },
+            Ok(Err(_)) => token_pass(),
+        };
+        assert!(!result.passed);
+        assert!(result.detail.contains("timed out"));
     }
 
     // -- check_git_available -------------------------------------------------
