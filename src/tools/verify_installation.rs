@@ -73,11 +73,15 @@ fn token_pass() -> CheckResult {
 }
 
 async fn check_git_available() -> CheckResult {
-    match tokio::process::Command::new("git")
+    let outcome = tokio::process::Command::new("git")
         .arg("--version")
         .output()
-        .await
-    {
+        .await;
+    interpret_git_output(outcome)
+}
+
+fn interpret_git_output(outcome: std::io::Result<std::process::Output>) -> CheckResult {
+    match outcome {
         Ok(output) if output.status.success() => {
             let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
             CheckResult {
@@ -200,6 +204,24 @@ mod tests {
         let result = check_git_available().await;
         assert!(result.passed);
         assert!(result.detail.contains("git version"));
+    }
+
+    #[test]
+    fn git_non_zero_exit_reports_fail() {
+        use std::process::{Command, Output};
+        // Run a command that exits non-zero to get a real ExitStatus
+        let bad: Output = Command::new("sh").arg("-c").arg("exit 42").output().unwrap();
+        let result = interpret_git_output(Ok(bad));
+        assert!(!result.passed);
+        assert!(result.detail.contains("exited with code 42"));
+    }
+
+    #[test]
+    fn git_spawn_error_reports_fail() {
+        let err = std::io::Error::new(std::io::ErrorKind::NotFound, "not found");
+        let result = interpret_git_output(Err(err));
+        assert!(!result.passed);
+        assert!(result.detail.contains("Could not run git"));
     }
 
     // -- check_git_repository ------------------------------------------------
