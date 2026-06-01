@@ -9,6 +9,7 @@ Tests that the verify_installation MCP tool correctly checks:
 4. The runtime environment is detected (binary or docker)
 """
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -103,7 +104,16 @@ def test_all_checks_pass(command: list[str], env: dict, repo_dir: Path) -> bool:
             {"git_repository_path": str(repo_dir)},
             timeout=60,
         )
+
+        print(f"  [DEBUG] Raw response keys: {list(response.keys())}")
+        print(f"  [DEBUG] Raw response: {json.dumps(response, default=str)[:2000]}")
+
+        if "error" in response:
+            print_test("Tool call succeeded", False, f"Error: {response['error']}")
+            return False
+
         result_text = extract_result_text(response)
+        print(f"  [DEBUG] Extracted text ({len(result_text)} chars): {result_text[:500]}")
 
         has_content = len(result_text) > 0
         print_test("Returned content", has_content, f"Length: {len(result_text)} chars")
@@ -153,7 +163,16 @@ def test_reports_git_repository(command: list[str], env: dict, repo_dir: Path) -
             {"git_repository_path": str(repo_dir)},
             timeout=60,
         )
+
+        print(f"  [DEBUG] Raw response keys: {list(response.keys())}")
+        print(f"  [DEBUG] Raw response: {json.dumps(response, default=str)[:2000]}")
+
+        if "error" in response:
+            print_test("Tool call succeeded", False, f"Error: {response['error']}")
+            return False
+
         result_text = extract_result_text(response)
+        print(f"  [DEBUG] Extracted text ({len(result_text)} chars): {result_text[:500]}")
 
         has_repo_pass = "[pass] git repository" in result_text.lower()
         print_test("Git Repository check passed", has_repo_pass)
@@ -195,7 +214,16 @@ def test_non_repo_fails_git_check(command: list[str], env: dict, test_dir: Path)
             {"git_repository_path": str(non_repo_dir)},
             timeout=60,
         )
+
+        print(f"  [DEBUG] Raw response keys: {list(response.keys())}")
+        print(f"  [DEBUG] Raw response: {json.dumps(response, default=str)[:2000]}")
+
+        if "error" in response:
+            print_test("Tool call succeeded", False, f"Error: {response['error']}")
+            return False
+
         result_text = extract_result_text(response)
+        print(f"  [DEBUG] Extracted text ({len(result_text)} chars): {result_text[:500]}")
 
         has_repo_fail = "[fail] git repository" in result_text.lower()
         print_test("Git Repository check failed as expected", has_repo_fail)
