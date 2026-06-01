@@ -52,7 +52,13 @@ async fn check_token_via_cli(repo_path: &Path, cli_runner: &dyn CliRunner) -> Ch
             detail: "CS_ACCESS_TOKEN is not set or empty.".to_string(),
         };
     }
-    let cli_future = cli_runner.run(&["delta"], Some(repo_path));
+    // Use `review` on a known source file instead of `delta` because
+    // `delta` performs heavyweight git operations that can hang on
+    // Windows.  The license check runs before any analysis, so any
+    // analysable file works.
+    let probe = find_probe_file(repo_path);
+    let args: Vec<&str> = vec!["review", "--output-format=json", &probe];
+    let cli_future = cli_runner.run(&args, Some(repo_path));
     match tokio::time::timeout(std::time::Duration::from_secs(30), cli_future).await {
         Err(_) => CheckResult {
             name: "Access Token",
@@ -65,9 +71,24 @@ async fn check_token_via_cli(repo_path: &Path, cli_runner: &dyn CliRunner) -> Ch
             passed: false,
             detail: "Token is set but invalid or expired.".to_string(),
         },
-        // Any other error (e.g. "no changes") still means auth passed.
+        // Any other error (e.g. unsupported file) still means auth passed.
         Ok(Err(_)) => token_pass(),
     }
+}
+
+/// Find a source file in the repo to use as a probe for the license
+/// check.  Falls back to a non-existent path which still triggers the
+/// license validation before the CLI reports "file not found".
+fn find_probe_file(repo_path: &Path) -> String {
+    for entry in repo_path.read_dir().into_iter().flatten() {
+        if let Ok(e) = entry {
+            let path = e.path();
+            if path.is_file() {
+                return path.to_string_lossy().to_string();
+            }
+        }
+    }
+    repo_path.join("__probe__.py").to_string_lossy().to_string()
 }
 
 fn token_pass() -> CheckResult {
