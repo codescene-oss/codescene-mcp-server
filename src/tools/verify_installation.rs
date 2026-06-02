@@ -16,15 +16,12 @@ pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: GitRepoParam,
 ) -> Result<CallToolResult, ErrorData> {
-    tracing::info!("verify_installation: starting");
     server.version_checker.check_in_background();
     let project_root = docker::adapt_path_for_docker(Path::new(&params.git_repository_path));
     let checks = run_all_checks(&project_root, &*server.cli_runner).await;
-    tracing::info!("verify_installation: checks complete");
     let text = format_results(&checks);
     server.track("verify-installation", json!({}));
     let text = server.maybe_version_warning(&text).await;
-    tracing::info!("verify_installation: responding");
     Ok(CallToolResult::success(vec![Content::text(text)]))
 }
 
@@ -36,15 +33,12 @@ struct CheckResult {
 
 async fn run_all_checks(project_root: &str, cli_runner: &dyn CliRunner) -> Vec<CheckResult> {
     let path = Path::new(project_root);
-    tracing::info!("verify_installation: checking git available");
-    let git = check_git_available().await;
-    tracing::info!("verify_installation: checking git repository");
-    let repo = check_git_repository(path);
-    tracing::info!("verify_installation: checking token");
-    let token = check_token_via_cli(path, cli_runner).await;
-    tracing::info!("verify_installation: checking environment");
-    let env = check_environment();
-    vec![git, repo, token, env]
+    vec![
+        check_git_available().await,
+        check_git_repository(path),
+        check_token_via_cli(path, cli_runner).await,
+        check_environment(),
+    ]
 }
 
 async fn check_token_via_cli(repo_path: &Path, cli_runner: &dyn CliRunner) -> CheckResult {
@@ -106,11 +100,17 @@ fn token_pass() -> CheckResult {
 }
 
 async fn check_git_available() -> CheckResult {
-    let outcome = tokio::process::Command::new("git")
+    let git_future = tokio::process::Command::new("git")
         .arg("--version")
-        .output()
-        .await;
-    interpret_git_output(outcome)
+        .output();
+    match tokio::time::timeout(std::time::Duration::from_secs(10), git_future).await {
+        Ok(outcome) => interpret_git_output(outcome),
+        Err(_) => CheckResult {
+            name: "Git",
+            passed: false,
+            detail: "git --version timed out after 10 s.".to_string(),
+        },
+    }
 }
 
 fn interpret_git_output(outcome: std::io::Result<std::process::Output>) -> CheckResult {
