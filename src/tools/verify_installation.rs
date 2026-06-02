@@ -31,16 +31,22 @@ struct CheckResult {
     detail: String,
 }
 
+const TOKEN_CHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 async fn run_all_checks(project_root: &str, cli_runner: &dyn CliRunner) -> Vec<CheckResult> {
     let path = Path::new(project_root);
     vec![
         check_git_repository(path),
-        check_token_via_cli(path, cli_runner).await,
+        check_token_via_cli(path, cli_runner, TOKEN_CHECK_TIMEOUT).await,
         check_environment(),
     ]
 }
 
-async fn check_token_via_cli(repo_path: &Path, cli_runner: &dyn CliRunner) -> CheckResult {
+async fn check_token_via_cli(
+    repo_path: &Path,
+    cli_runner: &dyn CliRunner,
+    timeout: std::time::Duration,
+) -> CheckResult {
     let token = std::env::var("CS_ACCESS_TOKEN")
         .map(|v| v.trim().to_string())
         .unwrap_or_default();
@@ -58,7 +64,7 @@ async fn check_token_via_cli(repo_path: &Path, cli_runner: &dyn CliRunner) -> Ch
     let probe = find_probe_file(repo_path);
     let args: Vec<&str> = vec!["review", "--output-format=json", &probe];
     let cli_future = cli_runner.run(&args, Some(repo_path));
-    match tokio::time::timeout(std::time::Duration::from_secs(30), cli_future).await {
+    match tokio::time::timeout(timeout, cli_future).await {
         Err(_) => CheckResult {
             name: "Access Token",
             passed: false,
@@ -152,13 +158,15 @@ mod tests {
         }
     }
 
+    const TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
     // -- check_token_via_cli -------------------------------------------------
 
     #[tokio::test]
     async fn token_missing_reports_fail() {
         let _g = clear_token();
         let cli = MockCliRunner::with_ok("");
-        let result = check_token_via_cli(Path::new("/tmp"), &cli).await;
+        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
         assert!(!result.passed);
         assert!(result.detail.contains("not set"));
     }
@@ -167,7 +175,7 @@ mod tests {
     async fn token_valid_reports_pass() {
         let _g = set_token("tok");
         let cli = MockCliRunner::with_ok("{}");
-        let result = check_token_via_cli(Path::new("/tmp"), &cli).await;
+        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
         assert!(result.passed);
         assert!(result.detail.contains("authenticated"));
     }
@@ -176,7 +184,7 @@ mod tests {
     async fn token_invalid_reports_fail() {
         let _g = set_token("bad");
         let cli = MockCliRunner::with_responses(vec![Err(CliError::LicenseCheckFailed)]);
-        let result = check_token_via_cli(Path::new("/tmp"), &cli).await;
+        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
         assert!(!result.passed);
         assert!(result.detail.contains("invalid or expired"));
     }
@@ -185,7 +193,7 @@ mod tests {
     async fn non_license_error_still_passes_auth() {
         let _g = set_token("tok");
         let cli = MockCliRunner::with_err(1, "no changes found");
-        let result = check_token_via_cli(Path::new("/tmp"), &cli).await;
+        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
         assert!(result.passed);
     }
 
@@ -204,13 +212,8 @@ mod tests {
         }
 
         let _g = set_token("tok");
-        let cli_future = HangingCli.run(&["delta"], Some(Path::new("/tmp")));
-        let result = match tokio::time::timeout(std::time::Duration::from_millis(50), cli_future).await {
-            Err(_) => CheckResult { name: "Access Token", passed: false, detail: "timed out".to_string() },
-            Ok(Ok(_)) => token_pass(),
-            Ok(Err(CliError::LicenseCheckFailed)) => CheckResult { name: "Access Token", passed: false, detail: "invalid".to_string() },
-            Ok(Err(_)) => token_pass(),
-        };
+        let short = std::time::Duration::from_millis(50);
+        let result = check_token_via_cli(Path::new("/tmp"), &HangingCli, short).await;
         assert!(!result.passed);
         assert!(result.detail.contains("timed out"));
     }
@@ -266,6 +269,23 @@ mod tests {
         assert!(output.contains("[PASS] A: ok"));
         assert!(output.contains("[FAIL] B: fail"));
         assert!(output.contains("1/2 checks passed"));
+    }
+
+    // -- find_probe_file -----------------------------------------------------
+
+    #[test]
+    fn probe_file_falls_back_when_dir_is_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let probe = find_probe_file(dir.path());
+        assert!(probe.ends_with("__probe__.py"));
+    }
+
+    #[test]
+    fn probe_file_finds_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("hello.py"), "x = 1").unwrap();
+        let probe = find_probe_file(dir.path());
+        assert!(probe.ends_with("hello.py"));
     }
 
     // -- handle (integration) ------------------------------------------------
