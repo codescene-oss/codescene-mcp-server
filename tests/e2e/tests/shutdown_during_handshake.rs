@@ -57,8 +57,7 @@ fn send_message(child: &mut std::process::Child, message: &serde_json::Value) {
     stdin.flush().expect("failed to flush stdin");
 }
 
-fn close_stdin_and_wait(mut child: std::process::Child) -> (Option<i32>, String) {
-    drop(child.stdin.take());
+fn wait_for_exit(mut child: std::process::Child) -> (Option<i32>, String) {
     let timeout = Duration::from_secs(EXIT_TIMEOUT_SECS);
     let start = Instant::now();
     loop {
@@ -86,6 +85,11 @@ fn close_stdin_and_wait(mut child: std::process::Child) -> (Option<i32>, String)
             }
         }
     }
+}
+
+fn close_stdin_and_wait(mut child: std::process::Child) -> (Option<i32>, String) {
+    drop(child.stdin.take());
+    wait_for_exit(child)
 }
 
 fn initialize_request() -> serde_json::Value {
@@ -159,4 +163,63 @@ pub fn test_stdin_closed_after_full_handshake() {
 
     let (exit_code, stderr) = close_stdin_and_wait(child);
     check_clean_exit(exit_code, &stderr, "stdin closed after full handshake");
+}
+
+// ---------------------------------------------------------------------------
+// SIGTERM tests (Unix + npm backend only)
+// ---------------------------------------------------------------------------
+
+fn is_npm_backend() -> bool {
+    std::env::var("CS_MCP_BACKEND").as_deref() == Ok("npm")
+}
+
+#[allow(unused_mut)]
+fn sigterm_and_wait(mut child: std::process::Child) -> (Option<i32>, String) {
+    #[cfg(unix)]
+    {
+        unsafe {
+            libc::kill(child.id() as i32, libc::SIGTERM);
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = child.kill();
+    }
+
+    wait_for_exit(child)
+}
+
+#[test]
+pub fn test_sigterm_before_any_input() {
+    if cfg!(windows) || !is_npm_backend() {
+        eprintln!("  SKIP: SIGTERM tests only run on Unix with npm backend");
+        return;
+    }
+
+    let (command, env, temp_dir) = shutdown_setup();
+    let child = spawn_server(&command, &env, temp_dir.path());
+    std::thread::sleep(Duration::from_millis(300));
+
+    let (exit_code, stderr) = sigterm_and_wait(child);
+    check_clean_exit(exit_code, &stderr, "SIGTERM before any input");
+}
+
+#[test]
+pub fn test_sigterm_after_full_handshake() {
+    if cfg!(windows) || !is_npm_backend() {
+        eprintln!("  SKIP: SIGTERM tests only run on Unix with npm backend");
+        return;
+    }
+
+    let (command, env, temp_dir) = shutdown_setup();
+    let mut child = spawn_server(&command, &env, temp_dir.path());
+
+    send_message(&mut child, &initialize_request());
+    std::thread::sleep(Duration::from_millis(300));
+
+    send_message(&mut child, &initialized_notification());
+    std::thread::sleep(Duration::from_millis(300));
+
+    let (exit_code, stderr) = sigterm_and_wait(child);
+    check_clean_exit(exit_code, &stderr, "SIGTERM after full handshake");
 }

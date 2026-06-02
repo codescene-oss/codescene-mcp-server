@@ -65,6 +65,8 @@ rcgen = "0.14"
 rustls = { version = "0.23", features = ["aws_lc_rs"] }
 rustls-pemfile = "2"
 libc = "0.2"
+sha2 = "0.10"
+hex = "0.4"
 
 [profile.release]
 opt-level = "z"

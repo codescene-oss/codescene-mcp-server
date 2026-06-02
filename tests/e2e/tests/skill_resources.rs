@@ -94,6 +94,23 @@ pub fn test_list_resources() {
             "Missing {manifest_uri}"
         );
     }
+
+    // Verify SKILL.md metadata (mimeType, description)
+    let sample = resources
+        .iter()
+        .find(|r| r["uri"].as_str().is_some_and(|u| u.ends_with("/SKILL.md")))
+        .expect("Should find a SKILL.md resource");
+
+    assert_eq!(
+        sample.get("mimeType").and_then(|v| v.as_str()),
+        Some("text/markdown"),
+        "SKILL.md should have text/markdown mime type"
+    );
+
+    assert!(
+        sample.get("description").and_then(|v| v.as_str()).is_some_and(|d| !d.is_empty()),
+        "SKILL.md should have a non-empty description"
+    );
 }
 
 pub fn test_read_skill_md() {
@@ -159,6 +176,24 @@ pub fn test_read_manifest() {
         .expect("Manifest should have files array");
 
     assert_eq!(files.len(), 1, "Manifest should list one file");
+
+    let file_entry = &files[0];
+    assert_eq!(
+        file_entry["path"].as_str(),
+        Some("SKILL.md"),
+        "File path should be SKILL.md"
+    );
+
+    let size = file_entry["size"].as_u64().unwrap_or(0);
+    assert!(size > 0, "File should have positive size, got: {size}");
+
+    let hash = file_entry["hash"]
+        .as_str()
+        .unwrap_or("");
+    assert!(
+        hash.starts_with("sha256:"),
+        "File should have sha256 hash, got: '{hash}'"
+    );
 }
 
 pub fn test_list_resource_templates() {

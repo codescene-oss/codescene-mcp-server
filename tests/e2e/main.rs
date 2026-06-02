@@ -55,6 +55,7 @@ pub fn find_or_build_executable() -> std::path::PathBuf {
     if let Ok(path) = std::env::var("CS_MCP_EXECUTABLE") {
         let p = std::path::PathBuf::from(path);
         if p.exists() {
+            ensure_executable(&p);
             return p;
         }
     }
@@ -78,6 +79,20 @@ pub fn find_or_build_executable() -> std::path::PathBuf {
 
     release_binary
 }
+
+#[cfg(unix)]
+fn ensure_executable(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(meta) = std::fs::metadata(path) {
+        let mode = meta.permissions().mode();
+        if mode & 0o111 == 0 {
+            let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode | 0o755));
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn ensure_executable(_path: &Path) {}
 
 pub fn make_client(command: &[String], env: &[(String, String)], cwd: &Path) -> MCPClient {
     MCPClient::new(
@@ -308,6 +323,68 @@ fn test_verify_installation() {
     );
 }
 
+#[test]
+fn test_verify_reports_git_repository() {
+    let (command, env, repo_dir, _tmp) = setup();
+    let mut client = make_client(&command, &env, &repo_dir);
+
+    assert!(client.start(), "Server should start");
+    client.initialize().expect("Initialize should succeed");
+
+    let response = client
+        .call_tool(
+            "verify_installation",
+            json!({"git_repository_path": repo_dir.to_string_lossy()}),
+            Duration::from_secs(60),
+        )
+        .expect("Tool call should succeed");
+
+    let result_text = extract_result_text(&response);
+    let lower = result_text.to_lowercase();
+
+    assert!(
+        lower.contains("[pass] git repository"),
+        "Git repository check should pass"
+    );
+    assert!(
+        lower.contains("git root"),
+        "Should report git root path"
+    );
+}
+
+#[test]
+fn test_verify_non_repo_fails_git_check() {
+    let (command, env, _, _tmp) = setup();
+    let non_repo = create_temp_dir("cs_mcp_non_repo_").expect("temp dir");
+    let non_repo_dir = non_repo.path().join("not_a_repo");
+    std::fs::create_dir_all(&non_repo_dir).expect("create dir");
+
+    let mut client = make_client(&command, &env, &non_repo_dir);
+
+    assert!(client.start(), "Server should start");
+    client.initialize().expect("Initialize should succeed");
+
+    let response = client
+        .call_tool(
+            "verify_installation",
+            json!({"git_repository_path": non_repo_dir.to_string_lossy()}),
+            Duration::from_secs(60),
+        )
+        .expect("Tool call should succeed");
+
+    let result_text = extract_result_text(&response);
+    let lower = result_text.to_lowercase();
+
+    assert!(
+        lower.contains("[fail] git repository"),
+        "Git repository check should fail"
+    );
+    assert!(
+        lower.contains("not inside a git repository"),
+        "Should report not inside a git repository"
+    );
+}
+
 // ============================================================================
 // Ported test modules
 // ============================================================================
@@ -531,6 +608,89 @@ fn test_stdin_closed_after_full_handshake() {
     tests::shutdown_during_handshake::test_stdin_closed_after_full_handshake();
 }
 
+#[test]
+fn test_sigterm_before_any_input() {
+    tests::shutdown_during_handshake::test_sigterm_before_any_input();
+}
+
+#[test]
+fn test_sigterm_after_full_handshake() {
+    tests::shutdown_during_handshake::test_sigterm_after_full_handshake();
+}
+
+// --- Platform Specific ---
+#[test]
+fn test_platform_absolute_paths() {
+    tests::platform_specific::test_absolute_paths();
+}
+
+#[test]
+fn test_platform_relative_paths() {
+    tests::platform_specific::test_relative_paths();
+}
+
+#[test]
+fn test_platform_symlinks() {
+    tests::platform_specific::test_symlinks();
+}
+
+#[test]
+fn test_platform_spaces_in_paths() {
+    tests::platform_specific::test_spaces_in_paths();
+}
+
+#[test]
+fn test_platform_unicode_in_paths() {
+    tests::platform_specific::test_unicode_in_paths();
+}
+
+// --- Git Worktree ---
+#[test]
+fn test_worktree_code_health_score() {
+    tests::git_worktree::test_worktree_code_health_score();
+}
+
+#[test]
+fn test_worktree_code_health_review() {
+    tests::git_worktree::test_worktree_code_health_review();
+}
+
+#[test]
+fn test_worktree_pre_commit() {
+    tests::git_worktree::test_worktree_pre_commit();
+}
+
+#[test]
+fn test_worktree_absolute_paths() {
+    tests::git_worktree::test_worktree_absolute_paths();
+}
+
+// --- Git Subtree ---
+#[test]
+fn test_subtree_code_health_score() {
+    tests::git_subtree::test_subtree_code_health_score();
+}
+
+#[test]
+fn test_subtree_code_health_review() {
+    tests::git_subtree::test_subtree_code_health_review();
+}
+
+#[test]
+fn test_subtree_pre_commit() {
+    tests::git_subtree::test_subtree_pre_commit();
+}
+
+#[test]
+fn test_subtree_absolute_paths() {
+    tests::git_subtree::test_subtree_absolute_paths();
+}
+
+#[test]
+fn test_subtree_main_repo_still_works() {
+    tests::git_subtree::test_main_repo_still_works();
+}
+
 // --- Version Check ---
 #[test]
 fn test_version_tool_responds_when_github_unreachable() {
@@ -596,6 +756,43 @@ fn test_analytics_enriched_common_properties() {
 #[test]
 fn test_analytics_enriched_tool_specific_properties() {
     tests::analytics_tracking::test_enriched_event_contains_tool_specific_properties();
+}
+
+// --- Analytics Tracking (enriched tool-specific) ---
+#[test]
+fn test_analytics_enriched_review_event() {
+    tests::analytics_tracking::test_enriched_review_event();
+}
+
+#[test]
+fn test_analytics_enriched_pre_commit_event() {
+    tests::analytics_tracking::test_enriched_pre_commit_event();
+}
+
+#[test]
+fn test_analytics_enriched_analyze_change_set_event() {
+    tests::analytics_tracking::test_enriched_analyze_change_set_event();
+}
+
+#[test]
+fn test_analytics_enriched_pre_commit_with_findings() {
+    tests::analytics_tracking::test_enriched_pre_commit_event_with_findings();
+}
+
+#[test]
+fn test_analytics_enriched_change_set_with_findings() {
+    tests::analytics_tracking::test_enriched_analyze_change_set_event_with_findings();
+}
+
+// --- Analytics Environment Override ---
+#[test]
+fn test_analytics_default_environment_is_sent() {
+    tests::analytics_environment_override::test_default_environment_is_sent();
+}
+
+#[test]
+fn test_analytics_overridden_environment_is_sent() {
+    tests::analytics_environment_override::test_overridden_environment_is_sent();
 }
 
 // --- CloudFront Headers ---

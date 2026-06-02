@@ -43,7 +43,7 @@ jobs:
       - name: Install coverage tooling
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Run Rust tests with cobertura coverage
-        run: cargo llvm-cov --workspace --cobertura --output-path coverage.xml
+        run: cargo llvm-cov --bin cs-mcp --cobertura --output-path coverage.xml
       - name: Upload Rust coverage report
         uses: actions/upload-artifact@v4
         with:

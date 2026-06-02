@@ -6,7 +6,7 @@
 
 use super::*;
 
-const DEFAULT_ITERATIONS: usize = 50;
+const DEFAULT_ITERATIONS: usize = 250;
 const TIMEOUT_SECS: u64 = 90;
 const TELEMETRY_RACE_MARKERS: &[&str] = &["NoSuchFileException", "codescene-cli.log.jsonl"];
 
@@ -25,7 +25,8 @@ fn check_single_call(client: &mut MCPClient, file_path: &Path) -> (bool, bool) {
         Ok(resp) => {
             let text = extract_result_text(resp);
             let has_race = contains_telemetry_race_error(&text);
-            let failed = text.is_empty() || has_race;
+            let has_error_key = resp.get("error").is_some();
+            let failed = text.is_empty() || has_race || has_error_key;
             (failed, has_race)
         }
         Err(_) => (true, false),

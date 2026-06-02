@@ -17,6 +17,7 @@ pub mod fake_http_server;
 pub mod fake_https_server;
 
 pub mod analyze_change_set;
+pub mod analytics_environment_override;
 pub mod analytics_tracking;
 pub mod bundled_docs;
 pub mod business_case;
@@ -24,6 +25,9 @@ pub mod cloudfront_headers;
 pub mod configure;
 pub mod enabled_tools;
 pub mod error_logging;
+pub mod git_subtree;
+pub mod git_worktree;
+pub mod platform_specific;
 pub mod relative_paths;
 pub mod require_access_token;
 pub mod shutdown_during_handshake;

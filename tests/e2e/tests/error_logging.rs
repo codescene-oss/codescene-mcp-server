@@ -144,6 +144,10 @@ pub fn test_error_telemetry_sends_only_kind() {
             !error_value.contains('/') && !error_value.contains('\\'),
             "Error kind should not contain path separators: '{error_value}'"
         );
+        assert!(
+            !error_value.contains("exited with code"),
+            "No raw stderr should leak into telemetry: '{error_value}'"
+        );
     }
 }
 
@@ -220,6 +224,19 @@ pub fn test_error_logged_to_file() {
         log_content.to_lowercase().contains("error"),
         "Log files should contain error details"
     );
+
+    let detail_markers = [
+        "does_not_exist_xyz",
+        "no such file",
+        "not a supported",
+        "non_zero_exit",
+        "invalid_input",
+        "file_not_found",
+    ];
+    let has_detail = detail_markers
+        .iter()
+        .any(|m| log_content.to_lowercase().contains(m));
+    assert!(has_detail, "Log should contain error detail markers");
 }
 
 pub fn test_file_logging_disabled_when_zero() {

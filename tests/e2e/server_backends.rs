@@ -150,8 +150,10 @@ impl ServerBackend for DockerBackend {
     }
 
     fn get_command(&self, working_dir: &Path) -> Vec<String> {
-        let uid = unsafe { libc::getuid() };
-        let gid = unsafe { libc::getgid() };
+        #[cfg(unix)]
+        let (uid, gid) = unsafe { (libc::getuid(), libc::getgid()) };
+        #[cfg(not(unix))]
+        let (uid, gid) = (0u32, 0u32);
 
         let mut cmd = vec![
             "docker".to_string(),

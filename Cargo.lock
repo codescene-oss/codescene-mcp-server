@@ -435,6 +435,7 @@ dependencies = [
  "dirs",
  "ed25519-dalek",
  "gray_matter",
+ "hex",
  "libc",
  "p12-keystore",
  "rcgen",

@@ -386,13 +386,18 @@ fn extract_zip_to_cache(cache_dir: &Path, zip_data: &[u8]) -> Result<PathBuf, Cl
 
     std::fs::create_dir_all(cache_dir)?;
 
+    // Extract to a temporary directory first, then atomically rename
+    // to avoid races when multiple processes extract in parallel.
+    let tmp_dir = tempfile::tempdir_in(cache_dir)?;
+
     let cursor = std::io::Cursor::new(zip_data);
     let mut archive = zip::ZipArchive::new(cursor)
         .map_err(|e| CliError::NotFound(format!("Invalid embedded CLI zip: {e}")))?;
 
-    extract_cli_binary(&mut archive, cache_dir)?;
+    extract_cli_binary(&mut archive, tmp_dir.path())?;
 
-    if !binary_path.exists() {
+    let tmp_binary = tmp_dir.path().join(CLI_BINARY_NAME);
+    if !tmp_binary.exists() {
         return Err(CliError::NotFound(format!(
             "CLI binary '{CLI_BINARY_NAME}' not found in embedded zip"
         )));
@@ -403,8 +408,17 @@ fn extract_zip_to_cache(cache_dir: &Path, zip_data: &[u8]) -> Result<PathBuf, Cl
     {
         use std::os::unix::fs::PermissionsExt;
         let perms = std::fs::Permissions::from_mode(0o755);
-        std::fs::set_permissions(&binary_path, perms)?;
+        std::fs::set_permissions(&tmp_binary, perms)?;
     }
+
+    // Atomic rename — if another process already placed the binary,
+    // the rename may fail on some platforms; that is fine.
+    if !binary_path.exists() {
+        std::fs::rename(&tmp_binary, &binary_path)?;
+    }
+
+    // Clean up temp dir (best-effort)
+    let _ = tmp_dir.close();
 
     Ok(binary_path)
 }
