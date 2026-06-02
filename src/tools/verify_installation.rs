@@ -34,7 +34,6 @@ struct CheckResult {
 async fn run_all_checks(project_root: &str, cli_runner: &dyn CliRunner) -> Vec<CheckResult> {
     let path = Path::new(project_root);
     vec![
-        check_git_available().await,
         check_git_repository(path),
         check_token_via_cli(path, cli_runner).await,
         check_environment(),
@@ -96,46 +95,6 @@ fn token_pass() -> CheckResult {
         name: "Access Token",
         passed: true,
         detail: "Token is set and authenticated successfully.".to_string(),
-    }
-}
-
-async fn check_git_available() -> CheckResult {
-    let git_future = tokio::process::Command::new("git")
-        .arg("--version")
-        .output();
-    match tokio::time::timeout(std::time::Duration::from_secs(10), git_future).await {
-        Ok(outcome) => interpret_git_output(outcome),
-        Err(_) => CheckResult {
-            name: "Git",
-            passed: false,
-            detail: "git --version timed out after 10 s.".to_string(),
-        },
-    }
-}
-
-fn interpret_git_output(outcome: std::io::Result<std::process::Output>) -> CheckResult {
-    match outcome {
-        Ok(output) if output.status.success() => {
-            let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            CheckResult {
-                name: "Git",
-                passed: true,
-                detail: format!("Found: {version}"),
-            }
-        }
-        Ok(output) => CheckResult {
-            name: "Git",
-            passed: false,
-            detail: format!(
-                "git exited with code {}.",
-                output.status.code().unwrap_or(-1)
-            ),
-        },
-        Err(e) => CheckResult {
-            name: "Git",
-            passed: false,
-            detail: format!("Could not run git: {e}"),
-        },
     }
 }
 
@@ -254,33 +213,6 @@ mod tests {
         };
         assert!(!result.passed);
         assert!(result.detail.contains("timed out"));
-    }
-
-    // -- check_git_available -------------------------------------------------
-
-    #[tokio::test]
-    async fn git_check_succeeds() {
-        let result = check_git_available().await;
-        assert!(result.passed);
-        assert!(result.detail.contains("git version"));
-    }
-
-    #[test]
-    fn git_non_zero_exit_reports_fail() {
-        use std::process::{Command, Output};
-        // Run a command that exits non-zero to get a real ExitStatus
-        let bad: Output = Command::new("sh").arg("-c").arg("exit 42").output().unwrap();
-        let result = interpret_git_output(Ok(bad));
-        assert!(!result.passed);
-        assert!(result.detail.contains("exited with code 42"));
-    }
-
-    #[test]
-    fn git_spawn_error_reports_fail() {
-        let err = std::io::Error::new(std::io::ErrorKind::NotFound, "not found");
-        let result = interpret_git_output(Err(err));
-        assert!(!result.passed);
-        assert!(result.detail.contains("Could not run git"));
     }
 
     // -- check_git_repository ------------------------------------------------

@@ -3,10 +3,9 @@
 Verify Installation integration tests.
 
 Tests that the verify_installation MCP tool correctly checks:
-1. Git is installed and accessible
-2. The project root is inside a git repository
-3. The access token is set and valid (verified via the CLI)
-4. The runtime environment is detected (binary or docker)
+1. The project root is inside a git repository
+2. The access token is set and valid (verified via the CLI)
+3. The runtime environment is detected (binary or docker)
 """
 
 import os
@@ -85,9 +84,6 @@ def run_verify_installation_tests_with_backend(backend: ServerBackend) -> int:
 def test_all_checks_pass(command: list[str], env: dict, repo_dir: Path) -> bool:
     """
     Test that the verify_installation tool responds with a valid report.
-    Individual checks may fail on CI (e.g. git --version can hang on
-    Windows runners), so we assert on the structure rather than every
-    check passing.
     """
     print_header("Test: All Checks Run")
 
