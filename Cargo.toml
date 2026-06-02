@@ -58,6 +58,14 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 tempfile = "3"
 gray_matter = { version = "0.3.2", features = ["yaml"] }
 
+[dev-dependencies]
+regex = "1"
+tiny_http = "0.12"
+rcgen = "0.14"
+rustls = { version = "0.23", features = ["aws_lc_rs"] }
+rustls-pemfile = "2"
+libc = "0.2"
+
 [profile.release]
 opt-level = "z"
 lto = true
