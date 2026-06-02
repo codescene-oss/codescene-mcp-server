@@ -460,6 +460,7 @@ def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool
     from test_standalone_license import run_standalone_license_tests_with_backend
     from test_ssl_api_ca_bundle import run_ssl_api_ca_bundle_tests_with_backend
     from test_ssl_cli_truststore import run_ssl_cli_truststore_tests_with_backend
+    from test_verify_installation import run_verify_installation_tests_with_backend
     from test_version_check import run_version_check_tests_with_backend
 
     modules = [
@@ -488,6 +489,7 @@ def _run_additional_test_modules(backend: ServerBackend) -> list[tuple[str, bool
         ("SSL API CA Bundle Tests", run_ssl_api_ca_bundle_tests_with_backend),
         ("Error Logging Tests", run_error_logging_tests_with_backend),
         ("Skill Resources Tests", run_skill_resources_tests_with_backend),
+        ("Verify Installation Tests", run_verify_installation_tests_with_backend),
     ]
     return [_run_test_module(name, func, backend) for name, func in modules]
 
