@@ -72,7 +72,12 @@ impl FakeHttpsServer {
         let handler: Arc<dyn Fn(&CapturedRequest) -> (u16, String) + Send + Sync> =
             Arc::new(handler);
 
-        thread::spawn(move || serve_loop(listener, acceptor, stop, reqs, handler));
+        thread::spawn(move || serve_loop(listener, ServerState {
+            tls_config: acceptor,
+            shutdown: stop,
+            captured: reqs,
+            handler,
+        }));
 
         FakeHttpsServer {
             port,
@@ -170,19 +175,20 @@ fn build_tls_config(cert_dir: &Path) -> (GeneratedCerts, rustls::ServerConfig) {
 // Accept loop
 // ---------------------------------------------------------------------------
 
-fn serve_loop(
-    listener: TcpListener,
+struct ServerState {
     tls_config: Arc<rustls::ServerConfig>,
     shutdown: Arc<Mutex<bool>>,
     captured: Arc<Mutex<Vec<CapturedRequest>>>,
     handler: Arc<dyn Fn(&CapturedRequest) -> (u16, String) + Send + Sync>,
-) {
-    while !*shutdown.lock().unwrap() {
+}
+
+fn serve_loop(listener: TcpListener, state: ServerState) {
+    while !*state.shutdown.lock().unwrap() {
         match listener.accept() {
             Ok((tcp_stream, _)) => {
-                let acceptor = rustls::ServerConnection::new(Arc::clone(&tls_config));
+                let acceptor = rustls::ServerConnection::new(Arc::clone(&state.tls_config));
                 if let Ok(acceptor) = acceptor {
-                    handle_tls_connection(tcp_stream, acceptor, &captured, &handler);
+                    handle_tls_connection(tcp_stream, acceptor, &state.captured, &state.handler);
                 }
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -213,32 +219,8 @@ fn handle_tls_connection(
 
 fn parse_request(stream: &mut impl Read) -> Option<CapturedRequest> {
     let mut reader = BufReader::new(stream);
-    let mut request_line = String::new();
-    reader.read_line(&mut request_line).ok()?;
-
-    let parts: Vec<&str> = request_line.trim().split_whitespace().collect();
-    if parts.len() < 2 {
-        return None;
-    }
-    let method = parts[0].to_string();
-    let path = parts[1].to_string();
-
-    let mut headers = Vec::new();
-    let mut content_length = 0usize;
-    loop {
-        let mut line = String::new();
-        if reader.read_line(&mut line).is_err() || line.trim().is_empty() {
-            break;
-        }
-        if let Some((k, v)) = line.trim().split_once(':') {
-            let k = k.trim().to_string();
-            let v = v.trim().to_string();
-            if k.to_lowercase() == "content-length" {
-                content_length = v.parse().unwrap_or(0);
-            }
-            headers.push((k, v));
-        }
-    }
+    let (method, path) = parse_request_line(&mut reader)?;
+    let (headers, content_length) = parse_headers(&mut reader);
 
     let mut body_buf = vec![0u8; content_length];
     if content_length > 0 {
@@ -251,6 +233,33 @@ fn parse_request(stream: &mut impl Read) -> Option<CapturedRequest> {
         headers,
         body: String::from_utf8_lossy(&body_buf).to_string(),
     })
+}
+
+fn parse_request_line(reader: &mut impl BufRead) -> Option<(String, String)> {
+    let mut line = String::new();
+    reader.read_line(&mut line).ok()?;
+    let parts: Vec<&str> = line.trim().split_whitespace().collect();
+    if parts.len() < 2 { return None; }
+    Some((parts[0].to_string(), parts[1].to_string()))
+}
+
+fn parse_headers(reader: &mut impl BufRead) -> (Vec<(String, String)>, usize) {
+    let mut headers = Vec::new();
+    let mut content_length = 0usize;
+    loop {
+        let mut line = String::new();
+        if reader.read_line(&mut line).is_err() || line.trim().is_empty() {
+            break;
+        }
+        let Some((k, v)) = line.trim().split_once(':') else { continue };
+        let key = k.trim().to_string();
+        let val = v.trim().to_string();
+        if key.eq_ignore_ascii_case("content-length") {
+            content_length = val.parse().unwrap_or(0);
+        }
+        headers.push((key, val));
+    }
+    (headers, content_length)
 }
 
 fn write_response(stream: &mut impl Write, status: u16, body: &str) {

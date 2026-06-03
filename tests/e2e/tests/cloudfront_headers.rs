@@ -4,7 +4,7 @@
 //! Accept, and Authorization headers.
 
 use super::*;
-use super::fake_https_server::FakeHttpsServer;
+use super::fake_https_server::{CapturedRequest, FakeHttpsServer};
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -18,8 +18,7 @@ fn find_header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a st
         .map(|(_, v)| v.as_str())
 }
 
-pub fn test_api_client_headers() {
-    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
+fn setup_headers_test() -> (FakeHttpsServer, MCPClient, tempfile::TempDir) {
     let call_count = Arc::new(AtomicUsize::new(0));
     let counter = call_count.clone();
     let temp_dir = create_temp_dir("cs_mcp_headers_").expect("create temp dir");
@@ -33,8 +32,7 @@ pub fn test_api_client_headers() {
     });
 
     let sample_files = get_sample_files();
-    let repo_dir =
-        create_git_repo(temp_dir.path(), &sample_files).expect("create git repo");
+    let repo_dir = create_git_repo(temp_dir.path(), &sample_files).expect("create git repo");
 
     let executable = find_or_build_executable();
     let backend = create_backend(executable);
@@ -60,6 +58,41 @@ pub fn test_api_client_headers() {
     assert!(client.start(), "Server should start");
     client.initialize().expect("Initialize should succeed");
 
+    (server, client, temp_dir)
+}
+
+fn assert_expected_headers(req: &CapturedRequest) {
+    let user_agent = find_header(&req.headers, "User-Agent")
+        .unwrap_or_else(|| panic!("Missing User-Agent header on {}", req.path));
+    assert!(
+        user_agent.starts_with("codescene-mcp/"),
+        "User-Agent should start with 'codescene-mcp/', got: {user_agent}"
+    );
+
+    let accept = find_header(&req.headers, "Accept")
+        .unwrap_or_else(|| panic!("Missing Accept header on {}", req.path));
+    assert!(
+        accept.contains("application/json"),
+        "Accept should contain 'application/json', got: {accept}"
+    );
+
+    let auth = find_header(&req.headers, "Authorization")
+        .unwrap_or_else(|| panic!("Missing Authorization header on {}", req.path));
+    assert!(
+        auth.starts_with("Bearer "),
+        "Authorization should start with 'Bearer ', got: {auth}"
+    );
+    assert!(
+        auth.len() > "Bearer ".len(),
+        "Authorization should have content after 'Bearer '"
+    );
+}
+
+pub fn test_api_client_headers() {
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
+
+    let (server, mut client, _tmp) = setup_headers_test();
+
     let _response = client
         .call_tool("select_project", json!({}), Duration::from_secs(30))
         .expect("select_project should succeed");
@@ -67,35 +100,9 @@ pub fn test_api_client_headers() {
     server.shutdown();
 
     let requests = server.get_requests();
-    assert!(
-        !requests.is_empty(),
-        "Server should have received at least one request"
-    );
+    assert!(!requests.is_empty(), "Server should have received at least one request");
 
     for req in &requests {
-        let user_agent = find_header(&req.headers, "User-Agent")
-            .unwrap_or_else(|| panic!("Missing User-Agent header on {}", req.path));
-        assert!(
-            user_agent.starts_with("codescene-mcp/"),
-            "User-Agent should start with 'codescene-mcp/', got: {user_agent}"
-        );
-
-        let accept = find_header(&req.headers, "Accept")
-            .unwrap_or_else(|| panic!("Missing Accept header on {}", req.path));
-        assert!(
-            accept.contains("application/json"),
-            "Accept should contain 'application/json', got: {accept}"
-        );
-
-        let auth = find_header(&req.headers, "Authorization")
-            .unwrap_or_else(|| panic!("Missing Authorization header on {}", req.path));
-        assert!(
-            auth.starts_with("Bearer "),
-            "Authorization should start with 'Bearer ', got: {auth}"
-        );
-        assert!(
-            auth.len() > "Bearer ".len(),
-            "Authorization should have content after 'Bearer '"
-        );
+        assert_expected_headers(req);
     }
 }
