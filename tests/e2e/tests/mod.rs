@@ -13,6 +13,7 @@ pub use serde_json::json;
 pub use std::path::Path;
 pub use std::time::Duration;
 
+#[allow(dead_code)]
 pub mod fake_http_server;
 pub mod fake_https_server;
 
