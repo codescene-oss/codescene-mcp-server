@@ -7,7 +7,7 @@
 //! - Enriched events contain required common and tool-specific properties
 
 use super::*;
-use super::fake_http_server::FakeHttpServer;
+use super::fake_https_server::FakeHttpsServer;
 
 use sha2::{Sha256, Digest};
 use std::path::PathBuf;
@@ -17,7 +17,7 @@ use tempfile::TempDir;
 
 const TOOL_NAME: &str = "code_health_score";
 const TIMEOUT: Duration = Duration::from_secs(60);
-const UNREACHABLE_ANALYTICS_URL: &str = "http://192.0.2.1:1";
+const UNREACHABLE_ANALYTICS_URL: &str = "https://192.0.2.1:1";
 
 // From analyze_change_set — triggers delta-analysis findings
 const CLEAN_ADDITION: &str = r#"
@@ -65,6 +65,23 @@ fn analytics_setup_with_env(
         env.push((key.to_string(), val.to_string()));
     }
     (command, env, repo_dir, tmp)
+}
+
+fn analytics_setup_with_https_server(
+    extra: &[(&str, &str)],
+) -> (Vec<String>, Vec<(String, String)>, PathBuf, FakeHttpsServer, TempDir, TempDir) {
+    let cert_dir = create_temp_dir("cs_mcp_certs_").expect("cert dir");
+    let server = FakeHttpsServer::always_ok(cert_dir.path());
+    let (command, mut env, repo_dir, tmp) = setup();
+    env.push(("CS_TRACKING_URL".to_string(), server.url()));
+    env.push((
+        "REQUESTS_CA_BUNDLE".to_string(),
+        server.certs.ca_cert_path.to_string_lossy().to_string(),
+    ));
+    for (key, val) in extra {
+        env.push((key.to_string(), val.to_string()));
+    }
+    (command, env, repo_dir, server, tmp, cert_dir)
 }
 
 fn call_code_health_score(client: &mut MCPClient, repo_dir: &Path) -> String {
@@ -126,16 +143,44 @@ fn assert_properties_are_nonempty(props: &serde_json::Value, keys: &[&str]) {
     }
 }
 
-fn wait_for_analytics(server: &FakeHttpServer) {
+fn wait_for_analytics(server: &FakeHttpsServer) {
     let deadline = Instant::now() + Duration::from_secs(15);
     while server.request_count() == 0 && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(200));
     }
 }
 
+fn score_with_https_server(
+    extra: &[(&str, &str)],
+) -> (String, FakeHttpsServer, TempDir, TempDir) {
+    let (command, env, repo_dir, server, tmp, cert_dir) =
+        analytics_setup_with_https_server(extra);
+    let (result, _client) = start_client_and_score(&command, &env, &repo_dir);
+    wait_for_analytics(&server);
+    (result, server, tmp, cert_dir)
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+pub fn test_analytics_events_are_sent() {
+    let (_result, server, _tmp, _cert_dir) = score_with_https_server(&[]);
+    assert!(
+        server.request_count() > 0,
+        "Analytics server should have received at least one request"
+    );
+}
+
+pub fn test_disabled_tracking_sends_no_events() {
+    let (_result, server, _tmp, _cert_dir) =
+        score_with_https_server(&[("CS_DISABLE_TRACKING", "1")]);
+    assert_eq!(
+        server.request_count(),
+        0,
+        "No events should be sent when tracking is disabled"
+    );
+}
 
 pub fn test_tool_responds_when_analytics_unreachable() {
     let (command, env, repo_dir, _tmp) =
@@ -158,37 +203,6 @@ pub fn test_response_time_not_delayed_by_analytics() {
     );
 }
 
-pub fn test_analytics_events_are_sent() {
-    let server = FakeHttpServer::always_ok();
-    let (command, env, repo_dir, _tmp) =
-        analytics_setup_with_env(&[("CS_TRACKING_URL", &server.url())]);
-
-    let (_result, _client) = start_client_and_score(&command, &env, &repo_dir);
-    wait_for_analytics(&server);
-
-    assert!(
-        server.request_count() > 0,
-        "Analytics server should have received at least one request"
-    );
-}
-
-pub fn test_disabled_tracking_sends_no_events() {
-    let server = FakeHttpServer::always_ok();
-    let (command, env, repo_dir, _tmp) = analytics_setup_with_env(&[
-        ("CS_TRACKING_URL", &server.url()),
-        ("CS_DISABLE_TRACKING", "1"),
-    ]);
-
-    let (_result, _client) = start_client_and_score(&command, &env, &repo_dir);
-    wait_for_analytics(&server);
-
-    assert_eq!(
-        server.request_count(),
-        0,
-        "No events should be sent when tracking is disabled"
-    );
-}
-
 pub fn test_disabled_tracking_returns_valid_results() {
     let (command, env, repo_dir, _tmp) =
         analytics_setup_with_env(&[("CS_DISABLE_TRACKING", "1")]);
@@ -197,12 +211,7 @@ pub fn test_disabled_tracking_returns_valid_results() {
 }
 
 pub fn test_enriched_event_contains_common_properties() {
-    let server = FakeHttpServer::always_ok();
-    let (command, env, repo_dir, _tmp) =
-        analytics_setup_with_env(&[("CS_TRACKING_URL", &server.url())]);
-
-    let (_result, _client) = start_client_and_score(&command, &env, &repo_dir);
-    wait_for_analytics(&server);
+    let (_result, server, _tmp, _cert_dir) = score_with_https_server(&[]);
 
     let payloads = server.get_payloads();
     let props = find_event_properties(&payloads, "mcp-code-health-score");
@@ -221,12 +230,7 @@ pub fn test_enriched_event_contains_common_properties() {
 }
 
 pub fn test_enriched_event_contains_tool_specific_properties() {
-    let server = FakeHttpServer::always_ok();
-    let (command, env, repo_dir, _tmp) =
-        analytics_setup_with_env(&[("CS_TRACKING_URL", &server.url())]);
-
-    let (result, _client) = start_client_and_score(&command, &env, &repo_dir);
-    wait_for_analytics(&server);
+    let (result, server, _tmp, _cert_dir) = score_with_https_server(&[]);
 
     let payloads = server.get_payloads();
     let props = find_event_properties(&payloads, "mcp-code-health-score");
@@ -299,15 +303,19 @@ fn run_tool_with_fake_server<F>(
 where
     F: FnOnce(&mut MCPClient, &Path) -> String,
 {
-    let server = FakeHttpServer::always_ok();
+    let cert_dir = create_temp_dir("cs_mcp_certs_run_").expect("cert dir");
+    let server = FakeHttpsServer::always_ok(cert_dir.path());
     let executable = find_or_build_executable();
     let backend = create_backend(executable);
 
-    let temp_dir_for_env = create_temp_dir("cs_mcp_analytics_env_").ok();
     let base = base_env();
     let env_map = backend.get_env(&base, repo_dir);
     let mut env_vec: Vec<(String, String)> = env_map.into_iter().collect();
     env_vec.push(("CS_TRACKING_URL".to_string(), server.url()));
+    env_vec.push((
+        "REQUESTS_CA_BUNDLE".to_string(),
+        server.certs.ca_cert_path.to_string_lossy().to_string(),
+    ));
     for (k, v) in extra_env {
         env_vec.push((k.to_string(), v.to_string()));
     }
@@ -321,7 +329,6 @@ where
     wait_for_analytics(&server);
 
     let payloads = server.get_payloads();
-    drop(temp_dir_for_env);
     (result_text, payloads)
 }
 
@@ -429,23 +436,20 @@ pub fn test_enriched_pre_commit_event() {
     assert!(props.get("file-count").and_then(|v| v.as_i64()).is_some(), "Should have file-count");
 }
 
-// ---------------------------------------------------------------------------
-// Enriched analyze-change-set event test
-// ---------------------------------------------------------------------------
-
-pub fn test_enriched_analyze_change_set_event() {
-    let temp = create_temp_dir("cs_mcp_changeset_event_").expect("temp");
+fn create_feature_branch(addition: &str) -> (PathBuf, TempDir) {
+    let temp = create_temp_dir("cs_mcp_changeset_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
-
-    // Create feature branch with clean change
     git_in(&repo_dir, &["checkout", "-b", "feature"]);
     let calc = repo_dir.join("src/utils/calculator.py");
     let original = std::fs::read_to_string(&calc).expect("read");
-    std::fs::write(&calc, format!("{original}{CLEAN_ADDITION}")).expect("write");
+    std::fs::write(&calc, format!("{original}{addition}")).expect("write");
     git_in(&repo_dir, &["add", "."]);
     git_in(&repo_dir, &["commit", "-m", "Feature change"]);
+    (repo_dir, temp)
+}
 
-    let (result, payloads) = run_tool_with_fake_server(&repo_dir, |client, rd| {
+fn run_analyze_change_set(repo_dir: &Path) -> (String, Vec<serde_json::Value>) {
+    run_tool_with_fake_server(repo_dir, |client, rd| {
         let resp = client
             .call_tool(
                 "analyze_change_set",
@@ -454,7 +458,16 @@ pub fn test_enriched_analyze_change_set_event() {
             )
             .expect("analyze should succeed");
         extract_result_text(&resp)
-    }, &[]);
+    }, &[])
+}
+
+// ---------------------------------------------------------------------------
+// Enriched analyze-change-set event test
+// ---------------------------------------------------------------------------
+
+pub fn test_enriched_analyze_change_set_event() {
+    let (repo_dir, _temp) = create_feature_branch(CLEAN_ADDITION);
+    let (result, payloads) = run_analyze_change_set(&repo_dir);
 
     assert!(!result.is_empty(), "Should return content");
 
@@ -528,27 +541,8 @@ pub fn test_enriched_pre_commit_event_with_findings() {
 // ---------------------------------------------------------------------------
 
 pub fn test_enriched_analyze_change_set_event_with_findings() {
-    let temp = create_temp_dir("cs_mcp_changeset_findings_").expect("temp");
-    let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
-
-    // Create feature branch with degrading change
-    git_in(&repo_dir, &["checkout", "-b", "feature"]);
-    let calc = repo_dir.join("src/utils/calculator.py");
-    let original = std::fs::read_to_string(&calc).expect("read");
-    std::fs::write(&calc, format!("{original}{DEGRADING_ADDITION}")).expect("write");
-    git_in(&repo_dir, &["add", "."]);
-    git_in(&repo_dir, &["commit", "-m", "Add degrading code"]);
-
-    let (result, payloads) = run_tool_with_fake_server(&repo_dir, |client, rd| {
-        let resp = client
-            .call_tool(
-                "analyze_change_set",
-                json!({"base_ref": "master", "git_repository_path": rd.to_string_lossy()}),
-                TIMEOUT,
-            )
-            .expect("analyze should succeed");
-        extract_result_text(&resp)
-    }, &[]);
+    let (repo_dir, _temp) = create_feature_branch(DEGRADING_ADDITION);
+    let (result, payloads) = run_analyze_change_set(&repo_dir);
 
     assert!(!result.is_empty(), "Should return content");
 

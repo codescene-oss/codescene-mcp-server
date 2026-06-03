@@ -22,7 +22,10 @@ pub fn track_event(event: &str, properties: Value, instance_id: &str) {
     }
 
     let te = TrackingEvent {
-        url: tracking_url(),
+        url: match tracking_url() {
+            Some(url) => url,
+            None => return,
+        },
         event: format!("mcp-{event}"),
         instance_id: instance_id.to_string(),
         environment: tracking_environment(),
@@ -94,24 +97,26 @@ async fn send_event(mut te: TrackingEvent, client: &dyn HttpClient) -> Result<()
     Ok(())
 }
 
-fn tracking_url() -> String {
+fn tracking_url() -> Option<String> {
     if let Ok(url) = std::env::var("CS_TRACKING_URL") {
         if let Err(e) = crate::config::require_https("CS_TRACKING_URL", &url) {
             tracing::warn!("{e}");
+            return None;
         }
-        return normalize_tracking_override(&url);
+        return Some(normalize_tracking_override(&url));
     }
 
     let api_url = std::env::var("CS_ONPREM_URL")
         .map(|u| {
             if let Err(e) = crate::config::require_https("CS_ONPREM_URL", &u) {
                 tracing::warn!("{e}");
+                return Err(e);
             }
-            format!("{u}/api")
+            Ok(format!("{u}/api"))
         })
-        .unwrap_or_else(|_| DEFAULT_API_URL.to_string());
+        .unwrap_or_else(|_| Ok(DEFAULT_API_URL.to_string()));
 
-    format!("{api_url}/v2/analytics/track")
+    api_url.ok().map(|base| format!("{base}/v2/analytics/track"))
 }
 
 fn tracking_environment() -> String {
@@ -198,7 +203,7 @@ mod tests {
         std::env::remove_var("CS_ONPREM_URL");
         assert_eq!(
             tracking_url(),
-            "https://api.codescene.io/v2/analytics/track"
+            Some("https://api.codescene.io/v2/analytics/track".to_string())
         );
     }
 
@@ -206,7 +211,18 @@ mod tests {
     fn tracking_url_override() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_TRACKING_URL", "http://custom-tracking");
-        assert_eq!(tracking_url(), "http://custom-tracking/v2/analytics/track");
+        assert_eq!(tracking_url(), None, "HTTP URLs should be blocked");
+        std::env::remove_var("CS_TRACKING_URL");
+    }
+
+    #[test]
+    fn tracking_url_override_https() {
+        let _lock = config::lock_test_env();
+        std::env::set_var("CS_TRACKING_URL", "https://custom-tracking");
+        assert_eq!(
+            tracking_url(),
+            Some("https://custom-tracking/v2/analytics/track".to_string())
+        );
         std::env::remove_var("CS_TRACKING_URL");
     }
 
@@ -215,9 +231,12 @@ mod tests {
         let _lock = config::lock_test_env();
         std::env::set_var(
             "CS_TRACKING_URL",
-            "http://custom-tracking/v2/analytics/track",
+            "https://custom-tracking/v2/analytics/track",
         );
-        assert_eq!(tracking_url(), "http://custom-tracking/v2/analytics/track");
+        assert_eq!(
+            tracking_url(),
+            Some("https://custom-tracking/v2/analytics/track".to_string())
+        );
         std::env::remove_var("CS_TRACKING_URL");
     }
 
@@ -228,8 +247,17 @@ mod tests {
         std::env::set_var("CS_ONPREM_URL", "https://my-instance.example.com");
         assert_eq!(
             tracking_url(),
-            "https://my-instance.example.com/api/v2/analytics/track"
+            Some("https://my-instance.example.com/api/v2/analytics/track".to_string())
         );
+        std::env::remove_var("CS_ONPREM_URL");
+    }
+
+    #[test]
+    fn tracking_url_from_onprem_http_blocked() {
+        let _lock = config::lock_test_env();
+        std::env::remove_var("CS_TRACKING_URL");
+        std::env::set_var("CS_ONPREM_URL", "http://my-instance.example.com");
+        assert_eq!(tracking_url(), None, "HTTP on-prem URL should be blocked");
         std::env::remove_var("CS_ONPREM_URL");
     }
 
