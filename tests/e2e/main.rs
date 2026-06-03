@@ -539,6 +539,26 @@ fn test_config_standalone_hides_api_only() {
     tests::configure::test_standalone_hides_api_only();
 }
 
+#[test]
+fn test_config_rejects_http_url() {
+    tests::configure::test_set_config_rejects_http_url();
+}
+
+#[test]
+fn test_config_accepts_https_url() {
+    tests::configure::test_set_config_accepts_https_url();
+}
+
+#[test]
+fn test_config_http_rejection_does_not_persist() {
+    tests::configure::test_set_config_http_rejection_does_not_persist();
+}
+
+#[test]
+fn test_config_non_url_key_unaffected() {
+    tests::configure::test_set_config_non_url_key_unaffected();
+}
+
 // --- Standalone License ---
 #[test]
 fn test_standalone_hides_api_tools() {
@@ -878,15 +898,15 @@ fn test_skill_sync_tool() {
     tests::skill_resources::test_sync_skills_tool();
 }
 
-// --- SSL CLI Truststore ---
+// --- SSL CLI Certificate Passthrough ---
 #[test]
-fn test_ssl_truststore_args_injected() {
-    tests::ssl_cli_truststore::test_truststore_args_are_injected();
+fn test_ssl_cs_certs_passed_to_cli() {
+    tests::ssl_cli_truststore::test_cs_certs_passed_to_cli();
 }
 
 #[test]
-fn test_ssl_truststore_args_missing_without_cert() {
-    tests::ssl_cli_truststore::test_truststore_args_missing_without_cert();
+fn test_ssl_cs_certs_missing_without_ca_bundle() {
+    tests::ssl_cli_truststore::test_cs_certs_missing_without_ca_bundle();
 }
 
 // --- SSL API CA Bundle ---

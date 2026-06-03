@@ -9,7 +9,13 @@ fn onprem_url() -> Option<String> {
     std::env::var("CS_ONPREM_URL")
         .ok()
         .filter(|u| !u.is_empty())
-        .map(|u| u.trim_end_matches('/').to_string())
+        .and_then(|u| {
+            if let Err(e) = crate::config::require_https("CS_ONPREM_URL", &u) {
+                tracing::warn!("{e}");
+                return None;
+            }
+            Some(u.trim_end_matches('/').to_string())
+        })
 }
 
 /// Returns the base path for an analysis page (without trailing slash).
@@ -110,6 +116,13 @@ mod tests {
     fn onprem_url_trims_trailing_slash() {
         let _g = with_onprem("https://my-instance.com/");
         assert_eq!(onprem_url().unwrap(), "https://my-instance.com");
+    }
+
+    #[test]
+    fn onprem_url_blocks_http() {
+        let _g = config::lock_test_env();
+        std::env::set_var("CS_ONPREM_URL", "http://my-instance.com");
+        assert!(onprem_url().is_none(), "HTTP URLs should be blocked");
     }
 
     // ── analysis_base ───────────────────────────────────────

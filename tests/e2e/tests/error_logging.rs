@@ -8,7 +8,7 @@
 //! 5. Includes file extension detail for unsupported file types
 
 use super::*;
-use super::fake_http_server::FakeHttpServer;
+use super::fake_https_server::FakeHttpsServer;
 
 const SAFE_ERROR_KINDS: &[&str] = &[
     "non_zero_exit",
@@ -37,7 +37,8 @@ fn trigger_error_with_fake_server(
     extra_env: &[(&str, &str)],
     file_path: Option<&Path>,
 ) -> (String, Vec<serde_json::Value>) {
-    let server = FakeHttpServer::always_ok();
+    let cert_dir = create_temp_dir("cs_mcp_certs_err_").expect("cert dir");
+    let server = FakeHttpsServer::always_ok(cert_dir.path());
 
     let target = file_path
         .map(|p| p.to_path_buf())
@@ -49,6 +50,10 @@ fn trigger_error_with_fake_server(
         .chain(std::iter::once((
             "CS_TRACKING_URL".to_string(),
             server.url(),
+        )))
+        .chain(std::iter::once((
+            "REQUESTS_CA_BUNDLE".to_string(),
+            super::docker_ca_bundle(&server.certs.ca_cert_path, repo_dir),
         )))
         .chain(std::iter::once((
             "CS_CONFIG_DIR".to_string(),

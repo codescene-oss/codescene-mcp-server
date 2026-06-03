@@ -258,3 +258,70 @@ pub fn test_standalone_hides_api_only() {
         "ca_bundle should still appear in standalone mode, got: {result}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// HTTPS URL validation tests
+// ---------------------------------------------------------------------------
+
+pub fn test_set_config_rejects_http_url() {
+    let env = configure_setup();
+    let mut client = start(&env);
+
+    let result = set_config(&mut client, "onprem_url", "http://insecure.example.com");
+    let lower = result.to_lowercase();
+
+    assert!(
+        lower.contains("https"),
+        "Error should mention HTTPS requirement, got: {result}"
+    );
+    assert!(
+        lower.contains("error") || lower.contains("must"),
+        "Should indicate an error, got: {result}"
+    );
+}
+
+pub fn test_set_config_accepts_https_url() {
+    let env = configure_setup();
+    let mut client = start(&env);
+
+    let result = set_then_get(&mut client, "onprem_url", "https://secure.example.com");
+
+    assert!(
+        result.contains("https://secure.example.com"),
+        "Should accept and store HTTPS URL, got: {result}"
+    );
+}
+
+pub fn test_set_config_http_rejection_does_not_persist() {
+    let env = configure_setup();
+    let mut client = start(&env);
+
+    // Try to set an HTTP URL (should be rejected)
+    set_config(&mut client, "onprem_url", "http://insecure.example.com");
+
+    // Verify nothing was persisted
+    let result = get_config(&mut client, "onprem_url");
+    let lower = result.to_lowercase();
+
+    assert!(
+        !result.contains("http://insecure.example.com"),
+        "Rejected HTTP URL must not be persisted, got: {result}"
+    );
+    assert!(
+        lower.contains("null") || lower.contains("not set") || !lower.contains("insecure"),
+        "Value should be unset after rejection, got: {result}"
+    );
+}
+
+pub fn test_set_config_non_url_key_unaffected() {
+    let env = configure_setup();
+    let mut client = start(&env);
+
+    // Non-URL keys should accept any value without HTTPS validation
+    let result = set_then_get(&mut client, "default_project_id", "42");
+
+    assert!(
+        result.contains("42"),
+        "Non-URL key should accept any value, got: {result}"
+    );
+}

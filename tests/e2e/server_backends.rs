@@ -141,6 +141,7 @@ impl DockerBackend {
         "CS_CONFIG_DIR",
         "CS_ENABLED_TOOLS",
         "CS_LOG_RETENTION_DAYS",
+        "REQUESTS_CA_BUNDLE",
     ];
 }
 
@@ -532,6 +533,22 @@ pub fn docker_config_dir(config_dir: &Path, repo_dir: &Path) -> String {
         format!("/mount/{}", relative.display())
     } else {
         config_dir.to_string_lossy().to_string()
+    }
+}
+
+/// Make a CA bundle file accessible inside the Docker container.
+///
+/// Copies the cert file into `repo_dir` (which is bind-mounted at `/mount/`)
+/// and returns the container-side path. For non-Docker backends, returns the
+/// original path unchanged.
+pub fn docker_ca_bundle(ca_cert_path: &Path, repo_dir: &Path) -> String {
+    if is_docker() {
+        let dest = repo_dir.join("ca-bundle.pem");
+        std::fs::copy(ca_cert_path, &dest)
+            .expect("failed to copy CA cert into repo_dir for Docker");
+        format!("/mount/ca-bundle.pem")
+    } else {
+        ca_cert_path.to_string_lossy().to_string()
     }
 }
 

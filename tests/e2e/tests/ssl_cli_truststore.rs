@@ -1,11 +1,12 @@
-//! SSL truststore CLI integration tests.
+//! SSL certificate CLI integration tests.
 //!
-//! Validates the full MCP -> embedded CLI argument path for SSL:
-//! - When `REQUESTS_CA_BUNDLE` is set, MCP injects Java truststore args.
-//! - When `REQUESTS_CA_BUNDLE` is missing, truststore args are not injected.
+//! Validates that the MCP server passes custom CA certificates to the CLI
+//! via the `CS_CERTS` environment variable:
+//! - When `REQUESTS_CA_BUNDLE` is set, `CS_CERTS` is forwarded to the CLI.
+//! - When `REQUESTS_CA_BUNDLE` is missing, `CS_CERTS` is not set.
 //!
 //! Uses a fake CLI binary compiled from Rust source at runtime that checks
-//! whether `-Djavax.net.ssl.trustStore=...` is present and valid.
+//! whether `CS_CERTS` is present and points to a valid file.
 
 use super::*;
 use std::process::Command;
@@ -37,17 +38,8 @@ use std::process;
 
 fn main() {
     let mut cmd = String::new();
-    let mut has_truststore = false;
 
     for arg in env::args().skip(1) {
-        if let Some(ts) = arg.strip_prefix("-Djavax.net.ssl.trustStore=") {
-            if !Path::new(ts).is_file() {
-                eprintln!("truststore file missing: {ts}");
-                process::exit(21);
-            }
-            has_truststore = true;
-            continue;
-        }
         if arg.starts_with("-D") {
             continue;
         }
@@ -56,10 +48,19 @@ fn main() {
         }
     }
 
-    let require = env::var("REQUIRE_TRUSTSTORE").unwrap_or_else(|_| "0".to_string()) == "1";
-    if require && !has_truststore {
-        eprintln!("missing truststore arg");
-        process::exit(22);
+    let require = env::var("REQUIRE_CS_CERTS").unwrap_or_else(|_| "0".to_string()) == "1";
+    if require {
+        match env::var("CS_CERTS") {
+            Ok(path) if Path::new(&path).is_file() => {}
+            Ok(path) => {
+                eprintln!("CS_CERTS file missing: {path}");
+                process::exit(21);
+            }
+            Err(_) => {
+                eprintln!("CS_CERTS not set");
+                process::exit(22);
+            }
+        }
     }
 
     match cmd.as_str() {
@@ -159,7 +160,7 @@ fn local_setup() -> (
         .into_iter()
         .chain([
             ("CS_CLI_PATH".to_string(), fake_cli.to_string_lossy().to_string()),
-            ("REQUIRE_TRUSTSTORE".to_string(), "1".to_string()),
+            ("REQUIRE_CS_CERTS".to_string(), "1".to_string()),
             ("CS_DISABLE_VERSION_CHECK".to_string(), "1".to_string()),
             ("CS_DISABLE_TRACKING".to_string(), "1".to_string()),
         ])
@@ -173,9 +174,9 @@ fn local_setup() -> (
 // Tests
 // ---------------------------------------------------------------------------
 
-/// When `REQUESTS_CA_BUNDLE` points to a valid cert, the MCP server injects
-/// truststore args and the fake CLI succeeds with a score.
-pub fn test_truststore_args_are_injected() {
+/// When `REQUESTS_CA_BUNDLE` points to a valid cert, the MCP server passes
+/// `CS_CERTS` to the CLI and the fake CLI succeeds with a score.
+pub fn test_cs_certs_passed_to_cli() {
     if is_docker() { return skip_if_docker("fake CLI binary not available in container"); }
     let (command, env, repo_dir, cert_path, _tmp) = local_setup();
 
@@ -195,9 +196,9 @@ pub fn test_truststore_args_are_injected() {
     );
 }
 
-/// Without `REQUESTS_CA_BUNDLE`, no truststore args are injected and the
-/// fake CLI (with `REQUIRE_TRUSTSTORE=1`) exits with an error.
-pub fn test_truststore_args_missing_without_cert() {
+/// Without `REQUESTS_CA_BUNDLE`, `CS_CERTS` is not set and the fake CLI
+/// (with `REQUIRE_CS_CERTS=1`) exits with an error.
+pub fn test_cs_certs_missing_without_ca_bundle() {
     if is_docker() { return skip_if_docker("fake CLI binary not available in container"); }
     let (command, env, repo_dir, _cert_path, _tmp) = local_setup();
 
@@ -210,7 +211,7 @@ pub fn test_truststore_args_missing_without_cert() {
 
     let result = call_score_tool(&command, &env, &repo_dir);
     assert!(
-        result.to_lowercase().contains("missing truststore arg"),
-        "Should report missing truststore arg, got: {result}"
+        result.to_lowercase().contains("cs_certs not set"),
+        "Should report CS_CERTS not set, got: {result}"
     );
 }

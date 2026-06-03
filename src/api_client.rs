@@ -5,11 +5,13 @@ use serde_json::Value;
 use crate::errors::ApiError;
 use crate::http::{HttpClient, HttpRequest, HttpResponse, Method};
 
-pub fn get_api_url() -> String {
+pub fn get_api_url() -> Result<String, ApiError> {
     if let Ok(url) = std::env::var("CS_ONPREM_URL") {
-        format!("{}/api", url.trim_end_matches('/'))
+        crate::config::require_https("CS_ONPREM_URL", &url)
+            .map_err(|e| ApiError::Transport(e.into()))?;
+        Ok(format!("{}/api", url.trim_end_matches('/')))
     } else {
-        "https://api.codescene.io".to_string()
+        Ok("https://api.codescene.io".to_string())
     }
 }
 
@@ -17,7 +19,7 @@ pub async fn query_api_with_client(
     endpoint: &str,
     client: &dyn HttpClient,
 ) -> Result<Value, ApiError> {
-    let url = format!("{}/{}", get_api_url(), endpoint.trim_start_matches('/'));
+    let url = format!("{}/{}", get_api_url()?, endpoint.trim_start_matches('/'));
     query_api_url_with_client(&url, client).await
 }
 
@@ -152,7 +154,7 @@ fn endpoint_with_query_params(
     endpoint: &str,
     params: &[(String, String)],
 ) -> Result<String, ApiError> {
-    let base = format!("{}/{}", get_api_url(), endpoint.trim_start_matches('/'));
+    let base = format!("{}/{}", get_api_url()?, endpoint.trim_start_matches('/'));
     let mut url = reqwest::Url::parse(&base)
         .map_err(|e| ApiError::Transport(format!("invalid API URL: {e}")))?;
     {
@@ -208,14 +210,14 @@ mod tests {
     fn get_api_url_default() {
         let _lock = config::lock_test_env();
         std::env::remove_var("CS_ONPREM_URL");
-        assert_eq!(get_api_url(), "https://api.codescene.io");
+        assert_eq!(get_api_url().unwrap(), "https://api.codescene.io");
     }
 
     #[test]
     fn get_api_url_onprem() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_ONPREM_URL", "https://my-instance.com");
-        assert_eq!(get_api_url(), "https://my-instance.com/api");
+        assert_eq!(get_api_url().unwrap(), "https://my-instance.com/api");
         std::env::remove_var("CS_ONPREM_URL");
     }
 
@@ -223,7 +225,15 @@ mod tests {
     fn get_api_url_onprem_trailing_slash() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_ONPREM_URL", "https://my-instance.com/");
-        assert_eq!(get_api_url(), "https://my-instance.com/api");
+        assert_eq!(get_api_url().unwrap(), "https://my-instance.com/api");
+        std::env::remove_var("CS_ONPREM_URL");
+    }
+
+    #[test]
+    fn get_api_url_onprem_http_blocked() {
+        let _lock = config::lock_test_env();
+        std::env::set_var("CS_ONPREM_URL", "http://my-instance.com");
+        assert!(get_api_url().is_err(), "HTTP URLs should be blocked");
         std::env::remove_var("CS_ONPREM_URL");
     }
 
