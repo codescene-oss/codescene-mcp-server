@@ -390,6 +390,13 @@ fn extract_zip_to_cache(cache_dir: &Path, zip_data: &[u8]) -> Result<PathBuf, Cl
     // to avoid races when multiple processes extract in parallel.
     let tmp_dir = tempfile::tempdir_in(cache_dir)?;
 
+    // Restrict temp directory to owner-only access
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(tmp_dir.path(), std::fs::Permissions::from_mode(0o700))?;
+    }
+
     let cursor = std::io::Cursor::new(zip_data);
     let mut archive = zip::ZipArchive::new(cursor)
         .map_err(|e| CliError::NotFound(format!("Invalid embedded CLI zip: {e}")))?;
@@ -403,7 +410,7 @@ fn extract_zip_to_cache(cache_dir: &Path, zip_data: &[u8]) -> Result<PathBuf, Cl
         )));
     }
 
-    // Set executable permission on Unix
+    // Set executable permission on Unix (owner-only execute)
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -411,10 +418,16 @@ fn extract_zip_to_cache(cache_dir: &Path, zip_data: &[u8]) -> Result<PathBuf, Cl
         std::fs::set_permissions(&tmp_binary, perms)?;
     }
 
-    // Atomic rename — if another process already placed the binary,
-    // the rename may fail on some platforms; that is fine.
-    if !binary_path.exists() {
-        std::fs::rename(&tmp_binary, &binary_path)?;
+    // Atomic rename — if another process won the race and already
+    // placed the binary, the rename error is harmless; just verify
+    // the binary exists rather than propagating a spurious failure.
+    if let Err(_e) = std::fs::rename(&tmp_binary, &binary_path) {
+        if !binary_path.exists() {
+            return Err(CliError::NotFound(format!(
+                "Failed to place CLI binary at '{}' and no existing binary found",
+                binary_path.display()
+            )));
+        }
     }
 
     // Clean up temp dir (best-effort)
