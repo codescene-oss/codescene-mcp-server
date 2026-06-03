@@ -421,19 +421,28 @@ fn extract_zip_to_cache(cache_dir: &Path, zip_data: &[u8]) -> Result<PathBuf, Cl
     // Atomic rename — if another process won the race and already
     // placed the binary, the rename error is harmless; just verify
     // the binary exists rather than propagating a spurious failure.
-    if let Err(_e) = std::fs::rename(&tmp_binary, &binary_path) {
-        if !binary_path.exists() {
-            return Err(CliError::NotFound(format!(
-                "Failed to place CLI binary at '{}' and no existing binary found",
-                binary_path.display()
-            )));
-        }
-    }
+    atomic_place_binary(&tmp_binary, &binary_path)?;
 
     // Clean up temp dir (best-effort)
     let _ = tmp_dir.close();
 
     Ok(binary_path)
+}
+
+/// Attempt to atomically place a binary at `dest` via rename.
+/// If another process already placed the binary, the rename error
+/// is silently ignored. Only fails if rename errors AND the dest
+/// binary does not exist.
+fn atomic_place_binary(src: &Path, dest: &Path) -> Result<(), CliError> {
+    if let Err(_e) = std::fs::rename(src, dest) {
+        if !dest.exists() {
+            return Err(CliError::NotFound(format!(
+                "Failed to place CLI binary at '{}' and no existing binary found",
+                dest.display()
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn extract_cli_binary(
@@ -977,6 +986,61 @@ mod tests {
         );
         let msg = result.unwrap_err().to_string();
         assert!(msg.contains("not found"), "unexpected error: {msg}");
+    }
+
+    #[test]
+    fn atomic_place_binary_succeeds_on_rename() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src-binary");
+        let dest = dir.path().join("dest-binary");
+        std::fs::write(&src, b"binary").unwrap();
+
+        let result = atomic_place_binary(&src, &dest);
+        assert!(result.is_ok());
+        assert!(dest.exists());
+        assert!(!src.exists(), "source should be gone after rename");
+    }
+
+    #[test]
+    fn atomic_place_binary_tolerates_existing_dest() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src-binary");
+        let dest = dir.path().join("dest-binary");
+        std::fs::write(&src, b"new-binary").unwrap();
+        std::fs::write(&dest, b"existing-binary").unwrap();
+
+        // rename succeeds (replaces existing), no error
+        let result = atomic_place_binary(&src, &dest);
+        assert!(result.is_ok());
+        assert!(dest.exists());
+    }
+
+    #[test]
+    fn atomic_place_binary_fails_when_rename_fails_and_no_dest() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("nonexistent-source");
+        let dest = dir.path().join("dest-binary");
+        // src doesn't exist — rename will fail; dest doesn't exist either
+
+        let result = atomic_place_binary(&src, &dest);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("Failed to place CLI binary"),
+            "unexpected error: {msg}"
+        );
+    }
+
+    #[test]
+    fn atomic_place_binary_ignores_rename_error_when_dest_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("nonexistent-source");
+        let dest = dir.path().join("dest-binary");
+        std::fs::write(&dest, b"already-placed").unwrap();
+        // src doesn't exist — rename fails, but dest exists (another process won)
+
+        let result = atomic_place_binary(&src, &dest);
+        assert!(result.is_ok(), "should succeed when dest already exists");
     }
 
     #[test]
