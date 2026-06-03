@@ -73,5 +73,10 @@ export function getDownloadUrl(version, asset) {
   const baseUrl =
     process.env.CS_MCP_DOWNLOAD_BASE_URL ||
     "https://github.com/codescene-oss/codescene-mcp-server/releases/download";
+  if (!baseUrl.startsWith("https://")) {
+    console.warn(
+      `Warning: CS_MCP_DOWNLOAD_BASE_URL should use HTTPS (got: ${baseUrl})`
+    );
+  }
   return `${baseUrl}/${tag}/${asset}`;
 }

@@ -161,6 +161,41 @@ pub struct ConfigData {
     pub values: HashMap<String, String>,
 }
 
+/// Keys that represent URL values and must use HTTPS.
+const URL_KEYS: &[&str] = &["onprem_url"];
+
+/// Validate that a URL value uses the HTTPS scheme.
+/// Returns `Ok(())` for valid HTTPS URLs, or `Err` with a user-facing message.
+pub fn validate_https_url(key: &str, url: &str) -> Result<(), String> {
+    if !URL_KEYS.contains(&key) {
+        return Ok(());
+    }
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    if trimmed.starts_with("https://") {
+        return Ok(());
+    }
+    Err(format!(
+        "The URL for '{key}' must use HTTPS (got: {trimmed}). \
+         Please provide a URL starting with https://"
+    ))
+}
+
+/// Validate that a raw URL string uses HTTPS. Used for env vars not managed
+/// through the config system (e.g. CS_TRACKING_URL).
+pub fn require_https(env_var: &str, url: &str) -> Result<(), String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() || trimmed.starts_with("https://") {
+        return Ok(());
+    }
+    Err(format!(
+        "{env_var} must use HTTPS (got: {trimmed}). \
+         Please provide a URL starting with https://"
+    ))
+}
+
 pub fn config_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("CS_CONFIG_DIR") {
         return PathBuf::from(dir);
@@ -307,6 +342,9 @@ pub fn apply_to_env(data: &ConfigData) {
         }
         let val = data.values.get(option.key).filter(|v| !v.is_empty());
         if let Some(val) = val {
+            if let Err(e) = validate_https_url(option.key, val) {
+                tracing::warn!("{e}");
+            }
             std::env::set_var(option.env_var, val);
         }
     }
@@ -930,5 +968,62 @@ mod tests {
             !vars.contains(&"CS_ONPREM_URL"),
             "should not include non-sensitive CS_ONPREM_URL"
         );
+    }
+
+    // ---- validate_https_url ----
+
+    #[test]
+    fn validate_https_url_accepts_https() {
+        assert!(validate_https_url("onprem_url", "https://example.com").is_ok());
+    }
+
+    #[test]
+    fn validate_https_url_rejects_http() {
+        let result = validate_https_url("onprem_url", "http://example.com");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("HTTPS"));
+    }
+
+    #[test]
+    fn validate_https_url_accepts_empty() {
+        assert!(validate_https_url("onprem_url", "").is_ok());
+        assert!(validate_https_url("onprem_url", "  ").is_ok());
+    }
+
+    #[test]
+    fn validate_https_url_ignores_non_url_keys() {
+        assert!(validate_https_url("access_token", "http://not-a-url").is_ok());
+    }
+
+    #[test]
+    fn validate_https_url_rejects_bare_domain() {
+        let result = validate_https_url("onprem_url", "example.com");
+        assert!(result.is_err());
+    }
+
+    // ---- require_https ----
+
+    #[test]
+    fn require_https_accepts_https() {
+        assert!(require_https("CS_TRACKING_URL", "https://track.example.com").is_ok());
+    }
+
+    #[test]
+    fn require_https_rejects_http() {
+        let result = require_https("CS_TRACKING_URL", "http://track.example.com");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("HTTPS"));
+    }
+
+    #[test]
+    fn require_https_accepts_empty() {
+        assert!(require_https("CS_TRACKING_URL", "").is_ok());
+        assert!(require_https("CS_TRACKING_URL", "  ").is_ok());
+    }
+
+    #[test]
+    fn require_https_includes_env_var_in_error() {
+        let result = require_https("CS_TRACKING_URL", "http://bad.com");
+        assert!(result.unwrap_err().contains("CS_TRACKING_URL"));
     }
 }

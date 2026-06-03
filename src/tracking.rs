@@ -96,11 +96,19 @@ async fn send_event(mut te: TrackingEvent, client: &dyn HttpClient) -> Result<()
 
 fn tracking_url() -> String {
     if let Ok(url) = std::env::var("CS_TRACKING_URL") {
+        if let Err(e) = crate::config::require_https("CS_TRACKING_URL", &url) {
+            tracing::warn!("{e}");
+        }
         return normalize_tracking_override(&url);
     }
 
     let api_url = std::env::var("CS_ONPREM_URL")
-        .map(|u| format!("{u}/api"))
+        .map(|u| {
+            if let Err(e) = crate::config::require_https("CS_ONPREM_URL", &u) {
+                tracing::warn!("{e}");
+            }
+            format!("{u}/api")
+        })
         .unwrap_or_else(|_| DEFAULT_API_URL.to_string());
 
     format!("{api_url}/v2/analytics/track")

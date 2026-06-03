@@ -5,18 +5,21 @@
 //! - Custom environment value is sent when `CS_ENVIRONMENT` is set
 
 use super::*;
-use super::fake_http_server::FakeHttpServer;
+use super::fake_https_server::FakeHttpsServer;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 fn score_event_environment(
     extra_env: &[(&str, &str)],
 ) -> Option<String> {
-    let server = FakeHttpServer::always_ok();
+    let cert_dir = create_temp_dir("cs_mcp_env_override_certs_").expect("cert temp");
+    let server = FakeHttpsServer::always_ok(cert_dir.path());
+    let ca = server.certs.ca_cert_path.to_string_lossy().to_string();
     let (command, mut env, repo_dir, _tmp) = setup();
 
     env.retain(|(k, _)| k != "CS_DISABLE_TRACKING");
     env.push(("CS_TRACKING_URL".to_string(), server.url()));
+    env.push(("REQUESTS_CA_BUNDLE".to_string(), ca));
     for (key, val) in extra_env {
         env.push((key.to_string(), val.to_string()));
     }
@@ -53,6 +56,7 @@ fn score_event_environment(
 }
 
 pub fn test_default_environment_is_sent() {
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
     let value = score_event_environment(&[])
         .expect("Should find environment property");
 
@@ -63,6 +67,7 @@ pub fn test_default_environment_is_sent() {
 }
 
 pub fn test_overridden_environment_is_sent() {
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
     let override_value = "my-agent-name";
     let value = score_event_environment(&[("CS_ENVIRONMENT", override_value)])
         .expect("Should find environment property");

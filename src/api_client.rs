@@ -7,6 +7,9 @@ use crate::http::{HttpClient, HttpRequest, HttpResponse, Method};
 
 pub fn get_api_url() -> String {
     if let Ok(url) = std::env::var("CS_ONPREM_URL") {
+        if let Err(e) = crate::config::require_https("CS_ONPREM_URL", &url) {
+            tracing::warn!("{e}");
+        }
         format!("{}/api", url.trim_end_matches('/'))
     } else {
         "https://api.codescene.io".to_string()

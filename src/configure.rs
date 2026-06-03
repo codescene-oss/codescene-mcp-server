@@ -45,6 +45,13 @@ pub fn set_value(key: &str, value: &str) -> String {
         value
     };
 
+    if !value.is_empty() {
+        if let Err(msg) = config::validate_https_url(option.key, value) {
+            return serde_json::to_string(&serde_json::json!({ "error": msg }))
+                .unwrap_or_default();
+        }
+    }
+
     let mut data = config::load().unwrap_or_default();
 
     if value.is_empty() {

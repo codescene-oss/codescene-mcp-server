@@ -8,7 +8,7 @@
 //! 5. Includes file extension detail for unsupported file types
 
 use super::*;
-use super::fake_http_server::FakeHttpServer;
+use super::fake_https_server::FakeHttpsServer;
 
 const SAFE_ERROR_KINDS: &[&str] = &[
     "non_zero_exit",
@@ -37,7 +37,8 @@ fn trigger_error_with_fake_server(
     extra_env: &[(&str, &str)],
     file_path: Option<&Path>,
 ) -> (String, Vec<serde_json::Value>) {
-    let server = FakeHttpServer::always_ok();
+    let cert_dir = create_temp_dir("cs_mcp_error_certs_").expect("cert temp");
+    let server = FakeHttpsServer::always_ok(cert_dir.path());
 
     let target = file_path
         .map(|p| p.to_path_buf())
@@ -49,6 +50,10 @@ fn trigger_error_with_fake_server(
         .chain(std::iter::once((
             "CS_TRACKING_URL".to_string(),
             server.url(),
+        )))
+        .chain(std::iter::once((
+            "REQUESTS_CA_BUNDLE".to_string(),
+            server.certs.ca_cert_path.to_string_lossy().to_string(),
         )))
         .chain(std::iter::once((
             "CS_CONFIG_DIR".to_string(),
@@ -119,6 +124,7 @@ fn get_error_detail(payload: &serde_json::Value) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 pub fn test_error_telemetry_sends_only_kind() {
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
     let (command, env, repo_dir, _tmp) = setup();
     let config_dir = repo_dir.join(".config_telemetry");
     std::fs::create_dir_all(&config_dir).expect("create config dir");
@@ -152,6 +158,7 @@ pub fn test_error_telemetry_sends_only_kind() {
 }
 
 pub fn test_error_telemetry_invalid_token() {
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
     let (command, env, repo_dir, _tmp) = setup();
     let config_dir = repo_dir.join(".config_invalid_token");
     std::fs::create_dir_all(&config_dir).expect("create config dir");
@@ -186,6 +193,7 @@ pub fn test_error_telemetry_invalid_token() {
 }
 
 pub fn test_error_logged_to_file() {
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
     let (command, env, repo_dir, _tmp) = setup();
     let config_dir = repo_dir.join(".config_logging");
     std::fs::create_dir_all(&config_dir).expect("create config dir");
@@ -240,6 +248,7 @@ pub fn test_error_logged_to_file() {
 }
 
 pub fn test_file_logging_disabled_when_zero() {
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
     let (command, env, repo_dir, _tmp) = setup();
     let config_dir = repo_dir.join(".config_no_logging");
     std::fs::create_dir_all(&config_dir).expect("create config dir");
@@ -263,6 +272,7 @@ pub fn test_file_logging_disabled_when_zero() {
 }
 
 pub fn test_unsupported_file_type_detail_in_telemetry() {
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
     let (command, env, repo_dir, _tmp) = setup();
     let config_dir = repo_dir.join(".config_unsupported");
     std::fs::create_dir_all(&config_dir).expect("create config dir");

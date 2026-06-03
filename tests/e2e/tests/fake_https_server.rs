@@ -11,6 +11,14 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+/// A captured HTTP request from the fake server.
+pub struct CapturedRequest {
+    pub method: String,
+    pub path: String,
+    pub headers: Vec<(String, String)>,
+    pub body: String,
+}
+
 /// Result of generating a CA and server certificate pair.
 pub struct GeneratedCerts {
     pub ca_cert_path: PathBuf,
@@ -22,6 +30,7 @@ pub struct FakeHttpsServer {
     #[allow(dead_code)]
     shutdown: Arc<Mutex<bool>>,
     pub certs: GeneratedCerts,
+    captured_requests: Arc<Mutex<Vec<CapturedRequest>>>,
 }
 
 impl FakeHttpsServer {
@@ -30,6 +39,23 @@ impl FakeHttpsServer {
     /// Generates a fresh CA and server certificate, writes the CA cert to
     /// `ca_cert_path` inside `cert_dir`, and listens on a random port.
     pub fn start_projects_api(cert_dir: &Path) -> Self {
+        Self::start(cert_dir, |req| {
+            let path = &req.path;
+            if path.contains("/api/v2/projects") {
+                if path.contains("page=1") || !path.contains("page=") {
+                    return (200, r#"[{"id":1,"name":"Test Project"}]"#.to_string());
+                }
+                return (200, "[]".to_string());
+            }
+            (200, "{}".to_string())
+        })
+    }
+
+    /// Start an HTTPS server with a custom handler function.
+    pub fn start(
+        cert_dir: &Path,
+        handler: impl Fn(&CapturedRequest) -> (u16, String) + Send + Sync + 'static,
+    ) -> Self {
         rustls::crypto::aws_lc_rs::default_provider()
             .install_default()
             .ok(); // ignore if already installed
@@ -40,15 +66,25 @@ impl FakeHttpsServer {
 
         let acceptor = Arc::new(rustls::ServerConfig::from(tls_config));
         let shutdown = Arc::new(Mutex::new(false));
+        let captured_requests: Arc<Mutex<Vec<CapturedRequest>>> = Arc::new(Mutex::new(Vec::new()));
         let stop = Arc::clone(&shutdown);
+        let reqs = Arc::clone(&captured_requests);
+        let handler: Arc<dyn Fn(&CapturedRequest) -> (u16, String) + Send + Sync> =
+            Arc::new(handler);
 
-        thread::spawn(move || serve_loop(listener, acceptor, stop));
+        thread::spawn(move || serve_loop(listener, acceptor, stop, reqs, handler));
 
         FakeHttpsServer {
             port,
             shutdown,
             certs,
+            captured_requests,
         }
+    }
+
+    /// Start an HTTPS server that always responds with 200 OK and `{}`.
+    pub fn always_ok(cert_dir: &Path) -> Self {
+        Self::start(cert_dir, |_| (200, "{}".to_string()))
     }
 
     pub fn url(&self) -> String {
@@ -58,6 +94,32 @@ impl FakeHttpsServer {
     #[allow(dead_code)]
     pub fn shutdown(&self) {
         *self.shutdown.lock().unwrap() = true;
+    }
+
+    pub fn get_requests(&self) -> Vec<CapturedRequest> {
+        let locked = self.captured_requests.lock().unwrap();
+        locked
+            .iter()
+            .map(|r| CapturedRequest {
+                method: r.method.clone(),
+                path: r.path.clone(),
+                headers: r.headers.clone(),
+                body: r.body.clone(),
+            })
+            .collect()
+    }
+
+    pub fn request_count(&self) -> usize {
+        self.captured_requests.lock().unwrap().len()
+    }
+
+    pub fn get_payloads(&self) -> Vec<serde_json::Value> {
+        let locked = self.captured_requests.lock().unwrap();
+        locked
+            .iter()
+            .filter(|r| r.method == "POST")
+            .filter_map(|r| serde_json::from_str(&r.body).ok())
+            .collect()
     }
 }
 
@@ -112,13 +174,15 @@ fn serve_loop(
     listener: TcpListener,
     tls_config: Arc<rustls::ServerConfig>,
     shutdown: Arc<Mutex<bool>>,
+    captured: Arc<Mutex<Vec<CapturedRequest>>>,
+    handler: Arc<dyn Fn(&CapturedRequest) -> (u16, String) + Send + Sync>,
 ) {
     while !*shutdown.lock().unwrap() {
         match listener.accept() {
             Ok((tcp_stream, _)) => {
                 let acceptor = rustls::ServerConnection::new(Arc::clone(&tls_config));
                 if let Ok(acceptor) = acceptor {
-                    handle_tls_connection(tcp_stream, acceptor);
+                    handle_tls_connection(tcp_stream, acceptor, &captured, &handler);
                 }
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -132,51 +196,67 @@ fn serve_loop(
 fn handle_tls_connection(
     tcp: std::net::TcpStream,
     server_conn: rustls::ServerConnection,
+    captured: &Arc<Mutex<Vec<CapturedRequest>>>,
+    handler: &Arc<dyn Fn(&CapturedRequest) -> (u16, String) + Send + Sync>,
 ) {
     tcp.set_nonblocking(false).ok();
     let mut tls = rustls::StreamOwned::new(server_conn, tcp);
 
-    let Some(path) = read_request_path(&mut tls) else {
+    let Some(request) = parse_request(&mut tls) else {
         return;
     };
 
-    let body = build_response_body(&path);
-    write_response(&mut tls, &body);
+    let (status, body) = handler(&request);
+    captured.lock().unwrap().push(request);
+    write_response(&mut tls, status, &body);
 }
 
-fn read_request_path(stream: &mut impl Read) -> Option<String> {
+fn parse_request(stream: &mut impl Read) -> Option<CapturedRequest> {
     let mut reader = BufReader::new(stream);
     let mut request_line = String::new();
     reader.read_line(&mut request_line).ok()?;
 
-    let path = request_line
-        .split_whitespace()
-        .nth(1)?
-        .to_string();
+    let parts: Vec<&str> = request_line.trim().split_whitespace().collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let method = parts[0].to_string();
+    let path = parts[1].to_string();
 
-    // Consume remaining headers
+    let mut headers = Vec::new();
+    let mut content_length = 0usize;
     loop {
         let mut line = String::new();
         if reader.read_line(&mut line).is_err() || line.trim().is_empty() {
             break;
         }
-    }
-    Some(path)
-}
-
-fn build_response_body(path: &str) -> String {
-    if path.contains("/api/v2/projects") {
-        if path.contains("page=1") || !path.contains("page=") {
-            return r#"[{"id":1,"name":"Test Project"}]"#.to_string();
+        if let Some((k, v)) = line.trim().split_once(':') {
+            let k = k.trim().to_string();
+            let v = v.trim().to_string();
+            if k.to_lowercase() == "content-length" {
+                content_length = v.parse().unwrap_or(0);
+            }
+            headers.push((k, v));
         }
-        return "[]".to_string();
     }
-    "{}".to_string()
+
+    let mut body_buf = vec![0u8; content_length];
+    if content_length > 0 {
+        let _ = reader.read_exact(&mut body_buf);
+    }
+
+    Some(CapturedRequest {
+        method,
+        path,
+        headers,
+        body: String::from_utf8_lossy(&body_buf).to_string(),
+    })
 }
 
-fn write_response(stream: &mut impl Write, body: &str) {
+fn write_response(stream: &mut impl Write, status: u16, body: &str) {
     let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+        "HTTP/1.1 {} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+        status,
         body.len(),
         body
     );

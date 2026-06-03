@@ -7,7 +7,7 @@
 //! - Enriched events contain required common and tool-specific properties
 
 use super::*;
-use super::fake_http_server::FakeHttpServer;
+use super::fake_https_server::FakeHttpsServer;
 
 use sha2::{Sha256, Digest};
 use std::path::PathBuf;
@@ -17,7 +17,7 @@ use tempfile::TempDir;
 
 const TOOL_NAME: &str = "code_health_score";
 const TIMEOUT: Duration = Duration::from_secs(60);
-const UNREACHABLE_ANALYTICS_URL: &str = "http://192.0.2.1:1";
+const UNREACHABLE_ANALYTICS_URL: &str = "https://192.0.2.1:1";
 
 // From analyze_change_set — triggers delta-analysis findings
 const CLEAN_ADDITION: &str = r#"
@@ -126,7 +126,7 @@ fn assert_properties_are_nonempty(props: &serde_json::Value, keys: &[&str]) {
     }
 }
 
-fn wait_for_analytics(server: &FakeHttpServer) {
+fn wait_for_analytics(server: &FakeHttpsServer) {
     let deadline = Instant::now() + Duration::from_secs(15);
     while server.request_count() == 0 && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(200));
@@ -159,9 +159,12 @@ pub fn test_response_time_not_delayed_by_analytics() {
 }
 
 pub fn test_analytics_events_are_sent() {
-    let server = FakeHttpServer::always_ok();
-    let (command, env, repo_dir, _tmp) =
-        analytics_setup_with_env(&[("CS_TRACKING_URL", &server.url())]);
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
+    let tmp = create_temp_dir("cs_mcp_analytics_sent_").expect("temp");
+    let server = FakeHttpsServer::always_ok(tmp.path());
+    let ca = server.certs.ca_cert_path.to_string_lossy().to_string();
+    let (command, env, repo_dir, _tmp2) =
+        analytics_setup_with_env(&[("CS_TRACKING_URL", &server.url()), ("REQUESTS_CA_BUNDLE", &ca)]);
 
     let (_result, _client) = start_client_and_score(&command, &env, &repo_dir);
     wait_for_analytics(&server);
@@ -173,9 +176,13 @@ pub fn test_analytics_events_are_sent() {
 }
 
 pub fn test_disabled_tracking_sends_no_events() {
-    let server = FakeHttpServer::always_ok();
-    let (command, env, repo_dir, _tmp) = analytics_setup_with_env(&[
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
+    let tmp = create_temp_dir("cs_mcp_analytics_disabled_").expect("temp");
+    let server = FakeHttpsServer::always_ok(tmp.path());
+    let ca = server.certs.ca_cert_path.to_string_lossy().to_string();
+    let (command, env, repo_dir, _tmp2) = analytics_setup_with_env(&[
         ("CS_TRACKING_URL", &server.url()),
+        ("REQUESTS_CA_BUNDLE", &ca),
         ("CS_DISABLE_TRACKING", "1"),
     ]);
 
@@ -197,9 +204,12 @@ pub fn test_disabled_tracking_returns_valid_results() {
 }
 
 pub fn test_enriched_event_contains_common_properties() {
-    let server = FakeHttpServer::always_ok();
-    let (command, env, repo_dir, _tmp) =
-        analytics_setup_with_env(&[("CS_TRACKING_URL", &server.url())]);
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
+    let tmp = create_temp_dir("cs_mcp_analytics_common_").expect("temp");
+    let server = FakeHttpsServer::always_ok(tmp.path());
+    let ca = server.certs.ca_cert_path.to_string_lossy().to_string();
+    let (command, env, repo_dir, _tmp2) =
+        analytics_setup_with_env(&[("CS_TRACKING_URL", &server.url()), ("REQUESTS_CA_BUNDLE", &ca)]);
 
     let (_result, _client) = start_client_and_score(&command, &env, &repo_dir);
     wait_for_analytics(&server);
@@ -221,9 +231,12 @@ pub fn test_enriched_event_contains_common_properties() {
 }
 
 pub fn test_enriched_event_contains_tool_specific_properties() {
-    let server = FakeHttpServer::always_ok();
-    let (command, env, repo_dir, _tmp) =
-        analytics_setup_with_env(&[("CS_TRACKING_URL", &server.url())]);
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
+    let tmp = create_temp_dir("cs_mcp_analytics_tool_").expect("temp");
+    let server = FakeHttpsServer::always_ok(tmp.path());
+    let ca = server.certs.ca_cert_path.to_string_lossy().to_string();
+    let (command, env, repo_dir, _tmp2) =
+        analytics_setup_with_env(&[("CS_TRACKING_URL", &server.url()), ("REQUESTS_CA_BUNDLE", &ca)]);
 
     let (result, _client) = start_client_and_score(&command, &env, &repo_dir);
     wait_for_analytics(&server);
@@ -299,7 +312,9 @@ fn run_tool_with_fake_server<F>(
 where
     F: FnOnce(&mut MCPClient, &Path) -> String,
 {
-    let server = FakeHttpServer::always_ok();
+    let cert_dir = create_temp_dir("cs_mcp_analytics_certs_").expect("cert temp");
+    let server = FakeHttpsServer::always_ok(cert_dir.path());
+    let ca = server.certs.ca_cert_path.to_string_lossy().to_string();
     let executable = find_or_build_executable();
     let backend = create_backend(executable);
 
@@ -308,6 +323,7 @@ where
     let env_map = backend.get_env(&base, repo_dir);
     let mut env_vec: Vec<(String, String)> = env_map.into_iter().collect();
     env_vec.push(("CS_TRACKING_URL".to_string(), server.url()));
+    env_vec.push(("REQUESTS_CA_BUNDLE".to_string(), ca));
     for (k, v) in extra_env {
         env_vec.push((k.to_string(), v.to_string()));
     }
@@ -356,6 +372,7 @@ fn git_in(repo_dir: &Path, args: &[&str]) {
 // ---------------------------------------------------------------------------
 
 pub fn test_enriched_review_event() {
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
     let temp = create_temp_dir("cs_mcp_review_event_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
 
@@ -394,6 +411,7 @@ pub fn test_enriched_review_event() {
 // ---------------------------------------------------------------------------
 
 pub fn test_enriched_pre_commit_event() {
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
     let temp = create_temp_dir("cs_mcp_precommit_event_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
 
@@ -434,6 +452,7 @@ pub fn test_enriched_pre_commit_event() {
 // ---------------------------------------------------------------------------
 
 pub fn test_enriched_analyze_change_set_event() {
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
     let temp = create_temp_dir("cs_mcp_changeset_event_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
 
@@ -483,6 +502,7 @@ pub fn test_enriched_analyze_change_set_event() {
 // ---------------------------------------------------------------------------
 
 pub fn test_enriched_pre_commit_event_with_findings() {
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
     let temp = create_temp_dir("cs_mcp_precommit_findings_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
 
@@ -528,6 +548,7 @@ pub fn test_enriched_pre_commit_event_with_findings() {
 // ---------------------------------------------------------------------------
 
 pub fn test_enriched_analyze_change_set_event_with_findings() {
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
     let temp = create_temp_dir("cs_mcp_changeset_findings_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
 

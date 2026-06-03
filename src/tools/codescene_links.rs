@@ -9,7 +9,12 @@ fn onprem_url() -> Option<String> {
     std::env::var("CS_ONPREM_URL")
         .ok()
         .filter(|u| !u.is_empty())
-        .map(|u| u.trim_end_matches('/').to_string())
+        .map(|u| {
+            if let Err(e) = crate::config::require_https("CS_ONPREM_URL", &u) {
+                tracing::warn!("{e}");
+            }
+            u.trim_end_matches('/').to_string()
+        })
 }
 
 /// Returns the base path for an analysis page (without trailing slash).

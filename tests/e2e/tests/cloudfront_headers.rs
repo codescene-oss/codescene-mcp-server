@@ -4,7 +4,7 @@
 //! Accept, and Authorization headers.
 
 use super::*;
-use super::fake_http_server::FakeHttpServer;
+use super::fake_https_server::FakeHttpsServer;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -19,9 +19,11 @@ fn find_header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a st
 }
 
 pub fn test_api_client_headers() {
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
     let call_count = Arc::new(AtomicUsize::new(0));
     let counter = call_count.clone();
-    let server = FakeHttpServer::start(move |_req| {
+    let temp_dir = create_temp_dir("cs_mcp_headers_").expect("create temp dir");
+    let server = FakeHttpsServer::start(temp_dir.path(), move |_req| {
         let n = counter.fetch_add(1, Ordering::SeqCst);
         if n == 0 {
             (200, r#"[{"id":1,"name":"Test Project"}]"#.to_string())
@@ -30,7 +32,6 @@ pub fn test_api_client_headers() {
         }
     });
 
-    let temp_dir = create_temp_dir("cs_mcp_headers_").expect("create temp dir");
     let sample_files = get_sample_files();
     let repo_dir =
         create_git_repo(temp_dir.path(), &sample_files).expect("create git repo");
@@ -48,6 +49,10 @@ pub fn test_api_client_headers() {
             ("CS_ACCESS_TOKEN".to_string(), "test-token-for-header-check".to_string()),
             ("CS_DISABLE_VERSION_CHECK".to_string(), "1".to_string()),
             ("CS_DISABLE_TRACKING".to_string(), "1".to_string()),
+            (
+                "REQUESTS_CA_BUNDLE".to_string(),
+                server.certs.ca_cert_path.to_string_lossy().to_string(),
+            ),
         ])
         .collect();
 
