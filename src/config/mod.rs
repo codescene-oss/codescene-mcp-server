@@ -1,3 +1,9 @@
+pub mod options;
+pub mod validation;
+
+pub use options::*;
+pub use validation::*;
+
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -30,128 +36,6 @@ pub(crate) fn lock_test_env() -> std::sync::MutexGuard<'static, ()> {
         .unwrap_or_else(|e| e.into_inner())
 }
 
-pub struct ConfigOption {
-    pub key: &'static str,
-    pub env_var: &'static str,
-    pub description: &'static str,
-    pub sensitive: bool,
-    pub hidden: bool,
-    pub api_only: bool,
-    pub aliases: &'static [&'static str],
-    pub docs_url: &'static str,
-}
-
-pub const OPTIONS: &[ConfigOption] = &[
-    ConfigOption {
-        key: "access_token",
-        env_var: "CS_ACCESS_TOKEN",
-        description: "CodeScene access token (PAT or standalone license)",
-        sensitive: true,
-        hidden: false,
-        api_only: false,
-        aliases: &["token", "pat"],
-        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
-    },
-    ConfigOption {
-        key: "onprem_url",
-        env_var: "CS_ONPREM_URL",
-        description: "CodeScene on-premise server URL",
-        sensitive: false,
-        hidden: false,
-        api_only: true,
-        aliases: &["url", "server_url"],
-        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
-    },
-    ConfigOption {
-        key: "default_project_id",
-        env_var: "CS_DEFAULT_PROJECT_ID",
-        description: "Default CodeScene project ID",
-        sensitive: false,
-        hidden: false,
-        api_only: true,
-        aliases: &["project_id", "project"],
-        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
-    },
-    ConfigOption {
-        key: "disable_tracking",
-        env_var: "CS_DISABLE_TRACKING",
-        description: "Disable anonymous usage analytics",
-        sensitive: false,
-        hidden: true,
-        api_only: false,
-        aliases: &["no_tracking"],
-        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
-    },
-    ConfigOption {
-        key: "disable_version_check",
-        env_var: "CS_DISABLE_VERSION_CHECK",
-        description: "Disable automatic version update checks",
-        sensitive: false,
-        hidden: true,
-        api_only: false,
-        aliases: &["no_version_check"],
-        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
-    },
-    ConfigOption {
-        key: "tracking_environment",
-        env_var: "CS_ENVIRONMENT",
-        description: "Override analytics environment label sent in tracking events",
-        sensitive: false,
-        hidden: true,
-        api_only: false,
-        aliases: &["environment"],
-        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
-    },
-    ConfigOption {
-        key: "ca_bundle",
-        env_var: "REQUESTS_CA_BUNDLE",
-        description: "Path to custom CA certificate bundle (PEM)",
-        sensitive: false,
-        hidden: false,
-        api_only: false,
-        aliases: &["ssl_cert", "cert"],
-        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
-    },
-    ConfigOption {
-        key: "enabled_tools",
-        env_var: "CS_ENABLED_TOOLS",
-        description: "Comma-separated allowlist of tool names to enable (unset = all enabled). Requires restart.",
-        sensitive: false,
-        hidden: false,
-        api_only: false,
-        aliases: &["tools"],
-        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
-    },
-    ConfigOption {
-        key: "log_retention_days",
-        env_var: "CS_LOG_RETENTION_DAYS",
-        description: "Number of days to keep log files (default: 7, set to 0 to disable file logging)",
-        sensitive: false,
-        hidden: false,
-        api_only: false,
-        aliases: &["log_days"],
-        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
-    },
-];
-
-/// Tool names that can be enabled/disabled via the `enabled_tools` config.
-/// Excludes `get_config` and `set_config` which are always available.
-pub const CONFIGURABLE_TOOL_NAMES: &[&str] = &[
-    "explain_code_health",
-    "explain_code_health_productivity",
-    "code_health_review",
-    "code_health_score",
-    "pre_commit_code_health_safeguard",
-    "analyze_change_set",
-    "code_health_refactoring_business_case",
-    "select_project",
-    "list_technical_debt_goals_for_project",
-    "list_technical_debt_goals_for_project_file",
-    "list_technical_debt_hotspots_for_project",
-    "list_technical_debt_hotspots_for_project_file",
-    "code_ownership_for_path",
-];
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ConfigData {
     #[serde(default)]
@@ -159,41 +43,6 @@ pub struct ConfigData {
 
     #[serde(flatten)]
     pub values: HashMap<String, String>,
-}
-
-/// Keys that represent URL values and must use HTTPS.
-const URL_KEYS: &[&str] = &["onprem_url"];
-
-/// Validate that a URL value uses the HTTPS scheme.
-/// Returns `Ok(())` for valid HTTPS URLs, or `Err` with a user-facing message.
-pub fn validate_https_url(key: &str, url: &str) -> Result<(), String> {
-    if !URL_KEYS.contains(&key) {
-        return Ok(());
-    }
-    let trimmed = url.trim();
-    if trimmed.is_empty() {
-        return Ok(());
-    }
-    if trimmed.starts_with("https://") {
-        return Ok(());
-    }
-    Err(format!(
-        "The URL for '{key}' must use HTTPS (got: {trimmed}). \
-         Please provide a URL starting with https://"
-    ))
-}
-
-/// Validate that a raw URL string uses HTTPS. Used for env vars not managed
-/// through the config system (e.g. CS_TRACKING_URL).
-pub fn require_https(env_var: &str, url: &str) -> Result<(), String> {
-    let trimmed = url.trim();
-    if trimmed.is_empty() || trimmed.starts_with("https://") {
-        return Ok(());
-    }
-    Err(format!(
-        "{env_var} must use HTTPS (got: {trimmed}). \
-         Please provide a URL starting with https://"
-    ))
 }
 
 pub fn config_dir() -> PathBuf {
@@ -327,12 +176,6 @@ pub fn value_source(option: &ConfigOption, data: &ConfigData) -> &'static str {
     "not set"
 }
 
-pub fn find_option(key: &str) -> Option<&'static ConfigOption> {
-    OPTIONS
-        .iter()
-        .find(|o| o.key == key || o.env_var == key || o.aliases.contains(&key))
-}
-
 /// Apply config values to environment variables at startup.
 /// Only sets env vars that are not already set by the MCP client.
 pub fn apply_to_env(data: &ConfigData) {
@@ -340,13 +183,13 @@ pub fn apply_to_env(data: &ConfigData) {
         if std::env::var(option.env_var).is_ok() {
             continue;
         }
-        let val = data.values.get(option.key).filter(|v| !v.is_empty());
-        if let Some(val) = val {
-            if let Err(e) = validate_https_url(option.key, val) {
-                tracing::warn!("{e}");
-            }
-            std::env::set_var(option.env_var, val);
+        let Some(val) = data.values.get(option.key).filter(|v| !v.is_empty()) else {
+            continue;
+        };
+        if let Err(e) = validate_https_url(option.key, val) {
+            tracing::warn!("{e}");
         }
+        std::env::set_var(option.env_var, val);
     }
 }
 
@@ -359,11 +202,6 @@ pub fn instance_id(data: &ConfigData) -> String {
 #[allow(dead_code)]
 pub fn config_file_path() -> PathBuf {
     config_dir().join("config.json")
-}
-
-#[allow(dead_code)]
-pub fn is_valid_key(key: &str) -> bool {
-    find_option(key).is_some()
 }
 
 /// Parse the `enabled_tools` config value into a set of tool names.
@@ -402,100 +240,9 @@ pub fn log_dir() -> PathBuf {
     config_dir().join("logs")
 }
 
-/// Mask sensitive values for display.
-/// Shows a short prefix to identify the token kind, without revealing entropy.
-const SENSITIVE_PREFIX_LENGTH: usize = 4;
-
-/// Returns the env var names of all sensitive config options (tokens, keys, etc.).
-/// Used to scrub secrets from child process environments.
-pub fn sensitive_env_vars() -> Vec<&'static str> {
-    OPTIONS
-        .iter()
-        .filter(|o| o.sensitive)
-        .map(|o| o.env_var)
-        .collect()
-}
-
-pub fn mask_if_sensitive(option: &ConfigOption, value: &str) -> String {
-    if option.sensitive && !value.is_empty() {
-        if value.len() <= SENSITIVE_PREFIX_LENGTH {
-            return "***".to_string();
-        }
-        format!("{}...", &value[..SENSITIVE_PREFIX_LENGTH])
-    } else {
-        value.to_string()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn find_option_by_key() {
-        let opt = find_option("access_token");
-        assert!(opt.is_some());
-        assert_eq!(opt.unwrap().env_var, "CS_ACCESS_TOKEN");
-    }
-
-    #[test]
-    fn find_option_by_alias() {
-        let opt = find_option("token");
-        assert!(opt.is_some());
-        assert_eq!(opt.unwrap().key, "access_token");
-    }
-
-    #[test]
-    fn find_option_by_env_var() {
-        let opt = find_option("CS_ACCESS_TOKEN");
-        assert!(opt.is_some());
-        assert_eq!(opt.unwrap().key, "access_token");
-    }
-
-    #[test]
-    fn find_option_unknown_returns_none() {
-        assert!(find_option("nonexistent_key").is_none());
-    }
-
-    #[test]
-    fn is_valid_key_known() {
-        assert!(is_valid_key("access_token"));
-        assert!(is_valid_key("onprem_url"));
-        assert!(is_valid_key("ca_bundle"));
-    }
-
-    #[test]
-    fn is_valid_key_unknown() {
-        assert!(!is_valid_key("bad_key"));
-    }
-
-    #[test]
-    fn mask_sensitive_long_value() {
-        let opt = find_option("access_token").unwrap();
-        let masked = mask_if_sensitive(opt, "my-super-secret-token-value");
-        assert_eq!(masked, "my-s...");
-    }
-
-    #[test]
-    fn mask_sensitive_short_value() {
-        let opt = find_option("access_token").unwrap();
-        let masked = mask_if_sensitive(opt, "abcd");
-        assert_eq!(masked, "***");
-    }
-
-    #[test]
-    fn mask_sensitive_empty_value() {
-        let opt = find_option("access_token").unwrap();
-        let masked = mask_if_sensitive(opt, "");
-        assert_eq!(masked, "");
-    }
-
-    #[test]
-    fn mask_non_sensitive_passes_through() {
-        let opt = find_option("onprem_url").unwrap();
-        let masked = mask_if_sensitive(opt, "https://example.com");
-        assert_eq!(masked, "https://example.com");
-    }
 
     #[test]
     fn config_data_default() {
@@ -635,16 +382,6 @@ mod tests {
         let val = std::env::var("CS_ONPREM_URL").unwrap_or_default();
         assert_eq!(val, "https://apply-test.com");
         std::env::remove_var("CS_ONPREM_URL");
-    }
-
-    #[test]
-    fn options_list_is_not_empty() {
-        assert!(!OPTIONS.is_empty());
-        for opt in OPTIONS {
-            assert!(!opt.key.is_empty());
-            assert!(!opt.env_var.is_empty());
-            assert!(!opt.description.is_empty());
-        }
     }
 
     #[test]
@@ -803,35 +540,25 @@ mod tests {
     }
 
     // ---- snapshot_client_env_vars + client env var paths ----
-    // CLIENT_ENV_VARS is a OnceLock, so can only be set once per process.
-    // This single test exercises snapshot_client_env_vars(), is_client_env_var(),
-    // and the client-env-var branches of get_effective() and value_source().
 
     #[test]
     fn snapshot_and_client_env_var_paths() {
         let _lock = lock_test_env();
-        // Set an env var BEFORE snapshotting so it's captured as a client var.
-        // Use disable_tracking since it's hidden and unlikely to be set by other tests.
         std::env::set_var("CS_DISABLE_TRACKING", "snapshot-test");
 
         snapshot_client_env_vars();
 
-        // is_client_env_var should return true for the captured var
         assert!(is_client_env_var("CS_DISABLE_TRACKING"));
-        // and false for one that wasn't set
         assert!(!is_client_env_var("CS_ONPREM_URL"));
 
-        // get_effective should return the env var value for a client var
         let opt = find_option("disable_tracking").unwrap();
         let data = ConfigData::default();
         let val = get_effective(opt, &data);
         assert_eq!(val, Some("snapshot-test".to_string()));
 
-        // value_source should return "environment" for a client var
         let source = value_source(opt, &data);
         assert_eq!(source, "environment");
 
-        // Cleanup
         std::env::remove_var("CS_DISABLE_TRACKING");
     }
 
@@ -907,123 +634,5 @@ mod tests {
         );
         let result = enabled_tools(&data).unwrap();
         assert_eq!(result.len(), 2);
-    }
-
-    // ---- CONFIGURABLE_TOOL_NAMES ----
-
-    #[test]
-    fn configurable_tool_names_excludes_config_tools() {
-        assert!(!CONFIGURABLE_TOOL_NAMES.contains(&"get_config"));
-        assert!(!CONFIGURABLE_TOOL_NAMES.contains(&"set_config"));
-    }
-
-    #[test]
-    fn configurable_tool_names_includes_core_tools() {
-        assert!(CONFIGURABLE_TOOL_NAMES.contains(&"code_health_review"));
-        assert!(CONFIGURABLE_TOOL_NAMES.contains(&"code_health_score"));
-        assert!(CONFIGURABLE_TOOL_NAMES.contains(&"analyze_change_set"));
-    }
-
-    #[test]
-    fn find_option_enabled_tools() {
-        let opt = find_option("enabled_tools");
-        assert!(opt.is_some());
-        assert_eq!(opt.unwrap().env_var, "CS_ENABLED_TOOLS");
-    }
-
-    #[test]
-    fn find_option_enabled_tools_by_alias() {
-        let opt = find_option("tools");
-        assert!(opt.is_some());
-        assert_eq!(opt.unwrap().key, "enabled_tools");
-    }
-
-    #[test]
-    fn find_option_tracking_environment_by_env_var() {
-        let opt = find_option("CS_ENVIRONMENT");
-        assert!(opt.is_some());
-        assert_eq!(opt.unwrap().key, "tracking_environment");
-    }
-
-    #[test]
-    fn find_option_tracking_environment_by_alias() {
-        let opt = find_option("environment");
-        assert!(opt.is_some());
-        assert_eq!(opt.unwrap().key, "tracking_environment");
-    }
-
-    #[test]
-    fn sensitive_env_vars_includes_tokens() {
-        let vars = sensitive_env_vars();
-        assert!(
-            vars.contains(&"CS_ACCESS_TOKEN"),
-            "should include CS_ACCESS_TOKEN"
-        );
-    }
-
-    #[test]
-    fn sensitive_env_vars_excludes_non_sensitive() {
-        let vars = sensitive_env_vars();
-        assert!(
-            !vars.contains(&"CS_ONPREM_URL"),
-            "should not include non-sensitive CS_ONPREM_URL"
-        );
-    }
-
-    // ---- validate_https_url ----
-
-    #[test]
-    fn validate_https_url_accepts_https() {
-        assert!(validate_https_url("onprem_url", "https://example.com").is_ok());
-    }
-
-    #[test]
-    fn validate_https_url_rejects_http() {
-        let result = validate_https_url("onprem_url", "http://example.com");
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("HTTPS"));
-    }
-
-    #[test]
-    fn validate_https_url_accepts_empty() {
-        assert!(validate_https_url("onprem_url", "").is_ok());
-        assert!(validate_https_url("onprem_url", "  ").is_ok());
-    }
-
-    #[test]
-    fn validate_https_url_ignores_non_url_keys() {
-        assert!(validate_https_url("access_token", "http://not-a-url").is_ok());
-    }
-
-    #[test]
-    fn validate_https_url_rejects_bare_domain() {
-        let result = validate_https_url("onprem_url", "example.com");
-        assert!(result.is_err());
-    }
-
-    // ---- require_https ----
-
-    #[test]
-    fn require_https_accepts_https() {
-        assert!(require_https("CS_TRACKING_URL", "https://track.example.com").is_ok());
-    }
-
-    #[test]
-    fn require_https_rejects_http() {
-        let result = require_https("CS_TRACKING_URL", "http://track.example.com");
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("HTTPS"));
-    }
-
-    #[test]
-    fn require_https_accepts_empty() {
-        assert!(require_https("CS_TRACKING_URL", "").is_ok());
-        assert!(require_https("CS_TRACKING_URL", "  ").is_ok());
-    }
-
-    #[test]
-    fn require_https_includes_env_var_in_error() {
-        let result = require_https("CS_TRACKING_URL", "http://bad.com");
-        assert!(result.unwrap_err().contains("CS_TRACKING_URL"));
     }
 }
