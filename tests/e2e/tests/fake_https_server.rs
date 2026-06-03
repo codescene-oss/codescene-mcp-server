@@ -60,7 +60,8 @@ impl FakeHttpsServer {
             .install_default()
             .ok(); // ignore if already installed
         let (certs, tls_config) = build_tls_config(cert_dir);
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind HTTPS");
+        let listener = TcpListener::bind(format!("{}:0", super::fake_server_bind_host()))
+            .expect("bind HTTPS");
         let port = listener.local_addr().unwrap().port();
         listener.set_nonblocking(true).unwrap();
 
@@ -93,7 +94,7 @@ impl FakeHttpsServer {
     }
 
     pub fn url(&self) -> String {
-        format!("https://127.0.0.1:{}", self.port)
+        format!("https://{}:{}", super::fake_server_url_host(), self.port)
     }
 
     #[allow(dead_code)]
@@ -143,7 +144,10 @@ fn build_tls_config(cert_dir: &Path) -> (GeneratedCerts, rustls::ServerConfig) {
 
     let issuer = rcgen::Issuer::from_params(&ca_params, ca_key);
 
-    let mut server_params = rcgen::CertificateParams::new(vec!["localhost".to_string()])
+    let mut server_params = rcgen::CertificateParams::new(vec![
+        "localhost".to_string(),
+        "host.docker.internal".to_string(),
+    ])
         .expect("server params");
     server_params.subject_alt_names.push(rcgen::SanType::IpAddress(
         std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),

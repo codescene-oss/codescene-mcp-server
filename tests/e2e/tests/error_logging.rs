@@ -53,7 +53,7 @@ fn trigger_error_with_fake_server(
         )))
         .chain(std::iter::once((
             "REQUESTS_CA_BUNDLE".to_string(),
-            server.certs.ca_cert_path.to_string_lossy().to_string(),
+            super::docker_ca_bundle(&server.certs.ca_cert_path, repo_dir),
         )))
         .chain(std::iter::once((
             "CS_CONFIG_DIR".to_string(),

@@ -74,10 +74,8 @@ fn analytics_setup_with_https_server(
     let server = FakeHttpsServer::always_ok(cert_dir.path());
     let (command, mut env, repo_dir, tmp) = setup();
     env.push(("CS_TRACKING_URL".to_string(), server.url()));
-    env.push((
-        "REQUESTS_CA_BUNDLE".to_string(),
-        server.certs.ca_cert_path.to_string_lossy().to_string(),
-    ));
+    let ca_path = super::docker_ca_bundle(&server.certs.ca_cert_path, &repo_dir);
+    env.push(("REQUESTS_CA_BUNDLE".to_string(), ca_path));
     for (key, val) in extra {
         env.push((key.to_string(), val.to_string()));
     }
@@ -312,10 +310,8 @@ where
     let env_map = backend.get_env(&base, repo_dir);
     let mut env_vec: Vec<(String, String)> = env_map.into_iter().collect();
     env_vec.push(("CS_TRACKING_URL".to_string(), server.url()));
-    env_vec.push((
-        "REQUESTS_CA_BUNDLE".to_string(),
-        server.certs.ca_cert_path.to_string_lossy().to_string(),
-    ));
+    let ca_path = super::docker_ca_bundle(&server.certs.ca_cert_path, repo_dir);
+    env_vec.push(("REQUESTS_CA_BUNDLE".to_string(), ca_path));
     for (k, v) in extra_env {
         env_vec.push((k.to_string(), v.to_string()));
     }

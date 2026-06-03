@@ -18,10 +18,8 @@ fn score_event_environment(
 
     env.retain(|(k, _)| k != "CS_DISABLE_TRACKING");
     env.push(("CS_TRACKING_URL".to_string(), server.url()));
-    env.push((
-        "REQUESTS_CA_BUNDLE".to_string(),
-        server.certs.ca_cert_path.to_string_lossy().to_string(),
-    ));
+    let ca_path = super::docker_ca_bundle(&server.certs.ca_cert_path, &repo_dir);
+    env.push(("REQUESTS_CA_BUNDLE".to_string(), ca_path));
     for (key, val) in extra_env {
         env.push((key.to_string(), val.to_string()));
     }
