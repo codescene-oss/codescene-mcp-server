@@ -539,6 +539,26 @@ fn test_config_standalone_hides_api_only() {
     tests::configure::test_standalone_hides_api_only();
 }
 
+#[test]
+fn test_config_rejects_http_url() {
+    tests::configure::test_set_config_rejects_http_url();
+}
+
+#[test]
+fn test_config_accepts_https_url() {
+    tests::configure::test_set_config_accepts_https_url();
+}
+
+#[test]
+fn test_config_http_rejection_does_not_persist() {
+    tests::configure::test_set_config_http_rejection_does_not_persist();
+}
+
+#[test]
+fn test_config_non_url_key_unaffected() {
+    tests::configure::test_set_config_non_url_key_unaffected();
+}
+
 // --- Standalone License ---
 #[test]
 fn test_standalone_hides_api_tools() {
