@@ -28,8 +28,10 @@ jobs:
   # =============================================================================
   # E2E Docker Tests - Linux
   # =============================================================================
-  # Note: Docker tests only run on Linux and Windows because:
+  # Note: Docker tests only run on Linux because:
   # - macOS GitHub runners don't have native Docker; Colima/VZ is unreliable
+  # - Windows GitHub runners only support Windows containers (no Linux images)
+  # Windows path translation is covered by unit tests in src/docker.rs
   e2e-docker-linux:
     needs: check-secrets
     if: needs.check-secrets.outputs.has-token == 'true'
@@ -49,37 +51,3 @@ jobs:
 
       - name: Run e2e tests (docker backend)
         run: CS_MCP_BACKEND=docker cargo test --test e2e --release -- --test-threads=4
-
-  # =============================================================================
-  # E2E Docker Tests - Windows
-  # =============================================================================
-  # Windows Docker tests verify path translation between Windows host paths
-  # (e.g. C:\Users\...) and Linux container paths (/mount/...).
-  # Docker Desktop on Windows runs Linux containers via WSL2.
-  e2e-docker-windows:
-    needs: check-secrets
-    if: needs.check-secrets.outputs.has-token == 'true'
-    runs-on: x64-windows-8core
-    name: E2E Docker (Windows)
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Verify Docker is available
-        shell: pwsh
-        run: docker info
-
-      - name: Build Docker image
-        shell: pwsh
-        run: docker build --build-arg VERSION=MCP-0.0.0-test -t codescene-mcp-test .
-
-      - name: Run e2e tests (docker backend)
-        shell: pwsh
-        run: |
-          $env:CS_MCP_BACKEND = "docker"
-          cargo test --test e2e --release -- --test-threads=4
