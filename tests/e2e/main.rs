@@ -638,6 +638,27 @@ fn test_sigterm_after_full_handshake() {
     tests::shutdown_during_handshake::test_sigterm_after_full_handshake();
 }
 
+// --- Docker Path Translation ---
+#[test]
+fn test_docker_verify_finds_git_repo() {
+    tests::docker_path_translation::test_docker_verify_finds_git_repo();
+}
+
+#[test]
+fn test_docker_code_health_score() {
+    tests::docker_path_translation::test_docker_code_health_score();
+}
+
+#[test]
+fn test_docker_pre_commit_safeguard() {
+    tests::docker_path_translation::test_docker_pre_commit_safeguard();
+}
+
+#[test]
+fn test_docker_code_health_review() {
+    tests::docker_path_translation::test_docker_code_health_review();
+}
+
 // --- Platform Specific ---
 #[test]
 fn test_platform_absolute_paths() {

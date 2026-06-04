@@ -24,6 +24,7 @@ pub mod bundled_docs;
 pub mod business_case;
 pub mod cloudfront_headers;
 pub mod configure;
+pub mod docker_path_translation;
 pub mod enabled_tools;
 pub mod error_logging;
 pub mod git_subtree;
