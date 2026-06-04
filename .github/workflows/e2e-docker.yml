@@ -70,11 +70,9 @@ jobs:
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Switch Docker to Linux containers
+      - name: Verify Docker is available
         shell: pwsh
-        run: |
-          & "C:\Program Files\Docker\Docker\DockerCli.exe" -SwitchLinuxEngine 2>$null
-          docker info
+        run: docker info
 
       - name: Build Docker image
         shell: pwsh
