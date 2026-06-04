@@ -30,7 +30,8 @@ jobs:
   # =============================================================================
   # Note: Docker tests only run on Linux because:
   # - macOS GitHub runners don't have native Docker; Colima/VZ is unreliable
-  # - Linux Docker tests provide sufficient coverage for the Docker backend
+  # - Windows GitHub runners only support Windows containers (no Linux images)
+  # Windows path translation is covered by unit tests in src/docker.rs
   e2e-docker-linux:
     needs: check-secrets
     if: needs.check-secrets.outputs.has-token == 'true'
