@@ -123,6 +123,7 @@ mod tests {
         let _g = config::lock_test_env();
         std::env::set_var("CS_ONPREM_URL", "http://my-instance.com");
         assert!(onprem_url().is_none(), "HTTP URLs should be blocked");
+        std::env::remove_var("CS_ONPREM_URL");
     }
 
     // ── analysis_base ───────────────────────────────────────
