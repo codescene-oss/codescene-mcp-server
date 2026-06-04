@@ -118,13 +118,14 @@ impl MCPClient {
         params: Value,
         timeout: Duration,
     ) -> Result<Value, String> {
+        let id = next_msg_id();
         self.write_message(&json!({
             "jsonrpc": "2.0",
-            "id": next_msg_id(),
+            "id": id,
             "method": method,
             "params": params,
         }))?;
-        self.await_response(timeout)
+        self.await_response(id, timeout)
     }
 
     fn write_message(&mut self, message: &Value) -> Result<(), String> {
@@ -136,19 +137,45 @@ impl MCPClient {
         stdin.flush().map_err(|e| format!("Flush failed: {e}"))
     }
 
-    fn await_response(&self, timeout: Duration) -> Result<Value, String> {
+    fn await_response(&self, expected_id: u64, timeout: Duration) -> Result<Value, String> {
         let start = Instant::now();
+        let mut stashed: Vec<String> = Vec::new();
         loop {
-            if let Some(line) = self.responses.lock().unwrap().pop_front() {
-                return serde_json::from_str::<Value>(&line)
-                    .map_err(|e| format!("Invalid JSON: {e}"));
+            let line = self.responses.lock().unwrap().pop_front();
+            if let Some(line) = line {
+                match self.try_match_response(&line, expected_id) {
+                    Some(val) => {
+                        self.restore_stashed(stashed);
+                        return Ok(val);
+                    }
+                    None => stashed.push(line),
+                }
             }
             if start.elapsed() > timeout {
+                self.restore_stashed(stashed);
                 let tail: String = self.get_stderr().lines().rev().take(10)
                     .collect::<Vec<_>>().join("\n");
-                return Err(format!("Timeout waiting for response. Recent stderr:\n{tail}"));
+                return Err(format!("Timeout waiting for response (id={expected_id}). Recent stderr:\n{tail}"));
             }
             thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    fn try_match_response(&self, line: &str, expected_id: u64) -> Option<Value> {
+        let val = serde_json::from_str::<Value>(line).ok()?;
+        if val.get("id").and_then(|v| v.as_u64()) == Some(expected_id) {
+            Some(val)
+        } else {
+            None
+        }
+    }
+
+    fn restore_stashed(&self, stashed: Vec<String>) {
+        if !stashed.is_empty() {
+            let mut buf = self.responses.lock().unwrap();
+            for s in stashed.into_iter().rev() {
+                buf.push_front(s);
+            }
         }
     }
 

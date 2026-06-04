@@ -79,6 +79,16 @@ async fn run_cli_at_path(
         return parse_cli_output(retry_output);
     }
 
+    if is_license_check_failure(&stderr) {
+        tracing::warn!("License check failed, retrying after brief delay...");
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        let retry_output = run_cli_process(cli_path, args, working_dir, false).await?;
+        if retry_output.status.success() {
+            return Ok(String::from_utf8_lossy(&retry_output.stdout).to_string());
+        }
+        return parse_cli_output(retry_output);
+    }
+
     parse_cli_output(output)
 }
 
@@ -777,6 +787,31 @@ mod tests {
     fn should_not_retry_for_other_no_such_file_error() {
         let stderr = "java.nio.file.NoSuchFileException: /tmp/other-file.log";
         assert!(!should_retry_after_telemetry_flush_error(stderr));
+    }
+
+    #[tokio::test]
+    async fn run_cli_at_path_retries_once_on_license_check_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("license-retry.marker");
+        let marker_path = marker.to_string_lossy().to_string();
+        let script = format!(
+            "if [ ! -f '{marker_path}' ]; then touch '{marker_path}'; >&2 echo 'License check failed: [401] The user must reauthorize.'; exit 1; fi; echo ok"
+        );
+
+        let output = run_cli_at_path(Path::new("/bin/sh"), &["-c", &script], None).await;
+        assert_eq!(output.unwrap().trim(), "ok");
+    }
+
+    #[tokio::test]
+    async fn run_cli_at_path_license_check_failure_persists_after_retry() {
+        let script =
+            ">&2 echo 'License check failed: [401] The user must reauthorize.'; exit 1";
+
+        let result = run_cli_at_path(Path::new("/bin/sh"), &["-c", script], None).await;
+        match result.unwrap_err() {
+            CliError::LicenseCheckFailed => {}
+            other => panic!("Expected LicenseCheckFailed, got: {other:?}"),
+        }
     }
 
     #[tokio::test]
