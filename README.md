@@ -19,6 +19,7 @@ Want AI to perform the setup? Start with [skills/installing-and-activating-codes
 2. Install the MCP Server using one of the [installation options](#installation) below.
 3. Add the MCP Server to your AI assistant. See the detailed instructions for your environment in the installation guide.
 4. Copy the agent guidance that matches your license into your repository: [AGENTS-full.md](docs/AGENTS-full.md) for CodeScene Core users, [AGENTS-standalone.md](docs/AGENTS-standalone.md) for standalone license users, or [.amazonq/rules](.amazonq/rules) for Amazon Q. Also copy any relevant public [skills](skills) for reusable workflow prompts.
+5. Explore the [available tools](docs/tools.md) to see what the MCP Server can do and which tools are available for your license.
 
 ## Installation
 
