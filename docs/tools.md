@@ -1,4 +1,4 @@
-# Available Tools
+# Tools
 
 The CodeScene MCP Server provides 20 tools organized into three categories:
 **Code Health Analysis**, **Technical Debt & Project Insights**, and **Server Management**.
