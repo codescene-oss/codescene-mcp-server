@@ -4,7 +4,7 @@ The CodeScene MCP Server provides 20 tools organized into three categories:
 **Code Health Analysis**, **Technical Debt & Project Insights**, and **Server Management**.
 
 Tools marked **All Users** work with any valid license (standalone or API-connected).
-Tools marked **CodeScene Core** require a CodeScene API Personal Access Token and a CodeScene Core instance — they are not available when running with a standalone license.
+Tools marked **CodeScene Core users (cloud or on-prem)** require a CodeScene API Personal Access Token and a CodeScene Core users (cloud or on-prem) instance — they are not available when running with a standalone license.
 
 ## Code Health Analysis
 
@@ -42,41 +42,41 @@ Generate a data-driven business case for refactoring a source file. Returns quan
 
 ## Technical Debt & Project Insights
 
-These tools connect to the CodeScene API to provide project-level analysis data. They require a CodeScene Core instance and a Personal Access Token.
+These tools connect to the CodeScene API to provide project-level analysis data. They require a CodeScene Core users (cloud or on-prem) instance and a Personal Access Token.
 
 ### `select_project`
 
-**Availability:** CodeScene Core
+**Availability:** CodeScene Core users (cloud or on-prem)
 
 List all projects for an organization for selection by the user. Use before other project-scoped tools so the user can pick the project context explicitly. If `default_project_id` is configured, the server returns that project and selection is locked.
 
 ### `list_technical_debt_hotspots_for_project`
 
-**Availability:** CodeScene Core
+**Availability:** CodeScene Core users (cloud or on-prem)
 
 List the technical debt hotspots for a project. Use to identify high-impact technical debt hotspots across a project and prioritize refactoring targets. Returns file paths, Code Health scores, revision counts, and lines of code, with a link to the CodeScene hotspots page.
 
 ### `list_technical_debt_hotspots_for_project_file`
 
-**Availability:** CodeScene Core
+**Availability:** CodeScene Core users (cloud or on-prem)
 
 List the technical debt hotspots for a specific file in a project. Use to inspect hotspot metrics for one file before deciding if it should be a refactoring candidate. Returns the Code Health score, revision count, and lines of code for the specified file.
 
 ### `list_technical_debt_goals_for_project`
 
-**Availability:** CodeScene Core
+**Availability:** CodeScene Core users (cloud or on-prem)
 
 List the technical debt goals for a project. Use to see all files in a project that currently have explicit technical debt goals in CodeScene. Returns goal data from the latest available analysis, including only files with non-empty goals, along with a link to the Code Biomarkers page.
 
 ### `list_technical_debt_goals_for_project_file`
 
-**Availability:** CodeScene Core
+**Availability:** CodeScene Core users (cloud or on-prem)
 
 List the technical debt goals for a specific file in a project. Use when you need goal details for one file before planning targeted refactoring work. Returns data from the latest available analysis.
 
 ### `code_ownership_for_path`
 
-**Availability:** CodeScene Core
+**Availability:** CodeScene Core users (cloud or on-prem)
 
 Find the owner or owners of a specific path in a project. Use to identify likely reviewers or domain experts for code reviews and technical questions about a file or directory. Returns a list of owners with their key areas and links to the CodeScene System Map page.
 
@@ -147,12 +147,12 @@ Describes how to build a business case for Code Health improvements. Covers empi
 | `pre_commit_code_health_safeguard` | All Users |
 | `analyze_change_set` | All Users |
 | `code_health_refactoring_business_case` | All Users |
-| `select_project` | CodeScene Core |
-| `list_technical_debt_hotspots_for_project` | CodeScene Core |
-| `list_technical_debt_hotspots_for_project_file` | CodeScene Core |
-| `list_technical_debt_goals_for_project` | CodeScene Core |
-| `list_technical_debt_goals_for_project_file` | CodeScene Core |
-| `code_ownership_for_path` | CodeScene Core |
+| `select_project` | CodeScene Core users (cloud or on-prem) |
+| `list_technical_debt_hotspots_for_project` | CodeScene Core users (cloud or on-prem) |
+| `list_technical_debt_hotspots_for_project_file` | CodeScene Core users (cloud or on-prem) |
+| `list_technical_debt_goals_for_project` | CodeScene Core users (cloud or on-prem) |
+| `list_technical_debt_goals_for_project_file` | CodeScene Core users (cloud or on-prem) |
+| `code_ownership_for_path` | CodeScene Core users (cloud or on-prem) |
 | `get_config` | All Users |
 | `set_config` | All Users |
 | `verify_installation` | All Users |
