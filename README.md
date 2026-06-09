@@ -76,6 +76,7 @@ Then open the `.mcpb` file with Claude Desktop to install the MCP server.
 
 ```bash
 brew tap codescene-oss/codescene-mcp-server https://github.com/codescene-oss/codescene-mcp-server
+brew trust codescene-oss/codescene-mcp-server
 brew install cs-mcp
 ```
 

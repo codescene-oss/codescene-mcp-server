@@ -31,7 +31,7 @@ Do not use this skill for configuring tokens, URLs, or other server options. Use
 
 1. Choose the installation method that fits the user environment:
    - `npx @codescene/codehealth-mcp` or `npm install -g @codescene/codehealth-mcp`
-   - `brew tap codescene-oss/codescene-mcp-server https://github.com/codescene-oss/codescene-mcp-server && brew install cs-mcp`
+   - `brew tap codescene-oss/codescene-mcp-server https://github.com/codescene-oss/codescene-mcp-server && brew trust codescene-oss/codescene-mcp-server && brew install cs-mcp`
    - Windows PowerShell installer
    - Manual binary download
    - Docker image
