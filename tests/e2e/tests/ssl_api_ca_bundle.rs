@@ -107,3 +107,36 @@ pub fn test_api_fails_without_ca_bundle() {
         "Should not return project data without CA bundle, got: {result}"
     );
 }
+
+/// When `REQUESTS_CA_BUNDLE` points to a non-existent file, the behaviour
+/// should be the same as when the variable is unset: the TLS handshake fails
+/// because the self-signed server certificate is unknown. This catches a
+/// common Windows misconfiguration where backslashes in JSON config are not
+/// properly escaped, causing the path to be mangled.
+pub fn test_api_fails_with_invalid_ca_bundle_path() {
+    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
+    let (command, env, repo_dir, _server, _tmp) = ssl_api_setup();
+
+    let env_bad_ca: Vec<(String, String)> = env
+        .into_iter()
+        .filter(|(k, _)| {
+            k != "REQUESTS_CA_BUNDLE" && k != "SSL_CERT_FILE" && k != "CURL_CA_BUNDLE"
+        })
+        .chain(std::iter::once((
+            "REQUESTS_CA_BUNDLE".to_string(),
+            "/nonexistent/path/to/ca-bundle.pem".to_string(),
+        )))
+        .collect();
+
+    let result = call_select_project(&command, &env_bad_ca, &repo_dir);
+    let lower = result.to_lowercase();
+
+    assert!(
+        lower.contains("error"),
+        "Should fail when CA bundle path is invalid, got: {result}"
+    );
+    assert!(
+        !lower.contains("test project"),
+        "Should not return project data when CA bundle path is invalid, got: {result}"
+    );
+}

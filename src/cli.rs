@@ -147,16 +147,41 @@ fn should_retry_after_telemetry_flush_error(stderr: &str) -> bool {
 }
 
 fn selected_ca_bundle_path_from_env() -> Option<PathBuf> {
-    ["REQUESTS_CA_BUNDLE", "SSL_CERT_FILE", "CURL_CA_BUNDLE"]
-        .into_iter()
-        .find_map(|env_var| {
-            std::env::var(env_var)
-                .ok()
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty())
-                .map(PathBuf::from)
-                .filter(|p| p.is_file())
-        })
+    let env_vars = ["REQUESTS_CA_BUNDLE", "SSL_CERT_FILE", "CURL_CA_BUNDLE"];
+    let mut configured_but_missing = Vec::new();
+
+    let result = env_vars.into_iter().find_map(|env_var| {
+        std::env::var(env_var)
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+            .and_then(|v| {
+                let p = PathBuf::from(&v);
+                if p.is_file() {
+                    Some((env_var, p))
+                } else {
+                    configured_but_missing.push((env_var, v));
+                    None
+                }
+            })
+    });
+
+    if let Some((var, ref path)) = result {
+        tracing::info!(
+            "Using CA bundle from {var}: {}",
+            path.display()
+        );
+    }
+
+    for (var, path) in &configured_but_missing {
+        tracing::warn!(
+            "{var} is set to \"{path}\" but the file does not exist — \
+             custom CA certificates will NOT be used. \
+             On Windows, ensure backslashes are escaped as \\\\ in JSON config."
+        );
+    }
+
+    result.map(|(_, p)| p)
 }
 
 fn is_license_check_failure(stderr: &str) -> bool {
@@ -169,7 +194,7 @@ fn parse_cli_output(output: Output) -> Result<String, CliError> {
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         if is_license_check_failure(&stderr) {
-            return Err(CliError::LicenseCheckFailed);
+            return Err(CliError::LicenseCheckFailed { stderr });
         }
         Err(CliError::NonZeroExit {
             code: output.status.code().unwrap_or(-1),
@@ -316,7 +341,10 @@ pub fn find_git_root(path: &Path) -> Option<PathBuf> {
 mod tests {
     use super::*;
     use crate::config;
+    #[cfg(unix)]
     use std::os::unix::process::ExitStatusExt;
+    #[cfg(windows)]
+    use std::os::windows::process::ExitStatusExt;
     use std::process::ExitStatus;
 
     /// Create a temp directory containing a `.git` dir and an optional subdirectory.
@@ -340,11 +368,25 @@ mod tests {
     }
 
     fn make_output(raw_status: i32, stdout: &[u8], stderr: &[u8]) -> Output {
+        // On Unix, from_raw takes the raw waitpid status (exit code in bits 8-15).
+        // On Windows, from_raw takes the exit code directly as u32.
+        #[cfg(unix)]
+        let status = ExitStatus::from_raw(raw_status);
+        #[cfg(windows)]
+        let status = ExitStatus::from_raw(raw_status as u32);
         Output {
-            status: ExitStatus::from_raw(raw_status),
+            status,
             stdout: stdout.to_vec(),
             stderr: stderr.to_vec(),
         }
+    }
+
+    /// Return the raw status value that represents a non-zero exit code.
+    /// On Unix the exit code occupies bits 8-15 of the wait status, so
+    /// exit code 1 is raw value 256.  On Windows the raw value IS the
+    /// exit code, so exit code 1 is raw value 1.
+    fn failing_raw_status() -> i32 {
+        if cfg!(unix) { 256 } else { 1 }
     }
 
     #[test]
@@ -354,25 +396,60 @@ mod tests {
     }
 
     #[test]
-    fn cli_binary_name_is_cs() {
-        assert_eq!(CLI_BINARY_NAME, "cs");
+    fn cli_binary_name_matches_platform() {
+        if cfg!(windows) {
+            assert_eq!(CLI_BINARY_NAME, "cs.exe");
+        } else {
+            assert_eq!(CLI_BINARY_NAME, "cs");
+        }
+    }
+
+    /// Run `body` with the CA bundle env vars set according to `vars`, then
+    /// clean up afterwards. Each entry is `(VAR_NAME, value_or_none)`.
+    fn with_ca_env(vars: &[(&str, Option<&str>)], body: impl FnOnce()) {
+        let _lock = config::lock_test_env();
+        for &(k, v) in vars {
+            match v {
+                Some(val) => std::env::set_var(k, val),
+                None => std::env::remove_var(k),
+            }
+        }
+        body();
+        for &(k, _) in vars {
+            std::env::remove_var(k);
+        }
     }
 
     #[test]
     fn selected_ca_bundle_prefers_requests_ca_bundle() {
-        let _lock = config::lock_test_env();
         let requests = tempfile::NamedTempFile::new().unwrap();
         let ssl_cert_file = tempfile::NamedTempFile::new().unwrap();
+        let r = requests.path().to_str().unwrap();
+        let s = ssl_cert_file.path().to_str().unwrap();
 
-        std::env::set_var("REQUESTS_CA_BUNDLE", requests.path());
-        std::env::set_var("SSL_CERT_FILE", ssl_cert_file.path());
-        std::env::remove_var("CURL_CA_BUNDLE");
+        with_ca_env(
+            &[("REQUESTS_CA_BUNDLE", Some(r)), ("SSL_CERT_FILE", Some(s)), ("CURL_CA_BUNDLE", None)],
+            || assert_eq!(selected_ca_bundle_path_from_env().unwrap(), requests.path()),
+        );
+    }
 
-        let selected = selected_ca_bundle_path_from_env().unwrap();
-        assert_eq!(selected, requests.path());
+    #[test]
+    fn selected_ca_bundle_returns_none_for_nonexistent_path() {
+        with_ca_env(
+            &[("REQUESTS_CA_BUNDLE", Some("/nonexistent/ca-bundle.pem")), ("SSL_CERT_FILE", None), ("CURL_CA_BUNDLE", None)],
+            || assert!(selected_ca_bundle_path_from_env().is_none()),
+        );
+    }
 
-        std::env::remove_var("REQUESTS_CA_BUNDLE");
-        std::env::remove_var("SSL_CERT_FILE");
+    #[test]
+    fn selected_ca_bundle_skips_nonexistent_falls_through_to_valid() {
+        let real_file = tempfile::NamedTempFile::new().unwrap();
+        let r = real_file.path().to_str().unwrap();
+
+        with_ca_env(
+            &[("REQUESTS_CA_BUNDLE", Some("/nonexistent/ca-bundle.pem")), ("SSL_CERT_FILE", Some(r)), ("CURL_CA_BUNDLE", None)],
+            || assert_eq!(selected_ca_bundle_path_from_env().unwrap(), real_file.path()),
+        );
     }
 
     #[test]
@@ -418,8 +495,7 @@ mod tests {
 
     #[test]
     fn parse_cli_output_failure() {
-        // Exit code 1 on unix: raw value is 256 (1 << 8)
-        let output = make_output(256, b"", b"error message");
+        let output = make_output(failing_raw_status(), b"", b"error message");
         match parse_cli_output(output).unwrap_err() {
             CliError::NonZeroExit { code, stderr } => {
                 assert_eq!(code, 1);
@@ -432,11 +508,12 @@ mod tests {
     #[test]
     fn parse_cli_output_license_check_failed() {
         let stderr = b"License check failed: [401] The user must reauthorize.\n\n  Make sure that CS_ACCESS_TOKEN is set to a valid Personal Access Token.";
-        let output = make_output(256, b"", stderr);
+        let output = make_output(failing_raw_status(), b"", stderr);
         match parse_cli_output(output).unwrap_err() {
-            CliError::LicenseCheckFailed => {
+            CliError::LicenseCheckFailed { stderr: s } => {
+                assert!(s.contains("License check failed"), "stderr preserved: {s}");
                 // Verify the user-facing message doesn't mention the CLI
-                let msg = CliError::LicenseCheckFailed.to_string();
+                let msg = CliError::LicenseCheckFailed { stderr: String::new() }.to_string();
                 assert!(msg.contains("invalid or expired"), "msg: {msg}");
                 assert!(msg.contains("set_config"), "msg: {msg}");
                 assert!(!msg.contains("CS CLI"), "msg should not mention CLI: {msg}");
@@ -709,12 +786,14 @@ mod tests {
         std::env::remove_var("CS_CLI_PATH");
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn run_cli_at_path_with_echo() {
         let output = run_cli_at_path(Path::new("/bin/echo"), &["hello", "world"], None).await;
         assert_eq!(output.unwrap().trim(), "hello world");
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn run_cli_at_path_forwards_env_vars() {
         let _lock = config::lock_test_env();
@@ -735,6 +814,7 @@ mod tests {
         std::env::remove_var("CS_ONPREM_URL");
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn run_cli_at_path_trims_access_token_before_forwarding() {
         let _lock = config::lock_test_env();
@@ -752,6 +832,7 @@ mod tests {
         std::env::remove_var("CS_ACCESS_TOKEN");
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn run_cli_at_path_with_working_dir() {
         let dir = tempfile::tempdir().unwrap();
@@ -762,12 +843,14 @@ mod tests {
         assert_eq!(output.trim(), canonical.to_string_lossy());
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn run_cli_at_path_nonexistent_binary() {
         let result = run_cli_at_path(Path::new("/nonexistent/binary"), &[], None).await;
         assert!(result.is_err());
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn run_cli_at_path_failing_command() {
         let result = run_cli_at_path(Path::new("/bin/sh"), &["-c", "exit 42"], None).await;
@@ -789,6 +872,7 @@ mod tests {
         assert!(!should_retry_after_telemetry_flush_error(stderr));
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn run_cli_at_path_retries_once_on_license_check_failure() {
         let dir = tempfile::tempdir().unwrap();
@@ -802,6 +886,7 @@ mod tests {
         assert_eq!(output.unwrap().trim(), "ok");
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn run_cli_at_path_license_check_failure_persists_after_retry() {
         let script =
@@ -809,11 +894,12 @@ mod tests {
 
         let result = run_cli_at_path(Path::new("/bin/sh"), &["-c", script], None).await;
         match result.unwrap_err() {
-            CliError::LicenseCheckFailed => {}
+            CliError::LicenseCheckFailed { .. } => {}
             other => panic!("Expected LicenseCheckFailed, got: {other:?}"),
         }
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn run_cli_at_path_retries_once_on_telemetry_flush_error() {
         let dir = tempfile::tempdir().unwrap();

@@ -513,8 +513,11 @@ mod tests {
         F: FnOnce() -> R,
     {
         let _lock = config::lock_test_env();
-        // /dev/null is a file, not a directory — create_dir_all will fail
-        std::env::set_var("CS_CONFIG_DIR", "/dev/null/impossible");
+        // Use a path where create_dir_all will fail:
+        //   Unix:    /dev/null is a file, so /dev/null/impossible cannot be created.
+        //   Windows: NUL is a reserved device name, so NUL\impossible cannot be created.
+        let impossible = if cfg!(windows) { r"NUL\impossible" } else { "/dev/null/impossible" };
+        std::env::set_var("CS_CONFIG_DIR", impossible);
         let result = f();
         std::env::remove_var("CS_CONFIG_DIR");
         result

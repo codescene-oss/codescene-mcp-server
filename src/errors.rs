@@ -20,7 +20,7 @@ pub enum CliError {
          To get a new Access Token, see:\n\
          https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/getting-a-personal-access-token.md"
     )]
-    LicenseCheckFailed,
+    LicenseCheckFailed { stderr: String },
 }
 
 impl CliError {
@@ -31,7 +31,7 @@ impl CliError {
             Self::NotFound(_) => "not_found",
             Self::Io(_) => "io",
             Self::InvalidInput(_) => "invalid_input",
-            Self::LicenseCheckFailed => "license_check_failed",
+            Self::LicenseCheckFailed { .. } => "license_check_failed",
         }
     }
 }
@@ -111,7 +111,7 @@ mod tests {
 
     #[test]
     fn cli_error_license_check_failed_display() {
-        let err = CliError::LicenseCheckFailed;
+        let err = CliError::LicenseCheckFailed { stderr: "License check failed".into() };
         assert!(err
             .to_string()
             .contains("Access token is invalid or expired"));
@@ -189,7 +189,7 @@ mod tests {
             CliError::InvalidInput("bad".into()).kind(),
             "invalid_input"
         );
-        assert_eq!(CliError::LicenseCheckFailed.kind(), "license_check_failed");
+        assert_eq!(CliError::LicenseCheckFailed { stderr: String::new() }.kind(), "license_check_failed");
     }
 
     #[test]

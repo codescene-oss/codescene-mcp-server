@@ -135,8 +135,9 @@ mod tests {
 
     #[test]
     fn resolve_file_path_absolute_stays_unchanged() {
-        let p = resolve_file_path(Path::new("/absolute/path/file.rs"));
-        assert_eq!(p, "/absolute/path/file.rs");
+        let input = if cfg!(windows) { r"C:\absolute\path\file.rs" } else { "/absolute/path/file.rs" };
+        let p = resolve_file_path(Path::new(input));
+        assert_eq!(p, input);
     }
 
     #[test]
