@@ -93,28 +93,18 @@ fn strip_windows_prefix(path: &str) -> String {
     path.strip_prefix(r"\\?\").unwrap_or(path).to_string()
 }
 
-fn assert_tls_success(result: &str, context: &str) {
+fn assert_tls_outcome(result: &str, expect_success: bool, context: &str) {
     let lower = result.to_lowercase();
-    assert!(
-        lower.contains("test project"),
-        "{context}: Should return project data, got: {result}"
-    );
-    assert!(
-        !lower.contains("error"),
-        "{context}: Should not contain errors, got: {result}"
-    );
-}
+    let has_project = lower.contains("test project");
+    let has_error = lower.contains("error");
 
-fn assert_tls_failure(result: &str, context: &str) {
-    let lower = result.to_lowercase();
-    assert!(
-        lower.contains("error"),
-        "{context}: Should fail, got: {result}"
-    );
-    assert!(
-        !lower.contains("test project"),
-        "{context}: Should not return project data, got: {result}"
-    );
+    if expect_success {
+        assert!(has_project, "{context}: Should return project data, got: {result}");
+        assert!(!has_error, "{context}: Should not contain errors, got: {result}");
+    } else {
+        assert!(has_error, "{context}: Should fail, got: {result}");
+        assert!(!has_project, "{context}: Should not return project data, got: {result}");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +123,7 @@ pub fn test_baseline_fails_without_ca_bundle() {
         .collect();
 
     let result = call_select_project(&s.command, &env, &s.repo_dir);
-    assert_tls_failure(&result, "No CA bundle");
+    assert_tls_outcome(&result, false, "No CA bundle");
 }
 
 /// The canonical path (as returned by the OS) works with `REQUESTS_CA_BUNDLE`.
@@ -149,7 +139,7 @@ pub fn test_canonical_path_succeeds() {
 
     let env = env_with_ca_bundle(&s.env, &ca_str);
     let result = call_select_project(&s.command, &env, &s.repo_dir);
-    assert_tls_success(&result, &format!("Canonical path: {ca_str}"));
+    assert_tls_outcome(&result, true, &format!("Canonical path: {ca_str}"));
 }
 
 /// Forward-slash paths (`C:/Users/...` on Windows) must work. This is the
@@ -164,7 +154,7 @@ pub fn test_forward_slash_path_succeeds() {
 
     let env = env_with_ca_bundle(&s.env, &forward_slash);
     let result = call_select_project(&s.command, &env, &s.repo_dir);
-    assert_tls_success(&result, &format!("Forward-slash path: {forward_slash}"));
+    assert_tls_outcome(&result, true, &format!("Forward-slash path: {forward_slash}"));
 }
 
 /// Native Windows backslash paths (`C:\Users\...`) must work. This is
@@ -179,7 +169,7 @@ pub fn test_backslash_path_succeeds() {
 
     let env = env_with_ca_bundle(&s.env, &backslash);
     let result = call_select_project(&s.command, &env, &s.repo_dir);
-    assert_tls_success(&result, &format!("Backslash path: {backslash}"));
+    assert_tls_outcome(&result, true, &format!("Backslash path: {backslash}"));
 }
 
 /// A nonexistent CA bundle path must cause TLS failure — the server must
@@ -197,7 +187,7 @@ pub fn test_nonexistent_ca_bundle_path_fails() {
 
     let env = env_with_ca_bundle(&s.env, &bad_path);
     let result = call_select_project(&s.command, &env, &s.repo_dir);
-    assert_tls_failure(&result, &format!("Nonexistent path: {bad_path}"));
+    assert_tls_outcome(&result, false, &format!("Nonexistent path: {bad_path}"));
 }
 
 // ---------------------------------------------------------------------------
@@ -251,5 +241,5 @@ pub fn test_set_config_ca_bundle_applies_immediately() {
         .call_tool("select_project", json!({}), TIMEOUT)
         .expect("select_project call should succeed");
     let result = extract_result_text(&response);
-    assert_tls_success(&result, &format!("set_config ca_bundle: {ca_str}"));
+    assert_tls_outcome(&result, true, &format!("set_config ca_bundle: {ca_str}"));
 }
