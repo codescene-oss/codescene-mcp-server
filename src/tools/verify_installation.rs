@@ -62,14 +62,18 @@ fn is_connectivity_error(stderr: &str) -> bool {
     let lower = stderr.to_lowercase();
     // Cover OpenSSL, rustls, curl, and Java-style TLS diagnostics the
     // underlying CLI might emit.
-    lower.contains("certificate")
-        || lower.contains("ssl")
-        || lower.contains("tls")
-        || lower.contains("handshake")
-        || lower.contains("connection refused")
-        || lower.contains("could not resolve")
-        || lower.contains("network")
-        || lower.contains("timed out")
+    const KEYWORDS: &[&str] = &[
+        "certificate",
+        "ssl",
+        "tls",
+        "handshake",
+        "connection refused",
+        "could not resolve",
+        "could not reach",
+        "network",
+        "timed out",
+    ];
+    KEYWORDS.iter().any(|kw| lower.contains(kw))
 }
 
 async fn check_token_via_cli(
@@ -108,7 +112,8 @@ async fn check_token_via_cli(
                 name: "Access Token",
                 passed: false,
                 detail: format!(
-                    "CLI could not connect to CodeScene — possible TLS/network issue: {stderr}"
+                    "CLI could not connect to {} — possible TLS/network issue: {stderr}",
+                    api_url_label()
                 ),
             }
         }
@@ -122,7 +127,8 @@ async fn check_token_via_cli(
                 name: "Access Token",
                 passed: false,
                 detail: format!(
-                    "CLI could not connect to CodeScene — possible TLS/network issue: {stderr}"
+                    "CLI could not connect to {} — possible TLS/network issue: {stderr}",
+                    api_url_label()
                 ),
             }
         }
@@ -158,7 +164,8 @@ async fn check_cli_connectivity(
                 name: "CLI Connectivity",
                 passed: false,
                 detail: format!(
-                    "CLI could not connect to CodeScene — possible TLS/network issue: {stderr}"
+                    "CLI could not connect to {} — possible TLS/network issue: {stderr}",
+                    api_url_label()
                 ),
             }
         }
@@ -167,7 +174,7 @@ async fn check_cli_connectivity(
         Ok(_) => CheckResult {
             name: "CLI Connectivity",
             passed: true,
-            detail: "CLI connected to CodeScene successfully.".to_string(),
+            detail: format!("CLI connected to {} successfully.", api_url_label()),
         },
     }
 }
@@ -374,6 +381,18 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn license_check_with_unreachable_server_reports_connectivity_failure() {
+        let _g = set_token("tok");
+        let cli = mock_license_failure(
+            "License check failed, could not reach CodeScene servers (https://wrong.ee/api/v2/tool-license/cli)"
+        );
+        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        assert!(!result.passed, "should detect unreachable server: {}", result.detail);
+        assert!(result.detail.contains("TLS/network"), "detail: {}", result.detail);
+        assert!(result.detail.contains("could not reach"), "should include original error: {}", result.detail);
+    }
+
+    #[tokio::test]
     async fn token_check_timeout_reports_fail() {
         use crate::errors::CliError;
 
@@ -468,6 +487,16 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn cli_connectivity_fails_when_server_unreachable() {
+        let cli = mock_license_failure(
+            "License check failed, could not reach CodeScene servers (https://wrong.ee/api/v2/tool-license/cli)"
+        );
+        let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        assert!(!result.passed, "unreachable server should fail connectivity: {}", result.detail);
+        assert!(result.detail.contains("TLS/network"), "detail: {}", result.detail);
+    }
+
+    #[tokio::test]
     async fn cli_connectivity_passes_on_plain_license_failure() {
         let cli = mock_license_failure("License check failed: [401] Unauthorized");
         let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
@@ -499,6 +528,7 @@ mod tests {
         assert!(is_connectivity_error("certificate verify failed"));
         assert!(is_connectivity_error("connection refused"));
         assert!(is_connectivity_error("Could not resolve host: example.com"));
+        assert!(is_connectivity_error("could not reach CodeScene servers (https://wrong.ee/api/v2/tool-license/cli)"));
         assert!(is_connectivity_error("network is unreachable"));
         assert!(is_connectivity_error("Operation timed out"));
     }
