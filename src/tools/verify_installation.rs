@@ -4,11 +4,13 @@ use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 use serde_json::json;
 
+use crate::api_client;
 use crate::cli;
 use crate::cli::CliRunner;
 use crate::docker;
 use crate::environment;
 use crate::errors::CliError;
+use crate::http::HttpClient;
 use crate::tools::GitRepoParam;
 use crate::CodeSceneServer;
 
@@ -18,7 +20,8 @@ pub(crate) async fn handle(
 ) -> Result<CallToolResult, ErrorData> {
     server.version_checker.check_in_background();
     let project_root = docker::adapt_path_for_docker(Path::new(&params.git_repository_path));
-    let checks = run_all_checks(&project_root, &*server.cli_runner).await;
+    let checks =
+        run_all_checks(&project_root, &*server.cli_runner, &*server.http_client, server.is_standalone).await;
     let text = format_results(&checks);
     server.track("verify-installation", json!({}));
     let text = server.maybe_version_warning(&text).await;
@@ -33,13 +36,45 @@ struct CheckResult {
 
 const TOKEN_CHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
-async fn run_all_checks(project_root: &str, cli_runner: &dyn CliRunner) -> Vec<CheckResult> {
+async fn run_all_checks(
+    project_root: &str,
+    cli_runner: &dyn CliRunner,
+    http_client: &dyn HttpClient,
+    is_standalone: bool,
+) -> Vec<CheckResult> {
     let path = Path::new(project_root);
-    vec![
+    let mut checks = vec![
         check_git_repository(path),
         check_token_via_cli(path, cli_runner, TOKEN_CHECK_TIMEOUT).await,
-        check_environment(),
-    ]
+    ];
+    if is_standalone {
+        checks.push(CheckResult {
+            name: "API Connectivity",
+            passed: true,
+            detail: "Skipped — standalone license uses CLI only (no API).".to_string(),
+        });
+    } else {
+        checks.push(check_api_connectivity(http_client).await);
+    }
+    checks.push(check_environment());
+    checks
+}
+
+/// Keywords in CLI stderr that indicate a TLS / connectivity problem
+/// rather than a "the CLI ran and auth succeeded but something else
+/// failed" situation.
+fn is_connectivity_error(stderr: &str) -> bool {
+    let lower = stderr.to_lowercase();
+    // Cover OpenSSL, rustls, curl, and Java-style TLS diagnostics the
+    // underlying CLI might emit.
+    lower.contains("certificate")
+        || lower.contains("ssl")
+        || lower.contains("tls")
+        || lower.contains("handshake")
+        || lower.contains("connection refused")
+        || lower.contains("could not resolve")
+        || lower.contains("network")
+        || lower.contains("timed out")
 }
 
 async fn check_token_via_cli(
@@ -76,9 +111,57 @@ async fn check_token_via_cli(
             passed: false,
             detail: "Token is set but invalid or expired.".to_string(),
         },
+        Ok(Err(CliError::NonZeroExit { stderr, .. })) if is_connectivity_error(&stderr) => {
+            CheckResult {
+                name: "Access Token",
+                passed: false,
+                detail: format!(
+                    "CLI could not connect to CodeScene — possible TLS/network issue: {stderr}"
+                ),
+            }
+        }
         // Any other error (e.g. unsupported file) still means auth passed.
         Ok(Err(_)) => token_pass(),
     }
+}
+
+/// Check API connectivity by hitting the projects endpoint.
+///
+/// This exercises the full reqwest → TLS → API path, catching CA
+/// certificate misconfiguration that the CLI check alone might miss
+/// (since the CLI and the MCP server build their TLS stacks
+/// independently).
+async fn check_api_connectivity(http_client: &dyn HttpClient) -> CheckResult {
+    let token = std::env::var("CS_ACCESS_TOKEN")
+        .map(|v| v.trim().to_string())
+        .unwrap_or_default();
+    if token.is_empty() {
+        return CheckResult {
+            name: "API Connectivity",
+            passed: false,
+            detail: "Skipped — CS_ACCESS_TOKEN is not set.".to_string(),
+        };
+    }
+    match api_client::query_api_with_client("v2/projects", http_client).await {
+        Ok(_) => CheckResult {
+            name: "API Connectivity",
+            passed: true,
+            detail: format!("Connected to {} successfully.", api_url_label()),
+        },
+        Err(e) => CheckResult {
+            name: "API Connectivity",
+            passed: false,
+            detail: format!("Could not reach {}: {e}", api_url_label()),
+        },
+    }
+}
+
+/// User-friendly label for the API target (on-prem URL or "CodeScene Cloud").
+fn api_url_label() -> String {
+    std::env::var("CS_ONPREM_URL")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| "CodeScene Cloud".to_string())
 }
 
 /// Find a source file in the repo to use as a probe for the license
@@ -145,8 +228,10 @@ fn format_results(checks: &[CheckResult]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::http::tests::MockHttpClient;
+    use crate::http::HttpResponse;
     use crate::tests::{
-        clear_token, make_cli_mock_server, set_token, MockCliRunner,
+        clear_token, make_server_with_mocks, set_token, MockCliRunner,
     };
     use crate::tools::GitRepoParam;
 
@@ -198,6 +283,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn tls_error_from_cli_reports_connectivity_failure() {
+        let _g = set_token("tok");
+        let cli = MockCliRunner::with_err(1, "SSL certificate problem: unable to get local issuer certificate");
+        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        assert!(!result.passed);
+        assert!(result.detail.contains("TLS/network"), "detail: {}", result.detail);
+    }
+
+    #[tokio::test]
+    async fn connection_refused_from_cli_reports_connectivity_failure() {
+        let _g = set_token("tok");
+        let cli = MockCliRunner::with_err(1, "connection refused");
+        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        assert!(!result.passed);
+        assert!(result.detail.contains("TLS/network"), "detail: {}", result.detail);
+    }
+
+    #[tokio::test]
     async fn token_check_timeout_reports_fail() {
         use crate::errors::CliError;
 
@@ -216,6 +319,64 @@ mod tests {
         let result = check_token_via_cli(Path::new("/tmp"), &HangingCli, short).await;
         assert!(!result.passed);
         assert!(result.detail.contains("timed out"));
+    }
+
+    // -- check_api_connectivity ----------------------------------------------
+
+    #[tokio::test]
+    async fn api_connectivity_succeeds() {
+        let _g = set_token("tok");
+        let http = MockHttpClient::always(HttpResponse::ok(r#"[{"id":1}]"#));
+        let result = check_api_connectivity(&http).await;
+        assert!(result.passed);
+        assert!(result.detail.contains("successfully"), "detail: {}", result.detail);
+    }
+
+    #[tokio::test]
+    async fn api_connectivity_fails_on_transport_error() {
+        let _g = set_token("tok");
+        let http = MockHttpClient::new(vec![]);
+        let result = check_api_connectivity(&http).await;
+        assert!(!result.passed);
+        assert!(result.detail.contains("Could not reach"), "detail: {}", result.detail);
+    }
+
+    #[tokio::test]
+    async fn api_connectivity_skipped_without_token() {
+        let _g = clear_token();
+        let http = MockHttpClient::new(vec![]);
+        let result = check_api_connectivity(&http).await;
+        assert!(!result.passed);
+        assert!(result.detail.contains("Skipped"), "detail: {}", result.detail);
+    }
+
+    #[tokio::test]
+    async fn api_connectivity_fails_on_auth_error() {
+        let _g = set_token("bad-token");
+        let http = MockHttpClient::always(HttpResponse::error(401, "Unauthorized"));
+        let result = check_api_connectivity(&http).await;
+        assert!(!result.passed);
+        assert!(result.detail.contains("401"), "detail: {}", result.detail);
+    }
+
+    // -- is_connectivity_error -----------------------------------------------
+
+    #[test]
+    fn detects_tls_keywords() {
+        assert!(is_connectivity_error("SSL certificate problem: unable to get local issuer certificate"));
+        assert!(is_connectivity_error("TLS handshake failed"));
+        assert!(is_connectivity_error("certificate verify failed"));
+        assert!(is_connectivity_error("connection refused"));
+        assert!(is_connectivity_error("Could not resolve host: example.com"));
+        assert!(is_connectivity_error("network is unreachable"));
+        assert!(is_connectivity_error("Operation timed out"));
+    }
+
+    #[test]
+    fn ignores_non_connectivity_errors() {
+        assert!(!is_connectivity_error("no changes found"));
+        assert!(!is_connectivity_error("unsupported file type"));
+        assert!(!is_connectivity_error("exit code 1"));
     }
 
     // -- check_git_repository ------------------------------------------------
@@ -288,13 +449,48 @@ mod tests {
         assert!(probe.ends_with("hello.py"));
     }
 
+    // -- api_url_label -------------------------------------------------------
+
+    #[test]
+    fn api_url_label_returns_cloud_when_no_onprem() {
+        let _lock = crate::config::lock_test_env();
+        std::env::remove_var("CS_ONPREM_URL");
+        assert_eq!(api_url_label(), "CodeScene Cloud");
+    }
+
+    #[test]
+    fn api_url_label_returns_onprem_url() {
+        let _lock = crate::config::lock_test_env();
+        std::env::set_var("CS_ONPREM_URL", "https://my-instance.com");
+        assert_eq!(api_url_label(), "https://my-instance.com");
+        std::env::remove_var("CS_ONPREM_URL");
+    }
+
     // -- handle (integration) ------------------------------------------------
 
     #[tokio::test]
     async fn handle_returns_success_result() {
         let _g = set_token("tok");
-        let server = make_cli_mock_server(MockCliRunner::with_ok("{}"));
+        let server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_ok("{}"),
+            MockHttpClient::always(HttpResponse::ok(r#"[{"id":1}]"#)),
+        );
         let result = handle(&server, repo_param("/tmp")).await.unwrap();
         assert!(result.is_error.is_none() || result.is_error == Some(false));
+    }
+
+    #[tokio::test]
+    async fn handle_skips_api_check_for_standalone() {
+        let _g = set_token("tok");
+        let server = make_server_with_mocks(
+            true,
+            MockCliRunner::with_ok("{}"),
+            MockHttpClient::new(vec![]), // no HTTP responses queued
+        );
+        let result = handle(&server, repo_param("/tmp")).await.unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+        let text = crate::tests::result_text(&result);
+        assert!(text.contains("standalone"), "should mention standalone skip: {text}");
     }
 }
