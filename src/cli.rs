@@ -404,21 +404,52 @@ mod tests {
         }
     }
 
+    /// Run `body` with the CA bundle env vars set according to `vars`, then
+    /// clean up afterwards. Each entry is `(VAR_NAME, value_or_none)`.
+    fn with_ca_env(vars: &[(&str, Option<&str>)], body: impl FnOnce()) {
+        let _lock = config::lock_test_env();
+        for &(k, v) in vars {
+            match v {
+                Some(val) => std::env::set_var(k, val),
+                None => std::env::remove_var(k),
+            }
+        }
+        body();
+        for &(k, _) in vars {
+            std::env::remove_var(k);
+        }
+    }
+
     #[test]
     fn selected_ca_bundle_prefers_requests_ca_bundle() {
-        let _lock = config::lock_test_env();
         let requests = tempfile::NamedTempFile::new().unwrap();
         let ssl_cert_file = tempfile::NamedTempFile::new().unwrap();
+        let r = requests.path().to_str().unwrap();
+        let s = ssl_cert_file.path().to_str().unwrap();
 
-        std::env::set_var("REQUESTS_CA_BUNDLE", requests.path());
-        std::env::set_var("SSL_CERT_FILE", ssl_cert_file.path());
-        std::env::remove_var("CURL_CA_BUNDLE");
+        with_ca_env(
+            &[("REQUESTS_CA_BUNDLE", Some(r)), ("SSL_CERT_FILE", Some(s)), ("CURL_CA_BUNDLE", None)],
+            || assert_eq!(selected_ca_bundle_path_from_env().unwrap(), requests.path()),
+        );
+    }
 
-        let selected = selected_ca_bundle_path_from_env().unwrap();
-        assert_eq!(selected, requests.path());
+    #[test]
+    fn selected_ca_bundle_returns_none_for_nonexistent_path() {
+        with_ca_env(
+            &[("REQUESTS_CA_BUNDLE", Some("/nonexistent/ca-bundle.pem")), ("SSL_CERT_FILE", None), ("CURL_CA_BUNDLE", None)],
+            || assert!(selected_ca_bundle_path_from_env().is_none()),
+        );
+    }
 
-        std::env::remove_var("REQUESTS_CA_BUNDLE");
-        std::env::remove_var("SSL_CERT_FILE");
+    #[test]
+    fn selected_ca_bundle_skips_nonexistent_falls_through_to_valid() {
+        let real_file = tempfile::NamedTempFile::new().unwrap();
+        let r = real_file.path().to_str().unwrap();
+
+        with_ca_env(
+            &[("REQUESTS_CA_BUNDLE", Some("/nonexistent/ca-bundle.pem")), ("SSL_CERT_FILE", Some(r)), ("CURL_CA_BUNDLE", None)],
+            || assert_eq!(selected_ca_bundle_path_from_env().unwrap(), real_file.path()),
+        );
     }
 
     #[test]

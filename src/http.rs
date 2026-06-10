@@ -303,4 +303,16 @@ pub mod tests {
         let client = build_reqwest_client();
         assert!(client.is_ok());
     }
+
+    #[test]
+    fn ca_bundle_path_returns_none_for_nonexistent_path() {
+        let _lock = crate::config::lock_test_env();
+        std::env::set_var("REQUESTS_CA_BUNDLE", "/nonexistent/ca-bundle.pem");
+        std::env::remove_var("SSL_CERT_FILE");
+        std::env::remove_var("CURL_CA_BUNDLE");
+
+        assert!(ca_bundle_path_from_env().is_none());
+
+        std::env::remove_var("REQUESTS_CA_BUNDLE");
+    }
 }
