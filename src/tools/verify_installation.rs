@@ -48,11 +48,9 @@ async fn run_all_checks(
         check_token_via_cli(path, cli_runner, TOKEN_CHECK_TIMEOUT).await,
     ];
     if is_standalone {
-        checks.push(CheckResult {
-            name: "API Connectivity",
-            passed: true,
-            detail: "Skipped — standalone license uses CLI only (no API).".to_string(),
-        });
+        checks.push(
+            check_cli_connectivity(path, cli_runner, TOKEN_CHECK_TIMEOUT).await,
+        );
     } else {
         checks.push(check_api_connectivity(http_client).await);
     }
@@ -122,6 +120,44 @@ async fn check_token_via_cli(
         }
         // Any other error (e.g. unsupported file) still means auth passed.
         Ok(Err(_)) => token_pass(),
+    }
+}
+
+/// Check CLI connectivity by running a code health review.
+///
+/// Used for standalone users who don't have API access. The CLI still
+/// connects to CodeScene to validate the license, so a broken CA cert
+/// or network issue will surface here.
+async fn check_cli_connectivity(
+    repo_path: &Path,
+    cli_runner: &dyn CliRunner,
+    timeout: std::time::Duration,
+) -> CheckResult {
+    let probe = find_probe_file(repo_path);
+    let args: Vec<&str> = vec!["review", "--output-format=json", &probe];
+    let cli_future = cli_runner.run(&args, Some(repo_path));
+    match tokio::time::timeout(timeout, cli_future).await {
+        Err(_) => CheckResult {
+            name: "CLI Connectivity",
+            passed: false,
+            detail: "CLI connectivity check timed out after 30 s.".to_string(),
+        },
+        Ok(Err(CliError::NonZeroExit { stderr, .. })) if is_connectivity_error(&stderr) => {
+            CheckResult {
+                name: "CLI Connectivity",
+                passed: false,
+                detail: format!(
+                    "CLI could not connect to CodeScene — possible TLS/network issue: {stderr}"
+                ),
+            }
+        }
+        // Success or any non-connectivity error means the CLI reached
+        // CodeScene's servers — the TLS chain is valid.
+        Ok(_) => CheckResult {
+            name: "CLI Connectivity",
+            passed: true,
+            detail: "CLI connected to CodeScene successfully.".to_string(),
+        },
     }
 }
 
@@ -361,6 +397,49 @@ mod tests {
 
     // -- is_connectivity_error -----------------------------------------------
 
+    // -- check_cli_connectivity ----------------------------------------------
+
+    #[tokio::test]
+    async fn cli_connectivity_succeeds_on_ok() {
+        let cli = MockCliRunner::with_ok("{}");
+        let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        assert!(result.passed, "detail: {}", result.detail);
+        assert!(result.detail.contains("successfully"), "detail: {}", result.detail);
+    }
+
+    #[tokio::test]
+    async fn cli_connectivity_succeeds_on_non_tls_error() {
+        let cli = MockCliRunner::with_err(1, "unsupported file type");
+        let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        assert!(result.passed, "non-TLS error should still pass: {}", result.detail);
+    }
+
+    #[tokio::test]
+    async fn cli_connectivity_fails_on_tls_error() {
+        let cli = MockCliRunner::with_err(1, "SSL certificate problem: unable to get local issuer certificate");
+        let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        assert!(!result.passed, "TLS error should fail: {}", result.detail);
+        assert!(result.detail.contains("TLS/network"), "detail: {}", result.detail);
+    }
+
+    #[tokio::test]
+    async fn cli_connectivity_fails_on_timeout() {
+        struct HangingCli;
+        #[async_trait::async_trait]
+        impl CliRunner for HangingCli {
+            async fn run(&self, _args: &[&str], _working_dir: Option<&Path>) -> Result<String, CliError> {
+                tokio::time::sleep(std::time::Duration::from_secs(999)).await;
+                Ok(String::new())
+            }
+        }
+        let short = std::time::Duration::from_millis(50);
+        let result = check_cli_connectivity(Path::new("/tmp"), &HangingCli, short).await;
+        assert!(!result.passed, "timeout should fail: {}", result.detail);
+        assert!(result.detail.contains("timed out"), "detail: {}", result.detail);
+    }
+
+    // -- is_connectivity_error (keyword detection) ---------------------------
+
     #[test]
     fn detects_tls_keywords() {
         assert!(is_connectivity_error("SSL certificate problem: unable to get local issuer certificate"));
@@ -481,16 +560,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handle_skips_api_check_for_standalone() {
+    async fn handle_runs_cli_connectivity_for_standalone() {
         let _g = set_token("tok");
         let server = make_server_with_mocks(
             true,
-            MockCliRunner::with_ok("{}"),
+            // Two CLI calls: check_token_via_cli + check_cli_connectivity
+            MockCliRunner::with_responses(vec![Ok("{}".into()), Ok("{}".into())]),
             MockHttpClient::new(vec![]), // no HTTP responses queued
         );
         let result = handle(&server, repo_param("/tmp")).await.unwrap();
         assert!(result.is_error.is_none() || result.is_error == Some(false));
         let text = crate::tests::result_text(&result);
-        assert!(text.contains("standalone"), "should mention standalone skip: {text}");
+        assert!(text.contains("CLI Connectivity"), "should run CLI connectivity check: {text}");
+        assert!(!text.contains("API Connectivity"), "should NOT run API connectivity: {text}");
     }
 }
