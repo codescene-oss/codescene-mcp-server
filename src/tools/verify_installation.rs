@@ -101,7 +101,18 @@ async fn check_token_via_cli(
             detail: "Token check timed out after 30 s.".to_string(),
         },
         Ok(Ok(_)) => token_pass(),
-        Ok(Err(CliError::LicenseCheckFailed)) => CheckResult {
+        Ok(Err(CliError::LicenseCheckFailed { ref stderr }))
+            if is_connectivity_error(stderr) =>
+        {
+            CheckResult {
+                name: "Access Token",
+                passed: false,
+                detail: format!(
+                    "CLI could not connect to CodeScene — possible TLS/network issue: {stderr}"
+                ),
+            }
+        }
+        Ok(Err(CliError::LicenseCheckFailed { .. })) => CheckResult {
             name: "Access Token",
             passed: false,
             detail: "Token is set but invalid or expired.".to_string(),
@@ -139,7 +150,10 @@ async fn check_cli_connectivity(
             passed: false,
             detail: "CLI connectivity check timed out after 30 s.".to_string(),
         },
-        Ok(Err(CliError::NonZeroExit { stderr, .. })) if is_connectivity_error(&stderr) => {
+        Ok(Err(CliError::NonZeroExit { ref stderr, .. }))
+        | Ok(Err(CliError::LicenseCheckFailed { ref stderr }))
+            if is_connectivity_error(stderr) =>
+        {
             CheckResult {
                 name: "CLI Connectivity",
                 passed: false,
@@ -278,6 +292,22 @@ mod tests {
 
     const TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
+    const SSL_HANDSHAKE_STDERR: &str =
+        "License check failed (https://codescene.example.com/api/v2/tool-license/cli):\n\
+         error - javax.net.ssl.SSLHandshakeException: (certificate_unknown)\n\
+         PKIX path building failed: unable to find valid certification path";
+
+    fn mock_license_failure(stderr: &str) -> MockCliRunner {
+        MockCliRunner::with_responses(vec![Err(CliError::LicenseCheckFailed {
+            stderr: stderr.into(),
+        })])
+    }
+
+    /// Mock CLI that returns OK for both the token check and the connectivity check.
+    fn mock_cli_all_ok() -> MockCliRunner {
+        MockCliRunner::with_responses(vec![Ok("{}".into()), Ok("{}".into())])
+    }
+
     // -- check_token_via_cli -------------------------------------------------
 
     #[tokio::test]
@@ -301,7 +331,7 @@ mod tests {
     #[tokio::test]
     async fn token_invalid_reports_fail() {
         let _g = set_token("bad");
-        let cli = MockCliRunner::with_responses(vec![Err(CliError::LicenseCheckFailed)]);
+        let cli = mock_license_failure("License check failed: [401]");
         let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
         assert!(!result.passed);
         assert!(result.detail.contains("invalid or expired"));
@@ -331,6 +361,16 @@ mod tests {
         let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
         assert!(!result.passed);
         assert!(result.detail.contains("TLS/network"), "detail: {}", result.detail);
+    }
+
+    #[tokio::test]
+    async fn license_check_with_ssl_handshake_reports_connectivity_failure() {
+        let _g = set_token("tok");
+        let cli = mock_license_failure(SSL_HANDSHAKE_STDERR);
+        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        assert!(!result.passed, "should detect TLS error: {}", result.detail);
+        assert!(result.detail.contains("TLS/network"), "detail: {}", result.detail);
+        assert!(result.detail.contains("SSLHandshakeException"), "should include original error: {}", result.detail);
     }
 
     #[tokio::test]
@@ -417,6 +457,21 @@ mod tests {
         let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
         assert!(!result.passed, "TLS error should fail: {}", result.detail);
         assert!(result.detail.contains("TLS/network"), "detail: {}", result.detail);
+    }
+
+    #[tokio::test]
+    async fn cli_connectivity_fails_on_license_check_ssl_error() {
+        let cli = mock_license_failure(SSL_HANDSHAKE_STDERR);
+        let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        assert!(!result.passed, "should detect TLS in license error: {}", result.detail);
+        assert!(result.detail.contains("TLS/network"), "detail: {}", result.detail);
+    }
+
+    #[tokio::test]
+    async fn cli_connectivity_passes_on_plain_license_failure() {
+        let cli = mock_license_failure("License check failed: [401] Unauthorized");
+        let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        assert!(result.passed, "plain license failure (no TLS) should pass connectivity: {}", result.detail);
     }
 
     #[tokio::test]
@@ -549,8 +604,7 @@ mod tests {
         let _g = set_token("tok");
         let server = make_server_with_mocks(
             false,
-            // Two CLI calls: check_token_via_cli + check_cli_connectivity
-            MockCliRunner::with_responses(vec![Ok("{}".into()), Ok("{}".into())]),
+            mock_cli_all_ok(),
             MockHttpClient::always(HttpResponse::ok(r#"[{"id":1}]"#)),
         );
         let result = handle(&server, repo_param("/tmp")).await.unwrap();
@@ -565,9 +619,8 @@ mod tests {
         let _g = set_token("tok");
         let server = make_server_with_mocks(
             true,
-            // Two CLI calls: check_token_via_cli + check_cli_connectivity
-            MockCliRunner::with_responses(vec![Ok("{}".into()), Ok("{}".into())]),
-            MockHttpClient::new(vec![]), // no HTTP responses queued
+            mock_cli_all_ok(),
+            MockHttpClient::new(vec![]),
         );
         let result = handle(&server, repo_param("/tmp")).await.unwrap();
         assert!(result.is_error.is_none() || result.is_error == Some(false));

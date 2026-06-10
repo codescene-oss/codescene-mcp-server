@@ -194,7 +194,7 @@ fn parse_cli_output(output: Output) -> Result<String, CliError> {
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         if is_license_check_failure(&stderr) {
-            return Err(CliError::LicenseCheckFailed);
+            return Err(CliError::LicenseCheckFailed { stderr });
         }
         Err(CliError::NonZeroExit {
             code: output.status.code().unwrap_or(-1),
@@ -510,9 +510,10 @@ mod tests {
         let stderr = b"License check failed: [401] The user must reauthorize.\n\n  Make sure that CS_ACCESS_TOKEN is set to a valid Personal Access Token.";
         let output = make_output(failing_raw_status(), b"", stderr);
         match parse_cli_output(output).unwrap_err() {
-            CliError::LicenseCheckFailed => {
+            CliError::LicenseCheckFailed { stderr: s } => {
+                assert!(s.contains("License check failed"), "stderr preserved: {s}");
                 // Verify the user-facing message doesn't mention the CLI
-                let msg = CliError::LicenseCheckFailed.to_string();
+                let msg = CliError::LicenseCheckFailed { stderr: String::new() }.to_string();
                 assert!(msg.contains("invalid or expired"), "msg: {msg}");
                 assert!(msg.contains("set_config"), "msg: {msg}");
                 assert!(!msg.contains("CS CLI"), "msg should not mention CLI: {msg}");
@@ -893,7 +894,7 @@ mod tests {
 
         let result = run_cli_at_path(Path::new("/bin/sh"), &["-c", script], None).await;
         match result.unwrap_err() {
-            CliError::LicenseCheckFailed => {}
+            CliError::LicenseCheckFailed { .. } => {}
             other => panic!("Expected LicenseCheckFailed, got: {other:?}"),
         }
     }
