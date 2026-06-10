@@ -46,12 +46,9 @@ async fn run_all_checks(
     let mut checks = vec![
         check_git_repository(path),
         check_token_via_cli(path, cli_runner, TOKEN_CHECK_TIMEOUT).await,
+        check_cli_connectivity(path, cli_runner, TOKEN_CHECK_TIMEOUT).await,
     ];
-    if is_standalone {
-        checks.push(
-            check_cli_connectivity(path, cli_runner, TOKEN_CHECK_TIMEOUT).await,
-        );
-    } else {
+    if !is_standalone {
         checks.push(check_api_connectivity(http_client).await);
     }
     checks.push(check_environment());
@@ -552,11 +549,15 @@ mod tests {
         let _g = set_token("tok");
         let server = make_server_with_mocks(
             false,
-            MockCliRunner::with_ok("{}"),
+            // Two CLI calls: check_token_via_cli + check_cli_connectivity
+            MockCliRunner::with_responses(vec![Ok("{}".into()), Ok("{}".into())]),
             MockHttpClient::always(HttpResponse::ok(r#"[{"id":1}]"#)),
         );
         let result = handle(&server, repo_param("/tmp")).await.unwrap();
         assert!(result.is_error.is_none() || result.is_error == Some(false));
+        let text = crate::tests::result_text(&result);
+        assert!(text.contains("CLI Connectivity"), "API mode should also run CLI check: {text}");
+        assert!(text.contains("API Connectivity"), "API mode should run API check: {text}");
     }
 
     #[tokio::test]
@@ -571,7 +572,7 @@ mod tests {
         let result = handle(&server, repo_param("/tmp")).await.unwrap();
         assert!(result.is_error.is_none() || result.is_error == Some(false));
         let text = crate::tests::result_text(&result);
-        assert!(text.contains("CLI Connectivity"), "should run CLI connectivity check: {text}");
-        assert!(!text.contains("API Connectivity"), "should NOT run API connectivity: {text}");
+        assert!(text.contains("CLI Connectivity"), "standalone should run CLI check: {text}");
+        assert!(!text.contains("API Connectivity"), "standalone should NOT run API check: {text}");
     }
 }
