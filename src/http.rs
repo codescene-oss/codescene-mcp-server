@@ -56,16 +56,38 @@ pub struct ReqwestClient;
 
 /// Return the first existing CA bundle file from the standard env vars.
 fn ca_bundle_path_from_env() -> Option<PathBuf> {
-    ["REQUESTS_CA_BUNDLE", "SSL_CERT_FILE", "CURL_CA_BUNDLE"]
-        .into_iter()
-        .find_map(|var| {
-            std::env::var(var)
-                .ok()
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty())
-                .map(PathBuf::from)
-                .filter(|p| p.is_file())
-        })
+    let env_vars = ["REQUESTS_CA_BUNDLE", "SSL_CERT_FILE", "CURL_CA_BUNDLE"];
+    let mut configured_but_missing = Vec::new();
+
+    let result = env_vars.into_iter().find_map(|var| {
+        std::env::var(var)
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+            .and_then(|v| {
+                let p = PathBuf::from(&v);
+                if p.is_file() {
+                    Some((var, p))
+                } else {
+                    configured_but_missing.push((var, v));
+                    None
+                }
+            })
+    });
+
+    for (var, path) in &configured_but_missing {
+        tracing::warn!(
+            "{var} is set to \"{path}\" but the file does not exist — \
+             custom CA certificates will NOT be used for API calls. \
+             On Windows, ensure backslashes are escaped as \\\\ in JSON config."
+        );
+    }
+
+    if let Some((var, ref path)) = result {
+        tracing::info!("Using CA bundle from {var}: {}", path.display());
+    }
+
+    result.map(|(_, p)| p)
 }
 
 /// Build a reqwest client, adding custom CA certificates when configured.

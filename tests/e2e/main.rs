@@ -930,6 +930,11 @@ fn test_ssl_cs_certs_missing_without_ca_bundle() {
     tests::ssl_cli_truststore::test_cs_certs_missing_without_ca_bundle();
 }
 
+#[test]
+fn test_ssl_cs_certs_not_set_when_ca_bundle_path_invalid() {
+    tests::ssl_cli_truststore::test_cs_certs_not_set_when_ca_bundle_path_invalid();
+}
+
 // --- SSL API CA Bundle ---
 #[test]
 fn test_api_uses_ca_bundle() {
@@ -939,6 +944,43 @@ fn test_api_uses_ca_bundle() {
 #[test]
 fn test_api_fails_without_ca_bundle() {
     tests::ssl_api_ca_bundle::test_api_fails_without_ca_bundle();
+}
+
+#[test]
+fn test_api_fails_with_invalid_ca_bundle_path() {
+    tests::ssl_api_ca_bundle::test_api_fails_with_invalid_ca_bundle_path();
+}
+
+// --- SSL CA Bundle Path Formats ---
+#[test]
+fn test_ssl_path_baseline_fails_without_ca_bundle() {
+    tests::ssl_ca_bundle_path_formats::test_baseline_fails_without_ca_bundle();
+}
+
+#[test]
+fn test_ssl_path_canonical_succeeds() {
+    tests::ssl_ca_bundle_path_formats::test_canonical_path_succeeds();
+}
+
+#[test]
+fn test_ssl_path_forward_slash_succeeds() {
+    tests::ssl_ca_bundle_path_formats::test_forward_slash_path_succeeds();
+}
+
+#[cfg(windows)]
+#[test]
+fn test_ssl_path_backslash_succeeds() {
+    tests::ssl_ca_bundle_path_formats::test_backslash_path_succeeds();
+}
+
+#[test]
+fn test_ssl_path_nonexistent_ca_bundle_fails() {
+    tests::ssl_ca_bundle_path_formats::test_nonexistent_ca_bundle_path_fails();
+}
+
+#[test]
+fn test_ssl_path_set_config_ca_bundle_applies_immediately() {
+    tests::ssl_ca_bundle_path_formats::test_set_config_ca_bundle_applies_immediately();
 }
 
 // --- Stress Test ---

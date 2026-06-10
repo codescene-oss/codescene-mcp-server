@@ -159,6 +159,7 @@ fn local_setup() -> (
     let env: Vec<(String, String)> = env_map
         .into_iter()
         .chain([
+            ("CS_ACCESS_TOKEN".to_string(), "test-token".to_string()),
             ("CS_CLI_PATH".to_string(), fake_cli.to_string_lossy().to_string()),
             ("REQUIRE_CS_CERTS".to_string(), "1".to_string()),
             ("CS_DISABLE_VERSION_CHECK".to_string(), "1".to_string()),
@@ -213,5 +214,32 @@ pub fn test_cs_certs_missing_without_ca_bundle() {
     assert!(
         result.to_lowercase().contains("cs_certs not set"),
         "Should report CS_CERTS not set, got: {result}"
+    );
+}
+
+/// When `REQUESTS_CA_BUNDLE` points to a non-existent file, the MCP server
+/// should NOT pass `CS_CERTS` to the CLI. This simulates a common Windows
+/// misconfiguration where backslashes in JSON config are not properly escaped
+/// (e.g. `C:\Users\cert.pem` instead of `C:\\Users\\cert.pem`), causing the
+/// path to be mangled and the file to not be found.
+pub fn test_cs_certs_not_set_when_ca_bundle_path_invalid() {
+    if is_docker() { return skip_if_docker("fake CLI binary not available in container"); }
+    let (command, env, repo_dir, _cert_path, _tmp) = local_setup();
+
+    let env: Vec<(String, String)> = env
+        .into_iter()
+        .filter(|(k, _)| {
+            k != "REQUESTS_CA_BUNDLE" && k != "SSL_CERT_FILE" && k != "CURL_CA_BUNDLE"
+        })
+        .chain(std::iter::once((
+            "REQUESTS_CA_BUNDLE".to_string(),
+            "/nonexistent/path/to/ca-bundle.pem".to_string(),
+        )))
+        .collect();
+
+    let result = call_score_tool(&command, &env, &repo_dir);
+    assert!(
+        result.to_lowercase().contains("cs_certs not set"),
+        "When REQUESTS_CA_BUNDLE points to a non-existent file, CS_CERTS should not be set. Got: {result}"
     );
 }

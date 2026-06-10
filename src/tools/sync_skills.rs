@@ -146,8 +146,12 @@ mod tests {
     #[tokio::test]
     async fn returns_error_when_directory_creation_fails() {
         let _g = set_token("tok");
+        // Use a path where create_dir_all will fail:
+        //   Unix:    /dev/null is a file, so /dev/null/impossible cannot be created.
+        //   Windows: NUL is a reserved device name, so NUL\impossible cannot be created.
+        let impossible = if cfg!(windows) { r"NUL\impossible" } else { "/dev/null/impossible" };
         let params = SyncSkillsParam {
-            destination_dir: "/dev/null/impossible".to_string(),
+            destination_dir: impossible.to_string(),
             overwrite: false,
         };
         let result = make_server(false)
