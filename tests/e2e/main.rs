@@ -919,20 +919,20 @@ fn test_skill_sync_tool() {
     tests::skill_resources::test_sync_skills_tool();
 }
 
-// --- SSL CLI Certificate Passthrough ---
+// --- SSL CLI Truststore ---
 #[test]
-fn test_ssl_cs_certs_passed_to_cli() {
-    tests::ssl_cli_truststore::test_cs_certs_passed_to_cli();
+fn test_ssl_truststore_args_injected() {
+    tests::ssl_cli_truststore::test_truststore_args_are_injected();
 }
 
 #[test]
-fn test_ssl_cs_certs_missing_without_ca_bundle() {
-    tests::ssl_cli_truststore::test_cs_certs_missing_without_ca_bundle();
+fn test_ssl_truststore_args_missing_without_cert() {
+    tests::ssl_cli_truststore::test_truststore_args_missing_without_cert();
 }
 
 #[test]
-fn test_ssl_cs_certs_not_set_when_ca_bundle_path_invalid() {
-    tests::ssl_cli_truststore::test_cs_certs_not_set_when_ca_bundle_path_invalid();
+fn test_ssl_truststore_args_not_injected_when_ca_bundle_path_invalid() {
+    tests::ssl_cli_truststore::test_truststore_args_not_injected_when_ca_bundle_path_invalid();
 }
 
 // --- SSL API CA Bundle ---
