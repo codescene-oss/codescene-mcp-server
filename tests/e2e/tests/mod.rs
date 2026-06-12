@@ -36,6 +36,7 @@ pub mod shutdown_during_handshake;
 pub mod skill_resources;
 pub mod ssl_api_ca_bundle;
 pub mod ssl_ca_bundle_path_formats;
+pub mod ssl_cli_ca_bundle;
 pub mod ssl_cli_truststore;
 pub mod standalone_license;
 pub mod stress_code_health_review;
