@@ -3,17 +3,37 @@ use super::options::{ConfigOption, OPTIONS};
 /// Keys that represent URL values and must use HTTPS.
 const URL_KEYS: &[&str] = &["onprem_url"];
 
+/// Localhost hosts that are exempt from the HTTPS requirement.
+const LOCALHOST_HOSTS: &[&str] = &["localhost", "127.0.0.1", "0.0.0.0"];
+
+/// Check whether a URL (after stripping the scheme) points to a localhost address.
+fn is_localhost_url(url: &str) -> bool {
+    let without_scheme = url
+        .strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))
+        .unwrap_or(url);
+
+    LOCALHOST_HOSTS.iter().any(|host| {
+        without_scheme == *host
+            || without_scheme.starts_with(&format!("{host}:"))
+            || without_scheme.starts_with(&format!("{host}/"))
+    })
+}
+
+/// Returns true if the URL is acceptable: empty, HTTPS, or localhost.
+fn is_allowed_url(url: &str) -> bool {
+    url.is_empty() || url.starts_with("https://") || is_localhost_url(url)
+}
+
 /// Validate that a URL value uses the HTTPS scheme.
 /// Returns `Ok(())` for valid HTTPS URLs, or `Err` with a user-facing message.
+/// Localhost addresses (localhost, 127.0.0.1, 0.0.0.0) are exempt.
 pub fn validate_https_url(key: &str, url: &str) -> Result<(), String> {
     if !URL_KEYS.contains(&key) {
         return Ok(());
     }
     let trimmed = url.trim();
-    if trimmed.is_empty() {
-        return Ok(());
-    }
-    if trimmed.starts_with("https://") {
+    if is_allowed_url(trimmed) {
         return Ok(());
     }
     Err(format!(
@@ -24,9 +44,10 @@ pub fn validate_https_url(key: &str, url: &str) -> Result<(), String> {
 
 /// Validate that a raw URL string uses HTTPS. Used for env vars not managed
 /// through the config system (e.g. CS_TRACKING_URL).
+/// Localhost addresses (localhost, 127.0.0.1, 0.0.0.0) are exempt.
 pub fn require_https(env_var: &str, url: &str) -> Result<(), String> {
     let trimmed = url.trim();
-    if trimmed.is_empty() || trimmed.starts_with("https://") {
+    if is_allowed_url(trimmed) {
         return Ok(());
     }
     Err(format!(
@@ -116,6 +137,59 @@ mod tests {
     fn require_https_includes_env_var_in_error() {
         let result = require_https("CS_TRACKING_URL", "http://bad.com");
         assert!(result.unwrap_err().contains("CS_TRACKING_URL"));
+    }
+
+    // --- Localhost exemption tests ---
+
+    #[test]
+    fn validate_https_url_accepts_http_localhost() {
+        assert!(validate_https_url("onprem_url", "http://localhost").is_ok());
+        assert!(validate_https_url("onprem_url", "http://localhost:3000").is_ok());
+        assert!(validate_https_url("onprem_url", "http://localhost/api").is_ok());
+    }
+
+    #[test]
+    fn validate_https_url_accepts_http_127_0_0_1() {
+        assert!(validate_https_url("onprem_url", "http://127.0.0.1").is_ok());
+        assert!(validate_https_url("onprem_url", "http://127.0.0.1:8080").is_ok());
+        assert!(validate_https_url("onprem_url", "http://127.0.0.1/path").is_ok());
+    }
+
+    #[test]
+    fn validate_https_url_accepts_http_0_0_0_0() {
+        assert!(validate_https_url("onprem_url", "http://0.0.0.0").is_ok());
+        assert!(validate_https_url("onprem_url", "http://0.0.0.0:9090").is_ok());
+    }
+
+    #[test]
+    fn require_https_accepts_http_localhost() {
+        assert!(require_https("CS_ONPREM_URL", "http://localhost").is_ok());
+        assert!(require_https("CS_ONPREM_URL", "http://localhost:3000").is_ok());
+        assert!(require_https("CS_TRACKING_URL", "http://localhost/api").is_ok());
+    }
+
+    #[test]
+    fn require_https_accepts_http_127_0_0_1() {
+        assert!(require_https("CS_ONPREM_URL", "http://127.0.0.1").is_ok());
+        assert!(require_https("CS_ONPREM_URL", "http://127.0.0.1:8080").is_ok());
+    }
+
+    #[test]
+    fn require_https_accepts_http_0_0_0_0() {
+        assert!(require_https("CS_TRACKING_URL", "http://0.0.0.0").is_ok());
+        assert!(require_https("CS_TRACKING_URL", "http://0.0.0.0:9090").is_ok());
+    }
+
+    #[test]
+    fn validate_https_url_still_rejects_http_non_localhost() {
+        assert!(validate_https_url("onprem_url", "http://example.com").is_err());
+        assert!(validate_https_url("onprem_url", "http://not-localhost.com").is_err());
+    }
+
+    #[test]
+    fn require_https_still_rejects_http_non_localhost() {
+        assert!(require_https("CS_ONPREM_URL", "http://example.com").is_err());
+        assert!(require_https("CS_TRACKING_URL", "http://not-localhost.com").is_err());
     }
 
     #[test]
