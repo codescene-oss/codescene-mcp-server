@@ -135,7 +135,8 @@ impl FakeHttpsServer {
 
 fn build_tls_config(cert_dir: &Path) -> (GeneratedCerts, rustls::ServerConfig) {
     let ca_key = rcgen::KeyPair::generate().expect("CA key");
-    let ca_params = rcgen::CertificateParams::new(Vec::<String>::new()).expect("CA params");
+    let mut ca_params = rcgen::CertificateParams::new(Vec::<String>::new()).expect("CA params");
+    ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
     let ca = ca_params.self_signed(&ca_key).expect("self-sign CA");
 
     let ca_pem = ca.pem();

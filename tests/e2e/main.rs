@@ -935,6 +935,17 @@ fn test_ssl_truststore_args_not_injected_when_ca_bundle_path_invalid() {
     tests::ssl_cli_truststore::test_truststore_args_not_injected_when_ca_bundle_path_invalid();
 }
 
+// --- SSL CLI CA Bundle ---
+#[test]
+fn test_ssl_cli_connectivity_passes_with_ca_bundle() {
+    tests::ssl_cli_ca_bundle::test_cli_connectivity_passes_with_ca_bundle();
+}
+
+#[test]
+fn test_ssl_cli_connectivity_fails_without_ca_bundle() {
+    tests::ssl_cli_ca_bundle::test_cli_connectivity_fails_without_ca_bundle();
+}
+
 // --- SSL API CA Bundle ---
 #[test]
 fn test_api_uses_ca_bundle() {
