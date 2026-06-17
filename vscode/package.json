@@ -111,8 +111,8 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src/",
-    "test": "npm run compile && node --test tests/*.test.js",
-    "test:ci": "npm run compile && c8 --reporter=cobertura --reporter=text node --test tests/*.test.js",
+    "test": "npm run compile && node --test tests/config.test.js tests/download-binary.test.js tests/package-platform.test.js && node --require ./tests/vscode-mock-preload.cjs --test tests/extension.test.js",
+    "test:ci": "npm run compile && c8 --reporter=cobertura --reporter=text --temp-directory=./coverage/tmp sh -c 'node --test tests/config.test.js tests/download-binary.test.js tests/package-platform.test.js && node --require ./tests/vscode-mock-preload.cjs --test tests/extension.test.js'",
     "package": "vsce package",
     "package:platform": "node scripts/package-platform.js",
     "download-binary": "node scripts/download-binary.js"

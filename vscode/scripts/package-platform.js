@@ -63,7 +63,7 @@ async function packageForTarget(vsTarget) {
     console.log(`\n=== Done: ${vsTarget} ===\n`);
 }
 
-export { VSCODE_TO_BINARY_TARGET, ALL_TARGETS };
+export { VSCODE_TO_BINARY_TARGET, ALL_TARGETS, packageForTarget };
 
 // Main — only runs when executed directly
 const isMain = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));

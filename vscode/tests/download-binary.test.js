@@ -1,11 +1,11 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, existsSync, readdirSync, renameSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { TARGETS, getDownloadUrl, isRedirect, downloadFile, BIN_DIR } from '../scripts/download-binary.js';
+import { TARGETS, getVersion, getDownloadUrl, isRedirect, downloadFile, downloadForTarget, extractZip, downloadCompressed, BIN_DIR } from '../scripts/download-binary.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEST_TMP = join(__dirname, '..', '.test-tmp');
@@ -169,5 +169,232 @@ describe('downloadFile', () => {
             () => downloadFile(`${baseUrl}/nonexistent`, dest),
             /Download failed: HTTP 404/
         );
+    });
+});
+
+describe('getVersion', () => {
+    it('returns the version from package.json', () => {
+        const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
+        assert.equal(getVersion(), pkg.version);
+    });
+
+    it('returns a valid semver-like string', () => {
+        const version = getVersion();
+        assert.match(version, /^\d+\.\d+\.\d+/);
+    });
+});
+
+describe('downloadForTarget', () => {
+    let testServer;
+    let baseUrl;
+    let origBinDir;
+
+    beforeEach(async () => {
+        testServer = createTestServer();
+        baseUrl = await testServer.listen();
+        mkdirSync(TEST_TMP, { recursive: true });
+    });
+
+    afterEach(async () => {
+        await testServer.close();
+        rmSync(TEST_TMP, { recursive: true, force: true });
+        // Clean up any files created in BIN_DIR during tests
+        if (existsSync(BIN_DIR)) {
+            for (const f of readdirSync(BIN_DIR)) {
+                if (f.startsWith('.test-')) {
+                    rmSync(join(BIN_DIR, f), { force: true });
+                }
+            }
+        }
+        if (originalBaseUrl === undefined) {
+            delete process.env.CS_MCP_DOWNLOAD_BASE_URL;
+        } else {
+            process.env.CS_MCP_DOWNLOAD_BASE_URL = originalBaseUrl;
+        }
+    });
+
+    const originalBaseUrl = process.env.CS_MCP_DOWNLOAD_BASE_URL;
+
+    it('skips download when binary already exists', async () => {
+        // Create a fake binary in BIN_DIR
+        mkdirSync(BIN_DIR, { recursive: true });
+        const info = TARGETS['win32-x64']; // Uncompressed is simplest
+        const binaryDest = join(BIN_DIR, info.binary);
+        const existed = existsSync(binaryDest);
+
+        if (!existed) {
+            writeFileSync(binaryDest, 'existing-binary');
+        }
+
+        // Set up a server that should NOT be hit
+        let serverHit = false;
+        testServer.addRoute(`/MCP-${getVersion()}/${info.asset}`, (_req, res) => {
+            serverHit = true;
+            res.writeHead(200);
+            res.end('data');
+        });
+        process.env.CS_MCP_DOWNLOAD_BASE_URL = baseUrl;
+
+        await downloadForTarget('win32-x64');
+
+        assert.equal(serverHit, false, 'Server should not be hit when binary exists');
+
+        if (!existed) {
+            rmSync(binaryDest, { force: true });
+        }
+    });
+
+    it('downloads uncompressed binary for win32-x64', async () => {
+        const info = TARGETS['win32-x64'];
+        const binaryDest = join(BIN_DIR, info.binary);
+        const existed = existsSync(binaryDest);
+
+        // Temporarily rename existing binary if it exists
+        if (existed) {
+            renameSync(binaryDest, binaryDest + '.bak');
+        }
+
+        const content = Buffer.from('fake-windows-binary');
+        testServer.addFileRoute(`/MCP-${getVersion()}/${info.asset}`, content);
+        process.env.CS_MCP_DOWNLOAD_BASE_URL = baseUrl;
+
+        try {
+            await downloadForTarget('win32-x64');
+            assert.ok(existsSync(binaryDest), 'Binary should be downloaded');
+        } finally {
+            rmSync(binaryDest, { force: true });
+            if (existed) {
+                renameSync(binaryDest + '.bak', binaryDest);
+            }
+        }
+    });
+
+    it('downloads compressed binary for linux-x64', async () => {
+        const info = TARGETS['linux-x64'];
+        const binaryDest = join(BIN_DIR, info.binary);
+        const existed = existsSync(binaryDest);
+
+        // Temporarily rename existing binary if it exists
+        if (existed) {
+            renameSync(binaryDest, binaryDest + '.bak');
+        }
+
+        // Create a zip containing a file named cs-mcp-linux-amd64
+        const tmpSrc = join(TEST_TMP, info.binary);
+        writeFileSync(tmpSrc, 'fake-linux-binary');
+        const zipPath = join(TEST_TMP, info.asset);
+        execFileSync('zip', ['-j', zipPath, tmpSrc], { stdio: 'pipe' });
+        const zipContent = readFileSync(zipPath);
+
+        testServer.addFileRoute(`/MCP-${getVersion()}/${info.asset}`, zipContent);
+        process.env.CS_MCP_DOWNLOAD_BASE_URL = baseUrl;
+
+        try {
+            await downloadForTarget('linux-x64');
+            assert.ok(existsSync(binaryDest), 'Binary should be downloaded and extracted');
+        } finally {
+            rmSync(binaryDest, { force: true });
+            if (existed) {
+                renameSync(binaryDest + '.bak', binaryDest);
+            }
+        }
+    });
+});
+
+describe('extractZip', () => {
+    beforeEach(() => {
+        mkdirSync(TEST_TMP, { recursive: true });
+    });
+
+    afterEach(() => {
+        rmSync(TEST_TMP, { recursive: true, force: true });
+    });
+
+    it('extracts a zip file to the destination directory', () => {
+        // Create a test file and zip it
+        const testFile = join(TEST_TMP, 'hello.txt');
+        writeFileSync(testFile, 'hello world');
+
+        const zipPath = join(TEST_TMP, 'test.zip');
+        execFileSync('zip', ['-j', zipPath, testFile], { stdio: 'pipe' });
+
+        const extractDir = join(TEST_TMP, 'extracted');
+        mkdirSync(extractDir, { recursive: true });
+
+        extractZip(zipPath, extractDir);
+
+        assert.ok(existsSync(join(extractDir, 'hello.txt')));
+        const content = readFileSync(join(extractDir, 'hello.txt'), 'utf8');
+        assert.equal(content, 'hello world');
+    });
+});
+
+describe('downloadCompressed', () => {
+    let testServer;
+    let baseUrl;
+
+    beforeEach(async () => {
+        testServer = createTestServer();
+        baseUrl = await testServer.listen();
+        mkdirSync(TEST_TMP, { recursive: true });
+    });
+
+    afterEach(async () => {
+        await testServer.close();
+        rmSync(TEST_TMP, { recursive: true, force: true });
+        // Clean up test artifacts from BIN_DIR
+        for (const f of ['test-asset.zip', 'test-binary', 'cs-mcp-test-binary']) {
+            rmSync(join(BIN_DIR, f), { force: true });
+        }
+    });
+
+    it('downloads and extracts a compressed asset', async () => {
+        // Create a zip containing a binary-like file
+        const srcFile = join(TEST_TMP, 'cs-mcp-test-binary');
+        writeFileSync(srcFile, 'compressed-binary-content');
+
+        const zipPath = join(TEST_TMP, 'test-asset.zip');
+        execFileSync('zip', ['-j', zipPath, srcFile], { stdio: 'pipe' });
+
+        const zipContent = readFileSync(zipPath);
+        testServer.addFileRoute('/asset.zip', zipContent);
+
+        mkdirSync(BIN_DIR, { recursive: true });
+
+        const info = { asset: 'test-asset.zip', binary: 'test-binary', compressed: true };
+        const binaryDest = join(BIN_DIR, 'test-binary');
+
+        await downloadCompressed(`${baseUrl}/asset.zip`, info, binaryDest);
+
+        // The binary should be renamed from cs-mcp-test-binary to test-binary
+        assert.ok(existsSync(binaryDest), 'Binary should be extracted and renamed');
+
+        // Clean up
+        rmSync(binaryDest, { force: true });
+    });
+
+    it('cleans up the zip file after extraction', async () => {
+        const srcFile = join(TEST_TMP, 'cs-mcp-cleanup-test');
+        writeFileSync(srcFile, 'data');
+
+        const zipPath = join(TEST_TMP, 'cleanup.zip');
+        execFileSync('zip', ['-j', zipPath, srcFile], { stdio: 'pipe' });
+
+        const zipContent = readFileSync(zipPath);
+        testServer.addFileRoute('/cleanup.zip', zipContent);
+
+        mkdirSync(BIN_DIR, { recursive: true });
+
+        const info = { asset: 'cleanup.zip', binary: 'cleanup-binary', compressed: true };
+        const binaryDest = join(BIN_DIR, 'cleanup-binary');
+
+        await downloadCompressed(`${baseUrl}/cleanup.zip`, info, binaryDest);
+
+        // The zip should be cleaned up
+        assert.ok(!existsSync(join(BIN_DIR, 'cleanup.zip')), 'Zip file should be cleaned up');
+
+        // Clean up
+        rmSync(binaryDest, { force: true });
+        rmSync(join(BIN_DIR, 'cs-mcp-cleanup-test'), { force: true });
     });
 });

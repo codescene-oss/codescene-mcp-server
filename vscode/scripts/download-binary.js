@@ -161,4 +161,4 @@ if (isMain) {
     });
 }
 
-export { TARGETS, getVersion, getDownloadUrl, isRedirect, downloadFile, downloadForTarget, BIN_DIR };
+export { TARGETS, getVersion, getDownloadUrl, isRedirect, downloadFile, downloadForTarget, extractZip, downloadCompressed, BIN_DIR };
