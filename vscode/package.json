@@ -4,6 +4,7 @@
   "description": "CodeScene MCP Server — Code Health analysis for AI coding agents. Provides tools for code health scoring, refactoring guidance, and technical debt analysis directly in VS Code's agent mode.",
   "version": "0.0.0",
   "publisher": "codescene",
+  "icon": "icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",
