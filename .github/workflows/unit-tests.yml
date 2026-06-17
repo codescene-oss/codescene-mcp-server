@@ -17,7 +17,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
       - name: Install dependencies
@@ -27,7 +27,7 @@ jobs:
         run: npm run test:ci
         working-directory: npm
       - name: Upload npm coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: npm-coverage-report
           path: npm/coverage/cobertura-coverage.xml
@@ -39,7 +39,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
       - name: Install dependencies
@@ -49,7 +49,7 @@ jobs:
         run: npm run test:ci
         working-directory: vscode
       - name: Upload vscode coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vscode-coverage-report
           path: vscode/coverage/cobertura-coverage.xml
@@ -67,7 +67,7 @@ jobs:
       - name: Run Rust tests with cobertura coverage
         run: cargo llvm-cov --bin cs-mcp --cobertura --output-path coverage.xml
       - name: Upload Rust coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rust-coverage-report
           path: coverage.xml
@@ -82,7 +82,7 @@ jobs:
           # fetch everything so that `cs-coverage check` can find merge-base
           fetch-depth: 0
       - name: download coverage
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           path: coverage/
       - uses: ./.github/actions/check-coverage
