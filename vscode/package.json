@@ -1,0 +1,108 @@
+{
+  "name": "codescene-codehealth-mcp",
+  "displayName": "CodeScene Code Health",
+  "description": "CodeScene MCP Server — Code Health analysis for AI coding agents. Provides tools for code health scoring, refactoring guidance, and technical debt analysis directly in VS Code's agent mode.",
+  "version": "0.1.0",
+  "publisher": "codescene",
+  "license": "MIT",
+
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codescene-oss/codescene-mcp-server.git",
+    "directory": "vscode"
+  },
+  "homepage": "https://codescene.com",
+  "bugs": {
+    "url": "https://github.com/codescene-oss/codescene-mcp-server/issues"
+  },
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "AI",
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "codescene",
+    "code-health",
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "code-quality",
+    "technical-debt",
+    "refactoring",
+    "copilot"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "codesceneMcp",
+        "label": "CodeScene Code Health MCP Server"
+      }
+    ],
+    "configuration": {
+      "title": "CodeScene Code Health",
+      "properties": {
+        "codescene.accessToken": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Your CodeScene access token for API connectivity. Get one from your [CodeScene account](https://codescene.io).",
+          "order": 1
+        },
+        "codescene.serverUrl": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "CodeScene server URL for on-premise installations. Leave empty for CodeScene cloud.",
+          "order": 2
+        },
+        "codescene.defaultProjectId": {
+          "type": "string",
+          "default": "",
+          "description": "Default CodeScene project ID. If set, tools will use this project automatically.",
+          "order": 3
+        },
+        "codescene.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable the CodeScene MCP Server.",
+          "order": 0
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "codescene.configure",
+        "title": "CodeScene: Configure Access Token"
+      },
+      {
+        "command": "codescene.restart",
+        "title": "CodeScene: Restart MCP Server"
+      },
+      {
+        "command": "codescene.showStatus",
+        "title": "CodeScene: Show Server Status"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src/",
+    "package": "vsce package",
+    "package:platform": "node scripts/package-platform.js",
+    "download-binary": "node scripts/download-binary.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/vscode": "^1.96.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0"
+  }
+}
