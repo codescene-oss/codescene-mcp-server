@@ -149,11 +149,16 @@ async function downloadForTarget(target) {
     console.log(`  Ready: ${binaryDest}`);
 }
 
-// Main
-const target = process.argv[2] || 'current';
-const resolvedTarget = target === 'current' ? `${process.platform}-${process.arch}` : target;
+// Main — only runs when executed directly
+const isMain = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
+if (isMain) {
+    const target = process.argv[2] || 'current';
+    const resolvedTarget = target === 'current' ? `${process.platform}-${process.arch}` : target;
 
-downloadForTarget(resolvedTarget).catch(err => {
-    console.error('Error:', err.message);
-    process.exit(1);
-});
+    downloadForTarget(resolvedTarget).catch(err => {
+        console.error('Error:', err.message);
+        process.exit(1);
+    });
+}
+
+export { TARGETS, getVersion, getDownloadUrl, isRedirect, downloadFile, downloadForTarget, BIN_DIR };

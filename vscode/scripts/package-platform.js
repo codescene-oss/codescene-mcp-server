@@ -63,17 +63,22 @@ async function packageForTarget(vsTarget) {
     console.log(`\n=== Done: ${vsTarget} ===\n`);
 }
 
-// Main
-const target = process.argv[2];
+export { VSCODE_TO_BINARY_TARGET, ALL_TARGETS };
 
-if (!target) {
-    console.log('Packaging for all supported platforms...\n');
-    for (const t of ALL_TARGETS) {
-        await packageForTarget(t);
+// Main — only runs when executed directly
+const isMain = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
+if (isMain) {
+    const target = process.argv[2];
+
+    if (!target) {
+        console.log('Packaging for all supported platforms...\n');
+        for (const t of ALL_TARGETS) {
+            await packageForTarget(t);
+        }
+    } else if (target === 'current') {
+        const current = `${process.platform}-${process.arch}`;
+        await packageForTarget(current);
+    } else {
+        await packageForTarget(target);
     }
-} else if (target === 'current') {
-    const current = `${process.platform}-${process.arch}`;
-    await packageForTarget(current);
-} else {
-    await packageForTarget(target);
 }
