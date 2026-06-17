@@ -1,0 +1,82 @@
+name: Publish VS Code Extension (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to download VSIXs from (e.g. MCP-1.2.3). Defaults to latest."
+        required: false
+        type: string
+      publish_vscode_marketplace:
+        type: boolean
+        default: true
+        description: Publish to VS Code Marketplace
+      publish_open_vsx:
+        type: boolean
+        default: true
+        description: Publish to Open VSX
+
+jobs:
+  publish:
+    name: Publish Extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Determine release tag
+        id: tag
+        shell: bash
+        run: |
+          if [[ -n "${{ inputs.tag }}" ]]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download VSIX files from release
+        uses: dsaltares/fetch-gh-release-asset@master
+        with:
+          regex: true
+          file: 'codescene-codehealth-mcp.*\.vsix'
+          version: ${{ steps.tag.outputs.tag != 'latest' && format('tags/{0}', steps.tag.outputs.tag) || 'latest' }}
+          target: './vsix-artifacts'
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify VSIX files
+        run: |
+          set -euo pipefail
+          targets=("win32-x64" "darwin-x64" "darwin-arm64" "linux-x64" "linux-arm64")
+          for target in "${targets[@]}"; do
+            file=$(find ./vsix-artifacts -name "codescene-codehealth-mcp-*-${target}.vsix" | head -1)
+            if [ -z "$file" ]; then
+              echo "Missing VSIX for ${target}"
+              exit 1
+            fi
+            echo "Found ${file}"
+          done
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Publish to VS Code Marketplace
+        if: inputs.publish_vscode_marketplace && env.VSCODE_MARKETPLACE_PUBLISHING_TOKEN != ''
+        env:
+          VSCODE_MARKETPLACE_PUBLISHING_TOKEN: ${{ secrets.VSCODE_MARKETPLACE_PUBLISHING_TOKEN }}
+        run: |
+          npm install -g @vscode/vsce
+          for file in ./vsix-artifacts/*.vsix; do
+            echo "Publishing ${file} to VS Code Marketplace"
+            vsce publish --pat "$VSCODE_MARKETPLACE_PUBLISHING_TOKEN" --packagePath "${file}"
+          done
+
+      - name: Publish to Open VSX
+        if: inputs.publish_open_vsx && env.OPEN_VSX_PUBLISHING_TOKEN != ''
+        env:
+          OPEN_VSX_PUBLISHING_TOKEN: ${{ secrets.OPEN_VSX_PUBLISHING_TOKEN }}
+        run: |
+          npm install -g ovsx
+          for file in ./vsix-artifacts/*.vsix; do
+            echo "Publishing ${file} to Open VSX"
+            ovsx publish --pat "$OPEN_VSX_PUBLISHING_TOKEN" --packagePath "${file}"
+          done

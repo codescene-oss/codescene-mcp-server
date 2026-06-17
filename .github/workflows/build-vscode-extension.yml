@@ -7,6 +7,10 @@ on:
         description: "Release tag to download binaries from (e.g. MCP-1.2.3)"
         required: false
         type: string
+      skip_publish:
+        description: "Skip publishing to VS Code Marketplace and Open VSX"
+        type: boolean
+        default: false
   push:
     tags:
       - 'MCP-[0-9]+.[0-9]+.[0-9]+'
@@ -136,3 +140,44 @@ jobs:
           tag_name: ${{ github.ref_name }}
           files: ./vsix-artifacts/*.vsix
           append_body: true
+
+  publish:
+    if: >
+      (github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && inputs.skip_publish != true)
+    needs: build-vsix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all VSIX artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: vsix-*
+          path: ./vsix-artifacts
+          merge-multiple: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Publish to VS Code Marketplace
+        if: env.VSCODE_MARKETPLACE_PUBLISHING_TOKEN != ''
+        env:
+          VSCODE_MARKETPLACE_PUBLISHING_TOKEN: ${{ secrets.VSCODE_MARKETPLACE_PUBLISHING_TOKEN }}
+        run: |
+          npm install -g @vscode/vsce
+          for file in ./vsix-artifacts/*.vsix; do
+            echo "Publishing ${file} to VS Code Marketplace"
+            vsce publish --pat "$VSCODE_MARKETPLACE_PUBLISHING_TOKEN" --packagePath "${file}"
+          done
+
+      - name: Publish to Open VSX
+        if: env.OPEN_VSX_PUBLISHING_TOKEN != ''
+        env:
+          OPEN_VSX_PUBLISHING_TOKEN: ${{ secrets.OPEN_VSX_PUBLISHING_TOKEN }}
+        run: |
+          npm install -g ovsx
+          for file in ./vsix-artifacts/*.vsix; do
+            echo "Publishing ${file} to Open VSX"
+            ovsx publish --pat "$OPEN_VSX_PUBLISHING_TOKEN" --packagePath "${file}"
+          done
