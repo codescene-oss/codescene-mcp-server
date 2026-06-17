@@ -45,12 +45,15 @@ function getDownloadUrl(version, asset) {
     return `${baseUrl}/${tag}/${asset}`;
 }
 
+function isRedirect(response) {
+    return response.statusCode >= 300 && response.statusCode < 400 && response.headers.location;
+}
+
 function downloadFile(url, destPath) {
     return new Promise((resolve, reject) => {
         const proto = url.startsWith('https') ? https : http;
         proto.get(url, (response) => {
-            // Follow redirects (GitHub releases use 302)
-            if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+            if (isRedirect(response)) {
                 downloadFile(response.headers.location, destPath).then(resolve).catch(reject);
                 response.resume();
                 return;
@@ -95,6 +98,23 @@ function extractZip(zipPath, destDir) {
     }
 }
 
+async function downloadCompressed(url, info, binaryDest) {
+    const zipPath = join(BIN_DIR, info.asset);
+    try {
+        await downloadFile(url, zipPath);
+        console.log('  Extracting...');
+        extractZip(zipPath, BIN_DIR);
+
+        const files = readdirSync(BIN_DIR);
+        const candidate = files.find(f => f.startsWith('cs-mcp') && !f.endsWith('.zip') && f !== info.binary);
+        if (candidate && !existsSync(binaryDest)) {
+            renameSync(join(BIN_DIR, candidate), binaryDest);
+        }
+    } finally {
+        await rm(zipPath, { force: true }).catch(() => { });
+    }
+}
+
 async function downloadForTarget(target) {
     const info = TARGETS[target];
     if (!info) {
@@ -117,26 +137,11 @@ async function downloadForTarget(target) {
     console.log(`  URL: ${url}`);
 
     if (info.compressed) {
-        const zipPath = join(BIN_DIR, info.asset);
-        try {
-            await downloadFile(url, zipPath);
-            console.log('  Extracting...');
-            extractZip(zipPath, BIN_DIR);
-
-            // Rename extracted binary to our expected name
-            const files = readdirSync(BIN_DIR);
-            const candidate = files.find(f => f.startsWith('cs-mcp') && !f.endsWith('.zip') && f !== info.binary);
-            if (candidate && !existsSync(binaryDest)) {
-                renameSync(join(BIN_DIR, candidate), binaryDest);
-            }
-        } finally {
-            await rm(zipPath, { force: true }).catch(() => { });
-        }
+        await downloadCompressed(url, info, binaryDest);
     } else {
         await downloadFile(url, binaryDest);
     }
 
-    // Make executable on Unix
     if (!target.startsWith('win32')) {
         chmodSync(binaryDest, 0o755);
     }
