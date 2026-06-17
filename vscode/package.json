@@ -1,8 +1,8 @@
 {
   "name": "codescene-codehealth-mcp",
-  "displayName": "CodeScene Code Health",
+  "displayName": "CodeScene CodeHealth MCP",
   "description": "CodeScene MCP Server — Code Health analysis for AI coding agents. Provides tools for code health scoring, refactoring guidance, and technical debt analysis directly in VS Code's agent mode.",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "publisher": "codescene",
   "license": "MIT",
   "repository": {
@@ -41,11 +41,11 @@
     "mcpServerDefinitionProviders": [
       {
         "id": "codesceneMcp",
-        "label": "CodeScene Code Health MCP Server"
+        "label": "CodeScene CodeHealth MCP Server"
       }
     ],
     "configuration": {
-      "title": "CodeScene Code Health",
+      "title": "CodeScene CodeHealth MCP",
       "properties": {
         "codescene.accessToken": {
           "type": "string",

@@ -42,7 +42,7 @@ export function activate(context: vscode.ExtensionContext) {
 
                 return [
                     new vscode.McpStdioServerDefinition(
-                        'CodeScene Code Health',
+                        'CodeScene CodeHealth MCP',
                         binaryPath,
                         [],
                         env,
@@ -51,7 +51,7 @@ export function activate(context: vscode.ExtensionContext) {
                 ];
             },
             resolveMcpServerDefinition: async (server: vscode.McpServerDefinition) => {
-                if (server.label !== 'CodeScene Code Health') {
+                if (server.label !== 'CodeScene CodeHealth MCP') {
                     return server;
                 }
 
@@ -178,11 +178,11 @@ function getBinaryPath(context: vscode.ExtensionContext): string | undefined {
 function updateStatusBar(active: boolean) {
     if (active) {
         statusBarItem.text = '$(shield) CodeScene';
-        statusBarItem.tooltip = 'CodeScene Code Health MCP — Active';
+        statusBarItem.tooltip = 'CodeScene CodeHealth MCP — Active';
         statusBarItem.show();
     } else {
         statusBarItem.text = '$(shield) CodeScene (off)';
-        statusBarItem.tooltip = 'CodeScene Code Health MCP — Disabled';
+        statusBarItem.tooltip = 'CodeScene CodeHealth MCP — Disabled';
         statusBarItem.show();
     }
 }

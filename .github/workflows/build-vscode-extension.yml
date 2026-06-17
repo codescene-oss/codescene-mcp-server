@@ -61,6 +61,15 @@ jobs:
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Set extension version from release tag
+        working-directory: vscode
+        shell: bash
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          VERSION="${TAG#MCP-}"
+          echo "Setting extension version to $VERSION (from tag $TAG)"
+          npm version "$VERSION" --no-git-tag-version
+
       - name: Download binary from release
         shell: bash
         env:

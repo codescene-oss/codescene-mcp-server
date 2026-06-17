@@ -173,12 +173,23 @@ describe('downloadFile', () => {
 });
 
 describe('getVersion', () => {
-    it('returns the version from package.json', () => {
-        const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
-        assert.equal(getVersion(), pkg.version);
+    const origVersion = process.env.CS_MCP_VERSION;
+
+    afterEach(() => {
+        if (origVersion === undefined) {
+            delete process.env.CS_MCP_VERSION;
+        } else {
+            process.env.CS_MCP_VERSION = origVersion;
+        }
     });
 
-    it('returns a valid semver-like string', () => {
+    it('returns CS_MCP_VERSION env var when set', () => {
+        process.env.CS_MCP_VERSION = '9.8.7';
+        assert.equal(getVersion(), '9.8.7');
+    });
+
+    it('returns a valid semver-like string from env', () => {
+        process.env.CS_MCP_VERSION = '1.2.3';
         const version = getVersion();
         assert.match(version, /^\d+\.\d+\.\d+/);
     });
@@ -188,11 +199,14 @@ describe('downloadForTarget', () => {
     let testServer;
     let baseUrl;
     let origBinDir;
+    const originalBaseUrl = process.env.CS_MCP_DOWNLOAD_BASE_URL;
+    const originalVersion = process.env.CS_MCP_VERSION;
 
     beforeEach(async () => {
         testServer = createTestServer();
         baseUrl = await testServer.listen();
         mkdirSync(TEST_TMP, { recursive: true });
+        process.env.CS_MCP_VERSION = '99.0.0';
     });
 
     afterEach(async () => {
@@ -211,9 +225,12 @@ describe('downloadForTarget', () => {
         } else {
             process.env.CS_MCP_DOWNLOAD_BASE_URL = originalBaseUrl;
         }
+        if (originalVersion === undefined) {
+            delete process.env.CS_MCP_VERSION;
+        } else {
+            process.env.CS_MCP_VERSION = originalVersion;
+        }
     });
-
-    const originalBaseUrl = process.env.CS_MCP_DOWNLOAD_BASE_URL;
 
     it('skips download when binary already exists', async () => {
         // Create a fake binary in BIN_DIR

@@ -59,7 +59,7 @@ describe('activate', () => {
         const sbi = state.statusBarItems[0];
         assert.equal(sbi.command, 'codescene.showStatus');
         assert.equal(sbi.text, '$(shield) CodeScene');
-        assert.equal(sbi.tooltip, 'CodeScene Code Health MCP — Active');
+        assert.equal(sbi.tooltip, 'CodeScene CodeHealth MCP — Active');
     });
 
     it('pushes disposables onto context.subscriptions', () => {
@@ -164,7 +164,7 @@ describe('provideMcpServerDefinitions', () => {
         const defs = await provider.provideMcpServerDefinitions();
 
         assert.equal(defs.length, 1);
-        assert.equal(defs[0].label, 'CodeScene Code Health');
+        assert.equal(defs[0].label, 'CodeScene CodeHealth MCP');
         assert.equal(defs[0].command, join(binDir, binaryName));
         assert.deepEqual(defs[0].args, []);
         assert.equal(defs[0].env['CS_ACCESS_TOKEN'], 'tok-123');
@@ -200,7 +200,7 @@ describe('resolveMcpServerDefinition', () => {
         extension.activate(ctx);
 
         const provider = findProvider();
-        const server = { label: 'CodeScene Code Health' };
+        const server = { label: 'CodeScene CodeHealth MCP' };
         const result = await provider.resolveMcpServerDefinition(server);
 
         assert.equal(result, server);
@@ -215,7 +215,7 @@ describe('resolveMcpServerDefinition', () => {
         extension.activate(ctx);
 
         const provider = findProvider();
-        const server = { label: 'CodeScene Code Health' };
+        const server = { label: 'CodeScene CodeHealth MCP' };
         const result = await provider.resolveMcpServerDefinition(server);
 
         assert.equal(result, server);
@@ -231,7 +231,7 @@ describe('resolveMcpServerDefinition', () => {
         extension.activate(ctx);
 
         const { McpStdioServerDefinition } = globalThis.__vscodeMock.vscode;
-        const server = new McpStdioServerDefinition('CodeScene Code Health', '/bin/test', [], {}, '1.0');
+        const server = new McpStdioServerDefinition('CodeScene CodeHealth MCP', '/bin/test', [], {}, '1.0');
 
         const provider = findProvider();
         const result = await provider.resolveMcpServerDefinition(server);

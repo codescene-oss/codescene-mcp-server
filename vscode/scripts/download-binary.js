@@ -34,7 +34,15 @@ const TARGETS = {
 };
 
 function getVersion() {
+    if (process.env.CS_MCP_VERSION) {
+        return process.env.CS_MCP_VERSION;
+    }
     const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+    if (!pkg.version || pkg.version === '0.0.0') {
+        console.error('Error: package.json version is a placeholder (0.0.0).');
+        console.error('Set CS_MCP_VERSION env var or run `npm version <version>` first.');
+        process.exit(1);
+    }
     return pkg.version;
 }
 

@@ -1,4 +1,4 @@
-# CodeScene Code Health — VS Code Extension
+# CodeScene CodeHealth MCP — VS Code Extension
 
 AI-powered code health analysis directly in VS Code's agent mode (Copilot Chat). This extension bundles the CodeScene MCP Server and automatically configures it, giving you instant access to code quality tools without any manual setup.
 
@@ -7,7 +7,7 @@ AI-powered code health analysis directly in VS Code's agent mode (Copilot Chat).
 - **Zero-config MCP setup** — Installs and registers the CodeScene MCP Server automatically
 - **Platform-specific binaries** — The correct native binary for your OS/arch is bundled inside the extension
 - **Settings UI** — Configure your CodeScene credentials and options through VS Code's settings
-- **Agent mode tools** — All CodeScene Code Health tools are available in Copilot's agent mode
+- **Agent mode tools** — All CodeScene CodeHealth MCP tools are available in Copilot's agent mode
 
 ## Available Tools (in Agent Mode)
 
