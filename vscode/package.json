@@ -5,7 +5,6 @@
   "version": "0.1.0",
   "publisher": "codescene",
   "license": "MIT",
-
   "repository": {
     "type": "git",
     "url": "https://github.com/codescene-oss/codescene-mcp-server.git",
@@ -113,6 +112,7 @@
     "watch": "tsc -watch -p ./",
     "lint": "eslint src/",
     "test": "npm run compile && node --test tests/*.test.js",
+    "test:ci": "npm run compile && c8 --reporter=cobertura --reporter=text node --test tests/*.test.js",
     "package": "vsce package",
     "package:platform": "node scripts/package-platform.js",
     "download-binary": "node scripts/download-binary.js"
@@ -121,6 +121,7 @@
     "@types/node": "^22",
     "@types/vscode": "^1.96.0",
     "@vscode/vsce": "^3.0.0",
+    "c8": "^11.0.0",
     "esbuild": "^0.24.0",
     "typescript": "^5.7.0"
   }
