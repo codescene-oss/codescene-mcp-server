@@ -1,0 +1,19 @@
+# Source files (compiled output is in out/)
+src/**
+scripts/**
+
+# Development files
+.vscode/**
+node_modules/**
+tsconfig.json
+.gitignore
+
+# Test files
+**/*.test.ts
+**/*.test.js
+
+# Build artifacts we don't need
+*.map
+.eslintrc*
+
+# Keep bin/ and out/ — they contain the binary and compiled extension

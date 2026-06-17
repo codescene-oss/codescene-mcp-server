@@ -1,0 +1,13 @@
+Copyright CodeScene AB ("CodeScene")
+
+This Model Context Protocol Server ("MCP Server") includes both open-source and closed-source software components. The Open-Source Components, are published in a public, open-source git repository. The Closed-Source Components are held in a private git repository.
+
+By using the MCP Server you, the "Customer", are agreeing to the terms & conditions available at https://codescene.com/policies (the "Terms & Conditions"). Subject to your compliance with the Terms & Conditions, CodeScene grants rights to this MCP Server as follows:
+
+Open-Source Components
+
+CodeScene grants an Apache License to use the Open-Source Components, based on the license to be found at https://www.apache.org/licenses/LICENSE-2.0.txt
+
+Closed-Source Components
+
+CodeScene grants a non-exclusive, non-transferable, non-sub-licensable, limited license to use the Closed-Source Components in object code format as set out in the Terms & Conditions. Other than any license granted pursuant to the Terms & Conditions, CodeScene reserves all rights to the Closed Source Components not expressly granted herein, and they shall under no circumstances be considered as sold to the Customer.
