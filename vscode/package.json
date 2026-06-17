@@ -51,20 +51,38 @@
         "codescene.accessToken": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Your CodeScene access token for API connectivity. Get one from your [CodeScene account](https://codescene.io).",
+          "markdownDescription": "Your CodeScene access token. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#access_token)",
           "order": 1
         },
-        "codescene.serverUrl": {
+        "codescene.onpremUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "CodeScene server URL for on-premise installations. Leave empty for CodeScene cloud.",
+          "markdownDescription": "Base URL of your self-hosted CodeScene instance (e.g. `https://codescene.mycompany.com`). Leave empty for CodeScene Cloud. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#onprem_url)",
           "order": 2
         },
         "codescene.defaultProjectId": {
           "type": "string",
           "default": "",
-          "description": "Default CodeScene project ID. If set, tools will use this project automatically.",
+          "markdownDescription": "Pre-selects a CodeScene project by its numeric ID, skipping interactive project selection. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#default_project_id)",
           "order": 3
+        },
+        "codescene.enabledTools": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Comma-separated list of MCP tool names to expose. When empty, all tools are enabled. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#enabled_tools)",
+          "order": 4
+        },
+        "codescene.disableVersionCheck": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Suppress the automatic version-check request on startup. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#disable_version_check)",
+          "order": 5
+        },
+        "codescene.caBundlePath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to a PEM-format CA certificate bundle for SSL/TLS verification. Required for corporate proxies or internal CAs. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#ca_bundle)",
+          "order": 6
         },
         "codescene.enabled": {
           "type": "boolean",

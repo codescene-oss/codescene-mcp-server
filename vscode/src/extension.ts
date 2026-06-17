@@ -191,14 +191,29 @@ function buildEnvironment(config: vscode.WorkspaceConfiguration): Record<string,
         env['CS_ACCESS_TOKEN'] = token;
     }
 
-    const serverUrl = config.get<string>('serverUrl', '');
-    if (serverUrl) {
-        env['CS_SERVER_URL'] = serverUrl;
+    const onpremUrl = config.get<string>('onpremUrl', '');
+    if (onpremUrl) {
+        env['CS_ONPREM_URL'] = onpremUrl;
     }
 
     const projectId = config.get<string>('defaultProjectId', '');
     if (projectId) {
         env['CS_DEFAULT_PROJECT_ID'] = projectId;
+    }
+
+    const enabledTools = config.get<string>('enabledTools', '');
+    if (enabledTools) {
+        env['CS_ENABLED_TOOLS'] = enabledTools;
+    }
+
+    const disableVersionCheck = config.get<boolean>('disableVersionCheck', false);
+    if (disableVersionCheck) {
+        env['CS_DISABLE_VERSION_CHECK'] = '1';
+    }
+
+    const caBundlePath = config.get<string>('caBundlePath', '');
+    if (caBundlePath) {
+        env['REQUESTS_CA_BUNDLE'] = caBundlePath;
     }
 
     return env;
