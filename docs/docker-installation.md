@@ -22,11 +22,11 @@ docker pull codescene/codescene-mcp
 | `CS_ACCESS_TOKEN` | Yes | Your CodeScene personal access token |
 | `CS_MOUNT_PATH` | Yes | Absolute path to your code directory |
 
-For additional environment variables (on-prem, ACE, SSL, proxy settings, etc.), see [Configuration Options](configuration-options.md).
+For additional environment variables (on-prem, SSL, proxy settings, etc.), see [Configuration Options](configuration-options.md).
 
 ## Integration with AI Assistants
 
-> **Note:** Docker containers cannot read the host's config file, so `CS_ACCESS_TOKEN` must be passed as an environment variable in the examples below. For other configuration options (on-prem, ACE, SSL, etc.), you can ask your AI assistant directly — for example, *"Set my CodeScene on-prem URL to https://my-instance.example.com"*. See [Configuration Options](configuration-options.md) for all available settings.
+> **Note:** Docker containers cannot read the host's config file, so `CS_ACCESS_TOKEN` must be passed as an environment variable in the examples below. For other configuration options (on-prem, SSL, etc.), you can ask your AI assistant directly — for example, *"Set my CodeScene on-prem URL to https://my-instance.example.com"*. See [Configuration Options](configuration-options.md) for all available settings.
 
 ### Claude Code
 
@@ -218,7 +218,30 @@ Replace `/path/to/your/code` with the actual absolute path to your code director
 
 ## Configuration
 
-For additional configuration — including CodeScene on-prem, ACE auto-refactoring, custom SSL/TLS certificates, and more — see [Configuration Options](configuration-options.md).
+For additional configuration — including CodeScene on-prem, custom SSL/TLS certificates, and more — see [Configuration Options](configuration-options.md).
+
+### Persistent Configuration and Logs
+
+By default, configuration changes made through `set_config` (e.g., setting a default project) and diagnostic log files are stored inside the container and lost when it stops. If you want these to persist across restarts, add a named volume for the config directory:
+
+```
+--mount type=volume,src=codescene-mcp-config,dst=/home/mcp/.config/codehealth-mcp
+```
+
+For example, in a JSON configuration:
+
+```json
+"args": [
+    "run", "-i", "--rm",
+    "-e", "CS_ACCESS_TOKEN",
+    "-e", "CS_MOUNT_PATH=/path/to/your/code",
+    "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
+    "--mount", "type=volume,src=codescene-mcp-config,dst=/home/mcp/.config/codehealth-mcp",
+    "codescene/codescene-mcp"
+]
+```
+
+This is entirely optional — configuration passed via environment variables (such as `CS_ACCESS_TOKEN`) is unaffected and does not require persistence. The volume is only needed to preserve settings changed at runtime through `set_config` and to retain diagnostic log files across container restarts.
 
 ## Building Docker Image Locally
 

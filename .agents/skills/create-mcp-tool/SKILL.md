@@ -137,7 +137,7 @@ Choose the right dependency based on what the tool does:
 
 | Dependency | Access via | When to use |
 |---|---|---|
-| `server.cli_runner` | `Arc<dyn CliRunner>` | Run the CodeScene CLI (code review, pre-commit, change-set, auto-refactor) |
+| `server.cli_runner` | `Arc<dyn CliRunner>` | Run the CodeScene CLI (code review, pre-commit, change-set) |
 | `server.http_client` | `Arc<dyn HttpClient>` | Make HTTP requests to CodeScene cloud/on-prem API |
 | `server.config_data` | `Arc<ConfigData>` | Read server configuration values |
 

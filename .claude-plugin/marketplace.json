@@ -1,0 +1,24 @@
+{
+  "name": "codescene",
+  "description": "CodeScene Code Health analysis tools and skills for Claude Code.",
+  "owner": {
+    "name": "CodeScene",
+    "email": "support@codescene.com"
+  },
+  "plugins": [
+    {
+      "name": "codescene",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/codescene-oss/codescene-mcp-server.git",
+        "path": "claude-code-plugin"
+      },
+      "description": "CodeScene Code Health analysis — review, refactor, and safeguard code quality with AI-friendly tools.",
+      "homepage": "https://codescene.com",
+      "repository": "https://github.com/codescene-oss/codescene-mcp-server",
+      "license": "Apache-2.0",
+      "keywords": ["code-health", "code-quality", "refactoring", "technical-debt", "codescene"],
+      "category": "code-quality"
+    }
+  ]
+}

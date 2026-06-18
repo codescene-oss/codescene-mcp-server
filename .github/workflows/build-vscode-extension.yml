@@ -1,0 +1,183 @@
+name: Build VS Code Extension
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to download binaries from (e.g. MCP-1.2.3)"
+        required: false
+        type: string
+      skip_publish:
+        description: "Skip publishing to VS Code Marketplace and Open VSX"
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'MCP-[0-9]+.[0-9]+.[0-9]+'
+      - 'MCP-[0-9]+.[0-9]+.[0-9]+-*'
+
+concurrency:
+  group: vscode-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-vsix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    strategy:
+      matrix:
+        include:
+          - vscode-target: darwin-arm64
+            binary-asset: cs-mcp-macos-aarch64.zip
+            binary-name: cs-mcp-macos-aarch64
+          - vscode-target: darwin-x64
+            binary-asset: cs-mcp-macos-amd64.zip
+            binary-name: cs-mcp-macos-amd64
+          - vscode-target: linux-x64
+            binary-asset: cs-mcp-linux-amd64.zip
+            binary-name: cs-mcp-linux-amd64
+          - vscode-target: linux-arm64
+            binary-asset: cs-mcp-linux-aarch64.zip
+            binary-name: cs-mcp-linux-aarch64
+          - vscode-target: win32-x64
+            binary-asset: cs-mcp-windows-amd64.exe
+            binary-name: cs-mcp-windows-amd64.exe
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Determine release tag
+        id: tag
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.tag }}" ]]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set extension version from release tag
+        working-directory: vscode
+        shell: bash
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          VERSION="${TAG#MCP-}"
+          echo "Setting extension version to $VERSION (from tag $TAG)"
+          npm version "$VERSION" --no-git-tag-version
+
+      - name: Download binary from release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          ASSET="${{ matrix.binary-asset }}"
+          mkdir -p vscode/bin
+
+          echo "Downloading $ASSET from release $TAG..."
+          gh release download "$TAG" --pattern "$ASSET" --dir ./tmp-download
+
+          if [[ "$ASSET" == *.zip ]]; then
+            unzip -q "./tmp-download/$ASSET" -d vscode/bin
+          else
+            cp "./tmp-download/$ASSET" "vscode/bin/${{ matrix.binary-name }}"
+          fi
+
+          rm -rf ./tmp-download
+
+          # Ensure binary is executable
+          chmod +x vscode/bin/* 2>/dev/null || true
+
+          echo "Binary ready:"
+          ls -la vscode/bin/
+
+      - name: Install dependencies
+        working-directory: vscode
+        run: npm ci
+
+      - name: Compile extension
+        working-directory: vscode
+        run: npm run compile
+
+      - name: Package VSIX
+        working-directory: vscode
+        run: npx @vscode/vsce package --target ${{ matrix.vscode-target }}
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: vsix-${{ matrix.vscode-target }}
+          path: vscode/*.vsix
+
+  upload-to-release:
+    if: github.event_name == 'push'
+    needs: build-vsix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download all VSIX artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: vsix-*
+          path: ./vsix-artifacts
+          merge-multiple: true
+
+      - name: Upload VSIXs to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: ./vsix-artifacts/*.vsix
+          append_body: true
+
+  publish:
+    if: >
+      (github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && inputs.skip_publish != true)
+    needs: build-vsix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all VSIX artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: vsix-*
+          path: ./vsix-artifacts
+          merge-multiple: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Publish to VS Code Marketplace
+        if: env.VSCODE_MARKETPLACE_PUBLISHING_TOKEN != ''
+        env:
+          VSCODE_MARKETPLACE_PUBLISHING_TOKEN: ${{ secrets.VSCODE_MARKETPLACE_PUBLISHING_TOKEN }}
+        run: |
+          npm install -g @vscode/vsce
+          for file in ./vsix-artifacts/*.vsix; do
+            echo "Publishing ${file} to VS Code Marketplace"
+            vsce publish --pat "$VSCODE_MARKETPLACE_PUBLISHING_TOKEN" --packagePath "${file}"
+          done
+
+      - name: Publish to Open VSX
+        if: env.OPEN_VSX_PUBLISHING_TOKEN != ''
+        env:
+          OPEN_VSX_PUBLISHING_TOKEN: ${{ secrets.OPEN_VSX_PUBLISHING_TOKEN }}
+        run: |
+          npm install -g ovsx
+          for file in ./vsix-artifacts/*.vsix; do
+            echo "Publishing ${file} to Open VSX"
+            ovsx publish --pat "$OPEN_VSX_PUBLISHING_TOKEN" --packagePath "${file}"
+          done

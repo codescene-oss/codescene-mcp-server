@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct HttpResponse {
@@ -53,10 +54,64 @@ pub trait HttpClient: Send + Sync {
 
 pub struct ReqwestClient;
 
+/// Return the first existing CA bundle file from the standard env vars.
+fn ca_bundle_path_from_env() -> Option<PathBuf> {
+    let env_vars = ["REQUESTS_CA_BUNDLE", "SSL_CERT_FILE", "CURL_CA_BUNDLE"];
+    let mut configured_but_missing = Vec::new();
+
+    let result = env_vars.into_iter().find_map(|var| {
+        std::env::var(var)
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+            .and_then(|v| {
+                let p = PathBuf::from(&v);
+                if p.is_file() {
+                    Some((var, p))
+                } else {
+                    configured_but_missing.push((var, v));
+                    None
+                }
+            })
+    });
+
+    for (var, path) in &configured_but_missing {
+        tracing::warn!(
+            "{var} is set to \"{path}\" but the file does not exist — \
+             custom CA certificates will NOT be used for API calls. \
+             On Windows, ensure backslashes are escaped as \\\\ in JSON config."
+        );
+    }
+
+    if let Some((var, ref path)) = result {
+        tracing::info!("Using CA bundle from {var}: {}", path.display());
+    }
+
+    result.map(|(_, p)| p)
+}
+
+/// Build a reqwest client, adding custom CA certificates when configured.
+fn build_reqwest_client() -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder();
+
+    if let Some(ca_path) = ca_bundle_path_from_env() {
+        let pem_data = std::fs::read(&ca_path).map_err(|e| {
+            format!("Failed to read CA bundle {}: {e}", ca_path.display())
+        })?;
+        let certs = reqwest::Certificate::from_pem_bundle(&pem_data)
+            .map_err(|e| format!("Failed to parse CA bundle: {e}"))?;
+        for cert in certs {
+            builder = builder.add_root_certificate(cert);
+        }
+    }
+
+    builder.build().map_err(|e| format!("Failed to build HTTP client: {e}"))
+}
+
 #[async_trait::async_trait]
 impl HttpClient for ReqwestClient {
     async fn send(&self, request: HttpRequest) -> Result<HttpResponse, String> {
-        let client = reqwest::Client::new();
+        let client = build_reqwest_client()?;
         let builder = match request.method {
             Method::Get => client.get(&request.url),
             Method::Post => client.post(&request.url),
@@ -198,5 +253,66 @@ pub mod tests {
         assert_eq!(captured.len(), 1);
         assert_eq!(captured[0].method, Method::Post);
         assert_eq!(captured[0].url, "http://example.com/api");
+    }
+
+    #[test]
+    fn build_reqwest_client_loads_valid_pem_bundle() {
+        let _lock = crate::config::lock_test_env();
+        let dir = tempfile::tempdir().unwrap();
+        let pem_path = dir.path().join("ca.pem");
+        // A minimal self-signed PEM certificate for testing parsing only.
+        // Generated with: openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=test
+        std::fs::write(&pem_path, include_str!("../tests/fixtures/test_ca.pem")).unwrap();
+
+        std::env::set_var("REQUESTS_CA_BUNDLE", pem_path.to_str().unwrap());
+        std::env::remove_var("SSL_CERT_FILE");
+        std::env::remove_var("CURL_CA_BUNDLE");
+
+        let client = build_reqwest_client();
+        assert!(client.is_ok(), "Expected Ok, got: {client:?}");
+
+        std::env::remove_var("REQUESTS_CA_BUNDLE");
+    }
+
+    #[test]
+    fn build_reqwest_client_ignores_invalid_pem_gracefully() {
+        let _lock = crate::config::lock_test_env();
+        let dir = tempfile::tempdir().unwrap();
+        let bad_pem = dir.path().join("bad.pem");
+        std::fs::write(&bad_pem, "not a valid PEM file").unwrap();
+
+        std::env::set_var("REQUESTS_CA_BUNDLE", bad_pem.to_str().unwrap());
+        std::env::remove_var("SSL_CERT_FILE");
+        std::env::remove_var("CURL_CA_BUNDLE");
+
+        // reqwest silently ignores non-PEM content (returns empty cert list),
+        // so the client builds successfully with no extra roots added.
+        let result = build_reqwest_client();
+        assert!(result.is_ok());
+
+        std::env::remove_var("REQUESTS_CA_BUNDLE");
+    }
+
+    #[test]
+    fn build_reqwest_client_succeeds_without_ca_bundle() {
+        let _lock = crate::config::lock_test_env();
+        std::env::remove_var("REQUESTS_CA_BUNDLE");
+        std::env::remove_var("SSL_CERT_FILE");
+        std::env::remove_var("CURL_CA_BUNDLE");
+
+        let client = build_reqwest_client();
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    fn ca_bundle_path_returns_none_for_nonexistent_path() {
+        let _lock = crate::config::lock_test_env();
+        std::env::set_var("REQUESTS_CA_BUNDLE", "/nonexistent/ca-bundle.pem");
+        std::env::remove_var("SSL_CERT_FILE");
+        std::env::remove_var("CURL_CA_BUNDLE");
+
+        assert!(ca_bundle_path_from_env().is_none());
+
+        std::env::remove_var("REQUESTS_CA_BUNDLE");
     }
 }

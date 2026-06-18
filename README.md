@@ -19,6 +19,7 @@ Want AI to perform the setup? Start with [skills/installing-and-activating-codes
 2. Install the MCP Server using one of the [installation options](#installation) below.
 3. Add the MCP Server to your AI assistant. See the detailed instructions for your environment in the installation guide.
 4. Copy the agent guidance that matches your license into your repository: [AGENTS-full.md](docs/AGENTS-full.md) for CodeScene Core users, [AGENTS-standalone.md](docs/AGENTS-standalone.md) for standalone license users, or [.amazonq/rules](.amazonq/rules) for Amazon Q. Also copy any relevant public [skills](skills) for reusable workflow prompts.
+5. Explore the [available tools](docs/tools.md) to see what the MCP Server can do and which tools are available for your license.
 
 ## Installation
 
@@ -46,6 +47,20 @@ The first run automatically downloads the correct platform-specific binary for y
 </details>
 
 <details>
+<summary><b>Claude Code</b></summary>
+
+Add the CodeScene marketplace and install the plugin:
+
+```
+/plugin marketplace add codescene-oss/codescene-mcp-server
+/plugin install codescene@codescene
+```
+
+This installs the MCP server and Code Health skills. Requires [Node.js](https://nodejs.org/) 18 or later.
+
+</details>
+
+<details>
 <summary><b>Claude Desktop</b></summary>
 
 Download the MCP bundle from the [latest release page](https://github.com/codescene-oss/codescene-mcp-server/releases/latest):
@@ -57,10 +72,21 @@ Then open the `.mcpb` file with Claude Desktop to install the MCP server.
 </details>
 
 <details>
+<summary><b>VS Code</b></summary>
+
+The CodeScene MCP is available as a VS Code extension:
+
+- [**Open VSX**](https://open-vsx.org/extension/codescene/codescene-codehealth-mcp)
+- [**VS Code Marketplace**](https://marketplace.visualstudio.com/items?itemName=codescene.codescene-codehealth-mcp)
+
+</details>
+
+<details>
 <summary><b>Homebrew (macOS / Linux)</b></summary>
 
 ```bash
 brew tap codescene-oss/codescene-mcp-server https://github.com/codescene-oss/codescene-mcp-server
+brew trust codescene-oss/codescene-mcp-server
 brew install cs-mcp
 ```
 
@@ -136,8 +162,6 @@ AI refactoring quality improves when code is modular and easy to reason about. T
 - verify progress with updated Code Health scores.
 
 This workflow works with MCP alone and is often enough to safely improve legacy code.
-
-If you also use [CodeScene ACE](https://codescene.com/product/integrations/ide-extensions/ai-refactoring), it can accelerate the first restructuring step for some large functions. ACE is optional and requires a separate add-on license. For details, see [ACE refactoring with MCP](docs/ace-refactoring-with-mcp.md).
 
 ### Make Targeted Refactoring  
 AI tools can refactor code, but they lack direction on *what* to fix and *how to measure* if it helped.  

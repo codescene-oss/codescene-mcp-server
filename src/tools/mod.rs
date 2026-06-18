@@ -2,16 +2,19 @@ use rmcp::schemars;
 use serde::Deserialize;
 
 pub mod analyze_change_set;
-pub mod code_health_auto_refactor;
 pub mod code_health_refactoring_business_case;
 pub mod code_health_review;
 pub mod code_health_score;
 pub mod code_ownership_for_path;
 pub mod codescene_links;
 pub mod common;
+pub mod validation;
+pub mod download_skill;
 pub mod explain_code_health;
 pub mod explain_code_health_productivity;
 pub mod get_config;
+pub mod get_skill_manifest;
+pub mod list_skills;
 pub mod list_technical_debt_goals_for_project;
 pub mod list_technical_debt_goals_for_project_file;
 pub mod list_technical_debt_hotspots_for_project;
@@ -19,6 +22,8 @@ pub mod list_technical_debt_hotspots_for_project_file;
 pub mod pre_commit_code_health_safeguard;
 pub mod select_project;
 pub mod set_config;
+pub mod sync_skills;
+pub mod verify_installation;
 
 /// Optional context parameter used by explain tools.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -52,17 +57,6 @@ pub struct ChangeSetParam {
 
     /// Absolute path to the local git repository.
     pub git_repository_path: String,
-}
-
-/// Parameters for auto-refactoring a function.
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct RefactorParam {
-    /// Absolute path to the source file containing the target function.
-    pub file_path: String,
-
-    /// Exact function name to refactor. Include class scope prefix
-    /// when relevant.
-    pub function_name: String,
 }
 
 /// Parameters for selecting/listing projects.
@@ -113,6 +107,40 @@ pub struct SetConfigParam {
     pub value: String,
 }
 
+/// Parameters for get_skill_manifest.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SkillNameParam {
+    /// Name of the skill (e.g., "safeguarding-ai-generated-code").
+    pub skill_name: String,
+}
+
+/// Parameters for download_skill.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct DownloadSkillParam {
+    /// Name of the skill to download (e.g., "safeguarding-ai-generated-code").
+    pub skill_name: String,
+
+    /// Directory to write the skill into. A subdirectory named after
+    /// the skill will be created containing SKILL.md.
+    pub destination_dir: String,
+
+    /// Whether to overwrite an existing skill. Defaults to false.
+    #[serde(default)]
+    pub overwrite: bool,
+}
+
+/// Parameters for sync_skills.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SyncSkillsParam {
+    /// Directory to write all skills into. Each skill gets its own
+    /// subdirectory containing SKILL.md.
+    pub destination_dir: String,
+
+    /// Whether to overwrite existing skills. Defaults to false.
+    #[serde(default)]
+    pub overwrite: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,14 +179,6 @@ mod tests {
         let p: ChangeSetParam = serde_json::from_str(json).unwrap();
         assert_eq!(p.base_ref, "main");
         assert_eq!(p.git_repository_path, "/repo");
-    }
-
-    #[test]
-    fn refactor_param_deserializes() {
-        let json = r#"{"file_path": "/src/lib.rs", "function_name": "do_stuff"}"#;
-        let p: RefactorParam = serde_json::from_str(json).unwrap();
-        assert_eq!(p.file_path, "/src/lib.rs");
-        assert_eq!(p.function_name, "do_stuff");
     }
 
     #[test]
@@ -204,5 +224,36 @@ mod tests {
         let p: SetConfigParam = serde_json::from_str(json).unwrap();
         assert_eq!(p.key, "access_token");
         assert_eq!(p.value, "abc123");
+    }
+
+    #[test]
+    fn skill_name_param_deserializes() {
+        let json = r#"{"skill_name": "my-skill"}"#;
+        let p: SkillNameParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.skill_name, "my-skill");
+    }
+
+    #[test]
+    fn download_skill_param_deserializes() {
+        let json = r#"{"skill_name": "my-skill", "destination_dir": "/tmp/skills"}"#;
+        let p: DownloadSkillParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.skill_name, "my-skill");
+        assert_eq!(p.destination_dir, "/tmp/skills");
+        assert!(!p.overwrite);
+    }
+
+    #[test]
+    fn download_skill_param_with_overwrite() {
+        let json = r#"{"skill_name": "x", "destination_dir": "/tmp", "overwrite": true}"#;
+        let p: DownloadSkillParam = serde_json::from_str(json).unwrap();
+        assert!(p.overwrite);
+    }
+
+    #[test]
+    fn sync_skills_param_deserializes() {
+        let json = r#"{"destination_dir": "/tmp/skills"}"#;
+        let p: SyncSkillsParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.destination_dir, "/tmp/skills");
+        assert!(!p.overwrite);
     }
 }

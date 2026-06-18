@@ -10,7 +10,7 @@ The simplest way to configure the MCP server is to ask your AI assistant directl
 
 > "Connect to our on-prem CodeScene at https://codescene.mycompany.com"
 
-> "Enable CodeScene ACE with token ace_xyz789"
+> "Set my default CodeScene project to 42"
 
 > "Disable the CodeScene version update check"
 
@@ -124,90 +124,6 @@ When this option is not set, the MCP server connects to CodeScene Cloud by defau
       "env": {
         "CS_ACCESS_TOKEN": "your-token-here",
         "CS_ONPREM_URL": "https://codescene.mycompany.com"
-      }
-    }
-  }
-}
-```
-
-## `ace_access_token`
-
-| | |
-|---|---|
-| **Environment variable** | `CS_ACE_ACCESS_TOKEN` |
-| **Sensitive** | Yes (value is masked in tool output) |
-
-Token for the [CodeScene ACE](https://codescene.com/product/integrations/ide-extensions/ai-refactoring) auto-refactoring API. When set, the `code_health_auto_refactor` tool becomes available, enabling automated refactoring of functions with code health issues.
-
-ACE is a **CodeScene add-on** and requires an additional license. You can [request access and more info here](https://codescene.com/contact-us-about-codescene-ace).
-
-ACE supports the following languages:
-- JavaScript / TypeScript
-- Java
-- C#
-- C++
-
-And the following code smells:
-- Complex Conditional
-- Bumpy Road Ahead
-- Complex Method
-- Deep, Nested Complexity
-- Large Method
-
-**Example — npx:**
-
-```json
-{
-  "servers": {
-    "codescene": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["@codescene/codehealth-mcp"],
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here",
-        "CS_ACE_ACCESS_TOKEN": "your-ace-token-here"
-      }
-    }
-  }
-}
-```
-
-**Example — Static binary (Homebrew / Windows):**
-
-```json
-{
-  "servers": {
-    "codescene": {
-      "type": "stdio",
-      "command": "cs-mcp",
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here",
-        "CS_ACE_ACCESS_TOKEN": "your-ace-token-here"
-      }
-    }
-  }
-}
-```
-
-**Example — Docker:**
-
-```json
-{
-  "servers": {
-    "codescene": {
-      "type": "stdio",
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "-e", "CS_ACCESS_TOKEN",
-        "-e", "CS_ACE_ACCESS_TOKEN",
-        "-e", "CS_MOUNT_PATH=/path/to/your/code",
-        "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
-        "codescene/codescene-mcp"
-      ],
-      "env": {
-        "CS_ACCESS_TOKEN": "your-token-here",
-        "CS_ACE_ACCESS_TOKEN": "your-ace-token-here"
       }
     }
   }
@@ -409,7 +325,6 @@ Changes to this setting require a server restart to take effect.
 | `pre_commit_code_health_safeguard` | Pre-commit check for Code Health regressions |
 | `analyze_change_set` | Branch-level Code Health analysis (PR pre-flight) |
 | `code_health_refactoring_business_case` | Quantified business case for refactoring |
-| `code_health_auto_refactor` | AI-assisted auto-refactoring (requires ACE) |
 
 **API tools** — require CodeScene Cloud or CodeScene On-prem:
 

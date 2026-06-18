@@ -16,12 +16,25 @@ impl NormalizedPath {
     fn from_str(raw: &str) -> Self {
         let forward = raw.replace('\\', "/");
         let bytes = forward.as_bytes();
+
+        // Standard Windows drive letter: "C:/Users/..." → "/Users/..."
         let has_drive = forward.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
         if has_drive {
-            Self(forward[2..].to_string())
-        } else {
-            Self(forward)
+            return Self(forward[2..].to_string());
         }
+
+        // MSYS / Git-Bash style: "/c/Users/..." → "/Users/..."
+        // Docker Desktop on Windows with Git Bash auto-converts paths
+        // to this format before passing them to the process.
+        let is_msys_drive = forward.len() >= 3
+            && bytes[0] == b'/'
+            && bytes[1].is_ascii_alphabetic()
+            && bytes[2] == b'/';
+        if is_msys_drive {
+            return Self(forward[2..].to_string());
+        }
+
+        Self(forward)
     }
 
     /// Strip `prefix` (case-insensitively) and return the relative tail.
@@ -137,6 +150,12 @@ mod tests {
     }
 
     #[test]
+    fn strip_msys_drive_prefix() {
+        assert_eq!(NormalizedPath::from_str("/c/Users/foo").0, "/Users/foo");
+        assert_eq!(NormalizedPath::from_str("/d/code/project").0, "/code/project");
+    }
+
+    #[test]
     fn no_drive_letter_unix_path() {
         assert_eq!(
             NormalizedPath::from_path(Path::new("/home/user/project")).0,
@@ -190,6 +209,41 @@ mod tests {
         let path = NormalizedPath::from_str("/other/path");
         let prefix = NormalizedPath::from_str("/Users/foo");
         assert_eq!(path.strip_prefix(&prefix), None);
+    }
+
+    #[test]
+    fn strip_prefix_msys_vs_windows_drive() {
+        // CS_MOUNT_PATH from cmd.exe, git_repository_path from Git Bash
+        let path = NormalizedPath::from_str("/c/Users/john/project/src/main.rs");
+        let prefix = NormalizedPath::from_str(r"C:\Users\john\project");
+        assert_eq!(path.strip_prefix(&prefix), Some("src/main.rs".to_string()));
+    }
+
+    #[test]
+    fn strip_prefix_windows_drive_vs_msys() {
+        // CS_MOUNT_PATH from Git Bash, git_repository_path from cmd.exe
+        let path = NormalizedPath::from_str(r"C:\Users\john\project\src\main.rs");
+        let prefix = NormalizedPath::from_str("/c/Users/john/project");
+        assert_eq!(path.strip_prefix(&prefix), Some("src/main.rs".to_string()));
+    }
+
+    #[test]
+    fn translate_to_container_with_msys_paths() {
+        let result = translate_to_container(
+            Path::new("/c/Users/john/project/src/main.rs"),
+            Some(Path::new("/c/Users/john/project")),
+        );
+        assert_eq!(result, "/mount/src/main.rs");
+    }
+
+    #[test]
+    fn translate_to_container_msys_mount_windows_path() {
+        // Mount set via Git Bash, path from Windows-native MCP client
+        let result = translate_to_container(
+            Path::new(r"C:\Users\john\project\src\main.rs"),
+            Some(Path::new("/c/Users/john/project")),
+        );
+        assert_eq!(result, "/mount/src/main.rs");
     }
 
     #[test]

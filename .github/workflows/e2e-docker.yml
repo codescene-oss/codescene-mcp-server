@@ -1,0 +1,53 @@
+name: E2E Tests (Docker)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: e2e-docker-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+
+jobs:
+  check-secrets:
+    runs-on: ubuntu-latest
+    outputs:
+      has-token: ${{ steps.check.outputs.has-token }}
+    steps:
+      - id: check
+        run: echo "has-token=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+
+  # =============================================================================
+  # E2E Docker Tests - Linux
+  # =============================================================================
+  # Note: Docker tests only run on Linux because:
+  # - macOS GitHub runners don't have native Docker; Colima/VZ is unreliable
+  # - Windows GitHub runners only support Windows containers (no Linux images)
+  # Windows path translation is covered by unit tests in src/docker.rs
+  e2e-docker-linux:
+    needs: check-secrets
+    if: needs.check-secrets.outputs.has-token == 'true'
+    runs-on: ubuntu-22.04
+    name: E2E Docker (Linux)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Docker image
+        run: docker build --build-arg VERSION=MCP-0.0.0-test -t codescene-mcp-test .
+
+      - name: Run e2e tests (docker backend)
+        run: CS_MCP_BACKEND=docker cargo test --test e2e --release -- --test-threads=4

@@ -22,10 +22,13 @@ pub fn track_event(event: &str, properties: Value, instance_id: &str) {
     }
 
     let te = TrackingEvent {
-        url: tracking_url(),
+        url: match tracking_url() {
+            Some(url) => url,
+            None => return,
+        },
         event: format!("mcp-{event}"),
         instance_id: instance_id.to_string(),
-        environment: crate::environment::detect().to_string(),
+        environment: tracking_environment(),
         version: env!("CS_MCP_VERSION"),
         properties,
     };
@@ -35,12 +38,23 @@ pub fn track_event(event: &str, properties: Value, instance_id: &str) {
     });
 }
 
-pub fn track_error(error_msg: &str, tool_name: &str, instance_id: &str) {
-    let properties = json!({
-        "error": error_msg,
-        "tool": tool_name,
+/// Data needed to track a tool error event.
+pub struct ErrorEvent<'a> {
+    pub error_kind: &'a str,
+    pub tool_name: &'a str,
+    pub instance_id: &'a str,
+    pub detail: Option<&'a str>,
+}
+
+pub fn track_error(evt: &ErrorEvent<'_>) {
+    let mut properties = json!({
+        "error": evt.error_kind,
+        "tool": evt.tool_name,
     });
-    track_event("error", properties, instance_id);
+    if let Some(d) = evt.detail {
+        properties["detail"] = json!(d);
+    }
+    track_event("error", properties, evt.instance_id);
 }
 
 fn build_tracking_body(te: &mut TrackingEvent) -> Value {
@@ -65,6 +79,7 @@ async fn send_event(mut te: TrackingEvent, client: &dyn HttpClient) -> Result<()
             "User-Agent".to_string(),
             format!("codescene-mcp/{}", env!("CS_MCP_VERSION")),
         ),
+        ("X-CS-Source".to_string(), "mcp".to_string()),
     ]);
     if !token.is_empty() {
         headers.insert("Authorization".to_string(), format!("Bearer {token}"));
@@ -82,16 +97,33 @@ async fn send_event(mut te: TrackingEvent, client: &dyn HttpClient) -> Result<()
     Ok(())
 }
 
-fn tracking_url() -> String {
+fn tracking_url() -> Option<String> {
     if let Ok(url) = std::env::var("CS_TRACKING_URL") {
-        return normalize_tracking_override(&url);
+        if let Err(e) = crate::config::require_https("CS_TRACKING_URL", &url) {
+            tracing::warn!("{e}");
+            return None;
+        }
+        return Some(normalize_tracking_override(&url));
     }
 
     let api_url = std::env::var("CS_ONPREM_URL")
-        .map(|u| format!("{u}/api"))
-        .unwrap_or_else(|_| DEFAULT_API_URL.to_string());
+        .map(|u| {
+            if let Err(e) = crate::config::require_https("CS_ONPREM_URL", &u) {
+                tracing::warn!("{e}");
+                return Err(e);
+            }
+            Ok(format!("{u}/api"))
+        })
+        .unwrap_or_else(|_| Ok(DEFAULT_API_URL.to_string()));
 
-    format!("{api_url}/v2/analytics/track")
+    api_url.ok().map(|base| format!("{base}/v2/analytics/track"))
+}
+
+fn tracking_environment() -> String {
+    std::env::var("CS_ENVIRONMENT")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| crate::environment::detect().to_string())
 }
 
 fn normalize_tracking_override(url: &str) -> String {
@@ -171,7 +203,7 @@ mod tests {
         std::env::remove_var("CS_ONPREM_URL");
         assert_eq!(
             tracking_url(),
-            "https://api.codescene.io/v2/analytics/track"
+            Some("https://api.codescene.io/v2/analytics/track".to_string())
         );
     }
 
@@ -179,7 +211,18 @@ mod tests {
     fn tracking_url_override() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_TRACKING_URL", "http://custom-tracking");
-        assert_eq!(tracking_url(), "http://custom-tracking/v2/analytics/track");
+        assert_eq!(tracking_url(), None, "HTTP URLs should be blocked");
+        std::env::remove_var("CS_TRACKING_URL");
+    }
+
+    #[test]
+    fn tracking_url_override_https() {
+        let _lock = config::lock_test_env();
+        std::env::set_var("CS_TRACKING_URL", "https://custom-tracking");
+        assert_eq!(
+            tracking_url(),
+            Some("https://custom-tracking/v2/analytics/track".to_string())
+        );
         std::env::remove_var("CS_TRACKING_URL");
     }
 
@@ -188,9 +231,12 @@ mod tests {
         let _lock = config::lock_test_env();
         std::env::set_var(
             "CS_TRACKING_URL",
-            "http://custom-tracking/v2/analytics/track",
+            "https://custom-tracking/v2/analytics/track",
         );
-        assert_eq!(tracking_url(), "http://custom-tracking/v2/analytics/track");
+        assert_eq!(
+            tracking_url(),
+            Some("https://custom-tracking/v2/analytics/track".to_string())
+        );
         std::env::remove_var("CS_TRACKING_URL");
     }
 
@@ -201,9 +247,41 @@ mod tests {
         std::env::set_var("CS_ONPREM_URL", "https://my-instance.example.com");
         assert_eq!(
             tracking_url(),
-            "https://my-instance.example.com/api/v2/analytics/track"
+            Some("https://my-instance.example.com/api/v2/analytics/track".to_string())
         );
         std::env::remove_var("CS_ONPREM_URL");
+    }
+
+    #[test]
+    fn tracking_url_from_onprem_http_blocked() {
+        let _lock = config::lock_test_env();
+        std::env::remove_var("CS_TRACKING_URL");
+        std::env::set_var("CS_ONPREM_URL", "http://my-instance.example.com");
+        assert_eq!(tracking_url(), None, "HTTP on-prem URL should be blocked");
+        std::env::remove_var("CS_ONPREM_URL");
+    }
+
+    #[test]
+    fn tracking_environment_uses_detected_environment_when_unset() {
+        let _lock = config::lock_test_env();
+        std::env::remove_var("CS_ENVIRONMENT");
+        assert_eq!(tracking_environment(), crate::environment::detect().to_string());
+    }
+
+    #[test]
+    fn tracking_environment_uses_override_when_set() {
+        let _lock = config::lock_test_env();
+        std::env::set_var("CS_ENVIRONMENT", "my-agent-name");
+        assert_eq!(tracking_environment(), "my-agent-name");
+        std::env::remove_var("CS_ENVIRONMENT");
+    }
+
+    #[test]
+    fn tracking_environment_ignores_blank_override() {
+        let _lock = config::lock_test_env();
+        std::env::set_var("CS_ENVIRONMENT", "   ");
+        assert_eq!(tracking_environment(), crate::environment::detect().to_string());
+        std::env::remove_var("CS_ENVIRONMENT");
     }
 
     #[test]
@@ -261,6 +339,14 @@ mod tests {
         reqs[0].clone()
     }
 
+    fn assert_standard_headers(req: &HttpRequest) {
+        assert_eq!(req.headers.get("Accept").unwrap(), "application/json");
+        assert!(req
+            .headers
+            .get("User-Agent")
+            .is_some_and(|v| v.starts_with("codescene-mcp/")));
+    }
+
     #[tokio::test]
     async fn send_event_posts_to_correct_url() {
         let _lock = config::lock_test_env();
@@ -277,11 +363,7 @@ mod tests {
         assert_eq!(req.url, "http://track.test/v2/analytics/track");
         assert_eq!(req.method, Method::Post);
         assert_eq!(req.headers.get("Authorization").unwrap(), "Bearer test-tok");
-        assert_eq!(req.headers.get("Accept").unwrap(), "application/json");
-        assert!(req
-            .headers
-            .get("User-Agent")
-            .is_some_and(|v| v.starts_with("codescene-mcp/")));
+        assert_standard_headers(&req);
 
         std::env::remove_var("CS_ACCESS_TOKEN");
     }
@@ -301,11 +383,7 @@ mod tests {
 
         assert!(req.headers.get("Authorization").is_none());
         assert_eq!(req.headers.get("Content-Type").unwrap(), "application/json");
-        assert_eq!(req.headers.get("Accept").unwrap(), "application/json");
-        assert!(req
-            .headers
-            .get("User-Agent")
-            .is_some_and(|v| v.starts_with("codescene-mcp/")));
+        assert_standard_headers(&req);
     }
 
     #[tokio::test]
@@ -364,27 +442,36 @@ mod tests {
     async fn track_error_disabled_does_not_panic() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_TRACKING", "1");
-        track_error("some error", "some-tool", "test-instance");
+        track_error(&ErrorEvent {
+            error_kind: "some error", tool_name: "some-tool",
+            instance_id: "test-instance", detail: None,
+        });
         std::env::remove_var("CS_DISABLE_TRACKING");
+    }
+
+    async fn run_with_tracking_enabled(f: impl FnOnce()) {
+        let _lock = config::lock_test_env();
+        std::env::remove_var("CS_DISABLE_TRACKING");
+        std::env::set_var("CS_TRACKING_URL", "http://192.0.2.1:1/track");
+        f();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        std::env::remove_var("CS_TRACKING_URL");
     }
 
     #[tokio::test]
     async fn track_event_enabled_spawns_without_panic() {
-        let _lock = config::lock_test_env();
-        std::env::remove_var("CS_DISABLE_TRACKING");
-        std::env::set_var("CS_TRACKING_URL", "http://192.0.2.1:1/track");
-        track_event("test-enabled", json!({"key": "val"}), "test-id");
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        std::env::remove_var("CS_TRACKING_URL");
+        run_with_tracking_enabled(|| {
+            track_event("test-enabled", json!({"key": "val"}), "test-id");
+        }).await;
     }
 
     #[tokio::test]
     async fn track_error_enabled_spawns_without_panic() {
-        let _lock = config::lock_test_env();
-        std::env::remove_var("CS_DISABLE_TRACKING");
-        std::env::set_var("CS_TRACKING_URL", "http://192.0.2.1:1/track");
-        track_error("err msg", "tool-name", "test-id");
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        std::env::remove_var("CS_TRACKING_URL");
+        run_with_tracking_enabled(|| {
+            track_error(&ErrorEvent {
+                error_kind: "err msg", tool_name: "tool-name",
+                instance_id: "test-id", detail: Some(".txt"),
+            });
+        }).await;
     }
 }

@@ -21,5 +21,6 @@ Available skills:
 - `routing-work-with-code-ownership`: Use CodeScene ownership data to find likely reviewers and domain experts.
 - `explaining-code-health`: Explain Code Health concepts and why they matter.
 - `business-risk-from-code-health`: Map technical debt hotspots to business capabilities and frame risk in customer and commercial terms for executive audiences.
+- `risk-based-testing-with-code-health`: Turn CodeScene risk signals into practical testing priorities for PRs and releases.
 
 These public skills are separate from the repo-local contributor skills under `.agents/skills`.

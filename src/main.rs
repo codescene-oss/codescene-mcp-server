@@ -1,4 +1,3 @@
-mod ace_client;
 mod api_client;
 mod business_case;
 mod cli;
@@ -16,6 +15,7 @@ mod platform;
 mod prompts;
 mod resources;
 mod server_handler;
+mod skills;
 mod startup;
 #[cfg(test)]
 mod test_utils;
@@ -30,19 +30,22 @@ use std::sync::Arc;
 
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{
-    CallToolResult, Content,
-};
+use rmcp::model::{CallToolResult, Content};
 use rmcp::schemars::{self, JsonSchema};
+use rmcp::service::ServerInitializeError;
 use rmcp::{tool, tool_router, ErrorData, ServiceExt};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
 use crate::cli::CliRunner;
 use crate::config::ConfigData;
 use crate::http::HttpClient;
+use crate::tools::validation::{ValidationError, Validator};
 use crate::tools::{
-    ChangeSetParam, FilePathParam, GetConfigParam, GitRepoParam, OptionalContext, OwnershipParam,
-    ProjectFileParam, ProjectParam, RefactorParam, SetConfigParam,
+    ChangeSetParam, DownloadSkillParam, FilePathParam, GetConfigParam, GitRepoParam,
+    OptionalContext, OwnershipParam, ProjectFileParam, ProjectParam, SetConfigParam,
+    SkillNameParam, SyncSkillsParam,
 };
 use crate::version_checker::VersionChecker;
 
@@ -110,8 +113,8 @@ pub(crate) async fn fetch_cli_version(cli_runner: &dyn cli::CliRunner) -> anyhow
     Ok(cli_runner.run(&["version"], None).await?)
 }
 
-pub(crate) fn inlined_schema_for<T: JsonSchema + 'static>() -> Arc<serde_json::Map<String, serde_json::Value>>
-{
+pub(crate) fn inlined_schema_for<T: JsonSchema + 'static>(
+) -> Arc<serde_json::Map<String, serde_json::Value>> {
     let mut settings = schemars::generate::SchemaSettings::draft2020_12();
     settings.inline_subschemas = true;
     settings.transforms = vec![Box::new(schemars::transform::AddNullable::default())];
@@ -131,6 +134,7 @@ pub(crate) struct ServerDeps {
     pub(crate) version_checker: VersionChecker,
     pub(crate) cli_runner: Arc<dyn CliRunner>,
     pub(crate) http_client: Arc<dyn HttpClient>,
+    pub(crate) validator: Arc<dyn Validator>,
 }
 
 #[derive(Clone)]
@@ -142,6 +146,7 @@ pub(crate) struct CodeSceneServer {
     pub(crate) is_standalone: bool,
     pub(crate) cli_runner: Arc<dyn CliRunner>,
     pub(crate) http_client: Arc<dyn HttpClient>,
+    pub(crate) validator: Arc<dyn Validator>,
 }
 
 impl CodeSceneServer {
@@ -171,8 +176,36 @@ impl CodeSceneServer {
         tracking::track_event(event, props, &self.instance_id);
     }
 
-    pub(crate) fn track_err(&self, tool: &str, err: &str) {
-        tracking::track_error(err, tool, &self.instance_id);
+    pub(crate) fn track_err(&self, tool: &str, err: &errors::CliError) {
+        tracing::warn!(tool, error = %err, "tool error");
+        tracking::track_error(&tracking::ErrorEvent {
+            error_kind: err.kind(), tool_name: tool,
+            instance_id: &self.instance_id, detail: None,
+        });
+    }
+
+    pub(crate) fn track_api_err(&self, tool: &str, err: &errors::ApiError) {
+        tracing::warn!(tool, error = %err, "API error");
+        tracking::track_error(&tracking::ErrorEvent {
+            error_kind: err.kind(), tool_name: tool,
+            instance_id: &self.instance_id, detail: None,
+        });
+    }
+
+    pub(crate) fn track_validation_err(&self, tool: &str, err: &ValidationError) {
+        tracing::warn!(tool, error = %err, "tool error");
+        tracking::track_error(&tracking::ErrorEvent {
+            error_kind: err.kind, tool_name: tool,
+            instance_id: &self.instance_id, detail: err.detail.as_deref(),
+        });
+    }
+
+    pub(crate) fn track_err_msg(&self, tool: &str, error_kind: &str, err: &str) {
+        tracing::warn!(tool, error = err, "tool error");
+        tracking::track_error(&tracking::ErrorEvent {
+            error_kind, tool_name: tool,
+            instance_id: &self.instance_id, detail: None,
+        });
     }
 }
 
@@ -182,10 +215,7 @@ fn remove_standalone_tools(router: &mut ToolRouter<CodeSceneServer>) {
     }
 }
 
-fn apply_enabled_tools_filter(
-    router: &mut ToolRouter<CodeSceneServer>,
-    config_data: &ConfigData,
-) {
+fn apply_enabled_tools_filter(router: &mut ToolRouter<CodeSceneServer>, config_data: &ConfigData) {
     let enabled = match config::enabled_tools(config_data) {
         Some(set) => set,
         None => return,
@@ -219,6 +249,7 @@ impl CodeSceneServer {
             is_standalone: deps.is_standalone,
             cli_runner: deps.cli_runner,
             http_client: deps.http_client,
+            validator: deps.validator,
         }
     }
 
@@ -297,17 +328,6 @@ impl CodeSceneServer {
         Parameters(params): Parameters<FilePathParam>,
     ) -> Result<CallToolResult, ErrorData> {
         tools::code_health_refactoring_business_case::handle(self, params).await
-    }
-
-    #[tool(
-        description = "Refactor a single function to fix specific code health problems.\nThis auto-refactor uses CodeScene ACE, and is intended as an initial\nrefactoring to increase the modularity of the code so that you as an\nAI agent can continue and iterate with more specific refactorings.\n\nWhen to use:\n    Use this tool after a Code Health review has identified one of the\n    supported smells in a specific function.\n\nThe code_health_auto_refactor tool is supported for these languages:\n    - JavaScript/TypeScript\n    - Java\n    - C#\n    - C++\nand for these code smells:\n    - Complex Conditional\n    - Bumpy Road Ahead\n    - Complex Method\n    - Deep, Nested Complexity\n    - Large Method\n\nIMPORTANT:\n    - Only use this tool for functions shorter than 300 lines of code.\n    - Insert any new functions close to the refactored function.\n    - Requires ACE access to be configured (use set_config with key \"ace_access_token\").\n\nReturns:\n    A JSON object describing the refactoring, with these properties:\n      - code: The refactored function plus new extracted functions.\n      - declarations: Optional (used for languages like C++). Declarations of additional functions introduced when refactoring.\n        When present, find the right include file and insert the declarations there. Note that some C++ refactorings result\n        in standalone functions; standalone functions should just be inserted in the implementation unit, not declared in\n        include files.\n      - confidence: The confidence level of the resulting refactoring. For low confidence, review the\n        refactoring and fix any introduced problems.\n      - reasons: A list of strings describing the reasons for the assigned confidence level.\n        Use this list of strings to direct fixes of the refactored code.\n\nExample:\n    Call with file_path=\"/repo/src/service.ts\" and\n    function_name=\"OrderService.calculateTotal\", then apply returned\n    code and declarations and re-run Code Health checks.",
-        input_schema = inlined_schema_for::<RefactorParam>()
-    )]
-    async fn code_health_auto_refactor(
-        &self,
-        Parameters(params): Parameters<RefactorParam>,
-    ) -> Result<CallToolResult, ErrorData> {
-        tools::code_health_auto_refactor::handle(self, params).await
     }
 
     #[tool(
@@ -393,6 +413,99 @@ impl CodeSceneServer {
     ) -> Result<CallToolResult, ErrorData> {
         tools::set_config::handle(self, params).await
     }
+
+    #[tool(
+        description = "List all available skills embedded in this MCP server.\n\nWhen to use:\n    Use this tool to discover what skills are available for\n    download or inspection.\n\nLimitations:\n    - Returns only skills embedded at compile time.\n    - Does not scan external skill directories.\n\nReturns:\n    A formatted list of skill names with their descriptions.\n\nExample:\n    Call this tool to see all available skills, then use\n    download_skill or sync_skills to install them locally."
+    )]
+    async fn list_skills(&self) -> Result<CallToolResult, ErrorData> {
+        tools::list_skills::handle(self).await
+    }
+
+    #[tool(
+        description = "Get the file manifest for a specific skill.\n\nWhen to use:\n    Use this tool to inspect what files a skill contains,\n    their sizes, and SHA256 hashes before downloading.\n\nLimitations:\n    - Requires a valid skill name from list_skills.\n\nReturns:\n    A JSON manifest with the skill name and an array of files,\n    each with path, size in bytes, and sha256 hash.\n\nExample:\n    Call with skill_name=\"safeguarding-ai-generated-code\" to\n    see the manifest, then use download_skill to install it.",
+        input_schema = inlined_schema_for::<SkillNameParam>()
+    )]
+    async fn get_skill_manifest(
+        &self,
+        Parameters(params): Parameters<SkillNameParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::get_skill_manifest::handle(self, params).await
+    }
+
+    #[tool(
+        description = "Download a single skill to a local directory.\n\nWhen to use:\n    Use this tool to install a specific skill into your local\n    skills directory (e.g., ~/.claude/skills/).\n\nLimitations:\n    - By default, refuses to overwrite existing skills.\n    - Set overwrite=true to replace an existing skill.\n    - Creates the destination directory if it does not exist.\n\nReturns:\n    A confirmation message with the path where the skill was written.\n\nExample:\n    Call with skill_name=\"safeguarding-ai-generated-code\" and\n    destination_dir=\"~/.claude/skills\" to install the skill.",
+        input_schema = inlined_schema_for::<DownloadSkillParam>()
+    )]
+    async fn download_skill(
+        &self,
+        Parameters(params): Parameters<DownloadSkillParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::download_skill::handle(self, params).await
+    }
+
+    #[tool(
+        description = "Download all available skills to a local directory.\n\nWhen to use:\n    Use this tool to install every embedded skill into your\n    local skills directory at once.\n\nLimitations:\n    - By default, skips skills that already exist locally.\n    - Set overwrite=true to replace all existing skills.\n    - Creates the destination directory if it does not exist.\n\nReturns:\n    A summary showing how many skills were downloaded and how\n    many were skipped (if any already existed).\n\nExample:\n    Call with destination_dir=\"~/.claude/skills\" to install\n    all skills. Use overwrite=true to force-update them.",
+        input_schema = inlined_schema_for::<SyncSkillsParam>()
+    )]
+    async fn sync_skills(
+        &self,
+        Parameters(params): Parameters<SyncSkillsParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::sync_skills::handle(self, params).await
+    }
+
+    #[tool(
+        description = "Check if the CodeScene MCP Server is correctly installed and configured.\n\nWhen to use:\n    Use this tool to diagnose setup issues such as missing tokens,\n    unavailable git, or environment misconfigurations.\n\nLimitations:\n    - Does not modify any configuration.\n    - Token validation requires a git repository path.\n\nReturns:\n    A summary of verification checks with PASS/FAIL status for each:\n      - Git: whether git is installed and accessible.\n      - Git Repository: whether the given path is inside a git repository.\n      - Access Token: whether CS_ACCESS_TOKEN is set and valid (verified via the CLI).\n      - API Connectivity: whether the MCP server can reach the CodeScene API (cloud or on-prem). Catches TLS/CA certificate misconfiguration. Skipped for standalone licenses.\n      - CLI Connectivity: whether the CLI can reach CodeScene. Catches TLS/CA certificate misconfiguration on the CLI path.\n      - Runtime Environment: whether running as binary or Docker.\n\nExample:\n    Call this tool when a user reports issues or after initial setup\n    to confirm everything is working. Pass the project root directory\n    as git_repository_path.",
+        input_schema = inlined_schema_for::<GitRepoParam>()
+    )]
+    async fn verify_installation(
+        &self,
+        Parameters(params): Parameters<GitRepoParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::verify_installation::handle(self, params).await
+    }
+}
+
+/// Initialise tracing with stderr output and optional file logging.
+///
+/// Returns the non-blocking file-appender guard when file logging is
+/// active.  The guard must be held for the lifetime of the program so
+/// that buffered log entries are flushed on shutdown.
+fn init_tracing(
+    config_data: &config::ConfigData,
+) -> Option<tracing_appender::non_blocking::WorkerGuard> {
+    let env_filter =
+        EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into());
+    let stderr_layer = tracing_subscriber::fmt::layer()
+        .with_writer(std::io::stderr)
+        .with_ansi(false);
+
+    let retention_days = config::log_retention_days(config_data);
+    if retention_days > 0 {
+        let log_dir = config::log_dir();
+        if let Ok(()) = std::fs::create_dir_all(&log_dir) {
+            cleanup_old_logs(&log_dir, retention_days);
+            let file_appender = tracing_appender::rolling::daily(&log_dir, "mcp.log");
+            let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+            let file_layer = tracing_subscriber::fmt::layer()
+                .with_writer(non_blocking)
+                .with_ansi(false);
+            tracing_subscriber::registry()
+                .with(env_filter)
+                .with(stderr_layer)
+                .with(file_layer)
+                .init();
+            return Some(guard);
+        }
+    }
+
+    // Stderr-only: file logging disabled or log directory not writable
+    // (e.g. non-root container with a read-only config path).
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(stderr_layer)
+        .init();
+    None
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -421,19 +534,16 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
-        .with_writer(std::io::stderr)
-        .with_ansi(false)
-        .init();
+    config::snapshot_client_env_vars();
+    let config_data = config::load().unwrap_or_default();
+    config::apply_to_env(&config_data);
+
+    let _file_guard = init_tracing(&config_data);
 
     startup::print_startup_logo();
     tracing::info!("CodeScene MCP server started");
     tracing::info!("Waiting for MCP client initialization...");
 
-    config::snapshot_client_env_vars();
-    let config_data = config::load().unwrap_or_default();
-    config::apply_to_env(&config_data);
     let instance_id = config::instance_id(&config_data);
 
     let token = std::env::var("CS_ACCESS_TOKEN").unwrap_or_default();
@@ -449,20 +559,79 @@ async fn main() -> anyhow::Result<()> {
         version_checker,
         cli_runner: Arc::new(cli::ProductionCliRunner),
         http_client: Arc::new(http::ReqwestClient),
+        validator: Arc::new(tools::validation::ProductionCliValidator),
     });
 
-    let service = server
-        .serve(rmcp::transport::stdio())
-        .await
-        .inspect_err(|e| {
-            if e.to_string().contains("initialize request") {
-                tracing::info!("No MCP initialize request received. If you ran `cs-mcp` directly in a terminal, run it through an MCP client instead.");
-            }
-            tracing::error!("serving error: {:?}", e);
-        })?;
+    // Covered by e2e test: test_shutdown_during_handshake.py
+    let Some(service) = serve_or_handle_disconnect(server, rmcp::transport::stdio()).await? else {
+        return Ok(());
+    };
 
     tracing::info!("CodeScene MCP server ready");
 
     service.waiting().await?;
     Ok(())
+}
+
+pub(crate) async fn serve_or_handle_disconnect<T, E, A>(
+    server: CodeSceneServer,
+    transport: T,
+) -> anyhow::Result<Option<rmcp::service::RunningService<rmcp::service::RoleServer, CodeSceneServer>>>
+where
+    T: rmcp::transport::IntoTransport<rmcp::service::RoleServer, E, A>,
+    E: std::error::Error + Send + Sync + 'static,
+{
+    match server.serve(transport).await {
+        Ok(service) => Ok(Some(service)),
+        Err(err) => {
+            handle_serve_error(err)?;
+            Ok(None)
+        }
+    }
+}
+
+/// Convert a `serve()` error into the desired process exit behavior.
+///
+/// MCP clients (e.g. VS Code, Zed) routinely close the server's stdin
+/// when the user closes the agent — sometimes before the MCP handshake
+/// has completed. That looks like a `ConnectionClosed` error during
+/// initialization, but is a normal shutdown from the client's
+/// perspective. Treat it as a clean exit so the client does not
+/// surface a "fatal error" dialog.
+pub(crate) fn handle_serve_error(err: ServerInitializeError) -> anyhow::Result<()> {
+    if let ServerInitializeError::ConnectionClosed(context) = &err {
+        tracing::info!(
+            "MCP client disconnected during initialization ({context}); shutting down cleanly"
+        );
+        if context.contains("initialize request") {
+            tracing::info!(
+                "No MCP initialize request received. If you ran `cs-mcp` directly in a terminal, run it through an MCP client instead."
+            );
+        }
+        return Ok(());
+    }
+
+    tracing::error!("serving error: {err:?}");
+    Err(err.into())
+}
+
+/// Remove log files older than `retention_days` from the given directory.
+fn cleanup_old_logs(log_dir: &std::path::Path, retention_days: u32) {
+    let cutoff = std::time::SystemTime::now()
+        - std::time::Duration::from_secs(u64::from(retention_days) * 24 * 60 * 60);
+    let entries = match std::fs::read_dir(log_dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
+        let Ok(modified) = metadata.modified() else {
+            continue;
+        };
+        if modified < cutoff {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
 }

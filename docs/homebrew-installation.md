@@ -13,9 +13,14 @@ You can install the CodeScene MCP Server using Homebrew on macOS and Linux.
 # Add the CodeScene tap
 brew tap codescene-oss/codescene-mcp-server https://github.com/codescene-oss/codescene-mcp-server
 
+# Trust the tap (required for Homebrew 5.1.4+)
+brew trust codescene-oss/codescene-mcp-server
+
 # Install CodeScene MCP Server
 brew install cs-mcp
 ```
+
+> **Note:** The `brew trust` step is required by Homebrew's [tap trust enforcement](https://github.com/Homebrew/brew/pull/22470). If your Homebrew version predates this feature, the `brew trust` command will fail harmlessly — you can safely ignore the error and proceed with `brew install`.
 
 ## Usage
 
@@ -145,9 +150,29 @@ q mcp add --name codescene-mcp --command cs-mcp
 
 ## Configuration
 
-For additional configuration — including CodeScene on-prem, ACE auto-refactoring, custom SSL/TLS certificates, and more — see [Configuration Options](configuration-options.md).
+For additional configuration — including CodeScene on-prem, custom SSL/TLS certificates, and more — see [Configuration Options](configuration-options.md).
 
 ## Troubleshooting
+
+### Untrusted tap error
+
+If you see an error like:
+
+```
+Error: Refusing to load formula codescene-oss/codescene-mcp-server/cs-mcp from untrusted tap codescene-oss/codescene-mcp-server.
+```
+
+Run the following to trust the tap:
+
+```bash
+brew trust codescene-oss/codescene-mcp-server
+```
+
+This is required by Homebrew's [tap trust enforcement](https://github.com/Homebrew/brew/pull/22470), which prevents loading formulas from third-party taps that haven't been explicitly trusted. You can also trust just the formula instead of the entire tap:
+
+```bash
+brew trust --formula codescene-oss/codescene-mcp-server/cs-mcp
+```
 
 ### Binary not found after installation
 

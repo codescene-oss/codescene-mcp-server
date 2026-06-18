@@ -62,7 +62,7 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant
         with:
           fetch-depth: 0
@@ -274,7 +274,7 @@ jobs:
 
       - name: Upload Executable Artifact (zipped binary)
         if: (github.event_name != 'workflow_dispatch' || github.event.inputs.variant == 'all' || github.event.inputs.variant == matrix.variant) && (github.event_name == 'push' || inputs.upload_binaries)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact-name }}
           path: ${{ matrix.artifact-name }}.zip
@@ -286,7 +286,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -320,7 +320,7 @@ jobs:
 
       - name: Upload Executable Artifact
         if: github.event_name == 'push' || inputs.upload_binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cs-mcp-windows-amd64
           path: cs-mcp-windows-amd64.exe
@@ -333,10 +333,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
 
@@ -344,7 +344,7 @@ jobs:
         run: npm install -g @anthropic-ai/mcpb
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: ./all-binaries
           merge-multiple: true
@@ -456,7 +456,7 @@ jobs:
           mcpb pack "$STAGING_DIR" "./all-binaries/codehealth-mcp-${RELEASE_VERSION}.mcpb"
 
       - name: Upload MCPB artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: codehealth-mcp-mcpb
           path: ./all-binaries/codehealth-mcp-*.mcpb

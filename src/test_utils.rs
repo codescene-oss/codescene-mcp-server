@@ -10,15 +10,52 @@ use crate::config::ConfigData;
 use crate::errors::CliError;
 use crate::http::{self};
 use crate::http::tests::MockHttpClient;
+use crate::tools::validation::{CliCheck, ValidationError, Validator};
 use crate::version_checker::VersionChecker;
 use crate::{CodeSceneServer, ServerDeps};
 
-pub(crate) fn test_deps(
-    id: &str,
-    is_standalone: bool,
-    cli: Arc<dyn cli::CliRunner>,
-    http: Arc<dyn http::HttpClient>,
-) -> ServerDeps {
+/// Mock validator that always passes. Use [`MockValidator::failing`] to
+/// simulate validation failures in tests.
+pub(crate) struct MockValidator {
+    error: Option<ValidationError>,
+}
+
+impl MockValidator {
+    pub(crate) fn passing() -> Self {
+        Self { error: None }
+    }
+
+    pub(crate) fn failing(kind: &'static str, message: &str) -> Self {
+        Self {
+            error: Some(ValidationError {
+                message: message.to_string(),
+                kind,
+                detail: None,
+            }),
+        }
+    }
+}
+
+impl Validator for MockValidator {
+    fn run_checks(&self, _checks: &[CliCheck<'_>]) -> Result<(), ValidationError> {
+        match &self.error {
+            Some(e) => Err(ValidationError {
+                message: e.message.clone(),
+                kind: e.kind,
+                detail: e.detail.clone(),
+            }),
+            None => Ok(()),
+        }
+    }
+}
+
+pub(crate) struct TestMocks {
+    pub(crate) cli: Arc<dyn cli::CliRunner>,
+    pub(crate) http: Arc<dyn http::HttpClient>,
+    pub(crate) validator: Arc<dyn Validator>,
+}
+
+pub(crate) fn test_deps(id: &str, is_standalone: bool, mocks: TestMocks) -> ServerDeps {
     ServerDeps {
         config_data: ConfigData {
             instance_id: Some(id.to_string()),
@@ -27,8 +64,9 @@ pub(crate) fn test_deps(
         instance_id: id.to_string(),
         is_standalone,
         version_checker: VersionChecker::new("dev"),
-        cli_runner: cli,
-        http_client: http,
+        cli_runner: mocks.cli,
+        http_client: mocks.http,
+        validator: mocks.validator,
     }
 }
 
@@ -36,8 +74,11 @@ pub(crate) fn make_server(is_standalone: bool) -> CodeSceneServer {
     CodeSceneServer::new(test_deps(
         "test-instance",
         is_standalone,
-        Arc::new(cli::ProductionCliRunner),
-        Arc::new(http::ReqwestClient),
+        TestMocks {
+            cli: Arc::new(cli::ProductionCliRunner),
+            http: Arc::new(http::ReqwestClient),
+            validator: Arc::new(MockValidator::passing()),
+        },
     ))
 }
 
@@ -72,6 +113,7 @@ pub(crate) async fn make_server_with_version(
         version_checker: vc,
         cli_runner: Arc::new(cli::ProductionCliRunner),
         http_client: Arc::new(http::ReqwestClient),
+        validator: Arc::new(MockValidator::passing()),
     })
 }
 
@@ -139,13 +181,28 @@ pub(crate) fn make_server_with_mocks(
     CodeSceneServer::new(test_deps(
         "test-mock",
         is_standalone,
-        Arc::new(cli),
-        Arc::new(http),
+        TestMocks {
+            cli: Arc::new(cli),
+            http: Arc::new(http),
+            validator: Arc::new(MockValidator::passing()),
+        },
     ))
 }
 
 pub(crate) fn make_cli_mock_server(cli: MockCliRunner) -> CodeSceneServer {
     make_server_with_mocks(false, cli, MockHttpClient::new(vec![]))
+}
+
+pub(crate) fn make_failing_validator_server(kind: &'static str, message: &str) -> CodeSceneServer {
+    CodeSceneServer::new(test_deps(
+        "test-validation",
+        false,
+        TestMocks {
+            cli: Arc::new(MockCliRunner::with_responses(vec![])),
+            http: Arc::new(MockHttpClient::new(vec![])),
+            validator: Arc::new(MockValidator::failing(kind, message)),
+        },
+    ))
 }
 
 pub(crate) fn assert_success_contains(result: &CallToolResult, needle: &str) {
@@ -191,18 +248,91 @@ pub(crate) fn assert_standalone_error(result: &CallToolResult) {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, VecDeque};
+    use std::io;
+    use std::sync::{Arc, Mutex};
 
+    use rmcp::model::{ClientJsonRpcMessage, ServerJsonRpcMessage};
+    use rmcp::service::ServerInitializeError;
+    use rmcp::service::RoleServer;
+    use rmcp::transport::Transport;
     use rmcp::ServerHandler;
+    use serde_json::json;
 
     use super::*;
     use crate::config::{self, ConfigData};
-    use crate::server_handler::{build_instructions, extract_md_title, resolve_resource_content};
+    use crate::server_handler::build_instructions;
     use crate::version_checker::VersionChecker;
     use crate::{
         display_version, fetch_cli_version, help_text, parse_cli_args,
-        resources, CliAction, API_ONLY_TOOLS,
+        CliAction, API_ONLY_TOOLS,
     };
+
+    #[derive(Clone)]
+    struct ScriptedTransport {
+        incoming: Arc<Mutex<VecDeque<ClientJsonRpcMessage>>>,
+        sent: Arc<Mutex<Vec<ServerJsonRpcMessage>>>,
+    }
+
+    impl ScriptedTransport {
+        fn from_messages(messages: Vec<ClientJsonRpcMessage>) -> Self {
+            Self {
+                incoming: Arc::new(Mutex::new(VecDeque::from(messages))),
+                sent: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+    }
+
+    impl Transport<RoleServer> for ScriptedTransport {
+        type Error = io::Error;
+
+        fn send(
+            &mut self,
+            item: ServerJsonRpcMessage,
+        ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send + 'static {
+            let sent = self.sent.clone();
+            async move {
+                sent.lock().unwrap().push(item);
+                Ok(())
+            }
+        }
+
+        fn receive(
+            &mut self,
+        ) -> impl std::future::Future<Output = Option<ClientJsonRpcMessage>> + Send {
+            let next = self.incoming.lock().unwrap().pop_front();
+            std::future::ready(next)
+        }
+
+        fn close(&mut self) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
+            std::future::ready(Ok(()))
+        }
+    }
+
+    fn initialize_request_message() -> ClientJsonRpcMessage {
+        serde_json::from_value(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "unit-test-client",
+                    "version": "1.0.0"
+                }
+            }
+        }))
+        .unwrap()
+    }
+
+    fn initialized_notification_message() -> ClientJsonRpcMessage {
+        serde_json::from_value(json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        }))
+        .unwrap()
+    }
 
     #[test]
     fn api_only_tools_has_expected_entries() {
@@ -390,24 +520,6 @@ mod tests {
     }
 
     #[test]
-    fn resolve_resource_content_returns_how_it_works() {
-        let content = resolve_resource_content(resources::HOW_IT_WORKS_URI).unwrap();
-        assert!(!content.is_empty());
-    }
-
-    #[test]
-    fn resolve_resource_content_returns_business_case() {
-        let content = resolve_resource_content(resources::BUSINESS_CASE_URI).unwrap();
-        assert!(!content.is_empty());
-    }
-
-    #[test]
-    fn resolve_resource_content_returns_error_for_unknown() {
-        let result = resolve_resource_content("unknown://resource");
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn build_instructions_standalone_omits_api_tools() {
         let text = build_instructions(true, false);
         assert!(text.contains("code_health_review"));
@@ -462,6 +574,7 @@ mod tests {
             version_checker: VersionChecker::new("dev"),
             cli_runner: Arc::new(cli::ProductionCliRunner),
             http_client: Arc::new(http::ReqwestClient),
+            validator: Arc::new(MockValidator::passing()),
         })
     }
 
@@ -481,7 +594,7 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server(false);
         let names = tool_names(&server);
-        assert_tool_count_and_config(&names, 16);
+        assert_tool_count_and_config(&names, 20);
         assert!(names.contains(&"code_health_review".to_string()));
     }
 
@@ -534,12 +647,55 @@ mod tests {
     }
 
     #[test]
-    fn extract_md_title_returns_first_heading() {
-        assert_eq!(extract_md_title("# Hello World\nsome text"), "Hello World");
+    fn handle_serve_error_connection_closed_initialize_request_is_ok() {
+        let result = crate::handle_serve_error(ServerInitializeError::ConnectionClosed(
+            "initialize request".to_string(),
+        ));
+        assert!(result.is_ok());
     }
 
     #[test]
-    fn extract_md_title_falls_back_to_resource() {
-        assert_eq!(extract_md_title("no heading here"), "Untitled");
+    fn handle_serve_error_connection_closed_initialize_notification_is_ok() {
+        let result = crate::handle_serve_error(ServerInitializeError::ConnectionClosed(
+            "initialize notification".to_string(),
+        ));
+        assert!(result.is_ok());
     }
+
+    #[test]
+    fn handle_serve_error_non_connection_closed_returns_err() {
+        let err = ServerInitializeError::Cancelled;
+        let result = crate::handle_serve_error(err);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn serve_or_handle_disconnect_returns_none_when_client_closes_early() {
+        let server = make_server(false);
+        let transport = ScriptedTransport::from_messages(vec![]);
+
+        let result = crate::serve_or_handle_disconnect(server, transport)
+            .await
+            .unwrap();
+
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn serve_or_handle_disconnect_returns_service_on_successful_handshake() {
+        let server = make_server(false);
+        let transport = ScriptedTransport::from_messages(vec![
+            initialize_request_message(),
+            initialized_notification_message(),
+        ]);
+
+        let mut service = crate::serve_or_handle_disconnect(server, transport)
+            .await
+            .unwrap()
+            .expect("expected initialized service");
+
+        let close_result = service.close().await;
+        assert!(close_result.is_ok());
+    }
+
 }

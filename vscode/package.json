@@ -1,0 +1,129 @@
+{
+  "name": "codescene-codehealth-mcp",
+  "displayName": "CodeScene CodeHealth MCP",
+  "description": "CodeScene MCP Server — Code Health analysis for AI coding agents. Provides tools for code health scoring, refactoring guidance, and technical debt analysis directly in VS Code's agent mode.",
+  "version": "0.0.0",
+  "publisher": "codescene",
+  "icon": "icon.png",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codescene-oss/codescene-mcp-server.git",
+    "directory": "vscode"
+  },
+  "homepage": "https://codescene.com",
+  "bugs": {
+    "url": "https://github.com/codescene-oss/codescene-mcp-server/issues"
+  },
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "AI",
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "codescene",
+    "code-health",
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "code-quality",
+    "technical-debt",
+    "refactoring",
+    "copilot"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "codesceneMcp",
+        "label": "CodeScene CodeHealth MCP Server"
+      }
+    ],
+    "configuration": {
+      "title": "CodeScene CodeHealth MCP",
+      "properties": {
+        "codescene.accessToken": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Your CodeScene access token. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#access_token)",
+          "order": 1
+        },
+        "codescene.onpremUrl": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Base URL of your self-hosted CodeScene instance (e.g. `https://codescene.mycompany.com`). Leave empty for CodeScene Cloud. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#onprem_url)",
+          "order": 2
+        },
+        "codescene.defaultProjectId": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Pre-selects a CodeScene project by its numeric ID, skipping interactive project selection. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#default_project_id)",
+          "order": 3
+        },
+        "codescene.enabledTools": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Comma-separated list of MCP tool names to expose. When empty, all tools are enabled. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#enabled_tools)",
+          "order": 4
+        },
+        "codescene.disableVersionCheck": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Suppress the automatic version-check request on startup. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#disable_version_check)",
+          "order": 5
+        },
+        "codescene.caBundlePath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to a PEM-format CA certificate bundle for SSL/TLS verification. Required for corporate proxies or internal CAs. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#ca_bundle)",
+          "order": 6
+        },
+        "codescene.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable the CodeScene MCP Server.",
+          "order": 0
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "codescene.configure",
+        "title": "CodeScene: Configure Access Token"
+      },
+      {
+        "command": "codescene.restart",
+        "title": "CodeScene: Restart MCP Server"
+      },
+      {
+        "command": "codescene.showStatus",
+        "title": "CodeScene: Show Server Status"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src/",
+    "test": "npm run compile && node --test tests/config.test.js tests/download-binary.test.js tests/package-platform.test.js && node --require ./tests/vscode-mock-preload.cjs --test tests/extension.test.js",
+    "test:ci": "npm run compile && c8 --reporter=cobertura --reporter=text --temp-directory=./coverage/tmp sh -c 'node --test tests/config.test.js tests/download-binary.test.js tests/package-platform.test.js && node --require ./tests/vscode-mock-preload.cjs --test tests/extension.test.js'",
+    "package": "vsce package",
+    "package:platform": "node scripts/package-platform.js",
+    "download-binary": "node scripts/download-binary.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/vscode": "^1.96.0",
+    "@vscode/vsce": "^3.0.0",
+    "c8": "^11.0.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.7.0"
+  }
+}

@@ -10,7 +10,53 @@
  * works as expected.
  */
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+
+/** Signals that indicate a normal client-initiated shutdown. */
+const CLEAN_SHUTDOWN_SIGNALS = new Set(["SIGTERM", "SIGINT"]);
+
+/** Maps signal names to their numeric values for exit code encoding. */
+const SIGNAL_NUMBERS = { SIGKILL: 9, SIGHUP: 1 };
+
+/**
+ * Handle spawn errors (binary not found, permission denied, etc.).
+ * Throws for unexpected errors.
+ *
+ * @param {Error} error - The spawn error
+ * @param {string} binaryPath - Path to the binary that failed to spawn
+ * @returns {never}
+ */
+function handleSpawnError(error, binaryPath) {
+  if (error.code === "ENOENT") {
+    process.stderr.write(`Error: Binary not found at ${binaryPath}\n`);
+    process.exit(127);
+  }
+  if (error.code === "EACCES") {
+    process.stderr.write(
+      `Error: Permission denied executing ${binaryPath}\n`
+    );
+    process.exit(126);
+  }
+  throw error;
+}
+
+/**
+ * Determine the exit code when the child was killed by a signal.
+ *
+ * SIGTERM and SIGINT are normal shutdown signals sent by MCP clients
+ * (e.g. VS Code, Zed) when the user closes the agent. Exiting with
+ * a non-zero code causes the client to surface a "fatal error" dialog,
+ * so treat these as clean exits.
+ *
+ * @param {string} signal - The signal name (e.g. "SIGTERM")
+ * @returns {number} The exit code to use
+ */
+function exitCodeForSignal(signal) {
+  if (CLEAN_SHUTDOWN_SIGNALS.has(signal)) {
+    return 0;
+  }
+  return 128 + (SIGNAL_NUMBERS[signal] || 1);
+}
 
 /**
  * Runs the cs-mcp binary, forwarding all stdio and signals.
@@ -23,37 +69,68 @@ import { spawnSync } from "node:child_process";
  * @returns {never}
  */
 export function runBinary(binaryPath, args) {
-  const result = spawnSync(binaryPath, args, {
+  const child = spawn(binaryPath, args, {
     stdio: "inherit",
     env: process.env,
     windowsHide: true,
   });
 
-  if (result.error) {
-    // Handle spawn errors (e.g. binary not found, permission denied)
-    if (result.error.code === "ENOENT") {
-      process.stderr.write(`Error: Binary not found at ${binaryPath}\n`);
-      process.exit(127);
+  let exited = false;
+
+  /**
+   * Exit exactly once and unregister signal handlers.
+   *
+   * @param {number} code
+   */
+  function exitOnce(code) {
+    if (exited) {
+      return;
     }
-    if (result.error.code === "EACCES") {
-      process.stderr.write(
-        `Error: Permission denied executing ${binaryPath}\n`
-      );
-      process.exit(126);
-    }
-    throw result.error;
+    exited = true;
+
+    process.off("SIGTERM", forwardSigterm);
+    process.off("SIGINT", forwardSigint);
+    process.exit(code);
   }
 
-  // Exit with the same code as the child process.
-  // If the child was killed by a signal, use 128 + signal number convention.
-  if (result.status !== null) {
-    process.exit(result.status);
+  /**
+   * Forward a signal to the child process.
+   *
+   * @param {NodeJS.Signals} signal
+   */
+  function forwardSignal(signal) {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      return;
+    }
+    try {
+      child.kill(signal);
+    } catch {
+      // Ignore race conditions where the child exits before kill().
+    }
   }
-  if (result.signal) {
-    // Convert signal name to number (e.g. SIGTERM -> 15)
-    const signalNumbers = { SIGTERM: 15, SIGINT: 2, SIGKILL: 9, SIGHUP: 1 };
-    const sigNum = signalNumbers[result.signal] || 1;
-    process.exit(128 + sigNum);
-  }
-  process.exit(1);
+
+  const forwardSigterm = () => forwardSignal("SIGTERM");
+  const forwardSigint = () => forwardSignal("SIGINT");
+
+  process.on("SIGTERM", forwardSigterm);
+  process.on("SIGINT", forwardSigint);
+
+  child.once("error", (error) => {
+    handleSpawnError(error, binaryPath);
+  });
+
+  child.once("exit", (status, signal) => {
+    if (status !== null) {
+      exitOnce(status);
+      return;
+    }
+    if (signal) {
+      exitOnce(exitCodeForSignal(signal));
+      return;
+    }
+    exitOnce(1);
+  });
+
+  // Keep the wrapper process alive while the child is running.
+  // Actual exit happens in the child "exit" event handler above.
 }
