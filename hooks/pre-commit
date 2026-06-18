@@ -1,0 +1,42 @@
+#!/bin/sh
+export PATH="$HOME/.local/bin:$PATH"
+
+if ! command -v cs > /dev/null 2>&1; then
+  printf 'CodeScene health gate: cs is not installed.\nInstall from https://codescene.io/docs/cli/index.html\n' >&2
+  exit 1
+fi
+
+if ! command -v jq > /dev/null 2>&1; then
+  printf 'CodeScene health gate: jq is not installed (required for JSON parsing).\n' >&2
+  exit 1
+fi
+
+output=$(cs delta --output-format=json 2>/dev/null)
+
+degraded_count=$(printf '%s' "$output" | jq -r '
+  [.[] | select(
+    (.["old-score"] == null and .["new-score"] != null) or
+    (.["old-score"] != null and .["new-score"] != null and .["new-score"] < .["old-score"])
+  )] | length
+' 2>/dev/null)
+
+if [ -z "$degraded_count" ] || [ "$degraded_count" -eq 0 ]; then
+  echo "CodeScene health gate OK"
+  exit 0
+fi
+
+printf '%s' "$output" | jq -r '
+  .[] |
+  select(
+    (.["old-score"] == null and .["new-score"] != null) or
+    (.["old-score"] != null and .["new-score"] != null and .["new-score"] < .["old-score"])
+  ) |
+  "\n  \(.name)  —  Code Health \(.["new-score"] // "n/a")/10",
+  (.findings[]? |
+    "  [\(.category)]",
+    (.functions[]? | "    \(.title) (\(.details // ""), lines \(.["start-line"])–\(.["end-line"]))")
+  )
+' >&2
+
+printf '\nCodeScene health gate failed — modified files must not degrade Code Health before committing.\n\nTo fix: use the CodeScene MCP tool `code_health_review` on each failing file for a detailed\nbreakdown, then follow the `codescene:guiding-refactoring-with-code-health` skill to work\nthrough the issues in small, verifiable steps.\n' >&2
+exit 1
