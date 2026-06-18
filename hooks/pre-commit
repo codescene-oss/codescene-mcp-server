@@ -7,36 +7,20 @@ if ! command -v cs > /dev/null 2>&1; then
 fi
 
 if ! command -v jq > /dev/null 2>&1; then
-  printf 'CodeScene health gate: jq is not installed (required for JSON parsing).\n' >&2
+  printf 'CodeScene health gate: jq is not installed.\n' >&2
   exit 1
 fi
 
 output=$(cs delta --output-format=json 2>/dev/null)
 
-degraded_count=$(printf '%s' "$output" | jq -r '
-  [.[] | select(
+degraded=$(printf '%s' "$output" | jq -r '
+  .[] | select(
     (.["old-score"] == null and .["new-score"] != null) or
     (.["old-score"] != null and .["new-score"] != null and .["new-score"] < .["old-score"])
-  )] | length
+  ) | "  \(.name)  —  Code Health \(.["new-score"])/10"
 ' 2>/dev/null)
 
-if [ -z "$degraded_count" ] || [ "$degraded_count" -eq 0 ]; then
-  echo "CodeScene health gate OK"
-  exit 0
-fi
+[ -z "$degraded" ] && { echo "CodeScene health gate OK"; exit 0; }
 
-printf '%s' "$output" | jq -r '
-  .[] |
-  select(
-    (.["old-score"] == null and .["new-score"] != null) or
-    (.["old-score"] != null and .["new-score"] != null and .["new-score"] < .["old-score"])
-  ) |
-  "\n  \(.name)  —  Code Health \(.["new-score"] // "n/a")/10",
-  (.findings[]? |
-    "  [\(.category)]",
-    (.functions[]? | "    \(.title) (\(.details // ""), lines \(.["start-line"])–\(.["end-line"]))")
-  )
-' >&2
-
-printf '\nCodeScene health gate failed — modified files must not degrade Code Health before committing.\n\nTo fix: use the CodeScene MCP tool `code_health_review` on each failing file for a detailed\nbreakdown, then follow the `codescene:guiding-refactoring-with-code-health` skill to work\nthrough the issues in small, verifiable steps.\n' >&2
+printf 'CodeScene health gate failed:\n%s\n\nRun the `code_health_review` MCP tool on each failing file, then follow the\n`codescene:guiding-refactoring-with-code-health` skill to fix the issues.\n' "$degraded" >&2
 exit 1
