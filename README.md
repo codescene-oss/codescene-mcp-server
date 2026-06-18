@@ -72,6 +72,16 @@ Then open the `.mcpb` file with Claude Desktop to install the MCP server.
 </details>
 
 <details>
+<summary><b>VS Code</b></summary>
+
+The CodeScene MCP is available as a VS Code extension:
+
+- **Open VSX:** [codescene.codescene-codehealth-mcp](https://open-vsx.org/extension/codescene/codescene-codehealth-mcp)
+- **VS Code Marketplace:** [codescene.codescene-codehealth-mcp](https://marketplace.visualstudio.com/items?itemName=codescene.codescene-codehealth-mcp)
+
+</details>
+
+<details>
 <summary><b>Homebrew (macOS / Linux)</b></summary>
 
 ```bash
