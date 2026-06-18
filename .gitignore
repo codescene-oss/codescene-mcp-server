@@ -1,6 +1,7 @@
 .venv
 __pycache__
 .DS_Store
+.vscode
 npm/node_modules/
 npm/coverage/
 npm/.cache/
