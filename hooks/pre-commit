@@ -1,0 +1,26 @@
+#!/bin/sh
+export PATH="$HOME/.local/bin:$PATH"
+
+if ! command -v cs > /dev/null 2>&1; then
+  printf 'CodeScene health gate: cs is not installed.\nInstall from https://codescene.io/docs/cli/index.html\n' >&2
+  exit 1
+fi
+
+if ! command -v jq > /dev/null 2>&1; then
+  printf 'CodeScene health gate: jq is not installed.\n' >&2
+  exit 1
+fi
+
+output=$(cs delta --output-format=json 2>/dev/null)
+
+degraded=$(printf '%s' "$output" | jq -r '
+  .[] | select(
+    (.["old-score"] == null and .["new-score"] != null) or
+    (.["old-score"] != null and .["new-score"] != null and .["new-score"] < .["old-score"])
+  ) | "  \(.name)  —  Code Health \(.["new-score"])/10"
+' 2>/dev/null)
+
+[ -z "$degraded" ] && { echo "CodeScene health gate OK"; exit 0; }
+
+printf 'CodeScene health gate failed:\n%s\n\nRun the `code_health_review` MCP tool on each failing file, then follow the\n`codescene:guiding-refactoring-with-code-health` skill to fix the issues.\n' "$degraded" >&2
+exit 1
