@@ -11,17 +11,26 @@ on:
         description: "Skip publishing to VS Code Marketplace and Open VSX"
         type: boolean
         default: false
-  push:
-    tags:
-      - 'MCP-[0-9]+.[0-9]+.[0-9]+'
-      - 'MCP-[0-9]+.[0-9]+.[0-9]+-*'
+  # Run after the executables have been built and uploaded to the release,
+  # otherwise the binaries this workflow downloads are not yet available.
+  workflow_run:
+    workflows: ["Build and publish executables"]
+    types:
+      - completed
 
 concurrency:
-  group: vscode-${{ github.ref }}
+  group: vscode-${{ github.event.workflow_run.head_branch || github.ref }}
   cancel-in-progress: true
 
 jobs:
   build-vsix:
+    # For workflow_run, only proceed when the executables build succeeded and
+    # was triggered by an MCP-* release tag (head_branch holds the tag name).
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'MCP-'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -48,6 +57,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          # workflow_run defaults to the default branch; check out the tag that
+          # triggered the executables build instead.
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -62,7 +74,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.tag }}" ]]; then
             echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "tag=${{ github.event.workflow_run.head_branch }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set extension version from release tag
@@ -119,13 +131,15 @@ jobs:
           path: vscode/*.vsix
 
   upload-to-release:
-    if: github.event_name == 'push'
+    if: github.event_name == 'workflow_run'
     needs: build-vsix
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
 
       - name: Download all VSIX artifacts
         uses: actions/download-artifact@v7
@@ -137,13 +151,13 @@ jobs:
       - name: Upload VSIXs to release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ github.event.workflow_run.head_branch }}
           files: ./vsix-artifacts/*.vsix
           append_body: true
 
   publish:
     if: >
-      (github.event_name == 'push') ||
+      (github.event_name == 'workflow_run') ||
       (github.event_name == 'workflow_dispatch' && inputs.skip_publish != true)
     needs: build-vsix
     runs-on: ubuntu-latest
