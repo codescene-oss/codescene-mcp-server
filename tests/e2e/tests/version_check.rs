@@ -184,6 +184,25 @@ pub fn test_disabled_version_check_no_banner() {
     }
 }
 
+/// Count requests that originate from the MCP server's version checker.
+///
+/// The version checker sends `User-Agent: cs-mcp` (see
+/// `version_checker::fetch_latest_version`). Filtering on this UA isolates
+/// the MCP's own version-check traffic from unrelated localhost connections
+/// — e.g. security/EDR agents or port monitors that probe newly-opened
+/// listening ports with their own clients (`Go-http-client`, etc.).
+fn mcp_version_check_request_count(server: &FakeHttpServer) -> usize {
+    server
+        .get_requests()
+        .iter()
+        .filter(|req| {
+            req.headers
+                .iter()
+                .any(|(k, v)| k.eq_ignore_ascii_case("user-agent") && v == "cs-mcp")
+        })
+        .count()
+}
+
 pub fn test_disabled_version_check_no_network_traffic() {
     let (server, mut client, test_file, _tmp) = disabled_check_setup();
 
@@ -195,8 +214,8 @@ pub fn test_disabled_version_check_no_network_traffic() {
     std::thread::sleep(Duration::from_secs(2));
 
     assert_eq!(
-        server.request_count(),
+        mcp_version_check_request_count(&server),
         0,
-        "No requests should reach the version endpoint when disabled",
+        "MCP server should not call the version endpoint when disabled",
     );
 }
