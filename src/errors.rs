@@ -14,10 +14,11 @@ pub enum CliError {
 
     #[error(
         "Access token is invalid or expired.\n\n\
-         Please update your access token using one of these methods:\n\
+         Sign in with OAuth: cs auth login --client mcp\n\n\
+         Or update your access token using one of these methods:\n\
          1. Use the `set_config` tool: set_config(key=\"access_token\", value=\"your-token\")\n\
          2. Set the CS_ACCESS_TOKEN environment variable in your MCP client configuration\n\n\
-         To get a new Access Token, see:\n\
+         To get a new Personal Access Token, see:\n\
          https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/getting-a-personal-access-token.md"
     )]
     LicenseCheckFailed { stderr: String },

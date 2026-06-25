@@ -12,6 +12,7 @@ use crate::http::{self};
 use crate::http::tests::MockHttpClient;
 use crate::tools::validation::{CliCheck, ValidationError, Validator};
 use crate::version_checker::VersionChecker;
+use crate::auth;
 use crate::{CodeSceneServer, ServerDeps};
 
 /// Mock validator that always passes. Use [`MockValidator::failing`] to
@@ -56,6 +57,7 @@ pub(crate) struct TestMocks {
 }
 
 pub(crate) fn test_deps(id: &str, is_standalone: bool, mocks: TestMocks) -> ServerDeps {
+    let cli_runner = mocks.cli.clone();
     ServerDeps {
         config_data: ConfigData {
             instance_id: Some(id.to_string()),
@@ -67,6 +69,7 @@ pub(crate) fn test_deps(id: &str, is_standalone: bool, mocks: TestMocks) -> Serv
         cli_runner: mocks.cli,
         http_client: mocks.http,
         validator: mocks.validator,
+        credentials: Arc::new(auth::CredentialResolver::new(cli_runner, false)),
     }
 }
 
@@ -114,6 +117,10 @@ pub(crate) async fn make_server_with_version(
         cli_runner: Arc::new(cli::ProductionCliRunner),
         http_client: Arc::new(http::ReqwestClient),
         validator: Arc::new(MockValidator::passing()),
+        credentials: Arc::new(auth::CredentialResolver::new(
+            Arc::new(cli::ProductionCliRunner),
+            false,
+        )),
     })
 }
 
@@ -575,6 +582,10 @@ mod tests {
             cli_runner: Arc::new(cli::ProductionCliRunner),
             http_client: Arc::new(http::ReqwestClient),
             validator: Arc::new(MockValidator::passing()),
+            credentials: Arc::new(auth::CredentialResolver::new(
+                Arc::new(cli::ProductionCliRunner),
+                false,
+            )),
         })
     }
 

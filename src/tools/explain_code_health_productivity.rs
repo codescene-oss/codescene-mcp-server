@@ -6,7 +6,7 @@ use crate::resources;
 use crate::CodeSceneServer;
 
 pub(crate) async fn handle(server: &CodeSceneServer) -> Result<CallToolResult, ErrorData> {
-    if let Some(r) = server.require_token() {
+    if let Some(r) = server.ensure_access_token().await {
         return Ok(r);
     }
     server.version_checker.check_in_background();
