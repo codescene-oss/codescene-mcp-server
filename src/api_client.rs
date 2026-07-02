@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
+use crate::auth::CredentialResolver;
 use crate::errors::ApiError;
 use crate::http::{HttpClient, HttpRequest, HttpResponse, Method};
 
@@ -18,29 +19,51 @@ pub fn get_api_url() -> Result<String, ApiError> {
 pub async fn query_api_with_client(
     endpoint: &str,
     client: &dyn HttpClient,
+    credentials: Option<&CredentialResolver>,
 ) -> Result<Value, ApiError> {
     let url = format!("{}/{}", get_api_url()?, endpoint.trim_start_matches('/'));
-    query_api_url_with_client(&url, client).await
+    query_api_url_with_client(&url, client, credentials).await
 }
 
-async fn query_api_url_with_client(url: &str, client: &dyn HttpClient) -> Result<Value, ApiError> {
-    let token = std::env::var("CS_ACCESS_TOKEN").unwrap_or_default();
-    let token = token.trim();
+async fn query_api_url_with_client(
+    url: &str,
+    client: &dyn HttpClient,
+    credentials: Option<&CredentialResolver>,
+) -> Result<Value, ApiError> {
+    let mut retried = false;
+    loop {
+        let token = std::env::var("CS_ACCESS_TOKEN").unwrap_or_default();
+        let token = token.trim();
 
-    let request = HttpRequest {
-        method: Method::Get,
-        url: url.to_string(),
-        headers: build_api_headers(token),
-        body: None,
-        timeout_secs: 30,
-    };
+        let request = HttpRequest {
+            method: Method::Get,
+            url: url.to_string(),
+            headers: build_api_headers(token),
+            body: None,
+            timeout_secs: 30,
+        };
 
-    let resp = client
-        .send(request)
-        .await
-        .map_err(|e| ApiError::Transport(e))?;
+        let resp = client
+            .send(request)
+            .await
+            .map_err(|e| ApiError::Transport(e))?;
 
-    parse_api_response(resp)
+        match parse_api_response(resp) {
+            Ok(value) => return Ok(value),
+            Err(ApiError::Status { status: 401, body })
+                if !retried && credentials.is_some_and(|c| c.oauth_managed()) =>
+            {
+                if let Some(creds) = credentials {
+                    if creds.on_unauthorized().await.unwrap_or(false) {
+                        retried = true;
+                        continue;
+                    }
+                }
+                return Err(ApiError::Status { status: 401, body });
+            }
+            Err(err) => return Err(err),
+        }
+    }
 }
 
 fn build_api_headers(token: &str) -> HashMap<String, String> {
@@ -74,6 +97,7 @@ fn parse_api_response(resp: HttpResponse) -> Result<Value, ApiError> {
 pub async fn query_api_list_with_client(
     endpoint: &str,
     client: &dyn HttpClient,
+    credentials: Option<&CredentialResolver>,
 ) -> Result<Vec<Value>, ApiError> {
     let mut results = Vec::new();
     let mut page = 1;
@@ -81,7 +105,7 @@ pub async fn query_api_list_with_client(
     loop {
         let sep = if endpoint.contains('?') { '&' } else { '?' };
         let paged = format!("{endpoint}{sep}page={page}");
-        let data = query_api_with_client(&paged, client).await?;
+        let data = query_api_with_client(&paged, client, credentials).await?;
 
         let items = match data.as_array() {
             Some(arr) => arr,
@@ -102,6 +126,7 @@ pub async fn query_api_keyed_list_with_client(
     params: &[(String, String)],
     key: &str,
     client: &dyn HttpClient,
+    credentials: Option<&CredentialResolver>,
 ) -> Result<Vec<Value>, ApiError> {
     let mut all_items = Vec::new();
     let mut current_page: i64 = 1;
@@ -111,7 +136,7 @@ pub async fn query_api_keyed_list_with_client(
         upsert_query_param(&mut query_params, "page", &current_page.to_string());
 
         let url = endpoint_with_query_params(endpoint, &query_params)?;
-        let data = query_api_url_with_client(&url, client).await?;
+        let data = query_api_url_with_client(&url, client, credentials).await?;
 
         let items = data
             .get(key)
@@ -142,9 +167,10 @@ pub async fn query_api_keyed_list_with_client(
 pub async fn get_latest_analysis_id(
     project_id: i64,
     client: &dyn HttpClient,
+    credentials: Option<&CredentialResolver>,
 ) -> Result<i64, ApiError> {
     let endpoint = format!("v2/projects/{project_id}/analyses/latest");
-    let data = query_api_with_client(&endpoint, client).await?;
+    let data = query_api_with_client(&endpoint, client, credentials).await?;
     data.get("id")
         .and_then(|v| v.as_i64())
         .ok_or_else(|| ApiError::Transport("Missing 'id' in analysis response".into()))
@@ -265,7 +291,7 @@ mod tests {
     async fn query_api_success() {
         let _g = lock_api_env("test-token");
         let mock = MockHttpClient::always(HttpResponse::ok(r#"{"projects":[]}"#));
-        let result = query_api_with_client("v2/projects", &mock).await.unwrap();
+        let result = query_api_with_client("v2/projects", &mock, None).await.unwrap();
         assert_eq!(result["projects"], serde_json::json!([]));
         cleanup_api_env();
     }
@@ -277,9 +303,9 @@ mod tests {
         let captured = mock.captured_requests.clone();
 
         // First request: normal endpoint
-        let _ = query_api_with_client("v2/test", &mock).await;
+        let _ = query_api_with_client("v2/test", &mock, None).await;
         // Second request: leading-slash endpoint
-        let _ = query_api_with_client("/v2/test", &mock).await;
+        let _ = query_api_with_client("/v2/test", &mock, None).await;
 
         let reqs = captured.lock().unwrap();
         assert_eq!(reqs.len(), 2);
@@ -307,7 +333,7 @@ mod tests {
         let mock = MockHttpClient::always(HttpResponse::ok(r#"{}"#));
         let captured = mock.captured_requests.clone();
 
-        let _ = query_api_with_client("v2/test", &mock).await;
+        let _ = query_api_with_client("v2/test", &mock, None).await;
 
         let reqs = captured.lock().unwrap();
         assert_eq!(reqs.len(), 1);
@@ -337,7 +363,7 @@ mod tests {
     }
 
     async fn assert_query_api_error(mock: MockHttpClient) {
-        match query_api_with_client("v2/projects", &mock)
+        match query_api_with_client("v2/projects", &mock, None)
             .await
             .unwrap_err()
         {
@@ -352,7 +378,7 @@ mod tests {
         endpoint: &str,
     ) -> Result<Vec<Value>, ApiError> {
         let mock = MockHttpClient::new(responses);
-        query_api_list_with_client(endpoint, &mock).await
+        query_api_list_with_client(endpoint, &mock, None).await
     }
 
     async fn run_keyed_list_query(
@@ -362,7 +388,7 @@ mod tests {
         key: &str,
     ) -> Result<Vec<Value>, ApiError> {
         let mock = MockHttpClient::new(responses);
-        query_api_keyed_list_with_client(endpoint, params, key, &mock).await
+        query_api_keyed_list_with_client(endpoint, params, key, &mock, None).await
     }
 
     #[tokio::test]
@@ -415,7 +441,7 @@ mod tests {
         let _g = lock_api_env("tok");
         let mock = MockHttpClient::new(vec![HttpResponse::ok(r#"[]"#)]);
         let captured = mock.captured_requests.clone();
-        let _ = query_api_list_with_client("v2/items?filter=test", &mock).await;
+        let _ = query_api_list_with_client("v2/items?filter=test", &mock, None).await;
         let reqs = captured.lock().unwrap();
         // Should use '&' since '?' already exists
         assert!(reqs[0].url.contains("filter=test&page=1"));
@@ -495,7 +521,7 @@ mod tests {
         let _g = lock_api_env("tok");
         let mock =
             MockHttpClient::always(HttpResponse::ok(r#"{"id":37888,"name":"latest analysis"}"#));
-        let id = get_latest_analysis_id(147, &mock).await.unwrap();
+        let id = get_latest_analysis_id(147, &mock, None).await.unwrap();
         assert_eq!(id, 37888);
         cleanup_api_env();
     }
@@ -504,7 +530,7 @@ mod tests {
     async fn get_latest_analysis_id_missing_id_field() {
         let _g = lock_api_env("tok");
         let mock = MockHttpClient::always(HttpResponse::ok(r#"{"name":"no id here"}"#));
-        let err = get_latest_analysis_id(147, &mock).await.unwrap_err();
+        let err = get_latest_analysis_id(147, &mock, None).await.unwrap_err();
         match err {
             ApiError::Transport(msg) => assert!(msg.contains("Missing 'id'")),
             other => panic!("Expected Transport error, got {other:?}"),
@@ -516,7 +542,7 @@ mod tests {
     async fn get_latest_analysis_id_api_error() {
         let _g = lock_api_env("tok");
         let mock = MockHttpClient::new(vec![HttpResponse::error(500, "Server Error")]);
-        assert!(get_latest_analysis_id(147, &mock).await.is_err());
+        assert!(get_latest_analysis_id(147, &mock, None).await.is_err());
         cleanup_api_env();
     }
 }

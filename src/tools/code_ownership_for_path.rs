@@ -14,7 +14,7 @@ pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: OwnershipParam,
 ) -> Result<CallToolResult, ErrorData> {
-    if let Some(r) = server.require_token() {
+    if let Some(r) = server.ensure_access_token().await {
         return Ok(r);
     }
     if server.is_standalone {
@@ -23,6 +23,7 @@ pub(crate) async fn handle(
         ));
     }
     server.version_checker.check_in_background();
+    let creds = Some(server.credentials.as_ref());
     let path = docker::adapt_path_for_docker(Path::new(&params.path));
     let relative = make_relative_for_api(Path::new(&path));
     let endpoint = format!("v2/projects/{}/analyses/latest/files", params.project_id);
@@ -35,6 +36,7 @@ pub(crate) async fn handle(
         &query_params,
         "files",
         &*server.http_client,
+        creds,
     )
     .await;
     match result {

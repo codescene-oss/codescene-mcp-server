@@ -8,7 +8,7 @@ use crate::tools::common::tool_error;
 use crate::CodeSceneServer;
 
 pub(crate) async fn handle(server: &CodeSceneServer) -> Result<CallToolResult, ErrorData> {
-    if let Some(r) = server.require_token() {
+    if let Some(r) = server.ensure_access_token().await {
         return Ok(r);
     }
     if server.is_standalone {
@@ -17,7 +17,7 @@ pub(crate) async fn handle(server: &CodeSceneServer) -> Result<CallToolResult, E
         ));
     }
     server.version_checker.check_in_background();
-    let result = run_select_project(&*server.http_client).await;
+    let result = run_select_project(&*server.http_client, Some(server.credentials.as_ref())).await;
     match &result {
         Ok(output) => {
             let props = event_properties::select_project_properties();
@@ -37,6 +37,7 @@ pub(crate) async fn handle(server: &CodeSceneServer) -> Result<CallToolResult, E
 
 pub(crate) async fn run_select_project(
     http_client: &dyn crate::http::HttpClient,
+    credentials: Option<&crate::auth::CredentialResolver>,
 ) -> Result<serde_json::Value, String> {
     let link = std::env::var("CS_ONPREM_URL")
         .ok()
@@ -55,7 +56,7 @@ pub(crate) async fn run_select_project(
         }
     }
 
-    let data = api_client::query_api_list_with_client("v2/projects", http_client)
+    let data = api_client::query_api_list_with_client("v2/projects", http_client, credentials)
         .await
         .map_err(|e| format!("Error: {e}"))?;
 
@@ -97,7 +98,7 @@ mod tests {
     async fn run_with_default_project_id() {
         let _g = set_token("test-token");
         std::env::set_var("CS_DEFAULT_PROJECT_ID", "42");
-        let result = run_select_project(&crate::http::ReqwestClient).await;
+        let result = run_select_project(&crate::http::ReqwestClient, None).await;
         std::env::remove_var("CS_DEFAULT_PROJECT_ID");
         let value = result.unwrap();
         assert_eq!(value["id"], 42);
@@ -108,7 +109,7 @@ mod tests {
     async fn run_default_id_empty_falls_through() {
         let _g = set_token("test-token");
         std::env::set_var("CS_DEFAULT_PROJECT_ID", "");
-        let result = run_select_project(&crate::http::ReqwestClient).await;
+        let result = run_select_project(&crate::http::ReqwestClient, None).await;
         std::env::remove_var("CS_DEFAULT_PROJECT_ID");
         match result {
             Ok(val) => assert!(val.get("projects").is_some()),
@@ -141,7 +142,7 @@ mod tests {
         let _g = set_token("tok");
         std::env::remove_var("CS_DEFAULT_PROJECT_ID");
         let http = make_api_mock(HttpResponse::ok(r#"[{"id":99,"name":"TestProject"}]"#));
-        let result = run_select_project(&http).await.unwrap();
+        let result = run_select_project(&http, None).await.unwrap();
         assert!(result["projects"].as_array().unwrap().len() > 0);
         assert_eq!(result["projects"][0]["name"], "TestProject");
     }
@@ -151,7 +152,7 @@ mod tests {
         let _g = set_token("tok");
         std::env::remove_var("CS_DEFAULT_PROJECT_ID");
         let http = MockHttpClient::new(vec![HttpResponse::error(500, "fail")]);
-        let result = run_select_project(&http).await;
+        let result = run_select_project(&http, None).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Error"));
     }

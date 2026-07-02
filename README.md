@@ -15,11 +15,34 @@ The repository also includes a downloadable set of public agent skills in [skill
 
 Want AI to perform the setup? Start with [skills/installing-and-activating-codescene-mcp/SKILL.md](skills/installing-and-activating-codescene-mcp/SKILL.md).
 
-1. Get an Access Token for the MCP Server — see [Getting a Personal Access Token](docs/getting-a-personal-access-token.md).
+1. **Authenticate** with CodeScene using OAuth (recommended) or a Personal Access Token — see [Authentication](#authentication) below.
 2. Install the MCP Server using one of the [installation options](#installation) below.
 3. Add the MCP Server to your AI assistant. See the detailed instructions for your environment in the installation guide.
 4. Copy the agent guidance that matches your license into your repository: [AGENTS-full.md](docs/AGENTS-full.md) for CodeScene Core users, [AGENTS-standalone.md](docs/AGENTS-standalone.md) for standalone license users, or [.amazonq/rules](.amazonq/rules) for Amazon Q. Also copy any relevant public [skills](skills) for reusable workflow prompts.
 5. Explore the [available tools](docs/tools.md) to see what the MCP Server can do and which tools are available for your license.
+
+## Authentication
+
+The MCP server supports OAuth authentication to CodeScene. You do not need to paste a token into your MCP config for interactive desktop use.
+
+For on-prem Enterprise, configure your instance first:
+
+Set the environment variable `CS_ONPREM_URL`
+
+or alternatively, set the in-repository configuration file using the `cs` CLI.
+
+In-repository configuration file
+```bash
+cs auth configure --onprem-url https://your.codescene.com
+```
+
+### Personal Access Token or standalone license
+
+Set `CS_ACCESS_TOKEN` in your MCP client configuration or use `set_config(key="access_token", ...)`. See [Getting a Personal Access Token](docs/getting-a-personal-access-token.md).
+
+`CS_ACCESS_TOKEN` overrides stored OAuth when set (useful for CI).
+
+**Precedence:** `CS_ACCESS_TOKEN` env → config file `access_token` → OAuth.
 
 ## Installation
 

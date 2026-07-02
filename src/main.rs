@@ -1,4 +1,5 @@
 mod api_client;
+mod auth;
 mod business_case;
 mod cli;
 mod config;
@@ -51,10 +52,12 @@ use crate::version_checker::VersionChecker;
 
 const TOKEN_MISSING_MSG: &str = "\
 No access token configured.\n\n\
-To use this tool, set your access token using one of these methods:\n\
+To sign in with OAuth, run:\n\
+  cs auth login --client mcp\n\n\
+You can also set your access token using one of these methods:\n\
 1. Use the `set_config` tool: set_config(key=\"access_token\", value=\"your-token\")\n\
 2. Set the CS_ACCESS_TOKEN environment variable in your MCP client configuration\n\n\
-To get an Access Token, see:\n\
+To get a Personal Access Token, see:\n\
 https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/getting-a-personal-access-token.md";
 
 const _VERSION_NOTICE_SUFFIX: &str = "\n\
@@ -135,6 +138,7 @@ pub(crate) struct ServerDeps {
     pub(crate) cli_runner: Arc<dyn CliRunner>,
     pub(crate) http_client: Arc<dyn HttpClient>,
     pub(crate) validator: Arc<dyn Validator>,
+    pub(crate) credentials: Arc<auth::CredentialResolver>,
 }
 
 #[derive(Clone)]
@@ -147,9 +151,17 @@ pub(crate) struct CodeSceneServer {
     pub(crate) cli_runner: Arc<dyn CliRunner>,
     pub(crate) http_client: Arc<dyn HttpClient>,
     pub(crate) validator: Arc<dyn Validator>,
+    pub(crate) credentials: Arc<auth::CredentialResolver>,
 }
 
 impl CodeSceneServer {
+    pub(crate) async fn ensure_access_token(&self) -> Option<CallToolResult> {
+        if let Err(err) = self.credentials.ensure_fresh().await {
+            tracing::warn!("OAuth token refresh failed: {err}");
+        }
+        self.require_token()
+    }
+
     pub(crate) fn require_token(&self) -> Option<CallToolResult> {
         if std::env::var("CS_ACCESS_TOKEN")
             .map(|v| v.trim().is_empty())
@@ -250,6 +262,7 @@ impl CodeSceneServer {
             cli_runner: deps.cli_runner,
             http_client: deps.http_client,
             validator: deps.validator,
+            credentials: deps.credentials,
         }
     }
 
@@ -546,6 +559,18 @@ async fn main() -> anyhow::Result<()> {
 
     let instance_id = config::instance_id(&config_data);
 
+    let cli_runner = Arc::new(cli::ProductionCliRunner);
+    let oauth_managed = !auth::access_token_configured(&config_data);
+    let credentials = Arc::new(auth::CredentialResolver::new(
+        cli_runner.clone(),
+        oauth_managed,
+    ));
+    if oauth_managed {
+        if let Err(err) = credentials.bootstrap_with_config(&config_data).await {
+            tracing::warn!("OAuth credential bootstrap failed: {err}");
+        }
+    }
+
     let token = std::env::var("CS_ACCESS_TOKEN").unwrap_or_default();
     let is_standalone = !token.is_empty() && license::is_standalone_license(&token);
 
@@ -557,9 +582,10 @@ async fn main() -> anyhow::Result<()> {
         instance_id,
         is_standalone,
         version_checker,
-        cli_runner: Arc::new(cli::ProductionCliRunner),
+        cli_runner,
         http_client: Arc::new(http::ReqwestClient),
         validator: Arc::new(tools::validation::ProductionCliValidator),
+        credentials,
     });
 
     // Covered by e2e test: test_shutdown_during_handshake.py

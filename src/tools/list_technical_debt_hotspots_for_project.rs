@@ -13,7 +13,7 @@ pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: ProjectParam,
 ) -> Result<CallToolResult, ErrorData> {
-    if let Some(r) = server.require_token() {
+    if let Some(r) = server.ensure_access_token().await {
         return Ok(r);
     }
     if server.is_standalone {
@@ -22,8 +22,13 @@ pub(crate) async fn handle(
         ));
     }
     server.version_checker.check_in_background();
+    let creds = Some(server.credentials.as_ref());
 
-    let analysis_id = api_client::get_latest_analysis_id(params.project_id, &*server.http_client)
+    let analysis_id = api_client::get_latest_analysis_id(
+        params.project_id,
+        &*server.http_client,
+        creds,
+    )
         .await
         .map_err(|e| format!("Error fetching latest analysis: {e}"));
     let analysis_id = match analysis_id {
@@ -47,6 +52,7 @@ pub(crate) async fn handle(
         &query_params,
         "result",
         &*server.http_client,
+        creds,
     )
     .await;
     match result {
