@@ -80,6 +80,33 @@ fn config_path(env: &TestEnv) -> String {
         .to_string()
 }
 
+/// Read and parse the rules config file back from disk so tests can assert
+/// that an edit was actually persisted (not just confirmed in the response).
+fn read_config(env: &TestEnv) -> serde_json::Value {
+    let raw = std::fs::read_to_string(config_path(env)).expect("read rules config file");
+    serde_json::from_str(&raw).expect("rules config should be valid JSON")
+}
+
+/// Find the weight of a named rule in the (single) rule set.
+fn rule_weight(config: &serde_json::Value, rule_name: &str) -> Option<f64> {
+    config["rule_sets"][0]["rules"]
+        .as_array()?
+        .iter()
+        .find(|r| r["name"] == rule_name)?
+        .get("weight")?
+        .as_f64()
+}
+
+/// Find the value of a named threshold in the (single) rule set.
+fn threshold_value(config: &serde_json::Value, threshold_name: &str) -> Option<i64> {
+    config["rule_sets"][0]["thresholds"]
+        .as_array()?
+        .iter()
+        .find(|t| t["name"] == threshold_name)?
+        .get("value")?
+        .as_i64()
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -203,20 +230,50 @@ fn assert_edit_confirmed(
     assert_no_errors(&result);
 }
 
-pub fn test_setters_confirm_edits() {
+pub fn test_set_rule_disable_and_enable_persist() {
     let env = rules_config_setup();
     let mut client = start(&env);
     let path = config_path(&env);
 
+    // Sanity: the rule starts enabled (weight 1.0).
+    assert_eq!(rule_weight(&read_config(&env), "Complex Method"), Some(1.0));
+
+    // Disable → weight 0.0 on disk.
     assert_edit_confirmed(
         &mut client,
         "rules_config_set_rule",
-        json!({
-            "rule_name": "Complex Method",
-            "enabled": false,
-            "config_path": path,
-        }),
+        json!({"rule_name": "Complex Method", "enabled": false, "config_path": path}),
         &["complex method", "disabled"],
+    );
+    assert_eq!(
+        rule_weight(&read_config(&env), "Complex Method"),
+        Some(0.0),
+        "disabling a rule should persist weight 0.0"
+    );
+
+    // Re-enable → weight 1.0 on disk.
+    assert_edit_confirmed(
+        &mut client,
+        "rules_config_set_rule",
+        json!({"rule_name": "Complex Method", "enabled": true, "config_path": path}),
+        &["complex method", "enabled"],
+    );
+    assert_eq!(
+        rule_weight(&read_config(&env), "Complex Method"),
+        Some(1.0),
+        "re-enabling a rule should persist weight 1.0"
+    );
+}
+
+pub fn test_set_threshold_persists_value() {
+    let env = rules_config_setup();
+    let mut client = start(&env);
+    let path = config_path(&env);
+
+    // Sanity: starts at the value from the fixture.
+    assert_eq!(
+        threshold_value(&read_config(&env), "function_lines_of_code_warning"),
+        Some(70)
     );
 
     assert_edit_confirmed(
@@ -228,6 +285,38 @@ pub fn test_setters_confirm_edits() {
             "config_path": path,
         }),
         &["function_lines_of_code_warning", "120"],
+    );
+    assert_eq!(
+        threshold_value(&read_config(&env), "function_lines_of_code_warning"),
+        Some(120),
+        "set_threshold should persist the new value to disk"
+    );
+}
+
+pub fn test_set_threshold_rejects_invalid_value() {
+    let env = rules_config_setup();
+    let mut client = start(&env);
+    let path = config_path(&env);
+
+    // Zero is not a positive integer; the CLI must reject it and leave the
+    // file unchanged.
+    let result = call(
+        &mut client,
+        "rules_config_set_threshold",
+        json!({
+            "threshold_name": "function_lines_of_code_warning",
+            "value": 0,
+            "config_path": path,
+        }),
+    );
+    assert!(
+        result.to_lowercase().contains("positive"),
+        "value 0 should be rejected as non-positive, got: {result}"
+    );
+    assert_eq!(
+        threshold_value(&read_config(&env), "function_lines_of_code_warning"),
+        Some(70),
+        "a rejected edit must not modify the file"
     );
 }
 

@@ -588,8 +588,18 @@ fn test_rules_config_list_thresholds_rejects_unknown_language() {
 }
 
 #[test]
-fn test_rules_config_setters_confirm_edits() {
-    tests::rules_config::test_setters_confirm_edits();
+fn test_rules_config_set_rule_disable_and_enable_persist() {
+    tests::rules_config::test_set_rule_disable_and_enable_persist();
+}
+
+#[test]
+fn test_rules_config_set_threshold_persists_value() {
+    tests::rules_config::test_set_threshold_persists_value();
+}
+
+#[test]
+fn test_rules_config_set_threshold_rejects_invalid_value() {
+    tests::rules_config::test_set_threshold_rejects_invalid_value();
 }
 
 #[test]
