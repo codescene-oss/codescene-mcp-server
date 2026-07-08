@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.3",
   "name": "codehealth-mcp",
-  "version": "1.3.7",
+  "version": "1.4.0",
   "description": "CodeScene's Code Health analysis as local AI-friendly tools.",
   "author": {
     "name": "CodeScene",
