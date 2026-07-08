@@ -8,7 +8,6 @@ pub mod code_health_score;
 pub mod code_ownership_for_path;
 pub mod codescene_links;
 pub mod common;
-pub mod validation;
 pub mod download_skill;
 pub mod explain_code_health;
 pub mod explain_code_health_productivity;
@@ -20,9 +19,15 @@ pub mod list_technical_debt_goals_for_project_file;
 pub mod list_technical_debt_hotspots_for_project;
 pub mod list_technical_debt_hotspots_for_project_file;
 pub mod pre_commit_code_health_safeguard;
+pub mod rules_config;
+pub mod rules_config_list_thresholds;
+pub mod rules_config_set_rule;
+pub mod rules_config_set_threshold;
+pub mod rules_config_validate;
 pub mod select_project;
 pub mod set_config;
 pub mod sync_skills;
+pub mod validation;
 pub mod verify_installation;
 
 /// Optional context parameter used by explain tools.
@@ -105,6 +110,73 @@ pub struct SetConfigParam {
 
     /// The value to store. Pass an empty string to remove the key.
     pub value: String,
+}
+
+/// Parameters for `rules_config_validate` — validate a Code Health rules file.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct RulesConfigValidateParam {
+    /// Absolute path to the `code-health-rules.json` file to validate.
+    /// Omit to use `.codescene/code-health-rules.json` in the current git repo.
+    #[serde(default)]
+    pub config_path: Option<String>,
+}
+
+/// Parameters for `rules_config_list_thresholds` — list a language's default
+/// Code Health thresholds.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct RulesConfigListThresholdsParam {
+    /// Language name whose default Code Health thresholds should be listed
+    /// (e.g., "Python", "JavaScript", "Java", "C#").
+    pub language: String,
+
+    /// Absolute path to the `code-health-rules.json` file to read overrides
+    /// from. Omit to use `.codescene/code-health-rules.json` in the current
+    /// git repo, or to show built-in defaults when no config exists.
+    #[serde(default)]
+    pub config_path: Option<String>,
+}
+
+/// Parameters for `rules_config_set_rule` — enable or disable a Code Health
+/// rule in a rules file.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct RulesConfigSetRuleParam {
+    /// Name of the Code Health rule to toggle (e.g., "Complex Method").
+    pub rule_name: String,
+
+    /// Whether the rule should be enabled (`true`) or disabled (`false`).
+    pub enabled: bool,
+
+    /// Glob selecting which rule set to edit (e.g., "**/*.js"). Required only
+    /// when the config defines multiple rule sets; omit for a single rule set.
+    #[serde(default)]
+    pub matching_content_path: Option<String>,
+
+    /// Absolute path to the `code-health-rules.json` file to edit. Omit to use
+    /// `.codescene/code-health-rules.json` in the current git repo.
+    #[serde(default)]
+    pub config_path: Option<String>,
+}
+
+/// Parameters for `rules_config_set_threshold` — set a Code Health threshold
+/// value in a rules file.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct RulesConfigSetThresholdParam {
+    /// Name of the Code Health threshold to set
+    /// (e.g., "function_lines_of_code_warning").
+    pub threshold_name: String,
+
+    /// New threshold value. Must be a positive integer.
+    pub value: u32,
+
+    /// Glob selecting which rule set to edit (e.g., "**/*.js"). Required only
+    /// when the config defines multiple rule sets; omit for a single rule set.
+    #[serde(default)]
+    pub matching_content_path: Option<String>,
+
+    /// Absolute path to the `code-health-rules.json` file to edit. Omit to use
+    /// `.codescene/code-health-rules.json` in the current git repo.
+    #[serde(default)]
+    pub config_path: Option<String>,
 }
 
 /// Parameters for get_skill_manifest.
@@ -231,6 +303,38 @@ mod tests {
         let json = r#"{"skill_name": "my-skill"}"#;
         let p: SkillNameParam = serde_json::from_str(json).unwrap();
         assert_eq!(p.skill_name, "my-skill");
+    }
+
+    #[test]
+    fn rules_config_validate_param_defaults_config_path_to_none() {
+        let p: RulesConfigValidateParam = serde_json::from_str("{}").unwrap();
+        assert!(p.config_path.is_none());
+    }
+
+    #[test]
+    fn rules_config_list_thresholds_param_deserializes() {
+        let json = r#"{"language": "Python"}"#;
+        let p: RulesConfigListThresholdsParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.language, "Python");
+        assert!(p.config_path.is_none());
+    }
+
+    #[test]
+    fn rules_config_set_rule_param_deserializes() {
+        let json = r#"{"rule_name": "Complex Method", "enabled": false}"#;
+        let p: RulesConfigSetRuleParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.rule_name, "Complex Method");
+        assert!(!p.enabled);
+        assert!(p.matching_content_path.is_none());
+        assert!(p.config_path.is_none());
+    }
+
+    #[test]
+    fn rules_config_set_threshold_param_deserializes() {
+        let json = r#"{"threshold_name": "function_lines_of_code_warning", "value": 120}"#;
+        let p: RulesConfigSetThresholdParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.threshold_name, "function_lines_of_code_warning");
+        assert_eq!(p.value, 120);
     }
 
     #[test]

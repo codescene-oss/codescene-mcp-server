@@ -25,7 +25,9 @@ fn run_score_test(repo_dir: &Path, file_path: &str) -> String {
 }
 
 pub fn test_absolute_paths() {
-    if is_docker() { return skip_if_docker("platform paths require host filesystem"); }
+    if is_docker() {
+        return skip_if_docker("platform paths require host filesystem");
+    }
     let (_, _, repo_dir, _tmp) = setup();
     let abs_path = repo_dir
         .join("src/utils/calculator.py")
@@ -43,7 +45,9 @@ pub fn test_absolute_paths() {
 }
 
 pub fn test_relative_paths() {
-    if is_docker() { return skip_if_docker("platform paths require host filesystem"); }
+    if is_docker() {
+        return skip_if_docker("platform paths require host filesystem");
+    }
     let (command, env, repo_dir, _tmp) = setup();
     let mut client = make_client(&command, &env, &repo_dir);
     assert!(client.start(), "Server should start");
@@ -67,7 +71,9 @@ pub fn test_relative_paths() {
 }
 
 pub fn test_symlinks() {
-    if is_docker() { return skip_if_docker("platform paths require host filesystem"); }
+    if is_docker() {
+        return skip_if_docker("platform paths require host filesystem");
+    }
     if cfg!(windows) {
         eprintln!("  SKIP: Symlink test skipped on Windows");
         return;
@@ -105,7 +111,9 @@ pub fn test_symlinks() {
 }
 
 pub fn test_spaces_in_paths() {
-    if is_docker() { return skip_if_docker("platform paths require host filesystem"); }
+    if is_docker() {
+        return skip_if_docker("platform paths require host filesystem");
+    }
     let (command, env, _, _tmp) = setup();
     let temp = create_temp_dir("cs_mcp_spaces_").expect("temp dir");
     let dir = temp.path().join("directory with spaces");
@@ -126,7 +134,10 @@ pub fn test_spaces_in_paths() {
         .expect("Tool call should succeed");
 
     let result = extract_result_text(&response);
-    assert!(!result.is_empty(), "Should return content for path with spaces");
+    assert!(
+        !result.is_empty(),
+        "Should return content for path with spaces"
+    );
     assert!(
         !result.contains("Traceback"),
         "Should not contain crash errors"
@@ -134,14 +145,21 @@ pub fn test_spaces_in_paths() {
 }
 
 pub fn test_unicode_in_paths() {
-    if is_docker() { return skip_if_docker("platform paths require host filesystem"); }
+    if is_docker() {
+        return skip_if_docker("platform paths require host filesystem");
+    }
     let (command, env, _, _tmp) = setup();
     let temp = create_temp_dir("cs_mcp_unicode_").expect("temp dir");
-    let dir = temp.path().join("t\u{00eb}st_\u{30c7}\u{30a3}\u{30ec}\u{30af}\u{30c8}\u{30ea}");
+    let dir = temp
+        .path()
+        .join("t\u{00eb}st_\u{30c7}\u{30a3}\u{30ec}\u{30af}\u{30c8}\u{30ea}");
     std::fs::create_dir_all(&dir).expect("create dir");
     let file = dir.join("f\u{00ee}l\u{00e9}_\u{30d5}\u{30a1}\u{30a4}\u{30eb}.py");
-    std::fs::write(&file, "def unicode_function():\n    return '\u{0442}\u{0435}\u{0441}\u{0442}'\n")
-        .expect("write");
+    std::fs::write(
+        &file,
+        "def unicode_function():\n    return '\u{0442}\u{0435}\u{0441}\u{0442}'\n",
+    )
+    .expect("write");
 
     let mut client = make_client(&command, &env, temp.path());
     assert!(client.start(), "Server should start");

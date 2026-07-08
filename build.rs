@@ -7,7 +7,6 @@
 /// Security: downloaded CLI zips are verified against SHA-256 checksums
 /// committed in `cli-checksums.sha256`. Update that file when upgrading
 /// the CLI version.
-
 use std::collections::HashMap;
 
 fn main() {
@@ -72,13 +71,7 @@ fn download_cli() {
     eprintln!("Downloading CS CLI from {url}");
 
     let status = std::process::Command::new("curl")
-        .args([
-            "--proto", "=https",
-            "--tlsv1.2",
-            "-fsSL",
-            "-o", &dest,
-            &url,
-        ])
+        .args(["--proto", "=https", "--tlsv1.2", "-fsSL", "-o", &dest, &url])
         .status()
         .expect("failed to run curl");
 
@@ -157,8 +150,8 @@ impl Sha256 {
     fn new() -> Self {
         Self {
             state: [
-                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c,
-                0x1f83d9ab, 0x5be0cd19,
+                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+                0x5be0cd19,
             ],
             buffer: Vec::new(),
             total_len: 0,
@@ -302,7 +295,9 @@ const CLI_VERSION: &str = "85b8510ee92608031e843acb8e374c3995e1d731";
 
 fn cli_download_url() -> String {
     let (os_part, arch_part) = cli_platform_parts();
-    format!("https://downloads.codescene.io/enterprise/cli/cs-{os_part}-{arch_part}-{CLI_VERSION}.zip")
+    format!(
+        "https://downloads.codescene.io/enterprise/cli/cs-{os_part}-{arch_part}-{CLI_VERSION}.zip"
+    )
 }
 
 fn cli_zip_filename() -> String {

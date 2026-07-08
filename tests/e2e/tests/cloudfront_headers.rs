@@ -3,8 +3,8 @@
 //! Validates that outgoing requests include the expected User-Agent,
 //! Accept, and Authorization headers.
 
-use super::*;
 use super::fake_https_server::{CapturedRequest, FakeHttpsServer};
+use super::*;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -44,7 +44,10 @@ fn setup_headers_test() -> (FakeHttpsServer, MCPClient, tempfile::TempDir) {
         .into_iter()
         .chain([
             ("CS_ONPREM_URL".to_string(), server.url()),
-            ("CS_ACCESS_TOKEN".to_string(), "test-token-for-header-check".to_string()),
+            (
+                "CS_ACCESS_TOKEN".to_string(),
+                "test-token-for-header-check".to_string(),
+            ),
             ("CS_DISABLE_VERSION_CHECK".to_string(), "1".to_string()),
             ("CS_DISABLE_TRACKING".to_string(), "1".to_string()),
             (
@@ -89,7 +92,9 @@ fn assert_expected_headers(req: &CapturedRequest) {
 }
 
 pub fn test_api_client_headers() {
-    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
+    if is_docker() {
+        return skip_if_docker("HTTPS server on host unreachable from container");
+    }
 
     let (server, mut client, _tmp) = setup_headers_test();
 
@@ -100,7 +105,10 @@ pub fn test_api_client_headers() {
     server.shutdown();
 
     let requests = server.get_requests();
-    assert!(!requests.is_empty(), "Server should have received at least one request");
+    assert!(
+        !requests.is_empty(),
+        "Server should have received at least one request"
+    );
 
     for req in &requests {
         assert_expected_headers(req);

@@ -9,18 +9,18 @@
 //! - `CS_ACCESS_TOKEN` environment variable set
 //! - `git` available in PATH
 
-mod mcp_client;
-mod server_backends;
-mod fixtures;
 mod file_utils;
+mod fixtures;
+mod mcp_client;
 mod response_parsers;
+mod server_backends;
 mod tests;
 
-use mcp_client::MCPClient;
-use server_backends::{base_env, create_backend};
-use fixtures::{get_sample_files, get_expected_scores};
 use file_utils::{create_git_repo, create_temp_dir};
-use response_parsers::{extract_result_text, extract_code_health_score};
+use fixtures::{get_expected_scores, get_sample_files};
+use mcp_client::MCPClient;
+use response_parsers::{extract_code_health_score, extract_result_text};
+use server_backends::{base_env, create_backend};
 
 use serde_json::json;
 use std::path::Path;
@@ -61,7 +61,11 @@ pub fn find_or_build_executable() -> std::path::PathBuf {
     }
 
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let binary_name = if cfg!(windows) { "cs-mcp.exe" } else { "cs-mcp" };
+    let binary_name = if cfg!(windows) {
+        "cs-mcp.exe"
+    } else {
+        "cs-mcp"
+    };
     let release_binary = repo_root.join("target").join("release").join(binary_name);
 
     if release_binary.exists() {
@@ -274,12 +278,18 @@ fn assert_documentation_tool(tool_name: &str, expected_terms: &[&str]) {
 
     let lower = result_text.to_lowercase();
     let terms_found = expected_terms.iter().filter(|t| lower.contains(*t)).count();
-    assert!(terms_found >= 2, "Should contain expected terms for {tool_name}");
+    assert!(
+        terms_found >= 2,
+        "Should contain expected terms for {tool_name}"
+    );
 }
 
 #[test]
 fn test_explain_code_health() {
-    assert_documentation_tool("explain_code_health", &["code health", "maintainability", "quality"]);
+    assert_documentation_tool(
+        "explain_code_health",
+        &["code health", "maintainability", "quality"],
+    );
 }
 
 #[test]
@@ -346,10 +356,7 @@ fn test_verify_reports_git_repository() {
         lower.contains("[pass] git repository"),
         "Git repository check should pass"
     );
-    assert!(
-        lower.contains("git root"),
-        "Should report git root path"
-    );
+    assert!(lower.contains("git root"), "Should report git root path");
 }
 
 #[test]
@@ -557,6 +564,57 @@ fn test_config_http_rejection_does_not_persist() {
 #[test]
 fn test_config_non_url_key_unaffected() {
     tests::configure::test_set_config_non_url_key_unaffected();
+}
+
+// --- Rules Config ---
+#[test]
+fn test_rules_config_tools_listed() {
+    tests::rules_config::test_rules_config_tools_listed();
+}
+
+#[test]
+fn test_rules_config_validate_reports_valid_config() {
+    tests::rules_config::test_validate_reports_valid_config();
+}
+
+#[test]
+fn test_rules_config_list_thresholds_returns_defaults() {
+    tests::rules_config::test_list_thresholds_returns_defaults();
+}
+
+#[test]
+fn test_rules_config_list_thresholds_rejects_unknown_language() {
+    tests::rules_config::test_list_thresholds_rejects_unknown_language();
+}
+
+#[test]
+fn test_rules_config_set_rule_disable_and_enable_persist() {
+    tests::rules_config::test_set_rule_disable_and_enable_persist();
+}
+
+#[test]
+fn test_rules_config_set_threshold_persists_value() {
+    tests::rules_config::test_set_threshold_persists_value();
+}
+
+#[test]
+fn test_rules_config_set_threshold_rejects_invalid_value() {
+    tests::rules_config::test_set_threshold_rejects_invalid_value();
+}
+
+#[test]
+fn test_rules_config_set_then_validate_roundtrip() {
+    tests::rules_config::test_set_then_validate_roundtrip();
+}
+
+#[test]
+fn test_rules_config_relative_config_path_is_rejected() {
+    tests::rules_config::test_relative_config_path_is_rejected();
+}
+
+#[test]
+fn test_rules_config_works_without_access_token() {
+    tests::rules_config::test_works_without_access_token();
 }
 
 // --- Standalone License ---

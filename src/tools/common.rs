@@ -48,10 +48,14 @@ async fn refresh_git_index(repo_path: &Path) {
     }
     let _ = git_cmd
         .args([
-            "-c", "core.fsmonitor=",
-            "-c", "core.sshCommand=echo",
-            "-c", "core.hooksPath=/dev/null",
-            "update-index", "--refresh",
+            "-c",
+            "core.fsmonitor=",
+            "-c",
+            "core.sshCommand=echo",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "update-index",
+            "--refresh",
         ])
         .current_dir(repo_path)
         .output()
@@ -135,7 +139,11 @@ mod tests {
 
     #[test]
     fn resolve_file_path_absolute_stays_unchanged() {
-        let input = if cfg!(windows) { r"C:\absolute\path\file.rs" } else { "/absolute/path/file.rs" };
+        let input = if cfg!(windows) {
+            r"C:\absolute\path\file.rs"
+        } else {
+            "/absolute/path/file.rs"
+        };
         let p = resolve_file_path(Path::new(input));
         assert_eq!(p, input);
     }
@@ -180,7 +188,10 @@ mod tests {
     fn reject_flag_like_rejects_single_dash() {
         let err = reject_flag_like("-o/tmp/evil", "file_path");
         assert!(err.is_err());
-        assert!(err.unwrap_err().to_string().contains("must not start with '-'"));
+        assert!(err
+            .unwrap_err()
+            .to_string()
+            .contains("must not start with '-'"));
     }
 
     #[test]
@@ -204,7 +215,10 @@ mod tests {
         // make_cli_path. We test run_delta which is easier to trigger.
         let result = run_delta(Path::new("/tmp"), Some("--output=/tmp/evil"), &cli).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("must not start with '-'"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("must not start with '-'"));
     }
 
     #[tokio::test]
@@ -217,14 +231,20 @@ mod tests {
 
         #[async_trait::async_trait]
         impl CliRunner for CapturingCli {
-            async fn run(&self, args: &[&str], _working_dir: Option<&Path>) -> Result<String, errors::CliError> {
+            async fn run(
+                &self,
+                args: &[&str],
+                _working_dir: Option<&Path>,
+            ) -> Result<String, errors::CliError> {
                 *self.captured.lock().unwrap() = args.iter().map(|s| s.to_string()).collect();
                 Ok("{}".to_string())
             }
         }
 
         let captured = Arc::new(Mutex::new(Vec::new()));
-        let cli = CapturingCli { captured: captured.clone() };
+        let cli = CapturingCli {
+            captured: captured.clone(),
+        };
         let _ = run_delta(Path::new("/tmp"), Some("main"), &cli).await;
         let args = captured.lock().unwrap();
         assert_eq!(args.as_slice(), &["delta", "--output-format=json", "main"]);

@@ -111,7 +111,9 @@ mod tests {
 
     #[test]
     fn cli_error_license_check_failed_display() {
-        let err = CliError::LicenseCheckFailed { stderr: "License check failed".into() };
+        let err = CliError::LicenseCheckFailed {
+            stderr: "License check failed".into(),
+        };
         assert!(err
             .to_string()
             .contains("Access token is invalid or expired"));
@@ -185,11 +187,14 @@ mod tests {
             CliError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "x")).kind(),
             "io"
         );
+        assert_eq!(CliError::InvalidInput("bad".into()).kind(), "invalid_input");
         assert_eq!(
-            CliError::InvalidInput("bad".into()).kind(),
-            "invalid_input"
+            CliError::LicenseCheckFailed {
+                stderr: String::new()
+            }
+            .kind(),
+            "license_check_failed"
         );
-        assert_eq!(CliError::LicenseCheckFailed { stderr: String::new() }.kind(), "license_check_failed");
     }
 
     #[test]

@@ -60,8 +60,8 @@ impl FakeHttpsServer {
             .install_default()
             .ok(); // ignore if already installed
         let (certs, tls_config) = build_tls_config(cert_dir);
-        let listener = TcpListener::bind(format!("{}:0", super::fake_server_bind_host()))
-            .expect("bind HTTPS");
+        let listener =
+            TcpListener::bind(format!("{}:0", super::fake_server_bind_host())).expect("bind HTTPS");
         let port = listener.local_addr().unwrap().port();
         listener.set_nonblocking(true).unwrap();
 
@@ -73,12 +73,17 @@ impl FakeHttpsServer {
         let handler: Arc<dyn Fn(&CapturedRequest) -> (u16, String) + Send + Sync> =
             Arc::new(handler);
 
-        thread::spawn(move || serve_loop(listener, ServerState {
-            tls_config: acceptor,
-            shutdown: stop,
-            captured: reqs,
-            handler,
-        }));
+        thread::spawn(move || {
+            serve_loop(
+                listener,
+                ServerState {
+                    tls_config: acceptor,
+                    shutdown: stop,
+                    captured: reqs,
+                    handler,
+                },
+            )
+        });
 
         FakeHttpsServer {
             port,
@@ -149,30 +154,29 @@ fn build_tls_config(cert_dir: &Path) -> (GeneratedCerts, rustls::ServerConfig) {
         "localhost".to_string(),
         "host.docker.internal".to_string(),
     ])
-        .expect("server params");
-    server_params.subject_alt_names.push(rcgen::SanType::IpAddress(
-        std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
-    ));
+    .expect("server params");
+    server_params
+        .subject_alt_names
+        .push(rcgen::SanType::IpAddress(std::net::IpAddr::V4(
+            std::net::Ipv4Addr::new(127, 0, 0, 1),
+        )));
 
     let server_key = rcgen::KeyPair::generate().expect("server key");
     let server_cert = server_params
         .signed_by(&server_key, &issuer)
         .expect("sign server cert");
 
-    let cert_chain = vec![
-        rustls::pki_types::CertificateDer::from(server_cert.der().to_vec()),
-    ];
-    let private_key =
-        rustls::pki_types::PrivateKeyDer::Pkcs8(server_key.serialize_der().into());
+    let cert_chain = vec![rustls::pki_types::CertificateDer::from(
+        server_cert.der().to_vec(),
+    )];
+    let private_key = rustls::pki_types::PrivateKeyDer::Pkcs8(server_key.serialize_der().into());
 
     let config = rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(cert_chain, private_key)
         .expect("rustls server config");
 
-    let certs = GeneratedCerts {
-        ca_cert_path,
-    };
+    let certs = GeneratedCerts { ca_cert_path };
     (certs, config)
 }
 
@@ -244,7 +248,9 @@ fn parse_request_line(reader: &mut impl BufRead) -> Option<(String, String)> {
     let mut line = String::new();
     reader.read_line(&mut line).ok()?;
     let parts: Vec<&str> = line.trim().split_whitespace().collect();
-    if parts.len() < 2 { return None; }
+    if parts.len() < 2 {
+        return None;
+    }
     Some((parts[0].to_string(), parts[1].to_string()))
 }
 
@@ -256,7 +262,9 @@ fn parse_headers(reader: &mut impl BufRead) -> (Vec<(String, String)>, usize) {
         if reader.read_line(&mut line).is_err() || line.trim().is_empty() {
             break;
         }
-        let Some((k, v)) = line.trim().split_once(':') else { continue };
+        let Some((k, v)) = line.trim().split_once(':') else {
+            continue;
+        };
         let key = k.trim().to_string();
         let val = v.trim().to_string();
         if key.eq_ignore_ascii_case("content-length") {

@@ -79,10 +79,7 @@ pub fn test_list_resources() {
         resources.len()
     );
 
-    let uris: Vec<&str> = resources
-        .iter()
-        .filter_map(|r| r["uri"].as_str())
-        .collect();
+    let uris: Vec<&str> = resources.iter().filter_map(|r| r["uri"].as_str()).collect();
 
     for name in EXPECTED_SKILL_NAMES {
         let skill_uri = format!("skill://{name}/SKILL.md");
@@ -108,7 +105,10 @@ pub fn test_list_resources() {
     );
 
     assert!(
-        sample.get("description").and_then(|v| v.as_str()).is_some_and(|d| !d.is_empty()),
+        sample
+            .get("description")
+            .and_then(|v| v.as_str())
+            .is_some_and(|d| !d.is_empty()),
         "SKILL.md should have a non-empty description"
     );
 }
@@ -187,9 +187,7 @@ pub fn test_read_manifest() {
     let size = file_entry["size"].as_u64().unwrap_or(0);
     assert!(size > 0, "File should have positive size, got: {size}");
 
-    let hash = file_entry["hash"]
-        .as_str()
-        .unwrap_or("");
+    let hash = file_entry["hash"].as_str().unwrap_or("");
     assert!(
         hash.starts_with("sha256:"),
         "File should have sha256 hash, got: '{hash}'"
@@ -223,10 +221,7 @@ pub fn test_read_error_cases() {
     let (command, env, repo_dir, _tmp) = setup();
     let mut client = start_and_initialize(&command, &env, &repo_dir);
 
-    let error_uris = [
-        "skill://nonexistent-skill/SKILL.md",
-        "file:///etc/passwd",
-    ];
+    let error_uris = ["skill://nonexistent-skill/SKILL.md", "file:///etc/passwd"];
 
     for uri in error_uris {
         let response = client
@@ -255,10 +250,7 @@ pub fn test_list_skills_tool() {
         content.contains(&expected_header),
         "Should list correct skill count"
     );
-    assert!(
-        content.contains(TEST_SKILL),
-        "Should contain {TEST_SKILL}"
-    );
+    assert!(content.contains(TEST_SKILL), "Should contain {TEST_SKILL}");
 }
 
 pub fn test_get_skill_manifest_tool() {

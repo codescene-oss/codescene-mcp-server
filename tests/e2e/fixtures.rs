@@ -348,10 +348,7 @@ pub fn get_sample_files() -> HashMap<&'static str, &'static str> {
     files.insert("src/services/order_processor.py", COMPLEX_PYTHON_CODE);
     files.insert("src/auth/AuthService.js", JAVASCRIPT_CODE);
     files.insert("src/services/order_processor.js", COMPLEX_JAVASCRIPT_CODE);
-    files.insert(
-        "src/main/java/com/example/OrderProcessor.java",
-        JAVA_CODE,
-    );
+    files.insert("src/main/java/com/example/OrderProcessor.java", JAVA_CODE);
     files
 }
 

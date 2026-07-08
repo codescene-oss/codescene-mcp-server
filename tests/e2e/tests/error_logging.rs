@@ -7,8 +7,8 @@
 //! 4. Respects `CS_LOG_RETENTION_DAYS=0` to disable file logging
 //! 5. Includes file extension detail for unsupported file types
 
-use super::*;
 use super::fake_https_server::FakeHttpsServer;
+use super::*;
 
 const SAFE_ERROR_KINDS: &[&str] = &[
     "non_zero_exit",

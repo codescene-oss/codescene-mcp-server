@@ -1,7 +1,7 @@
 # Tools
 
-The CodeScene MCP Server provides 20 tools organized into three categories:
-**Code Health Analysis**, **Technical Debt & Project Insights**, and **Server Management**.
+The CodeScene MCP Server provides 24 tools organized into four categories:
+**Code Health Analysis**, **Code Health Rules Configuration**, **Technical Debt & Project Insights**, and **Server Management**.
 
 Tools marked **All Users** work with any valid license (standalone or API-connected).
 Tools marked **CodeScene Core users (cloud or on-prem)** require a CodeScene API Personal Access Token and a CodeScene Core users (cloud or on-prem) instance — they are not available when running with a standalone license.
@@ -39,6 +39,34 @@ Run a branch-level Code Health review for all files that differ between the curr
 **Availability:** All Users
 
 Generate a data-driven business case for refactoring a source file. Returns quantified predictions tied to the file's current Code Health, including optimistic and pessimistic outcome estimates for improvements in development speed and defect reduction, with a 90% confidence interval.
+
+## Code Health Rules Configuration
+
+These tools validate and edit `code-health-rules.json` files, which customize CodeScene's Code Health analysis by adjusting rule weights and thresholds. They are local, filesystem-only operations using the embedded CodeScene CLI and require no access token. When a `config_path` is provided it must be an absolute path; otherwise the CLI uses `.codescene/code-health-rules.json` in the current git repository.
+
+### `rules_config_validate`
+
+**Availability:** All Users
+
+Validate a Code Health rules configuration file. Use after creating or editing a rules file to confirm it is well-formed. Returns a status and a human-readable summary of the number of rule sets, rule overrides, and threshold overrides.
+
+### `rules_config_list_thresholds`
+
+**Availability:** All Users
+
+List the default Code Health thresholds for a programming language (e.g., Python, JavaScript, Java, C#). Use to discover the built-in threshold names and default values before overriding any of them. Returns a JSON object keyed by rule-set name, each with a `thresholds` array of `{ name, value }` entries.
+
+### `rules_config_set_rule`
+
+**Availability:** All Users
+
+Enable or disable a Code Health rule in a rules file. Disabling a rule removes its impact from the Code Health score. Writes to the rules file and returns a confirmation naming the rule, its new state, and the edited rule set. `matching_content_path` is required only when the file defines multiple rule sets.
+
+### `rules_config_set_threshold`
+
+**Availability:** All Users
+
+Set a Code Health threshold value in a rules file (for example, the number of lines at which a function is flagged as a "Large Method"). The value must be a positive integer. Writes to the rules file and returns a confirmation naming the threshold, its new value, and the edited rule set. `matching_content_path` is required only when the file defines multiple rule sets.
 
 ## Technical Debt & Project Insights
 
@@ -147,6 +175,10 @@ Describes how to build a business case for Code Health improvements. Covers empi
 | `pre_commit_code_health_safeguard` | All Users |
 | `analyze_change_set` | All Users |
 | `code_health_refactoring_business_case` | All Users |
+| `rules_config_validate` | All Users |
+| `rules_config_list_thresholds` | All Users |
+| `rules_config_set_rule` | All Users |
+| `rules_config_set_threshold` | All Users |
 | `select_project` | CodeScene Core users (cloud or on-prem) |
 | `list_technical_debt_hotspots_for_project` | CodeScene Core users (cloud or on-prem) |
 | `list_technical_debt_hotspots_for_project_file` | CodeScene Core users (cloud or on-prem) |

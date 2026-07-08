@@ -15,7 +15,13 @@ const TOOL_NAME: &str = "code_health_refactoring_business_case";
 const TEST_FILE: &str = "src/services/order_processor.py";
 const TIMEOUT: Duration = Duration::from_secs(60);
 
-const BUSINESS_CASE_TERMS: &[&str] = &["defect", "development", "optimistic", "pessimistic", "scenario"];
+const BUSINESS_CASE_TERMS: &[&str] = &[
+    "defect",
+    "development",
+    "optimistic",
+    "pessimistic",
+    "scenario",
+];
 const ERROR_PATTERNS: &[&str] = &["no such file or directory", "os error 2", "traceback"];
 
 fn call_business_case(client: &mut MCPClient, repo_dir: &Path) -> String {

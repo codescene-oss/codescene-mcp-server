@@ -54,7 +54,10 @@ fn enabled_tools_setup() -> (
 
     let base = base_env();
     let mut env_map = backend.get_env(&base, &repo_dir);
-    env_map.insert("CS_CONFIG_DIR".to_string(), docker_config_dir(&config_dir, &repo_dir));
+    env_map.insert(
+        "CS_CONFIG_DIR".to_string(),
+        docker_config_dir(&config_dir, &repo_dir),
+    );
 
     let env_vec: Vec<(String, String)> = env_map.into_iter().collect();
     let command = backend.get_command(&repo_dir);
@@ -93,10 +96,23 @@ pub fn test_all_tools_without_filter() {
 
     assert!(names.contains("get_config"), "get_config should be listed");
     assert!(names.contains("set_config"), "set_config should be listed");
-    assert!(names.contains("code_health_review"), "code_health_review should be listed");
-    assert!(names.contains("code_health_score"), "code_health_score should be listed");
-    assert!(names.contains("explain_code_health"), "explain_code_health should be listed");
-    assert!(names.len() >= 10, "Expected >= 10 tools, found {}", names.len());
+    assert!(
+        names.contains("code_health_review"),
+        "code_health_review should be listed"
+    );
+    assert!(
+        names.contains("code_health_score"),
+        "code_health_score should be listed"
+    );
+    assert!(
+        names.contains("explain_code_health"),
+        "explain_code_health should be listed"
+    );
+    assert!(
+        names.len() >= 10,
+        "Expected >= 10 tools, found {}",
+        names.len()
+    );
 }
 
 #[test]
@@ -111,12 +127,27 @@ pub fn test_filter_restricts_tools() {
 
     let names = get_tool_names(&mut client);
 
-    assert!(names.contains("code_health_review"), "code_health_review listed");
-    assert!(names.contains("code_health_score"), "code_health_score listed");
+    assert!(
+        names.contains("code_health_review"),
+        "code_health_review listed"
+    );
+    assert!(
+        names.contains("code_health_score"),
+        "code_health_score listed"
+    );
     assert!(names.contains("get_config"), "get_config always listed");
     assert!(names.contains("set_config"), "set_config always listed");
-    assert!(!names.contains("explain_code_health"), "explain_code_health should NOT be listed");
-    assert_eq!(names.len(), 4, "Expected exactly 4 tools, found {}: {:?}", names.len(), names);
+    assert!(
+        !names.contains("explain_code_health"),
+        "explain_code_health should NOT be listed"
+    );
+    assert_eq!(
+        names.len(),
+        4,
+        "Expected exactly 4 tools, found {}: {:?}",
+        names.len(),
+        names
+    );
 }
 
 #[test]
@@ -133,7 +164,10 @@ pub fn test_config_tools_always_present() {
 
     assert!(names.contains("get_config"), "get_config always present");
     assert!(names.contains("set_config"), "set_config always present");
-    assert!(names.contains("explain_code_health"), "explain_code_health present");
+    assert!(
+        names.contains("explain_code_health"),
+        "explain_code_health present"
+    );
 }
 
 fn call_config_tool(tool_name: &str, args: serde_json::Value) -> String {
@@ -150,10 +184,14 @@ pub fn test_set_enabled_tools_restart_warning() {
     let text = call_config_tool(
         "set_config",
         json!({"key": "enabled_tools", "value": "code_health_review,code_health_score"}),
-    ).to_lowercase();
+    )
+    .to_lowercase();
 
     assert!(text.contains("saved"), "Response should mention 'saved'");
-    assert!(text.contains("restart"), "Response should mention 'restart'");
+    assert!(
+        text.contains("restart"),
+        "Response should mention 'restart'"
+    );
 }
 
 #[test]
@@ -161,9 +199,13 @@ pub fn test_set_invalid_tool_name_warning() {
     let text = call_config_tool(
         "set_config",
         json!({"key": "enabled_tools", "value": "code_health_review,nonexistent_tool"}),
-    ).to_lowercase();
+    )
+    .to_lowercase();
 
-    assert!(text.contains("nonexistent_tool"), "Should mention the invalid tool name");
+    assert!(
+        text.contains("nonexistent_tool"),
+        "Should mention the invalid tool name"
+    );
     assert!(text.contains("unrecognized"), "Should say 'unrecognized'");
 }
 
@@ -171,6 +213,12 @@ pub fn test_set_invalid_tool_name_warning() {
 pub fn test_get_enabled_tools_shows_available() {
     let text = call_config_tool("get_config", json!({"key": "enabled_tools"}));
 
-    assert!(text.contains("available_tools"), "Response should contain 'available_tools'");
-    assert!(text.contains("code_health_review"), "Should list code_health_review");
+    assert!(
+        text.contains("available_tools"),
+        "Response should contain 'available_tools'"
+    );
+    assert!(
+        text.contains("code_health_review"),
+        "Should list code_health_review"
+    );
 }

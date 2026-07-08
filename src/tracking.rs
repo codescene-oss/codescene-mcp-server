@@ -116,7 +116,9 @@ fn tracking_url() -> Option<String> {
         })
         .unwrap_or_else(|_| Ok(DEFAULT_API_URL.to_string()));
 
-    api_url.ok().map(|base| format!("{base}/v2/analytics/track"))
+    api_url
+        .ok()
+        .map(|base| format!("{base}/v2/analytics/track"))
 }
 
 fn tracking_environment() -> String {
@@ -265,7 +267,10 @@ mod tests {
     fn tracking_environment_uses_detected_environment_when_unset() {
         let _lock = config::lock_test_env();
         std::env::remove_var("CS_ENVIRONMENT");
-        assert_eq!(tracking_environment(), crate::environment::detect().to_string());
+        assert_eq!(
+            tracking_environment(),
+            crate::environment::detect().to_string()
+        );
     }
 
     #[test]
@@ -280,7 +285,10 @@ mod tests {
     fn tracking_environment_ignores_blank_override() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_ENVIRONMENT", "   ");
-        assert_eq!(tracking_environment(), crate::environment::detect().to_string());
+        assert_eq!(
+            tracking_environment(),
+            crate::environment::detect().to_string()
+        );
         std::env::remove_var("CS_ENVIRONMENT");
     }
 
@@ -443,8 +451,10 @@ mod tests {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_TRACKING", "1");
         track_error(&ErrorEvent {
-            error_kind: "some error", tool_name: "some-tool",
-            instance_id: "test-instance", detail: None,
+            error_kind: "some error",
+            tool_name: "some-tool",
+            instance_id: "test-instance",
+            detail: None,
         });
         std::env::remove_var("CS_DISABLE_TRACKING");
     }
@@ -462,16 +472,20 @@ mod tests {
     async fn track_event_enabled_spawns_without_panic() {
         run_with_tracking_enabled(|| {
             track_event("test-enabled", json!({"key": "val"}), "test-id");
-        }).await;
+        })
+        .await;
     }
 
     #[tokio::test]
     async fn track_error_enabled_spawns_without_panic() {
         run_with_tracking_enabled(|| {
             track_error(&ErrorEvent {
-                error_kind: "err msg", tool_name: "tool-name",
-                instance_id: "test-id", detail: Some(".txt"),
+                error_kind: "err msg",
+                tool_name: "tool-name",
+                instance_id: "test-id",
+                detail: Some(".txt"),
             });
-        }).await;
+        })
+        .await;
     }
 }

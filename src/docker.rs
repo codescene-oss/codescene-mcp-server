@@ -60,6 +60,14 @@ fn docker_mount_path() -> Option<String> {
     std::env::var("CS_MOUNT_PATH").ok()
 }
 
+/// The container-side directory where the user's workspace is bind-mounted,
+/// or `None` when not running inside Docker. Tools that need a working
+/// directory but were given no explicit path can fall back to this so the CLI
+/// runs against the mounted repository instead of the container's own cwd.
+pub fn container_workspace_dir() -> Option<PathBuf> {
+    docker_mount_path().map(|_| PathBuf::from(CONTAINER_MOUNT))
+}
+
 pub fn adapt_path_for_docker(path: &Path) -> String {
     translate_to_container(path, docker_mount_path().as_deref().map(Path::new))
 }
@@ -152,7 +160,10 @@ mod tests {
     #[test]
     fn strip_msys_drive_prefix() {
         assert_eq!(NormalizedPath::from_str("/c/Users/foo").0, "/Users/foo");
-        assert_eq!(NormalizedPath::from_str("/d/code/project").0, "/code/project");
+        assert_eq!(
+            NormalizedPath::from_str("/d/code/project").0,
+            "/code/project"
+        );
     }
 
     #[test]

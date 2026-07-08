@@ -47,8 +47,7 @@ pub fn set_value(key: &str, value: &str) -> String {
 
     if !value.is_empty() {
         if let Err(msg) = config::validate_https_url(option.key, value) {
-            return serde_json::to_string(&serde_json::json!({ "error": msg }))
-                .unwrap_or_default();
+            return serde_json::to_string(&serde_json::json!({ "error": msg })).unwrap_or_default();
         }
     }
 
@@ -516,7 +515,11 @@ mod tests {
         // Use a path where create_dir_all will fail:
         //   Unix:    /dev/null is a file, so /dev/null/impossible cannot be created.
         //   Windows: NUL is a reserved device name, so NUL\impossible cannot be created.
-        let impossible = if cfg!(windows) { r"NUL\impossible" } else { "/dev/null/impossible" };
+        let impossible = if cfg!(windows) {
+            r"NUL\impossible"
+        } else {
+            "/dev/null/impossible"
+        };
         std::env::set_var("CS_CONFIG_DIR", impossible);
         let result = f();
         std::env::remove_var("CS_CONFIG_DIR");

@@ -11,7 +11,9 @@ const TIMEOUT_SECS: u64 = 90;
 const TELEMETRY_RACE_MARKERS: &[&str] = &["NoSuchFileException", "codescene-cli.log.jsonl"];
 
 fn contains_telemetry_race_error(text: &str) -> bool {
-    TELEMETRY_RACE_MARKERS.iter().all(|marker| text.contains(marker))
+    TELEMETRY_RACE_MARKERS
+        .iter()
+        .all(|marker| text.contains(marker))
 }
 
 fn check_single_call(client: &mut MCPClient, file_path: &Path) -> (bool, bool) {
@@ -78,8 +80,7 @@ pub fn test_stress_code_health_review() {
     client.initialize().expect("Initialize should succeed");
 
     let review_target = repo_dir.join("src/services/order_processor.py");
-    let (total_failures, telemetry_failures) =
-        run_iterations(&mut client, &review_target);
+    let (total_failures, telemetry_failures) = run_iterations(&mut client, &review_target);
 
     assert_eq!(
         total_failures, 0,

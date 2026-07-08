@@ -180,7 +180,8 @@ fn parse_http_request(stream: &mut TcpStream) -> Option<CapturedRequest> {
 
 fn parse_headers(reader: &mut BufReader<TcpStream>) -> (Vec<(String, String)>, usize) {
     let lines = read_header_lines(reader);
-    let headers: Vec<(String, String)> = lines.iter().filter_map(|l| parse_header_line(l)).collect();
+    let headers: Vec<(String, String)> =
+        lines.iter().filter_map(|l| parse_header_line(l)).collect();
     let content_length = extract_content_length(&headers);
     (headers, content_length)
 }

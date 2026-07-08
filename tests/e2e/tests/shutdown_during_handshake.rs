@@ -33,11 +33,7 @@ fn shutdown_setup() -> (Vec<String>, Vec<(String, String)>, tempfile::TempDir) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn spawn_server(
-    command: &[String],
-    env: &[(String, String)],
-    cwd: &Path,
-) -> std::process::Child {
+fn spawn_server(command: &[String], env: &[(String, String)], cwd: &Path) -> std::process::Child {
     let (program, args) = command.split_first().expect("command must not be empty");
     ProcessCommand::new(program)
         .args(args)
@@ -119,7 +115,10 @@ fn check_clean_exit(exit_code: Option<i32>, stderr: &str, scenario: &str) -> boo
     let code = exit_code.unwrap_or_else(|| {
         panic!("{scenario}: server did not exit within {EXIT_TIMEOUT_SECS}s");
     });
-    assert_eq!(code, 0, "{scenario}: expected exit code 0, got {code}\nstderr: {stderr}");
+    assert_eq!(
+        code, 0,
+        "{scenario}: expected exit code 0, got {code}\nstderr: {stderr}"
+    );
     true
 }
 

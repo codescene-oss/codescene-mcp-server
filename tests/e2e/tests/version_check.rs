@@ -4,8 +4,8 @@
 //! version check endpoint is unreachable and when a local fake server
 //! reports a newer version available.
 
-use super::*;
 use super::fake_http_server::FakeHttpServer;
+use super::*;
 
 use std::time::{Duration, Instant};
 
@@ -19,7 +19,9 @@ const FAKE_LATEST_VERSION: &str = "MCP-99.99.99";
 ///
 /// Removes `CS_DISABLE_VERSION_CHECK` from the base env and sets
 /// `CS_VERSION_CHECK_URL` to the given `url`.
-fn version_check_setup_with_url(url: &str) -> (
+fn version_check_setup_with_url(
+    url: &str,
+) -> (
     Vec<String>,
     Vec<(String, String)>,
     std::path::PathBuf,
@@ -57,9 +59,18 @@ fn start_fake_version_server() -> FakeHttpServer {
 ///
 /// Returns the server, a started+initialized MCP client, the test file
 /// path, and the temp dir guard.
-fn disabled_check_setup() -> (FakeHttpServer, MCPClient, std::path::PathBuf, tempfile::TempDir) {
+fn disabled_check_setup() -> (
+    FakeHttpServer,
+    MCPClient,
+    std::path::PathBuf,
+    tempfile::TempDir,
+) {
     let server = start_fake_version_server();
-    let url = format!("http://{}:{}/releases/latest", fake_server_url_host(), server.port());
+    let url = format!(
+        "http://{}:{}/releases/latest",
+        fake_server_url_host(),
+        server.port()
+    );
 
     let (command, mut env, repo_dir, tmp) = version_check_setup_with_url(&url);
     env.push(("CS_DISABLE_VERSION_CHECK".to_string(), "1".to_string()));
@@ -106,7 +117,10 @@ pub fn test_tool_responds_when_github_unreachable() {
     assert!(!result_text.is_empty(), "Tool should return content");
 
     let score = extract_code_health_score(&result_text);
-    assert!(score.is_some(), "Response should contain a valid score: {result_text}");
+    assert!(
+        score.is_some(),
+        "Response should contain a valid score: {result_text}"
+    );
 }
 
 pub fn test_no_version_update_noise() {
@@ -137,7 +151,11 @@ pub fn test_response_time_acceptable() {
 
 pub fn test_version_info_appears_after_background_fetch() {
     let server = start_fake_version_server();
-    let url = format!("http://{}:{}/releases/latest", fake_server_url_host(), server.port());
+    let url = format!(
+        "http://{}:{}/releases/latest",
+        fake_server_url_host(),
+        server.port()
+    );
 
     let (command, env, repo_dir, _tmp) = version_check_setup_with_url(&url);
     let mut client = make_client(&command, &env, &repo_dir);
@@ -149,7 +167,10 @@ pub fn test_version_info_appears_after_background_fetch() {
     // Call 1 — triggers background fetch; version banner not expected yet.
     let result_text = call_code_health_score(&mut client, &test_file);
     let score = extract_code_health_score(&result_text);
-    assert!(score.is_some(), "Call 1 should return a valid score: {result_text}");
+    assert!(
+        score.is_some(),
+        "Call 1 should return a valid score: {result_text}"
+    );
 
     // Wait for the fast local fetch to complete in the background.
     std::thread::sleep(Duration::from_secs(3));
@@ -168,7 +189,10 @@ pub fn test_version_info_appears_after_background_fetch() {
         }
     }
 
-    assert!(version_appeared, "VERSION UPDATE AVAILABLE should appear on a subsequent call");
+    assert!(
+        version_appeared,
+        "VERSION UPDATE AVAILABLE should appear on a subsequent call"
+    );
 }
 
 pub fn test_disabled_version_check_no_banner() {

@@ -68,13 +68,7 @@ fn extract_description(content: &str) -> String {
     };
     parsed
         .data
-        .and_then(|d: gray_matter::Pod| {
-            d.as_hashmap()
-                .ok()?
-                .get("description")?
-                .as_string()
-                .ok()
-        })
+        .and_then(|d: gray_matter::Pod| d.as_hashmap().ok()?.get("description")?.as_string().ok())
         .unwrap_or_else(|| "No description".to_string())
 }
 
@@ -86,14 +80,11 @@ fn sha256_hex(data: &[u8]) -> String {
 /// Encode bytes as lowercase hexadecimal.
 mod hex {
     pub(super) fn encode(bytes: impl AsRef<[u8]>) -> String {
-        bytes
-            .as_ref()
-            .iter()
-            .fold(String::new(), |mut acc, b| {
-                use std::fmt::Write;
-                let _ = write!(acc, "{b:02x}");
-                acc
-            })
+        bytes.as_ref().iter().fold(String::new(), |mut acc, b| {
+            use std::fmt::Write;
+            let _ = write!(acc, "{b:02x}");
+            acc
+        })
     }
 }
 

@@ -102,6 +102,13 @@ pub fn config_properties(action: ConfigAction, key: &str) -> Value {
     })
 }
 
+pub fn rules_config_properties(subcommand: &str, config_path: Option<&Path>) -> Value {
+    json!({
+        "subcommand": subcommand,
+        "config-path-hash": config_path.map(hash_path),
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------

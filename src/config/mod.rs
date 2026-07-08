@@ -87,9 +87,8 @@ pub fn save(data: &ConfigData) -> Result<(), ConfigError> {
     let temp = tempfile::NamedTempFile::new_in(&dir)?;
     std::fs::write(temp.path(), &content)?;
     restrict_path_permissions(temp.path());
-    temp.persist(&path).map_err(|e| {
-        ConfigError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
-    })?;
+    temp.persist(&path)
+        .map_err(|e| ConfigError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
     Ok(())
 }
 

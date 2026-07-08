@@ -133,7 +133,9 @@ impl MCPClient {
         let stdin = child.stdin.as_mut().ok_or("No stdin")?;
         let mut msg = serde_json::to_string(message).map_err(|e| e.to_string())?;
         msg.push('\n');
-        stdin.write_all(msg.as_bytes()).map_err(|e| format!("Write failed: {e}"))?;
+        stdin
+            .write_all(msg.as_bytes())
+            .map_err(|e| format!("Write failed: {e}"))?;
         stdin.flush().map_err(|e| format!("Flush failed: {e}"))
     }
 
@@ -153,9 +155,16 @@ impl MCPClient {
             }
             if start.elapsed() > timeout {
                 self.restore_stashed(stashed);
-                let tail: String = self.get_stderr().lines().rev().take(10)
-                    .collect::<Vec<_>>().join("\n");
-                return Err(format!("Timeout waiting for response (id={expected_id}). Recent stderr:\n{tail}"));
+                let tail: String = self
+                    .get_stderr()
+                    .lines()
+                    .rev()
+                    .take(10)
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                return Err(format!(
+                    "Timeout waiting for response (id={expected_id}). Recent stderr:\n{tail}"
+                ));
             }
             thread::sleep(Duration::from_millis(10));
         }

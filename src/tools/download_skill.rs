@@ -66,9 +66,7 @@ pub(crate) async fn handle(
 mod tests {
     use rmcp::handler::server::wrapper::Parameters;
 
-    use crate::tests::{
-        assert_error_contains, assert_success_contains, make_server, set_token,
-    };
+    use crate::tests::{assert_error_contains, assert_success_contains, make_server, set_token};
     use crate::tools::DownloadSkillParam;
 
     #[tokio::test]
@@ -157,7 +155,11 @@ mod tests {
         // Use a path where create_dir_all will fail:
         //   Unix:    /dev/null is a file, so /dev/null/impossible cannot be created.
         //   Windows: NUL is a reserved device name, so NUL\impossible cannot be created.
-        let impossible = if cfg!(windows) { r"NUL\impossible" } else { "/dev/null/impossible" };
+        let impossible = if cfg!(windows) {
+            r"NUL\impossible"
+        } else {
+            "/dev/null/impossible"
+        };
         let params = DownloadSkillParam {
             skill_name: "safeguarding-ai-generated-code".to_string(),
             destination_dir: impossible.to_string(),

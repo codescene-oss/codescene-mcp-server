@@ -62,14 +62,22 @@ fn format_summary(downloaded: &[String], skipped: &[String], dest: &Path) -> Str
             "Downloaded {} skill(s) to {}:\n{}",
             downloaded.len(),
             dest.display(),
-            downloaded.iter().map(|s| format!("  - {s}")).collect::<Vec<_>>().join("\n")
+            downloaded
+                .iter()
+                .map(|s| format!("  - {s}"))
+                .collect::<Vec<_>>()
+                .join("\n")
         ));
     }
     if !skipped.is_empty() {
         parts.push(format!(
             "Skipped {} existing skill(s) (use overwrite=true to replace):\n{}",
             skipped.len(),
-            skipped.iter().map(|s| format!("  - {s}")).collect::<Vec<_>>().join("\n")
+            skipped
+                .iter()
+                .map(|s| format!("  - {s}"))
+                .collect::<Vec<_>>()
+                .join("\n")
         ));
     }
     if parts.is_empty() {
@@ -149,7 +157,11 @@ mod tests {
         // Use a path where create_dir_all will fail:
         //   Unix:    /dev/null is a file, so /dev/null/impossible cannot be created.
         //   Windows: NUL is a reserved device name, so NUL\impossible cannot be created.
-        let impossible = if cfg!(windows) { r"NUL\impossible" } else { "/dev/null/impossible" };
+        let impossible = if cfg!(windows) {
+            r"NUL\impossible"
+        } else {
+            "/dev/null/impossible"
+        };
         let params = SyncSkillsParam {
             destination_dir: impossible.to_string(),
             overwrite: false,
@@ -188,11 +200,7 @@ mod tests {
 
     #[test]
     fn format_summary_with_only_skipped() {
-        let result = format_summary(
-            &[],
-            &["skill-a".to_string()],
-            std::path::Path::new("/tmp"),
-        );
+        let result = format_summary(&[], &["skill-a".to_string()], std::path::Path::new("/tmp"));
         assert!(result.contains("Skipped 1"));
         assert!(!result.contains("Downloaded"));
     }

@@ -73,7 +73,8 @@ mod tests {
     #[tokio::test]
     async fn validation_failure_returns_error() {
         let _g = set_token("tok");
-        let server = make_failing_validator_server("file_not_found", "File not found: /tmp/missing.rs");
+        let server =
+            make_failing_validator_server("file_not_found", "File not found: /tmp/missing.rs");
         let params = FilePathParam {
             file_path: "/tmp/missing.rs".to_string(),
         };

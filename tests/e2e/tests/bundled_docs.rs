@@ -12,7 +12,11 @@ const MIN_MATCHING_TERMS: usize = 2;
 
 const CODE_HEALTH_TERMS: &[&str] = &["code health", "maintainability", "code", "quality"];
 const PRODUCTIVITY_TERMS: &[&str] = &["productivity", "defect", "business", "code health"];
-const ERROR_PATTERNS: &[&str] = &["no such file or directory", "filenotfounderror", "not found"];
+const ERROR_PATTERNS: &[&str] = &[
+    "no such file or directory",
+    "filenotfounderror",
+    "not found",
+];
 
 fn call_doc_tool(client: &mut MCPClient, tool_name: &str) -> String {
     let response = client
