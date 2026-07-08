@@ -155,6 +155,18 @@ pub fn test_canonical_path_succeeds() {
     assert_tls_outcome(&result, true, &format!("Canonical path: {ca_str}"));
 }
 
+/// Shared body for the separator-format tests: rewrite the path separators
+/// in the CA bundle path, then assert the TLS handshake still succeeds.
+fn assert_separator_variant_succeeds(from: char, to: char, label: &str) {
+    let s = path_setup();
+    let native = s.ca_cert_path.to_string_lossy().to_string();
+    let rewritten = native.replace(from, &to.to_string());
+
+    let env = env_with_ca_bundle(&s.env, &rewritten);
+    let result = call_select_project(&s.command, &env, &s.repo_dir);
+    assert_tls_outcome(&result, true, &format!("{label}: {rewritten}"));
+}
+
 /// Forward-slash paths (`C:/Users/...` on Windows) must work. This is the
 /// format many MCP client configs use because JSON requires escaped
 /// backslashes but forward slashes work without escaping.
@@ -162,18 +174,7 @@ pub fn test_forward_slash_path_succeeds() {
     if is_docker() {
         return skip_if_docker("HTTPS server on host unreachable from container");
     }
-    let s = path_setup();
-
-    let native = s.ca_cert_path.to_string_lossy().to_string();
-    let forward_slash = native.replace('\\', "/");
-
-    let env = env_with_ca_bundle(&s.env, &forward_slash);
-    let result = call_select_project(&s.command, &env, &s.repo_dir);
-    assert_tls_outcome(
-        &result,
-        true,
-        &format!("Forward-slash path: {forward_slash}"),
-    );
+    assert_separator_variant_succeeds('\\', '/', "Forward-slash path");
 }
 
 /// Native Windows backslash paths (`C:\Users\...`) must work. This is
@@ -183,14 +184,7 @@ pub fn test_backslash_path_succeeds() {
     if is_docker() {
         return skip_if_docker("HTTPS server on host unreachable from container");
     }
-    let s = path_setup();
-
-    let native = s.ca_cert_path.to_string_lossy().to_string();
-    let backslash = native.replace('/', "\\");
-
-    let env = env_with_ca_bundle(&s.env, &backslash);
-    let result = call_select_project(&s.command, &env, &s.repo_dir);
-    assert_tls_outcome(&result, true, &format!("Backslash path: {backslash}"));
+    assert_separator_variant_succeeds('/', '\\', "Backslash path");
 }
 
 /// A nonexistent CA bundle path must cause TLS failure — the server must

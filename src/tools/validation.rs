@@ -149,29 +149,29 @@ fn validate_inside_git_repo(path: &Path) -> Result<(), ValidationError> {
 /// only, not full Code Health support.
 const SUPPORTED_EXTENSIONS: &[&str] = &[
     // C / C++
-    ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".ipp", // C#
-    ".cs", // Java
-    ".java", // Groovy
+    ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".ipp",    // C#
+    ".cs",     // Java
+    ".java",   // Groovy
     ".groovy", // JavaScript / TypeScript / React / Vue / ESM
     ".js", ".mjs", ".cjs", ".sj", ".ts", ".mts", ".cts", ".jsx", ".tsx", ".vue",
     // Objective-C
-    ".m", ".mm", // Scala
+    ".m", ".mm",    // Scala
     ".scala", // Python
-    ".py", ".pyi", // Swift
+    ".py", ".pyi",   // Swift
     ".swift", // Go
-    ".go", // Dart
-    ".dart", // Visual Basic .NET
-    ".vb", // PHP
-    ".php", // Rust
-    ".rs", // Ruby
-    ".rb", // Kotlin
+    ".go",    // Dart
+    ".dart",  // Visual Basic .NET
+    ".vb",    // PHP
+    ".php",   // Rust
+    ".rs",    // Ruby
+    ".rb",    // Kotlin
     ".kt", ".kts", // Perl
     ".pl", ".pm", // Erlang
     ".erl", ".hrl", // Elixir
     ".ex", ".exs", // Clojure
     ".clj", ".cljc", ".cljs", // PowerShell
     ".ps1", ".psm1", ".psd1", // TCL
-    ".tcl", // Apex (Salesforce)
+    ".tcl",  // Apex (Salesforce)
     ".cls", ".trigger", ".tgr", // BrightScript / BrighterScript
     ".brs", ".bs", // Rational Software Architect models (C++)
     ".efx", ".emx",
@@ -193,24 +193,16 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn recognises_common_extensions() {
-        for ext in ["rs", "py", "js", "ts", "java", "go", "c", "cpp", "rb"] {
-            assert!(
-                is_supported_extension(ext),
-                "Expected .{ext} to be supported"
-            );
-        }
-    }
-
-    #[test]
-    fn rejects_unsupported_extensions() {
-        for ext in [
+    fn classifies_extensions_by_support() {
+        let supported = ["rs", "py", "js", "ts", "java", "go", "c", "cpp", "rb"];
+        let unsupported = [
             "txt", "md", "json", "yaml", "toml", "xml", "html", "css", "tf",
-        ] {
-            assert!(
-                !is_supported_extension(ext),
-                "Expected .{ext} to be unsupported"
-            );
+        ];
+        for ext in supported {
+            assert!(is_supported_extension(ext), "expected .{ext} supported");
+        }
+        for ext in unsupported {
+            assert!(!is_supported_extension(ext), "expected .{ext} unsupported");
         }
     }
 

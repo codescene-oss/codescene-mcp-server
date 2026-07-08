@@ -313,6 +313,16 @@ mod tests {
         MockCliRunner::with_responses(vec![Ok("{}".into()), Ok("{}".into())])
     }
 
+    /// Assert a check's pass/fail state and that its detail mentions `needle`.
+    fn assert_check(result: &CheckResult, passed: bool, needle: &str) {
+        assert_eq!(result.passed, passed, "detail: {}", result.detail);
+        assert!(
+            result.detail.contains(needle),
+            "expected detail to contain {needle:?}, got: {}",
+            result.detail
+        );
+    }
+
     // -- check_token_via_cli -------------------------------------------------
 
     #[tokio::test]
@@ -358,12 +368,7 @@ mod tests {
             "SSL certificate problem: unable to get local issuer certificate",
         );
         let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
-        assert!(!result.passed);
-        assert!(
-            result.detail.contains("TLS/network"),
-            "detail: {}",
-            result.detail
-        );
+        assert_check(&result, false, "TLS/network");
     }
 
     #[tokio::test]
@@ -371,12 +376,7 @@ mod tests {
         let _g = set_token("tok");
         let cli = MockCliRunner::with_err(1, "connection refused");
         let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
-        assert!(!result.passed);
-        assert!(
-            result.detail.contains("TLS/network"),
-            "detail: {}",
-            result.detail
-        );
+        assert_check(&result, false, "TLS/network");
     }
 
     #[tokio::test]
@@ -384,12 +384,7 @@ mod tests {
         let _g = set_token("tok");
         let cli = mock_license_failure(SSL_HANDSHAKE_STDERR);
         let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
-        assert!(!result.passed, "should detect TLS error: {}", result.detail);
-        assert!(
-            result.detail.contains("TLS/network"),
-            "detail: {}",
-            result.detail
-        );
+        assert_check(&result, false, "TLS/network");
         assert!(
             result.detail.contains("SSLHandshakeException"),
             "should include original error: {}",
@@ -404,16 +399,7 @@ mod tests {
             "License check failed, could not reach CodeScene servers (https://wrong.ee/api/v2/tool-license/cli)"
         );
         let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
-        assert!(
-            !result.passed,
-            "should detect unreachable server: {}",
-            result.detail
-        );
-        assert!(
-            result.detail.contains("TLS/network"),
-            "detail: {}",
-            result.detail
-        );
+        assert_check(&result, false, "TLS/network");
         assert!(
             result.detail.contains("could not reach"),
             "should include original error: {}",
@@ -453,12 +439,7 @@ mod tests {
         let _g = set_token("tok");
         let http = MockHttpClient::always(HttpResponse::ok(r#"[{"id":1}]"#));
         let result = check_api_connectivity(&http).await;
-        assert!(result.passed);
-        assert!(
-            result.detail.contains("successfully"),
-            "detail: {}",
-            result.detail
-        );
+        assert_check(&result, true, "successfully");
     }
 
     #[tokio::test]
@@ -466,12 +447,7 @@ mod tests {
         let _g = set_token("tok");
         let http = MockHttpClient::new(vec![]);
         let result = check_api_connectivity(&http).await;
-        assert!(!result.passed);
-        assert!(
-            result.detail.contains("Could not reach"),
-            "detail: {}",
-            result.detail
-        );
+        assert_check(&result, false, "Could not reach");
     }
 
     #[tokio::test]
@@ -479,12 +455,7 @@ mod tests {
         let _g = clear_token();
         let http = MockHttpClient::new(vec![]);
         let result = check_api_connectivity(&http).await;
-        assert!(!result.passed);
-        assert!(
-            result.detail.contains("Skipped"),
-            "detail: {}",
-            result.detail
-        );
+        assert_check(&result, false, "Skipped");
     }
 
     #[tokio::test]
@@ -530,28 +501,14 @@ mod tests {
             "SSL certificate problem: unable to get local issuer certificate",
         );
         let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
-        assert!(!result.passed, "TLS error should fail: {}", result.detail);
-        assert!(
-            result.detail.contains("TLS/network"),
-            "detail: {}",
-            result.detail
-        );
+        assert_check(&result, false, "TLS/network");
     }
 
     #[tokio::test]
     async fn cli_connectivity_fails_on_license_check_ssl_error() {
         let cli = mock_license_failure(SSL_HANDSHAKE_STDERR);
         let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
-        assert!(
-            !result.passed,
-            "should detect TLS in license error: {}",
-            result.detail
-        );
-        assert!(
-            result.detail.contains("TLS/network"),
-            "detail: {}",
-            result.detail
-        );
+        assert_check(&result, false, "TLS/network");
     }
 
     #[tokio::test]
@@ -560,16 +517,7 @@ mod tests {
             "License check failed, could not reach CodeScene servers (https://wrong.ee/api/v2/tool-license/cli)"
         );
         let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
-        assert!(
-            !result.passed,
-            "unreachable server should fail connectivity: {}",
-            result.detail
-        );
-        assert!(
-            result.detail.contains("TLS/network"),
-            "detail: {}",
-            result.detail
-        );
+        assert_check(&result, false, "TLS/network");
     }
 
     #[tokio::test]
