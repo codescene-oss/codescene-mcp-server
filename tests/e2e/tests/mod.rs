@@ -32,6 +32,7 @@ pub mod git_worktree;
 pub mod platform_specific;
 pub mod relative_paths;
 pub mod require_access_token;
+pub mod rules_config;
 pub mod shutdown_during_handshake;
 pub mod skill_resources;
 pub mod ssl_api_ca_bundle;

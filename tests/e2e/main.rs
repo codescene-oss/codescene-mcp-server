@@ -566,6 +566,47 @@ fn test_config_non_url_key_unaffected() {
     tests::configure::test_set_config_non_url_key_unaffected();
 }
 
+// --- Rules Config ---
+#[test]
+fn test_rules_config_tools_listed() {
+    tests::rules_config::test_rules_config_tools_listed();
+}
+
+#[test]
+fn test_rules_config_validate_reports_valid_config() {
+    tests::rules_config::test_validate_reports_valid_config();
+}
+
+#[test]
+fn test_rules_config_list_thresholds_returns_defaults() {
+    tests::rules_config::test_list_thresholds_returns_defaults();
+}
+
+#[test]
+fn test_rules_config_list_thresholds_rejects_unknown_language() {
+    tests::rules_config::test_list_thresholds_rejects_unknown_language();
+}
+
+#[test]
+fn test_rules_config_setters_confirm_edits() {
+    tests::rules_config::test_setters_confirm_edits();
+}
+
+#[test]
+fn test_rules_config_set_then_validate_roundtrip() {
+    tests::rules_config::test_set_then_validate_roundtrip();
+}
+
+#[test]
+fn test_rules_config_relative_config_path_is_rejected() {
+    tests::rules_config::test_relative_config_path_is_rejected();
+}
+
+#[test]
+fn test_rules_config_works_without_access_token() {
+    tests::rules_config::test_works_without_access_token();
+}
+
 // --- Standalone License ---
 #[test]
 fn test_standalone_hides_api_tools() {
