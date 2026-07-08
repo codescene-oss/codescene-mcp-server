@@ -16,15 +16,6 @@ use crate::cli::CliRunner;
 use crate::docker;
 use crate::errors::CliError;
 
-/// A validated `--config-path`, tracking both the host path (used to pick the
-/// CLI working directory) and the container-adapted path (passed to the CLI).
-/// The two differ only when running inside Docker.
-#[derive(Debug)]
-struct ConfigPath {
-    host: String,
-    cli_arg: String,
-}
-
 /// The `cs rules-config` subcommand to invoke.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Subcommand {
@@ -58,7 +49,7 @@ struct Opt {
 pub(crate) struct Invocation {
     subcommand: Subcommand,
     opts: Vec<Opt>,
-    config_path: Option<ConfigPath>,
+    config_path: Option<String>,
 }
 
 impl Invocation {
@@ -101,17 +92,15 @@ impl Invocation {
 
     /// Record an optional `--config-path`. An empty string is treated as
     /// "not provided" so callers can pass through defaults freely. The path is
-    /// adapted for Docker so the CLI receives a container-reachable location.
+    /// adapted for Docker so the CLI — which runs inside the container — and its
+    /// working directory both reference a container-reachable location.
     pub(crate) fn config_path(mut self, path: Option<&str>) -> Result<Self, CliError> {
         let Some(path) = non_empty(path) else {
             return Ok(self);
         };
         require_absolute(path)?;
         reject_flag_like(path, "config_path")?;
-        self.config_path = Some(ConfigPath {
-            host: path.to_string(),
-            cli_arg: docker::adapt_path_for_docker(Path::new(path)),
-        });
+        self.config_path = Some(docker::adapt_path_for_docker(Path::new(path)));
         Ok(self)
     }
 
@@ -132,24 +121,33 @@ impl Invocation {
             args.push(opt.name.to_string());
             args.push(opt.value.clone());
         }
-        if let Some(cfg) = &self.config_path {
+        if let Some(path) = &self.config_path {
             args.push("--config-path".to_string());
-            args.push(cfg.cli_arg.clone());
+            args.push(path.clone());
         }
         args.push("--format".to_string());
         args.push("json".to_string());
         args
     }
 
-    /// Choose the directory the CLI runs in. When a `config_path` is given, run
-    /// from its git root (or its parent directory as a fallback) so the CLI can
-    /// locate the repository. The host path is used here because this becomes
-    /// the spawned process's working directory. Otherwise let the CLI use its
-    /// own default resolution.
+    /// Choose the directory the CLI runs in. The CLI must run inside the user's
+    /// repository so it can locate the default config and language rules. When a
+    /// `config_path` is given, run from its git root (or its parent directory as
+    /// a fallback); the path is already Docker-adapted, so this resolves to a
+    /// container-side directory. Otherwise, inside Docker, fall back to the
+    /// bind-mounted workspace; elsewhere let the CLI use the process's own
+    /// working directory.
     fn working_dir(&self) -> Option<PathBuf> {
-        let path = Path::new(&self.config_path.as_ref()?.host);
-        cli::find_git_root(path).or_else(|| path.parent().map(Path::to_path_buf))
+        match self.config_path.as_deref() {
+            Some(path) => git_root_or_parent(Path::new(path)),
+            None => docker::container_workspace_dir(),
+        }
     }
+}
+
+/// Resolve the git root containing `path`, falling back to its parent dir.
+fn git_root_or_parent(path: &Path) -> Option<PathBuf> {
+    cli::find_git_root(path).or_else(|| path.parent().map(Path::to_path_buf))
 }
 
 fn non_empty(value: Option<&str>) -> Option<&str> {

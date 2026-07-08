@@ -109,6 +109,19 @@ impl DockerBackend {
         }
     }
 
+    /// Build the image at most once per test process. Parallel tests share the
+    /// same image, so guard the build behind a mutex + "already built" flag to
+    /// avoid concurrent `docker build` invocations racing on the same tag.
+    fn build_image_once(&self) {
+        static BUILT: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
+        let mut built = BUILT.lock().unwrap();
+        if *built {
+            return;
+        }
+        self.build_image();
+        *built = true;
+    }
+
     fn build_image(&self) {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let status = Command::new("docker")
@@ -147,7 +160,7 @@ impl DockerBackend {
 
 impl ServerBackend for DockerBackend {
     fn prepare(&mut self) {
-        self.build_image();
+        self.build_image_once();
     }
 
     fn get_command(&self, working_dir: &Path) -> Vec<String> {
