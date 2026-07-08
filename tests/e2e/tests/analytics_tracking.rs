@@ -6,10 +6,10 @@
 //! - Tracking can be disabled via `CS_DISABLE_TRACKING`
 //! - Enriched events contain required common and tool-specific properties
 
-use super::*;
 use super::fake_https_server::FakeHttpsServer;
+use super::*;
 
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant};
@@ -69,7 +69,14 @@ fn analytics_setup_with_env(
 
 fn analytics_setup_with_https_server(
     extra: &[(&str, &str)],
-) -> (Vec<String>, Vec<(String, String)>, PathBuf, FakeHttpsServer, TempDir, TempDir) {
+) -> (
+    Vec<String>,
+    Vec<(String, String)>,
+    PathBuf,
+    FakeHttpsServer,
+    TempDir,
+    TempDir,
+) {
     let cert_dir = create_temp_dir("cs_mcp_certs_").expect("cert dir");
     let server = FakeHttpsServer::always_ok(cert_dir.path());
     let (command, mut env, repo_dir, tmp) = setup();
@@ -118,10 +125,7 @@ fn assert_has_score(result: &str) {
 // Event inspection helpers
 // ---------------------------------------------------------------------------
 
-fn find_event_properties(
-    payloads: &[serde_json::Value],
-    event_type: &str,
-) -> serde_json::Value {
+fn find_event_properties(payloads: &[serde_json::Value], event_type: &str) -> serde_json::Value {
     payloads
         .iter()
         .find(|p| p.get("event-type").and_then(|v| v.as_str()) == Some(event_type))
@@ -148,11 +152,8 @@ fn wait_for_analytics(server: &FakeHttpsServer) {
     }
 }
 
-fn score_with_https_server(
-    extra: &[(&str, &str)],
-) -> (String, FakeHttpsServer, TempDir, TempDir) {
-    let (command, env, repo_dir, server, tmp, cert_dir) =
-        analytics_setup_with_https_server(extra);
+fn score_with_https_server(extra: &[(&str, &str)]) -> (String, FakeHttpsServer, TempDir, TempDir) {
+    let (command, env, repo_dir, server, tmp, cert_dir) = analytics_setup_with_https_server(extra);
     let (result, _client) = start_client_and_score(&command, &env, &repo_dir);
     wait_for_analytics(&server);
     (result, server, tmp, cert_dir)
@@ -202,8 +203,7 @@ pub fn test_response_time_not_delayed_by_analytics() {
 }
 
 pub fn test_disabled_tracking_returns_valid_results() {
-    let (command, env, repo_dir, _tmp) =
-        analytics_setup_with_env(&[("CS_DISABLE_TRACKING", "1")]);
+    let (command, env, repo_dir, _tmp) = analytics_setup_with_env(&[("CS_DISABLE_TRACKING", "1")]);
     let (result, _client) = start_client_and_score(&command, &env, &repo_dir);
     assert_has_score(&result);
 }
@@ -362,13 +362,21 @@ pub fn test_enriched_review_event() {
     let temp = create_temp_dir("cs_mcp_review_event_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
 
-    let (result, payloads) = run_tool_with_fake_server(&repo_dir, |client, rd| {
-        let file = rd.join("src/services/order_processor.py");
-        let resp = client
-            .call_tool("code_health_review", json!({"file_path": file.to_string_lossy()}), TIMEOUT)
-            .expect("review should succeed");
-        extract_result_text(&resp)
-    }, &[]);
+    let (result, payloads) = run_tool_with_fake_server(
+        &repo_dir,
+        |client, rd| {
+            let file = rd.join("src/services/order_processor.py");
+            let resp = client
+                .call_tool(
+                    "code_health_review",
+                    json!({"file_path": file.to_string_lossy()}),
+                    TIMEOUT,
+                )
+                .expect("review should succeed");
+            extract_result_text(&resp)
+        },
+        &[],
+    );
 
     assert!(!result.is_empty(), "Review should return content");
 
@@ -378,7 +386,10 @@ pub fn test_enriched_review_event() {
 
     // file-hash
     let expected_hash = hash_path(&repo_dir.join("src/services/order_processor.py"));
-    let file_hash = props.get("file-hash").and_then(|v| v.as_str()).unwrap_or("");
+    let file_hash = props
+        .get("file-hash")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     assert_eq!(file_hash, expected_hash, "file-hash mismatch");
 
     // score
@@ -386,10 +397,16 @@ pub fn test_enriched_review_event() {
 
     // categories
     let cats = props.get("categories").and_then(|v| v.as_array());
-    assert!(cats.is_some_and(|c| !c.is_empty()), "Should have categories");
+    assert!(
+        cats.is_some_and(|c| !c.is_empty()),
+        "Should have categories"
+    );
 
     let cat_count = props.get("category-count").and_then(|v| v.as_i64());
-    assert!(cat_count.is_some_and(|c| c > 0), "Should have category-count > 0");
+    assert!(
+        cat_count.is_some_and(|c| c > 0),
+        "Should have category-count > 0"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -400,21 +417,26 @@ pub fn test_enriched_pre_commit_event() {
     let temp = create_temp_dir("cs_mcp_precommit_event_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
 
-    let (result, payloads) = run_tool_with_fake_server(&repo_dir, |client, rd| {
-        let file = rd.join("src/utils/calculator.py");
-        let original = std::fs::read_to_string(&file).expect("read");
-        std::fs::write(&file, format!("{original}\n# Analytics tracking test\n")).expect("write");
-        git_in(rd, &["add", &file.to_string_lossy()]);
+    let (result, payloads) = run_tool_with_fake_server(
+        &repo_dir,
+        |client, rd| {
+            let file = rd.join("src/utils/calculator.py");
+            let original = std::fs::read_to_string(&file).expect("read");
+            std::fs::write(&file, format!("{original}\n# Analytics tracking test\n"))
+                .expect("write");
+            git_in(rd, &["add", &file.to_string_lossy()]);
 
-        let resp = client
-            .call_tool(
-                "pre_commit_code_health_safeguard",
-                json!({"git_repository_path": rd.to_string_lossy()}),
-                TIMEOUT,
-            )
-            .expect("pre-commit should succeed");
-        extract_result_text(&resp)
-    }, &[]);
+            let resp = client
+                .call_tool(
+                    "pre_commit_code_health_safeguard",
+                    json!({"git_repository_path": rd.to_string_lossy()}),
+                    TIMEOUT,
+                )
+                .expect("pre-commit should succeed");
+            extract_result_text(&resp)
+        },
+        &[],
+    );
 
     assert!(!result.is_empty(), "Pre-commit should return content");
 
@@ -423,13 +445,25 @@ pub fn test_enriched_pre_commit_event() {
     assert_common_properties(&props);
 
     let expected_hash = hash_path(&repo_dir);
-    let repo_hash = props.get("repo-hash").and_then(|v| v.as_str()).unwrap_or("");
+    let repo_hash = props
+        .get("repo-hash")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     assert_eq!(repo_hash, expected_hash, "repo-hash mismatch");
 
-    let qg = props.get("quality-gates").and_then(|v| v.as_str()).unwrap_or("");
-    assert!(qg == "passed" || qg == "failed", "quality-gates should be passed/failed");
+    let qg = props
+        .get("quality-gates")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    assert!(
+        qg == "passed" || qg == "failed",
+        "quality-gates should be passed/failed"
+    );
 
-    assert!(props.get("file-count").and_then(|v| v.as_i64()).is_some(), "Should have file-count");
+    assert!(
+        props.get("file-count").and_then(|v| v.as_i64()).is_some(),
+        "Should have file-count"
+    );
 }
 
 fn create_feature_branch(addition: &str) -> (PathBuf, TempDir) {
@@ -445,16 +479,20 @@ fn create_feature_branch(addition: &str) -> (PathBuf, TempDir) {
 }
 
 fn run_analyze_change_set(repo_dir: &Path) -> (String, Vec<serde_json::Value>) {
-    run_tool_with_fake_server(repo_dir, |client, rd| {
-        let resp = client
-            .call_tool(
-                "analyze_change_set",
-                json!({"base_ref": "master", "git_repository_path": rd.to_string_lossy()}),
-                TIMEOUT,
-            )
-            .expect("analyze should succeed");
-        extract_result_text(&resp)
-    }, &[])
+    run_tool_with_fake_server(
+        repo_dir,
+        |client, rd| {
+            let resp = client
+                .call_tool(
+                    "analyze_change_set",
+                    json!({"base_ref": "master", "git_repository_path": rd.to_string_lossy()}),
+                    TIMEOUT,
+                )
+                .expect("analyze should succeed");
+            extract_result_text(&resp)
+        },
+        &[],
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -473,18 +511,30 @@ pub fn test_enriched_analyze_change_set_event() {
 
     let expected_repo = hash_path(&repo_dir);
     assert_eq!(
-        props.get("repo-hash").and_then(|v| v.as_str()).unwrap_or(""),
+        props
+            .get("repo-hash")
+            .and_then(|v| v.as_str())
+            .unwrap_or(""),
         expected_repo
     );
 
     let expected_ref = hash_ref("master");
     assert_eq!(
-        props.get("base-ref-hash").and_then(|v| v.as_str()).unwrap_or(""),
+        props
+            .get("base-ref-hash")
+            .and_then(|v| v.as_str())
+            .unwrap_or(""),
         expected_ref
     );
 
-    let qg = props.get("quality-gates").and_then(|v| v.as_str()).unwrap_or("");
-    assert!(qg == "passed" || qg == "failed", "quality-gates should be passed/failed");
+    let qg = props
+        .get("quality-gates")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    assert!(
+        qg == "passed" || qg == "failed",
+        "quality-gates should be passed/failed"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -495,21 +545,25 @@ pub fn test_enriched_pre_commit_event_with_findings() {
     let temp = create_temp_dir("cs_mcp_precommit_findings_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
 
-    let (result, payloads) = run_tool_with_fake_server(&repo_dir, |client, rd| {
-        let file = rd.join("src/utils/calculator.py");
-        let original = std::fs::read_to_string(&file).expect("read");
-        std::fs::write(&file, format!("{original}{DEGRADING_ADDITION}")).expect("write");
-        git_in(rd, &["add", &file.to_string_lossy()]);
+    let (result, payloads) = run_tool_with_fake_server(
+        &repo_dir,
+        |client, rd| {
+            let file = rd.join("src/utils/calculator.py");
+            let original = std::fs::read_to_string(&file).expect("read");
+            std::fs::write(&file, format!("{original}{DEGRADING_ADDITION}")).expect("write");
+            git_in(rd, &["add", &file.to_string_lossy()]);
 
-        let resp = client
-            .call_tool(
-                "pre_commit_code_health_safeguard",
-                json!({"git_repository_path": rd.to_string_lossy()}),
-                TIMEOUT,
-            )
-            .expect("pre-commit should succeed");
-        extract_result_text(&resp)
-    }, &[]);
+            let resp = client
+                .call_tool(
+                    "pre_commit_code_health_safeguard",
+                    json!({"git_repository_path": rd.to_string_lossy()}),
+                    TIMEOUT,
+                )
+                .expect("pre-commit should succeed");
+            extract_result_text(&resp)
+        },
+        &[],
+    );
 
     assert!(!result.is_empty(), "Should return content");
 
@@ -523,13 +577,22 @@ pub fn test_enriched_pre_commit_event_with_findings() {
     );
 
     let file_count = props.get("file-count").and_then(|v| v.as_i64());
-    assert!(file_count.is_some_and(|c| c > 0), "file-count should be > 0");
+    assert!(
+        file_count.is_some_and(|c| c > 0),
+        "file-count should be > 0"
+    );
 
     let verdicts = props.get("verdicts").and_then(|v| v.as_object());
-    assert!(verdicts.is_some_and(|v| !v.is_empty()), "Should have verdicts");
+    assert!(
+        verdicts.is_some_and(|v| !v.is_empty()),
+        "Should have verdicts"
+    );
 
     let categories = props.get("categories").and_then(|v| v.as_array());
-    assert!(categories.is_some_and(|c| !c.is_empty()), "Should have categories");
+    assert!(
+        categories.is_some_and(|c| !c.is_empty()),
+        "Should have categories"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -548,7 +611,10 @@ pub fn test_enriched_analyze_change_set_event_with_findings() {
 
     let expected_ref = hash_ref("master");
     assert_eq!(
-        props.get("base-ref-hash").and_then(|v| v.as_str()).unwrap_or(""),
+        props
+            .get("base-ref-hash")
+            .and_then(|v| v.as_str())
+            .unwrap_or(""),
         expected_ref
     );
 
@@ -559,11 +625,20 @@ pub fn test_enriched_analyze_change_set_event_with_findings() {
     );
 
     let file_count = props.get("file-count").and_then(|v| v.as_i64());
-    assert!(file_count.is_some_and(|c| c > 0), "file-count should be > 0");
+    assert!(
+        file_count.is_some_and(|c| c > 0),
+        "file-count should be > 0"
+    );
 
     let verdicts = props.get("verdicts").and_then(|v| v.as_object());
-    assert!(verdicts.is_some_and(|v| !v.is_empty()), "Should have verdicts");
+    assert!(
+        verdicts.is_some_and(|v| !v.is_empty()),
+        "Should have verdicts"
+    );
 
     let categories = props.get("categories").and_then(|v| v.as_array());
-    assert!(categories.is_some_and(|c| !c.is_empty()), "Should have categories");
+    assert!(
+        categories.is_some_and(|c| !c.is_empty()),
+        "Should have categories"
+    );
 }

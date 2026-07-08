@@ -203,10 +203,7 @@ fn selected_ca_bundle_path_from_env() -> Option<PathBuf> {
     });
 
     if let Some((var, ref path)) = result {
-        tracing::info!(
-            "Using CA bundle from {var}: {}",
-            path.display()
-        );
+        tracing::info!("Using CA bundle from {var}: {}", path.display());
     }
 
     for (var, path) in &configured_but_missing {
@@ -309,7 +306,11 @@ fn atomic_write_with_restricted_permissions(target: &Path, data: &[u8]) -> bool 
     };
 
     // Write to a temp file in the same directory (same filesystem for rename)
-    let tmp_path = parent.join(format!(".tmp-{}-{:?}", std::process::id(), std::thread::current().id()));
+    let tmp_path = parent.join(format!(
+        ".tmp-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
     if std::fs::write(&tmp_path, data).is_err() {
         return false;
     }
@@ -592,7 +593,11 @@ mod tests {
     /// exit code 1 is raw value 256.  On Windows the raw value IS the
     /// exit code, so exit code 1 is raw value 1.
     fn failing_raw_status() -> i32 {
-        if cfg!(unix) { 256 } else { 1 }
+        if cfg!(unix) {
+            256
+        } else {
+            1
+        }
     }
 
     #[test]
@@ -642,7 +647,11 @@ mod tests {
         let s = ssl_cert_file.path().to_str().unwrap();
 
         with_ca_env(
-            &[("REQUESTS_CA_BUNDLE", Some(r)), ("SSL_CERT_FILE", Some(s)), ("CURL_CA_BUNDLE", None)],
+            &[
+                ("REQUESTS_CA_BUNDLE", Some(r)),
+                ("SSL_CERT_FILE", Some(s)),
+                ("CURL_CA_BUNDLE", None),
+            ],
             || assert_eq!(selected_ca_bundle_path_from_env().unwrap(), requests.path()),
         );
     }
@@ -650,7 +659,11 @@ mod tests {
     #[test]
     fn selected_ca_bundle_returns_none_for_nonexistent_path() {
         with_ca_env(
-            &[("REQUESTS_CA_BUNDLE", Some("/nonexistent/ca-bundle.pem")), ("SSL_CERT_FILE", None), ("CURL_CA_BUNDLE", None)],
+            &[
+                ("REQUESTS_CA_BUNDLE", Some("/nonexistent/ca-bundle.pem")),
+                ("SSL_CERT_FILE", None),
+                ("CURL_CA_BUNDLE", None),
+            ],
             || assert!(selected_ca_bundle_path_from_env().is_none()),
         );
     }
@@ -661,8 +674,17 @@ mod tests {
         let r = real_file.path().to_str().unwrap();
 
         with_ca_env(
-            &[("REQUESTS_CA_BUNDLE", Some("/nonexistent/ca-bundle.pem")), ("SSL_CERT_FILE", Some(r)), ("CURL_CA_BUNDLE", None)],
-            || assert_eq!(selected_ca_bundle_path_from_env().unwrap(), real_file.path()),
+            &[
+                ("REQUESTS_CA_BUNDLE", Some("/nonexistent/ca-bundle.pem")),
+                ("SSL_CERT_FILE", Some(r)),
+                ("CURL_CA_BUNDLE", None),
+            ],
+            || {
+                assert_eq!(
+                    selected_ca_bundle_path_from_env().unwrap(),
+                    real_file.path()
+                )
+            },
         );
     }
 
@@ -787,7 +809,9 @@ mod tests {
 
     #[test]
     fn is_owned_by_current_user_returns_false_for_nonexistent_file() {
-        assert!(!is_owned_by_current_user(Path::new("/nonexistent/file.p12")));
+        assert!(!is_owned_by_current_user(Path::new(
+            "/nonexistent/file.p12"
+        )));
     }
 
     #[test]
@@ -961,7 +985,10 @@ mod tests {
             CliError::LicenseCheckFailed { stderr: s } => {
                 assert!(s.contains("License check failed"), "stderr preserved: {s}");
                 // Verify the user-facing message doesn't mention the CLI
-                let msg = CliError::LicenseCheckFailed { stderr: String::new() }.to_string();
+                let msg = CliError::LicenseCheckFailed {
+                    stderr: String::new(),
+                }
+                .to_string();
                 assert!(msg.contains("invalid or expired"), "msg: {msg}");
                 assert!(msg.contains("set_config"), "msg: {msg}");
                 assert!(!msg.contains("CS CLI"), "msg should not mention CLI: {msg}");
@@ -1359,8 +1386,7 @@ sC0Nc9QdNQt5Tos5Je5S7CWL0w==
     #[cfg(unix)]
     #[tokio::test]
     async fn run_cli_at_path_license_check_failure_persists_after_retry() {
-        let script =
-            ">&2 echo 'License check failed: [401] The user must reauthorize.'; exit 1";
+        let script = ">&2 echo 'License check failed: [401] The user must reauthorize.'; exit 1";
 
         let result = run_cli_at_path(Path::new("/bin/sh"), &["-c", script], None).await;
         match result.unwrap_err() {

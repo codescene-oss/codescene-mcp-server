@@ -149,54 +149,31 @@ fn validate_inside_git_repo(path: &Path) -> Result<(), ValidationError> {
 /// only, not full Code Health support.
 const SUPPORTED_EXTENSIONS: &[&str] = &[
     // C / C++
-    ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".ipp",
-    // C#
-    ".cs",
-    // Java
-    ".java",
-    // Groovy
-    ".groovy",
-    // JavaScript / TypeScript / React / Vue / ESM
+    ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".ipp", // C#
+    ".cs", // Java
+    ".java", // Groovy
+    ".groovy", // JavaScript / TypeScript / React / Vue / ESM
     ".js", ".mjs", ".cjs", ".sj", ".ts", ".mts", ".cts", ".jsx", ".tsx", ".vue",
     // Objective-C
-    ".m", ".mm",
-    // Scala
-    ".scala",
-    // Python
-    ".py", ".pyi",
-    // Swift
-    ".swift",
-    // Go
-    ".go",
-    // Dart
-    ".dart",
-    // Visual Basic .NET
-    ".vb",
-    // PHP
-    ".php",
-    // Rust
-    ".rs",
-    // Ruby
-    ".rb",
-    // Kotlin
-    ".kt", ".kts",
-    // Perl
-    ".pl", ".pm",
-    // Erlang
-    ".erl", ".hrl",
-    // Elixir
-    ".ex", ".exs",
-    // Clojure
-    ".clj", ".cljc", ".cljs",
-    // PowerShell
-    ".ps1", ".psm1", ".psd1",
-    // TCL
-    ".tcl",
-    // Apex (Salesforce)
-    ".cls", ".trigger", ".tgr",
-    // BrightScript / BrighterScript
-    ".brs", ".bs",
-    // Rational Software Architect models (C++)
+    ".m", ".mm", // Scala
+    ".scala", // Python
+    ".py", ".pyi", // Swift
+    ".swift", // Go
+    ".go", // Dart
+    ".dart", // Visual Basic .NET
+    ".vb", // PHP
+    ".php", // Rust
+    ".rs", // Ruby
+    ".rb", // Kotlin
+    ".kt", ".kts", // Perl
+    ".pl", ".pm", // Erlang
+    ".erl", ".hrl", // Elixir
+    ".ex", ".exs", // Clojure
+    ".clj", ".cljc", ".cljs", // PowerShell
+    ".ps1", ".psm1", ".psd1", // TCL
+    ".tcl", // Apex (Salesforce)
+    ".cls", ".trigger", ".tgr", // BrightScript / BrighterScript
+    ".brs", ".bs", // Rational Software Architect models (C++)
     ".efx", ".emx",
 ];
 
@@ -227,7 +204,9 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_extensions() {
-        for ext in ["txt", "md", "json", "yaml", "toml", "xml", "html", "css", "tf"] {
+        for ext in [
+            "txt", "md", "json", "yaml", "toml", "xml", "html", "css", "tf",
+        ] {
             assert!(
                 !is_supported_extension(ext),
                 "Expected .{ext} to be unsupported"
@@ -311,10 +290,7 @@ mod tests {
     fn run_checks_passes_when_all_ok() {
         let v = ProductionCliValidator;
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
-        let result = v.run_checks(&[
-            CliCheck::FileExists(&path),
-            CliCheck::InsideGitRepo(&path),
-        ]);
+        let result = v.run_checks(&[CliCheck::FileExists(&path), CliCheck::InsideGitRepo(&path)]);
         assert!(result.is_ok());
     }
 
@@ -343,7 +319,10 @@ mod tests {
     #[test]
     fn supported_extensions_all_start_with_dot() {
         for ext in SUPPORTED_EXTENSIONS {
-            assert!(ext.starts_with('.'), "Extension {ext} should start with '.'");
+            assert!(
+                ext.starts_with('.'),
+                "Extension {ext} should start with '.'"
+            );
         }
     }
 

@@ -73,11 +73,14 @@ class Config:
     dir
 }
 
-fn subtree_setup() -> Option<(Vec<String>, Vec<(String, String)>, std::path::PathBuf, tempfile::TempDir)> {
+fn subtree_setup() -> Option<(
+    Vec<String>,
+    Vec<(String, String)>,
+    std::path::PathBuf,
+    tempfile::TempDir,
+)> {
     // Check git subtree availability
-    let check = Command::new("git")
-        .args(["subtree", "--help"])
-        .output();
+    let check = Command::new("git").args(["subtree", "--help"]).output();
     if check.is_err() || !check.unwrap().status.success() {
         eprintln!("  SKIP: git subtree not available");
         return None;
@@ -95,8 +98,13 @@ fn subtree_setup() -> Option<(Vec<String>, Vec<(String, String)>, std::path::Pat
     // Add subtree
     let output = Command::new("git")
         .args([
-            "subtree", "add", "--prefix", SUBTREE_PREFIX,
-            &external_repo.to_string_lossy(), "master", "--squash",
+            "subtree",
+            "add",
+            "--prefix",
+            SUBTREE_PREFIX,
+            &external_repo.to_string_lossy(),
+            "master",
+            "--squash",
         ])
         .current_dir(&repo_dir)
         .output()
@@ -115,7 +123,12 @@ fn subtree_setup() -> Option<(Vec<String>, Vec<(String, String)>, std::path::Pat
     Some((command, env_vec, repo_dir, temp_dir))
 }
 
-fn run_score_test(file_path: &Path, repo_dir: &Path, command: &[String], env: &[(String, String)]) -> String {
+fn run_score_test(
+    file_path: &Path,
+    repo_dir: &Path,
+    command: &[String],
+    env: &[(String, String)],
+) -> String {
     let mut client = make_client(command, env, repo_dir);
     assert!(client.start(), "Server should start");
     client.initialize().expect("Initialize should succeed");
@@ -135,14 +148,18 @@ fn run_score_test(file_path: &Path, repo_dir: &Path, command: &[String], env: &[
 }
 
 pub fn test_subtree_code_health_score() {
-    let Some((command, env, repo_dir, _tmp)) = subtree_setup() else { return };
+    let Some((command, env, repo_dir, _tmp)) = subtree_setup() else {
+        return;
+    };
     let test_file = repo_dir.join(SUBTREE_PREFIX).join("utils.py");
     assert!(test_file.exists(), "Subtree file should exist");
     run_score_test(&test_file, &repo_dir, &command, &env);
 }
 
 pub fn test_subtree_code_health_review() {
-    let Some((command, env, repo_dir, _tmp)) = subtree_setup() else { return };
+    let Some((command, env, repo_dir, _tmp)) = subtree_setup() else {
+        return;
+    };
     let test_file = repo_dir.join(SUBTREE_PREFIX).join("config.py");
 
     let mut client = make_client(&command, &env, &repo_dir);
@@ -166,10 +183,16 @@ pub fn test_subtree_code_health_review() {
 }
 
 pub fn test_subtree_pre_commit() {
-    let Some((command, env, repo_dir, _tmp)) = subtree_setup() else { return };
+    let Some((command, env, repo_dir, _tmp)) = subtree_setup() else {
+        return;
+    };
     let test_file = repo_dir.join(SUBTREE_PREFIX).join("utils.py");
     let original = std::fs::read_to_string(&test_file).expect("read");
-    std::fs::write(&test_file, format!("{original}\n# Subtree modification test\n")).expect("write");
+    std::fs::write(
+        &test_file,
+        format!("{original}\n# Subtree modification test\n"),
+    )
+    .expect("write");
 
     Command::new("git")
         .args(["add", &test_file.to_string_lossy()])
@@ -191,10 +214,7 @@ pub fn test_subtree_pre_commit() {
 
     let result = extract_result_text(&response);
     assert!(result.len() > 20, "Safeguard should return content");
-    assert!(
-        !result.to_lowercase().contains("traceback"),
-        "No errors"
-    );
+    assert!(!result.to_lowercase().contains("traceback"), "No errors");
 
     // Reset
     std::fs::write(&test_file, &original).expect("restore");
@@ -205,13 +225,17 @@ pub fn test_subtree_pre_commit() {
 }
 
 pub fn test_subtree_absolute_paths() {
-    let Some((command, env, repo_dir, _tmp)) = subtree_setup() else { return };
+    let Some((command, env, repo_dir, _tmp)) = subtree_setup() else {
+        return;
+    };
     let test_file = repo_dir.join(SUBTREE_PREFIX).join("utils.py");
     run_score_test(&test_file, &repo_dir, &command, &env);
 }
 
 pub fn test_main_repo_still_works() {
-    let Some((command, env, repo_dir, _tmp)) = subtree_setup() else { return };
+    let Some((command, env, repo_dir, _tmp)) = subtree_setup() else {
+        return;
+    };
     let test_file = repo_dir.join("src/utils/calculator.py");
     run_score_test(&test_file, &repo_dir, &command, &env);
 }

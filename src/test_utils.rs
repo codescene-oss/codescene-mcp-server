@@ -8,8 +8,8 @@ use rmcp::model::CallToolResult;
 use crate::cli::{self, CliRunner};
 use crate::config::ConfigData;
 use crate::errors::CliError;
-use crate::http::{self};
 use crate::http::tests::MockHttpClient;
+use crate::http::{self};
 use crate::tools::validation::{CliCheck, ValidationError, Validator};
 use crate::version_checker::VersionChecker;
 use crate::{CodeSceneServer, ServerDeps};
@@ -164,11 +164,7 @@ impl MockCliRunner {
 
 #[async_trait]
 impl CliRunner for MockCliRunner {
-    async fn run(
-        &self,
-        _args: &[&str],
-        _working_dir: Option<&Path>,
-    ) -> Result<String, CliError> {
+    async fn run(&self, _args: &[&str], _working_dir: Option<&Path>) -> Result<String, CliError> {
         self.responses.lock().unwrap().remove(0)
     }
 }
@@ -253,8 +249,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use rmcp::model::{ClientJsonRpcMessage, ServerJsonRpcMessage};
-    use rmcp::service::ServerInitializeError;
     use rmcp::service::RoleServer;
+    use rmcp::service::ServerInitializeError;
     use rmcp::transport::Transport;
     use rmcp::ServerHandler;
     use serde_json::json;
@@ -264,8 +260,7 @@ mod tests {
     use crate::server_handler::build_instructions;
     use crate::version_checker::VersionChecker;
     use crate::{
-        display_version, fetch_cli_version, help_text, parse_cli_args,
-        CliAction, API_ONLY_TOOLS,
+        display_version, fetch_cli_version, help_text, parse_cli_args, CliAction, API_ONLY_TOOLS,
     };
 
     #[derive(Clone)]
@@ -558,10 +553,7 @@ mod tests {
             .collect()
     }
 
-    fn make_server_with_enabled_tools(
-        is_standalone: bool,
-        enabled_tools: &str,
-    ) -> CodeSceneServer {
+    fn make_server_with_enabled_tools(is_standalone: bool, enabled_tools: &str) -> CodeSceneServer {
         let mut values = HashMap::new();
         values.insert("enabled_tools".to_string(), enabled_tools.to_string());
         CodeSceneServer::new(ServerDeps {
@@ -579,12 +571,22 @@ mod tests {
     }
 
     fn assert_has_config_tools(names: &[String]) {
-        assert!(names.contains(&"get_config".to_string()), "missing get_config");
-        assert!(names.contains(&"set_config".to_string()), "missing set_config");
+        assert!(
+            names.contains(&"get_config".to_string()),
+            "missing get_config"
+        );
+        assert!(
+            names.contains(&"set_config".to_string()),
+            "missing set_config"
+        );
     }
 
     fn assert_tool_count_and_config(names: &[String], expected: usize) {
-        assert_eq!(names.len(), expected, "expected {expected} tools, got: {names:?}");
+        assert_eq!(
+            names.len(),
+            expected,
+            "expected {expected} tools, got: {names:?}"
+        );
         assert_has_config_tools(names);
     }
 
@@ -594,7 +596,7 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server(false);
         let names = tool_names(&server);
-        assert_tool_count_and_config(&names, 20);
+        assert_tool_count_and_config(&names, 24);
         assert!(names.contains(&"code_health_review".to_string()));
     }
 
@@ -602,8 +604,7 @@ mod tests {
     fn enabled_tools_filters_to_allowlist() {
         let _lock = config::lock_test_env();
         std::env::remove_var("CS_ENABLED_TOOLS");
-        let server =
-            make_server_with_enabled_tools(false, "code_health_review,code_health_score");
+        let server = make_server_with_enabled_tools(false, "code_health_review,code_health_score");
         let names = tool_names(&server);
         // Should have the 2 enabled tools + 2 always-on = 4
         assert_tool_count_and_config(&names, 4);
@@ -627,8 +628,7 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         // In standalone mode, API_ONLY_TOOLS are removed first,
         // then enabled_tools further restricts the list
-        let server =
-            make_server_with_enabled_tools(true, "code_health_review,select_project");
+        let server = make_server_with_enabled_tools(true, "code_health_review,select_project");
         let names = tool_names(&server);
         // select_project is api-only, so removed in standalone even if in enabled_tools
         assert!(!names.contains(&"select_project".to_string()));
@@ -697,5 +697,4 @@ mod tests {
         let close_result = service.close().await;
         assert!(close_result.is_ok());
     }
-
 }

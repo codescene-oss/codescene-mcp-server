@@ -44,8 +44,9 @@ use crate::http::HttpClient;
 use crate::tools::validation::{ValidationError, Validator};
 use crate::tools::{
     ChangeSetParam, DownloadSkillParam, FilePathParam, GetConfigParam, GitRepoParam,
-    OptionalContext, OwnershipParam, ProjectFileParam, ProjectParam, SetConfigParam,
-    SkillNameParam, SyncSkillsParam,
+    OptionalContext, OwnershipParam, ProjectFileParam, ProjectParam,
+    RulesConfigListThresholdsParam, RulesConfigSetRuleParam, RulesConfigSetThresholdParam,
+    RulesConfigValidateParam, SetConfigParam, SkillNameParam, SyncSkillsParam,
 };
 use crate::version_checker::VersionChecker;
 
@@ -179,32 +180,40 @@ impl CodeSceneServer {
     pub(crate) fn track_err(&self, tool: &str, err: &errors::CliError) {
         tracing::warn!(tool, error = %err, "tool error");
         tracking::track_error(&tracking::ErrorEvent {
-            error_kind: err.kind(), tool_name: tool,
-            instance_id: &self.instance_id, detail: None,
+            error_kind: err.kind(),
+            tool_name: tool,
+            instance_id: &self.instance_id,
+            detail: None,
         });
     }
 
     pub(crate) fn track_api_err(&self, tool: &str, err: &errors::ApiError) {
         tracing::warn!(tool, error = %err, "API error");
         tracking::track_error(&tracking::ErrorEvent {
-            error_kind: err.kind(), tool_name: tool,
-            instance_id: &self.instance_id, detail: None,
+            error_kind: err.kind(),
+            tool_name: tool,
+            instance_id: &self.instance_id,
+            detail: None,
         });
     }
 
     pub(crate) fn track_validation_err(&self, tool: &str, err: &ValidationError) {
         tracing::warn!(tool, error = %err, "tool error");
         tracking::track_error(&tracking::ErrorEvent {
-            error_kind: err.kind, tool_name: tool,
-            instance_id: &self.instance_id, detail: err.detail.as_deref(),
+            error_kind: err.kind,
+            tool_name: tool,
+            instance_id: &self.instance_id,
+            detail: err.detail.as_deref(),
         });
     }
 
     pub(crate) fn track_err_msg(&self, tool: &str, error_kind: &str, err: &str) {
         tracing::warn!(tool, error = err, "tool error");
         tracking::track_error(&tracking::ErrorEvent {
-            error_kind, tool_name: tool,
-            instance_id: &self.instance_id, detail: None,
+            error_kind,
+            tool_name: tool,
+            instance_id: &self.instance_id,
+            detail: None,
         });
     }
 }
@@ -328,6 +337,50 @@ impl CodeSceneServer {
         Parameters(params): Parameters<FilePathParam>,
     ) -> Result<CallToolResult, ErrorData> {
         tools::code_health_refactoring_business_case::handle(self, params).await
+    }
+
+    #[tool(
+        description = "Validate a Code Health rules configuration file (code-health-rules.json).\nThis is the file that customizes CodeScene's Code Health analysis by\nadjusting rule weights and thresholds.\n\nWhen to use:\n    Use this tool after creating or editing a Code Health rules file to\n    confirm it is well-formed before relying on it for analysis.\n\nLimitations:\n    - Local, filesystem-only operation. No CodeScene API or access token\n      is required.\n    - config_path, when provided, must be an absolute path.\n    - Without config_path, the CLI looks for\n      .codescene/code-health-rules.json in the current git repository.\n\nReturns:\n    A JSON object with:\n        - status: \"ok\" when the configuration is valid.\n        - summary: A human-readable count of rule sets, rule overrides,\n          and threshold overrides.\n\nOn failure:\n    If the file is missing or malformed, the error message describes the\n    problem and a suggested remedy. Fix the file (or supply a valid\n    config_path) and validate again.\n\nExample:\n    Call with config_path=\"/repo/.codescene/code-health-rules.json\" and\n    report whether the Code Health rules configuration is valid.",
+        input_schema = inlined_schema_for::<RulesConfigValidateParam>()
+    )]
+    async fn rules_config_validate(
+        &self,
+        Parameters(params): Parameters<RulesConfigValidateParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::rules_config_validate::handle(self, params).await
+    }
+
+    #[tool(
+        description = "List the default Code Health thresholds for a programming language.\nThresholds define what Code Health issues such as \"Complex Method\" or\n\"Large Method\" mean for a given language, and are the values you can\noverride in a code-health-rules.json file.\n\nWhen to use:\n    Use this tool to discover the built-in threshold names and default\n    values for a language before overriding any of them with\n    rules_config_set_threshold.\n\nLimitations:\n    - Local, filesystem-only operation. No CodeScene API or access token\n      is required.\n    - Requires a supported language name (e.g., Python, JavaScript, Java,\n      C#).\n    - config_path, when provided, must be an absolute path; the returned\n      values then reflect that file's overrides. Without it, built-in\n      defaults are shown.\n\nReturns:\n    A JSON object keyed by rule-set name, each containing a `thresholds`\n    array of `{ name, value }` entries.\n\nOn failure:\n    If the language is not supported, the error message lists supported\n    languages. Retry with a valid language name.\n\nExample:\n    Call with language=\"Python\" and present the threshold names and\n    values the user can customize.",
+        input_schema = inlined_schema_for::<RulesConfigListThresholdsParam>()
+    )]
+    async fn rules_config_list_thresholds(
+        &self,
+        Parameters(params): Parameters<RulesConfigListThresholdsParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::rules_config_list_thresholds::handle(self, params).await
+    }
+
+    #[tool(
+        description = "Enable or disable a Code Health rule in a code-health-rules.json file.\nDisabling a rule removes its impact from CodeScene's Code Health score;\nenabling it restores the default behavior.\n\nWhen to use:\n    Use this tool to turn a specific Code Health rule (e.g., \"Complex\n    Method\") on or off for a repository. This edits the rules file on\n    disk.\n\nLimitations:\n    - Local, filesystem-only operation that WRITES to the rules file. No\n      CodeScene API or access token is required.\n    - rule_name must be a supported Code Health rule name.\n    - config_path, when provided, must be an absolute path. Without it,\n      the CLI edits .codescene/code-health-rules.json in the current git\n      repository.\n    - matching_content_path is required only when the file defines\n      multiple rule sets; it selects which one to edit.\n\nReturns:\n    A confirmation message naming the rule, its new enabled/disabled\n    state, and the rule set that was edited.\n\nOn failure:\n    If the rule name is unknown the error suggests valid names; if\n    multiple rule sets exist without a selector the error lists the\n    available selectors. Retry with the corrected input.\n\nExample:\n    Call with rule_name=\"Complex Method\" and enabled=false to disable the\n    Complex Method rule, then confirm the change to the user.",
+        input_schema = inlined_schema_for::<RulesConfigSetRuleParam>()
+    )]
+    async fn rules_config_set_rule(
+        &self,
+        Parameters(params): Parameters<RulesConfigSetRuleParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::rules_config_set_rule::handle(self, params).await
+    }
+
+    #[tool(
+        description = "Set a Code Health threshold value in a code-health-rules.json file.\nThresholds tune the sensitivity of Code Health issues (for example, the\nnumber of lines at which a function is flagged as a \"Large Method\").\n\nWhen to use:\n    Use this tool to override a specific Code Health threshold for a\n    repository. This edits the rules file on disk. Use\n    rules_config_list_thresholds first to find valid threshold names.\n\nLimitations:\n    - Local, filesystem-only operation that WRITES to the rules file. No\n      CodeScene API or access token is required.\n    - threshold_name must be a supported Code Health threshold name.\n    - value must be a positive integer.\n    - config_path, when provided, must be an absolute path. Without it,\n      the CLI edits .codescene/code-health-rules.json in the current git\n      repository.\n    - matching_content_path is required only when the file defines\n      multiple rule sets; it selects which one to edit.\n\nReturns:\n    A confirmation message naming the threshold, its new value, and the\n    rule set that was edited.\n\nOn failure:\n    If the threshold name is unknown or the value is not a positive\n    integer, the error message explains the problem. Retry with corrected\n    input.\n\nExample:\n    Call with threshold_name=\"function_lines_of_code_warning\" and\n    value=120 to raise the Large Method warning threshold, then confirm\n    the change.",
+        input_schema = inlined_schema_for::<RulesConfigSetThresholdParam>()
+    )]
+    async fn rules_config_set_threshold(
+        &self,
+        Parameters(params): Parameters<RulesConfigSetThresholdParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::rules_config_set_threshold::handle(self, params).await
     }
 
     #[tool(
@@ -474,8 +527,7 @@ impl CodeSceneServer {
 fn init_tracing(
     config_data: &config::ConfigData,
 ) -> Option<tracing_appender::non_blocking::WorkerGuard> {
-    let env_filter =
-        EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into());
+    let env_filter = EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into());
     let stderr_layer = tracing_subscriber::fmt::layer()
         .with_writer(std::io::stderr)
         .with_ansi(false);

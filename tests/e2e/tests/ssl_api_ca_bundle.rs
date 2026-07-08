@@ -8,14 +8,10 @@
 //! 1. `select_project` succeeds when `REQUESTS_CA_BUNDLE` is set.
 //! 2. `select_project` fails without the CA bundle.
 
-use super::*;
 use super::fake_https_server::FakeHttpsServer;
+use super::*;
 
-fn call_select_project(
-    command: &[String],
-    env: &[(String, String)],
-    repo_dir: &Path,
-) -> String {
+fn call_select_project(command: &[String], env: &[(String, String)], repo_dir: &Path) -> String {
     let mut client = make_client(command, env, repo_dir);
     assert!(client.start(), "Server should start");
     client.initialize().expect("Initialize should succeed");
@@ -66,7 +62,9 @@ fn ssl_api_setup() -> (
 /// When `REQUESTS_CA_BUNDLE` points to the CA cert, `select_project` should
 /// succeed and return the fake project data.
 pub fn test_api_uses_ca_bundle() {
-    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
+    if is_docker() {
+        return skip_if_docker("HTTPS server on host unreachable from container");
+    }
     let (command, env, repo_dir, _server, _tmp) = ssl_api_setup();
 
     let result = call_select_project(&command, &env, &repo_dir);
@@ -85,14 +83,14 @@ pub fn test_api_uses_ca_bundle() {
 /// Without `REQUESTS_CA_BUNDLE`, the TLS handshake should fail because the
 /// server uses a self-signed certificate unknown to the system trust store.
 pub fn test_api_fails_without_ca_bundle() {
-    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
+    if is_docker() {
+        return skip_if_docker("HTTPS server on host unreachable from container");
+    }
     let (command, env, repo_dir, _server, _tmp) = ssl_api_setup();
 
     let env_without_ca: Vec<(String, String)> = env
         .into_iter()
-        .filter(|(k, _)| {
-            k != "REQUESTS_CA_BUNDLE" && k != "SSL_CERT_FILE" && k != "CURL_CA_BUNDLE"
-        })
+        .filter(|(k, _)| k != "REQUESTS_CA_BUNDLE" && k != "SSL_CERT_FILE" && k != "CURL_CA_BUNDLE")
         .collect();
 
     let result = call_select_project(&command, &env_without_ca, &repo_dir);
@@ -114,14 +112,14 @@ pub fn test_api_fails_without_ca_bundle() {
 /// common Windows misconfiguration where backslashes in JSON config are not
 /// properly escaped, causing the path to be mangled.
 pub fn test_api_fails_with_invalid_ca_bundle_path() {
-    if is_docker() { return skip_if_docker("HTTPS server on host unreachable from container"); }
+    if is_docker() {
+        return skip_if_docker("HTTPS server on host unreachable from container");
+    }
     let (command, env, repo_dir, _server, _tmp) = ssl_api_setup();
 
     let env_bad_ca: Vec<(String, String)> = env
         .into_iter()
-        .filter(|(k, _)| {
-            k != "REQUESTS_CA_BUNDLE" && k != "SSL_CERT_FILE" && k != "CURL_CA_BUNDLE"
-        })
+        .filter(|(k, _)| k != "REQUESTS_CA_BUNDLE" && k != "SSL_CERT_FILE" && k != "CURL_CA_BUNDLE")
         .chain(std::iter::once((
             "REQUESTS_CA_BUNDLE".to_string(),
             "/nonexistent/path/to/ca-bundle.pem".to_string(),

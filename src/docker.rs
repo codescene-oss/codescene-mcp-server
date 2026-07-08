@@ -152,7 +152,10 @@ mod tests {
     #[test]
     fn strip_msys_drive_prefix() {
         assert_eq!(NormalizedPath::from_str("/c/Users/foo").0, "/Users/foo");
-        assert_eq!(NormalizedPath::from_str("/d/code/project").0, "/code/project");
+        assert_eq!(
+            NormalizedPath::from_str("/d/code/project").0,
+            "/code/project"
+        );
     }
 
     #[test]

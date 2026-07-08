@@ -209,8 +209,7 @@ struct NpmSharedState {
 }
 
 /// Global npm backend state, initialized once on first access.
-static NPM_STATE: LazyLock<Mutex<Option<NpmSharedState>>> =
-    LazyLock::new(|| Mutex::new(None));
+static NPM_STATE: LazyLock<Mutex<Option<NpmSharedState>>> = LazyLock::new(|| Mutex::new(None));
 
 /// Backend that tests the full npm package install and binary download flow.
 ///
@@ -282,7 +281,11 @@ impl NpmBackend {
             .output()
             .expect("npm pack should execute");
 
-        assert!(output.status.success(), "npm pack failed: {}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "npm pack failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         let tarball_name = String::from_utf8_lossy(&output.stdout)
             .trim()
@@ -292,7 +295,11 @@ impl NpmBackend {
             .to_string();
 
         let path = pack_dest.join(tarball_name);
-        assert!(path.exists(), "Expected tarball not found: {}", path.display());
+        assert!(
+            path.exists(),
+            "Expected tarball not found: {}",
+            path.display()
+        );
         // Keep the temp dir alive by leaking it; tarball is deleted after install
         std::mem::forget(pack_dir);
         path
@@ -401,7 +408,10 @@ impl ServerBackend for NpmBackend {
             return; // Already prepared by another test
         }
 
-        let binary = self.cargo_executable.as_ref().expect("executable required for npm backend");
+        let binary = self
+            .cargo_executable
+            .as_ref()
+            .expect("executable required for npm backend");
         assert!(binary.exists(), "Binary not found: {}", binary.display());
 
         Self::find_tool("node");
@@ -415,7 +425,11 @@ impl ServerBackend for NpmBackend {
 
         // Verify bin symlink exists
         let bin_script = install_dir.join("node_modules/.bin/cs-mcp");
-        assert!(bin_script.exists(), "Bin symlink not found: {}", bin_script.display());
+        assert!(
+            bin_script.exists(),
+            "Bin symlink not found: {}",
+            bin_script.display()
+        );
 
         // Prime the binary cache: run the bin script with --version so the
         // download + extract happens exactly once before parallel tests start.
@@ -480,10 +494,7 @@ fn percent_decode(input: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(byte) = u8::from_str_radix(
-                &input[i + 1..i + 3],
-                16,
-            ) {
+            if let Ok(byte) = u8::from_str_radix(&input[i + 1..i + 3], 16) {
                 out.push(byte);
                 i += 3;
                 continue;
@@ -501,7 +512,8 @@ fn create_zip(zip_path: &Path, source: &Path, inner_name: &str) {
     let mut zip = zip::ZipWriter::new(file);
     let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);
-    zip.start_file(inner_name, options).expect("start zip entry");
+    zip.start_file(inner_name, options)
+        .expect("start zip entry");
     let data = std::fs::read(source).expect("read binary for zip");
     std::io::Write::write_all(&mut zip, &data).expect("write zip entry");
     zip.finish().expect("finish zip");
@@ -515,12 +527,20 @@ pub fn is_docker() -> bool {
 /// The address to bind fake HTTP servers on.
 /// Use `0.0.0.0` for Docker so the container can connect back to the host.
 pub fn fake_server_bind_host() -> &'static str {
-    if is_docker() { "0.0.0.0" } else { "127.0.0.1" }
+    if is_docker() {
+        "0.0.0.0"
+    } else {
+        "127.0.0.1"
+    }
 }
 
 /// The hostname the MCP server should use to reach fake servers on the host.
 pub fn fake_server_url_host() -> &'static str {
-    if is_docker() { "host.docker.internal" } else { "127.0.0.1" }
+    if is_docker() {
+        "host.docker.internal"
+    } else {
+        "127.0.0.1"
+    }
 }
 
 /// Translate a host-side config directory path for the Docker container.

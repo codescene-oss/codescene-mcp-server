@@ -95,9 +95,8 @@ fn build_reqwest_client() -> Result<reqwest::Client, String> {
     let mut builder = reqwest::Client::builder();
 
     if let Some(ca_path) = ca_bundle_path_from_env() {
-        let pem_data = std::fs::read(&ca_path).map_err(|e| {
-            format!("Failed to read CA bundle {}: {e}", ca_path.display())
-        })?;
+        let pem_data = std::fs::read(&ca_path)
+            .map_err(|e| format!("Failed to read CA bundle {}: {e}", ca_path.display()))?;
         let certs = reqwest::Certificate::from_pem_bundle(&pem_data)
             .map_err(|e| format!("Failed to parse CA bundle: {e}"))?;
         for cert in certs {
@@ -105,7 +104,9 @@ fn build_reqwest_client() -> Result<reqwest::Client, String> {
         }
     }
 
-    builder.build().map_err(|e| format!("Failed to build HTTP client: {e}"))
+    builder
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))
 }
 
 #[async_trait::async_trait]

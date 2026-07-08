@@ -48,7 +48,10 @@ fn get_tool_names_with_token(
         .iter()
         .filter(|(k, _)| k != "CS_ACCESS_TOKEN")
         .cloned()
-        .chain(std::iter::once(("CS_ACCESS_TOKEN".to_string(), token.to_string())))
+        .chain(std::iter::once((
+            "CS_ACCESS_TOKEN".to_string(),
+            token.to_string(),
+        )))
         .collect();
 
     let mut client = make_client(command, &env, cwd);

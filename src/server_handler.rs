@@ -2,7 +2,8 @@ use rmcp::model::{
     AnnotateAble, GetPromptRequestParams, GetPromptResult, Implementation, ListPromptsResult,
     ListResourceTemplatesResult, ListResourcesResult, PaginatedRequestParams, Prompt,
     PromptArgument, PromptMessage, PromptMessageRole, RawResource, RawResourceTemplate,
-    ReadResourceRequestParams, ReadResourceResult, ResourceContents, ServerCapabilities, ServerInfo,
+    ReadResourceRequestParams, ReadResourceResult, ResourceContents, ServerCapabilities,
+    ServerInfo,
 };
 use rmcp::service::RequestContext;
 use rmcp::{tool_handler, ErrorData, RoleServer, ServerHandler};
@@ -119,8 +120,7 @@ fn build_resources_list() -> ListResourcesResult {
             let main_uri = skills::skill_uri(&skill.name, "SKILL.md");
             let manifest_uri_str = skills::manifest_uri(&skill.name);
             let manifest_name = format!("{} manifest", skill.name);
-            let manifest_desc =
-                format!("File manifest for the {} skill", skill.name);
+            let manifest_desc = format!("File manifest for the {} skill", skill.name);
             vec![
                 RawResource::new(main_uri, &skill.name)
                     .with_description(&skill.description)
@@ -142,36 +142,29 @@ fn build_resources_list() -> ListResourcesResult {
 }
 
 fn resolve_resource(uri: &str) -> Result<ReadResourceResult, ErrorData> {
-    let (skill_name, path) =
-        skills::parse_skill_uri(uri).ok_or_else(|| {
-            ErrorData::resource_not_found(
-                format!("Invalid skill URI: {uri}"),
-                None,
-            )
-        })?;
+    let (skill_name, path) = skills::parse_skill_uri(uri)
+        .ok_or_else(|| ErrorData::resource_not_found(format!("Invalid skill URI: {uri}"), None))?;
 
     let skill_list = skills::load_skills();
     let skill = skill_list
         .iter()
         .find(|s| s.name == skill_name)
         .ok_or_else(|| {
-            ErrorData::resource_not_found(
-                format!("Skill not found: {skill_name}"),
-                None,
-            )
+            ErrorData::resource_not_found(format!("Skill not found: {skill_name}"), None)
         })?;
 
     match path {
-        "SKILL.md" => Ok(ReadResourceResult::new(vec![
-            ResourceContents::text(skill.content, uri)
-                .with_mime_type("text/markdown"),
-        ])),
+        "SKILL.md" => Ok(ReadResourceResult::new(vec![ResourceContents::text(
+            skill.content,
+            uri,
+        )
+        .with_mime_type("text/markdown")])),
         "_manifest" => {
             let manifest = skills::build_manifest(skill);
-            Ok(ReadResourceResult::new(vec![
-                ResourceContents::text(manifest, uri)
-                    .with_mime_type("application/json"),
-            ]))
+            Ok(ReadResourceResult::new(vec![ResourceContents::text(
+                manifest, uri,
+            )
+            .with_mime_type("application/json")]))
         }
         _ => Err(ErrorData::resource_not_found(
             format!("File not found in skill {skill_name}: {path}"),
@@ -181,15 +174,12 @@ fn resolve_resource(uri: &str) -> Result<ReadResourceResult, ErrorData> {
 }
 
 fn build_resource_templates() -> ListResourceTemplatesResult {
-    let template = RawResourceTemplate::new(
-        "skill://{skill_name}/{path}",
-        "Skill file",
-    )
-    .with_description(
-        "Access a specific file within a CodeScene skill. \
+    let template = RawResourceTemplate::new("skill://{skill_name}/{path}", "Skill file")
+        .with_description(
+            "Access a specific file within a CodeScene skill. \
          Use skill_name from the resource list and path from the manifest.",
-    )
-    .with_mime_type("text/markdown");
+        )
+        .with_mime_type("text/markdown");
     ListResourceTemplatesResult {
         resource_templates: vec![template.no_annotation()],
         next_cursor: None,
@@ -208,6 +198,10 @@ pub(crate) fn build_instructions(is_standalone: bool, tools_filtered: bool) -> S
          - pre_commit_code_health_safeguard: Check staged changes before commit.\n\
          - analyze_change_set: Branch-level review before PR.\n\
          - code_health_refactoring_business_case: ROI for refactoring.\n\
+         - rules_config_validate: Validate a Code Health rules file.\n\
+         - rules_config_list_thresholds: List a language's default Code Health thresholds.\n\
+         - rules_config_set_rule: Enable/disable a Code Health rule in a rules file.\n\
+         - rules_config_set_threshold: Set a Code Health threshold in a rules file.\n\
          - get_config / set_config: Manage server configuration.\n\
          \n\
          RESOURCES:\n\
@@ -237,7 +231,6 @@ pub(crate) fn build_instructions(is_standalone: bool, tools_filtered: bool) -> S
 
     text
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -334,8 +327,7 @@ mod tests {
 
     #[test]
     fn read_unknown_path_in_skill_returns_error() {
-        let result =
-            resolve_resource("skill://safeguarding-ai-generated-code/unknown.txt");
+        let result = resolve_resource("skill://safeguarding-ai-generated-code/unknown.txt");
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.message.contains("File not found"));

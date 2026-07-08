@@ -12,12 +12,17 @@ pub fn extract_result_text(response: &Value) -> String {
 }
 
 fn extract_from_content(response: &Value) -> Option<String> {
-    let first = response.get("result")?.get("content")?.as_array()?.first()?;
+    let first = response
+        .get("result")?
+        .get("content")?
+        .as_array()?
+        .first()?;
     first.get("text")?.as_str().map(String::from)
 }
 
 fn extract_from_structured_content(response: &Value) -> Option<String> {
-    response.get("result")?
+    response
+        .get("result")?
         .get("structuredContent")?
         .get("result")?
         .as_str()
@@ -33,7 +38,8 @@ pub fn extract_code_health_score(response_text: &str) -> Option<f64> {
         r"health[:\s]+([0-9]+\.?[0-9]*)",
     ];
 
-    patterns.iter()
+    patterns
+        .iter()
         .filter_map(|p| Regex::new(p).ok())
         .find_map(|re| parse_first_capture(&re, &text_lower))
 }

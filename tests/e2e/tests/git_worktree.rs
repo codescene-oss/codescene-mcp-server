@@ -9,9 +9,19 @@ use std::process::Command;
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 fn create_worktree(repo_dir: &Path, branch_name: &str) -> std::path::PathBuf {
-    let worktree_dir = repo_dir.parent().unwrap().join(format!("worktree_{branch_name}"));
+    let worktree_dir = repo_dir
+        .parent()
+        .unwrap()
+        .join(format!("worktree_{branch_name}"));
     let output = Command::new("git")
-        .args(["worktree", "add", "-b", branch_name, &worktree_dir.to_string_lossy(), "master"])
+        .args([
+            "worktree",
+            "add",
+            "-b",
+            branch_name,
+            &worktree_dir.to_string_lossy(),
+            "master",
+        ])
         .current_dir(repo_dir)
         .output()
         .expect("git worktree add should execute");
@@ -27,12 +37,23 @@ fn create_worktree(repo_dir: &Path, branch_name: &str) -> std::path::PathBuf {
 
 fn cleanup_worktree(repo_dir: &Path, worktree_dir: &Path) {
     let _ = Command::new("git")
-        .args(["worktree", "remove", &worktree_dir.to_string_lossy(), "--force"])
+        .args([
+            "worktree",
+            "remove",
+            &worktree_dir.to_string_lossy(),
+            "--force",
+        ])
         .current_dir(repo_dir)
         .output();
 }
 
-fn worktree_setup() -> (Vec<String>, Vec<(String, String)>, std::path::PathBuf, std::path::PathBuf, tempfile::TempDir) {
+fn worktree_setup() -> (
+    Vec<String>,
+    Vec<(String, String)>,
+    std::path::PathBuf,
+    std::path::PathBuf,
+    tempfile::TempDir,
+) {
     let executable = find_or_build_executable();
     let backend = create_backend(executable);
 
@@ -49,7 +70,12 @@ fn worktree_setup() -> (Vec<String>, Vec<(String, String)>, std::path::PathBuf, 
     (command, env_vec, repo_dir, worktree_dir, temp_dir)
 }
 
-fn run_worktree_score_test(worktree_dir: &Path, file_subpath: &str, command: &[String], env: &[(String, String)]) -> String {
+fn run_worktree_score_test(
+    worktree_dir: &Path,
+    file_subpath: &str,
+    command: &[String],
+    env: &[(String, String)],
+) -> String {
     let mut client = make_client(command, env, worktree_dir);
     assert!(client.start(), "Server should start");
     client.initialize().expect("Initialize should succeed");
@@ -65,7 +91,10 @@ fn run_worktree_score_test(worktree_dir: &Path, file_subpath: &str, command: &[S
 
     let result = extract_result_text(&response);
     let score = extract_code_health_score(&result);
-    assert!(score.is_some(), "Should return a score in worktree: {result}");
+    assert!(
+        score.is_some(),
+        "Should return a score in worktree: {result}"
+    );
     result
 }
 
@@ -96,7 +125,10 @@ pub fn test_worktree_code_health_review() {
         .expect("Tool call should succeed");
 
     let result = extract_result_text(&response);
-    assert!(result.len() > 50, "Review should return substantial content");
+    assert!(
+        result.len() > 50,
+        "Review should return substantial content"
+    );
     assert!(
         !result.to_lowercase().contains("traceback"),
         "No errors in response"

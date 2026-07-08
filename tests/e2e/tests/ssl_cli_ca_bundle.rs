@@ -12,8 +12,8 @@
 //! are injected), this test exercises the **real embedded CLI binary** making
 //! an actual HTTPS connection through a self-signed CA certificate.
 
-use super::*;
 use super::fake_https_server::FakeHttpsServer;
+use super::*;
 
 const VERIFY_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -117,9 +117,7 @@ pub fn test_cli_connectivity_fails_without_ca_bundle() {
 
     let env_without_ca: Vec<(String, String)> = env
         .into_iter()
-        .filter(|(k, _)| {
-            k != "REQUESTS_CA_BUNDLE" && k != "SSL_CERT_FILE" && k != "CURL_CA_BUNDLE"
-        })
+        .filter(|(k, _)| k != "REQUESTS_CA_BUNDLE" && k != "SSL_CERT_FILE" && k != "CURL_CA_BUNDLE")
         .collect();
 
     let result = call_verify_installation(&command, &env_without_ca, &repo_dir);

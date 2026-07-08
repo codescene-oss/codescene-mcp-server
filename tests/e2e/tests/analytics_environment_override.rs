@@ -4,14 +4,12 @@
 //! - Default environment (binary/docker) is sent when `CS_ENVIRONMENT` is unset
 //! - Custom environment value is sent when `CS_ENVIRONMENT` is set
 
-use super::*;
 use super::fake_https_server::FakeHttpsServer;
+use super::*;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 
-fn score_event_environment(
-    extra_env: &[(&str, &str)],
-) -> Option<String> {
+fn score_event_environment(extra_env: &[(&str, &str)]) -> Option<String> {
     let cert_dir = create_temp_dir("cs_mcp_certs_env_").expect("cert dir");
     let server = FakeHttpsServer::always_ok(cert_dir.path());
     let (command, mut env, repo_dir, _tmp) = setup();
@@ -56,8 +54,7 @@ fn score_event_environment(
 }
 
 pub fn test_default_environment_is_sent() {
-    let value = score_event_environment(&[])
-        .expect("Should find environment property");
+    let value = score_event_environment(&[]).expect("Should find environment property");
 
     assert!(
         value == "binary" || value == "docker",

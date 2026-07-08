@@ -118,7 +118,8 @@ fn create_feature_branch_with_file_change(repo_dir: &Path, file_path: &str, addi
 
     let full_path = repo_dir.join(file_path);
     let original = std::fs::read_to_string(&full_path).expect("Read original file");
-    std::fs::write(&full_path, format!("{original}{additional_code}")).expect("Write modified file");
+    std::fs::write(&full_path, format!("{original}{additional_code}"))
+        .expect("Write modified file");
 
     git(repo_dir, &["add", "."]);
     git(repo_dir, &["commit", "-m", "Feature branch change"]);
@@ -134,7 +135,10 @@ fn create_feature_branch_with_new_file(repo_dir: &Path, file_path: &str, content
     std::fs::write(&full_path, content).expect("Write new file");
 
     git(repo_dir, &["add", "."]);
-    git(repo_dir, &["commit", "-m", "Add new file on feature branch"]);
+    git(
+        repo_dir,
+        &["commit", "-m", "Add new file on feature branch"],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +179,12 @@ fn run_change_set_analysis(
 // Local setup — each test gets its own temp dir and git repo
 // ---------------------------------------------------------------------------
 
-fn local_setup() -> (Vec<String>, Vec<(String, String)>, std::path::PathBuf, tempfile::TempDir) {
+fn local_setup() -> (
+    Vec<String>,
+    Vec<(String, String)>,
+    std::path::PathBuf,
+    tempfile::TempDir,
+) {
     let executable = find_or_build_executable();
     let backend = create_backend(executable);
 
@@ -238,13 +247,21 @@ pub fn test_passes_on_clean_branch() {
 
 pub fn test_fails_on_degraded_branch() {
     let (command, env, repo_dir, _tmp) = local_setup();
-    create_feature_branch_with_file_change(&repo_dir, "src/utils/calculator.py", DEGRADING_ADDITION);
+    create_feature_branch_with_file_change(
+        &repo_dir,
+        "src/utils/calculator.py",
+        DEGRADING_ADDITION,
+    );
     assert_quality_gates_failed(&command, &env, &repo_dir, "calculator.py");
 }
 
 pub fn test_fails_on_new_file_with_degraded_health() {
     let (command, env, repo_dir, _tmp) = local_setup();
-    create_feature_branch_with_new_file(&repo_dir, "src/validation/validator.py", DEGRADING_NEW_FILE);
+    create_feature_branch_with_new_file(
+        &repo_dir,
+        "src/validation/validator.py",
+        DEGRADING_NEW_FILE,
+    );
     assert_quality_gates_failed(&command, &env, &repo_dir, "validator.py");
 }
 

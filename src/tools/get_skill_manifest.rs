@@ -30,9 +30,7 @@ pub(crate) async fn handle(
 mod tests {
     use rmcp::handler::server::wrapper::Parameters;
 
-    use crate::tests::{
-        assert_error_contains, assert_success_contains, make_server, set_token,
-    };
+    use crate::tests::{assert_error_contains, assert_success_contains, make_server, set_token};
     use crate::tools::SkillNameParam;
 
     #[tokio::test]

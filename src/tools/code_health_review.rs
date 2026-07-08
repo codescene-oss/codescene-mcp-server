@@ -69,7 +69,8 @@ mod tests {
     #[tokio::test]
     async fn validation_failure_returns_error() {
         let _g = set_token("tok");
-        let server = make_failing_validator_server("unsupported_file_type", "File type not supported: .xyz");
+        let server =
+            make_failing_validator_server("unsupported_file_type", "File type not supported: .xyz");
         let params = FilePathParam {
             file_path: "/tmp/test.xyz".to_string(),
         };

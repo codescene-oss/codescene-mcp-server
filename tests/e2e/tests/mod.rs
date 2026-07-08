@@ -4,8 +4,8 @@ pub use crate::fixtures::get_sample_files;
 pub use crate::mcp_client::MCPClient;
 pub use crate::response_parsers::{extract_code_health_score, extract_result_text};
 pub use crate::server_backends::{
-    base_env, create_backend, docker_ca_bundle, docker_config_dir, fake_server_bind_host, fake_server_url_host,
-    is_docker, skip_if_docker, ServerBackend,
+    base_env, create_backend, docker_ca_bundle, docker_config_dir, fake_server_bind_host,
+    fake_server_url_host, is_docker, skip_if_docker, ServerBackend,
 };
 pub use crate::{find_or_build_executable, make_client, setup};
 
@@ -17,9 +17,9 @@ pub use std::time::Duration;
 pub mod fake_http_server;
 pub mod fake_https_server;
 
-pub mod analyze_change_set;
 pub mod analytics_environment_override;
 pub mod analytics_tracking;
+pub mod analyze_change_set;
 pub mod bundled_docs;
 pub mod business_case;
 pub mod cloudfront_headers;

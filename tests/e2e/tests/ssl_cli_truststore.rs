@@ -111,11 +111,7 @@ fn make_fake_cli(dir: &Path) -> std::path::PathBuf {
 }
 
 /// Start the MCP server, call `code_health_score` on calculator.py, return result text.
-fn call_score_tool(
-    command: &[String],
-    env: &[(String, String)],
-    repo_dir: &Path,
-) -> String {
+fn call_score_tool(command: &[String], env: &[(String, String)], repo_dir: &Path) -> String {
     let mut client = make_client(command, env, repo_dir);
     assert!(client.start(), "Server should start");
     client.initialize().expect("Initialize should succeed");
@@ -145,8 +141,7 @@ fn local_setup() -> (
 
     let temp_dir = create_temp_dir("cs_mcp_ssl_cli_").expect("create temp dir");
     let sample_files = get_sample_files();
-    let repo_dir =
-        create_git_repo(temp_dir.path(), &sample_files).expect("create git repo");
+    let repo_dir = create_git_repo(temp_dir.path(), &sample_files).expect("create git repo");
 
     let fake_cli = make_fake_cli(temp_dir.path());
 
@@ -159,7 +154,10 @@ fn local_setup() -> (
         .into_iter()
         .chain([
             ("CS_ACCESS_TOKEN".to_string(), "test-token".to_string()),
-            ("CS_CLI_PATH".to_string(), fake_cli.to_string_lossy().to_string()),
+            (
+                "CS_CLI_PATH".to_string(),
+                fake_cli.to_string_lossy().to_string(),
+            ),
             ("REQUIRE_TRUSTSTORE".to_string(), "1".to_string()),
             ("CS_DISABLE_VERSION_CHECK".to_string(), "1".to_string()),
             ("CS_DISABLE_TRACKING".to_string(), "1".to_string()),
@@ -177,7 +175,9 @@ fn local_setup() -> (
 /// When `REQUESTS_CA_BUNDLE` points to a valid cert, the MCP server injects
 /// truststore args and the fake CLI succeeds with a score.
 pub fn test_truststore_args_are_injected() {
-    if is_docker() { return skip_if_docker("fake CLI binary not available in container"); }
+    if is_docker() {
+        return skip_if_docker("fake CLI binary not available in container");
+    }
     let (command, env, repo_dir, cert_path, _tmp) = local_setup();
 
     let env: Vec<(String, String)> = env
@@ -199,14 +199,14 @@ pub fn test_truststore_args_are_injected() {
 /// Without `REQUESTS_CA_BUNDLE`, no truststore args are injected and the
 /// fake CLI (with `REQUIRE_TRUSTSTORE=1`) exits with an error.
 pub fn test_truststore_args_missing_without_cert() {
-    if is_docker() { return skip_if_docker("fake CLI binary not available in container"); }
+    if is_docker() {
+        return skip_if_docker("fake CLI binary not available in container");
+    }
     let (command, env, repo_dir, _cert_path, _tmp) = local_setup();
 
     let env: Vec<(String, String)> = env
         .into_iter()
-        .filter(|(k, _)| {
-            k != "REQUESTS_CA_BUNDLE" && k != "SSL_CERT_FILE" && k != "CURL_CA_BUNDLE"
-        })
+        .filter(|(k, _)| k != "REQUESTS_CA_BUNDLE" && k != "SSL_CERT_FILE" && k != "CURL_CA_BUNDLE")
         .collect();
 
     let result = call_score_tool(&command, &env, &repo_dir);
@@ -222,14 +222,14 @@ pub fn test_truststore_args_missing_without_cert() {
 /// (e.g. `C:\Users\cert.pem` instead of `C:\\Users\\cert.pem`), causing the
 /// path to be mangled and the file to not be found.
 pub fn test_truststore_args_not_injected_when_ca_bundle_path_invalid() {
-    if is_docker() { return skip_if_docker("fake CLI binary not available in container"); }
+    if is_docker() {
+        return skip_if_docker("fake CLI binary not available in container");
+    }
     let (command, env, repo_dir, _cert_path, _tmp) = local_setup();
 
     let env: Vec<(String, String)> = env
         .into_iter()
-        .filter(|(k, _)| {
-            k != "REQUESTS_CA_BUNDLE" && k != "SSL_CERT_FILE" && k != "CURL_CA_BUNDLE"
-        })
+        .filter(|(k, _)| k != "REQUESTS_CA_BUNDLE" && k != "SSL_CERT_FILE" && k != "CURL_CA_BUNDLE")
         .chain(std::iter::once((
             "REQUESTS_CA_BUNDLE".to_string(),
             "/nonexistent/path/to/ca-bundle.pem".to_string(),

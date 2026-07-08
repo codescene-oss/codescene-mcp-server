@@ -13,8 +13,17 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 
 const VALID_STANDALONE_JWT: &str = "eyJhbGciOiJFZERTQSIsImtpZCI6ImNzbWNwIiwidHlwIjoiSldTIn0.eyJpc3MiOiJjb2Rlc2NlbmUtbWNwIiwiYXVkIjoiY29kZXNjZW5lLWNsaSIsImlhdCI6MTc3MTk0NTM1NSwiZXhwIjoxNzcyMjgxNjUzLCJzdWIiOiIyYTM5NDAyNS1kYjg2LTQwMDAtYWE0NS1lODY2Yjk5YmJhMzcifQ.V0UxjlS1ZK-hcF1M7edu6GfvMAjv1XukFe8m6iHzS9guh_4rqu4HGbRTzl217qMemCjwyHtAG9pO6NUu3SWbCQ";
 
-const VISIBLE_KEYS: &[&str] = &["access_token", "onprem_url", "default_project_id", "ca_bundle"];
-const HIDDEN_KEYS: &[&str] = &["disable_tracking", "disable_version_check", "tracking_environment"];
+const VISIBLE_KEYS: &[&str] = &[
+    "access_token",
+    "onprem_url",
+    "default_project_id",
+    "ca_bundle",
+];
+const HIDDEN_KEYS: &[&str] = &[
+    "disable_tracking",
+    "disable_version_check",
+    "tracking_environment",
+];
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -47,7 +56,10 @@ fn configure_setup_with_extra_env(extra: &[(&str, &str)]) -> TestEnv {
 
     let base = base_env();
     let mut env_map = backend.get_env(&base, &repo_dir);
-    env_map.insert("CS_CONFIG_DIR".to_string(), docker_config_dir(&config_dir, &repo_dir));
+    env_map.insert(
+        "CS_CONFIG_DIR".to_string(),
+        docker_config_dir(&config_dir, &repo_dir),
+    );
 
     for (k, v) in extra {
         env_map.insert(k.to_string(), v.to_string());
@@ -124,8 +136,14 @@ pub fn test_tools_visible() {
 
     let names = tool_names(&mut client);
 
-    assert!(names.contains(&"get_config".to_string()), "get_config should be listed");
-    assert!(names.contains(&"set_config".to_string()), "set_config should be listed");
+    assert!(
+        names.contains(&"get_config".to_string()),
+        "get_config should be listed"
+    );
+    assert!(
+        names.contains(&"set_config".to_string()),
+        "set_config should be listed"
+    );
 }
 
 pub fn test_set_then_get() {
@@ -165,10 +183,16 @@ pub fn test_list_all() {
     let lower = result.to_lowercase();
 
     for key in VISIBLE_KEYS {
-        assert!(lower.contains(key), "Visible key '{key}' should appear in output");
+        assert!(
+            lower.contains(key),
+            "Visible key '{key}' should appear in output"
+        );
     }
     for key in HIDDEN_KEYS {
-        assert!(!lower.contains(key), "Hidden key '{key}' should NOT appear in listing");
+        assert!(
+            !lower.contains(key),
+            "Hidden key '{key}' should NOT appear in listing"
+        );
     }
 }
 
@@ -179,10 +203,16 @@ pub fn test_invalid_key() {
     let result = set_config(&mut client, "no_such_key", "whatever");
     let lower = result.to_lowercase();
 
-    assert!(lower.contains("unknown"), "Should mention 'unknown', got: {result}");
+    assert!(
+        lower.contains("unknown"),
+        "Should mention 'unknown', got: {result}"
+    );
 
     let mentions_valid = VISIBLE_KEYS.iter().any(|k| lower.contains(k));
-    assert!(mentions_valid, "Should list at least one valid key, got: {result}");
+    assert!(
+        mentions_valid,
+        "Should list at least one valid key, got: {result}"
+    );
 }
 
 pub fn test_delete_value() {
