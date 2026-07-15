@@ -5,6 +5,7 @@ use rmcp::ErrorData;
 use serde_json::json;
 
 use crate::api_client;
+use crate::auth::AuthCredential;
 use crate::cli;
 use crate::cli::CliRunner;
 use crate::docker;
@@ -20,13 +21,21 @@ pub(crate) async fn handle(
 ) -> Result<CallToolResult, ErrorData> {
     server.version_checker.check_in_background();
     let project_root = docker::adapt_path_for_docker(Path::new(&params.git_repository_path));
-    let checks = run_all_checks(
-        &project_root,
-        &*server.cli_runner,
-        &*server.http_client,
-        server.is_standalone,
-    )
-    .await;
+    let credential = server
+        .auth_manager
+        .resolve_credential(&*server.cli_runner)
+        .await
+        .ok()
+        .flatten();
+    let ctx = CheckContext {
+        cli_runner: &*server.cli_runner,
+        http_client: &*server.http_client,
+        is_standalone: server.is_standalone,
+        credential: credential.as_ref(),
+        target_label: api_url_label(credential.as_ref()),
+        cli_timeout: TOKEN_CHECK_TIMEOUT,
+    };
+    let checks = run_all_checks(&project_root, &ctx).await;
     let text = format_results(&checks);
     server.track("verify-installation", json!({}));
     let text = server.maybe_version_warning(&text).await;
@@ -41,20 +50,27 @@ struct CheckResult {
 
 const TOKEN_CHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
-async fn run_all_checks(
-    project_root: &str,
-    cli_runner: &dyn CliRunner,
-    http_client: &dyn HttpClient,
+/// Context for running all installation checks.
+struct CheckContext<'a> {
+    cli_runner: &'a dyn CliRunner,
+    http_client: &'a dyn HttpClient,
     is_standalone: bool,
-) -> Vec<CheckResult> {
+    credential: Option<&'a AuthCredential>,
+    /// Pre-computed user-friendly label for the API target.
+    target_label: String,
+    /// Timeout for CLI-based checks (token validation, connectivity).
+    cli_timeout: std::time::Duration,
+}
+
+async fn run_all_checks(project_root: &str, ctx: &CheckContext<'_>) -> Vec<CheckResult> {
     let path = Path::new(project_root);
     let mut checks = vec![
         check_git_repository(path),
-        check_token_via_cli(path, cli_runner, TOKEN_CHECK_TIMEOUT).await,
-        check_cli_connectivity(path, cli_runner, TOKEN_CHECK_TIMEOUT).await,
+        check_token_via_cli(path, ctx).await,
+        check_cli_connectivity(path, ctx).await,
     ];
-    if !is_standalone {
-        checks.push(check_api_connectivity(http_client).await);
+    if !ctx.is_standalone {
+        checks.push(check_api_connectivity(ctx).await);
     }
     checks.push(check_environment());
     checks
@@ -81,11 +97,15 @@ fn is_connectivity_error(stderr: &str) -> bool {
     KEYWORDS.iter().any(|kw| lower.contains(kw))
 }
 
-async fn check_token_via_cli(
-    repo_path: &Path,
-    cli_runner: &dyn CliRunner,
-    timeout: std::time::Duration,
-) -> CheckResult {
+async fn check_token_via_cli(repo_path: &Path, ctx: &CheckContext<'_>) -> CheckResult {
+    if matches!(ctx.credential, Some(AuthCredential::OAuth { .. })) {
+        return CheckResult {
+            name: "Access Token",
+            passed: true,
+            detail: "Authenticated via OAuth session.".to_string(),
+        };
+    }
+
     let token = std::env::var("CS_ACCESS_TOKEN")
         .map(|v| v.trim().to_string())
         .unwrap_or_default();
@@ -96,14 +116,10 @@ async fn check_token_via_cli(
             detail: "CS_ACCESS_TOKEN is not set or empty.".to_string(),
         };
     }
-    // Use `review` on a known source file instead of `delta` because
-    // `delta` performs heavyweight git operations that can hang on
-    // Windows.  The license check runs before any analysis, so any
-    // analysable file works.
     let probe = find_probe_file(repo_path);
     let args: Vec<&str> = vec!["review", "--output-format=json", &probe];
-    let cli_future = cli_runner.run(&args, Some(repo_path));
-    match tokio::time::timeout(timeout, cli_future).await {
+    let cli_future = ctx.cli_runner.run(&args, Some(repo_path));
+    match tokio::time::timeout(ctx.cli_timeout, cli_future).await {
         Err(_) => CheckResult {
             name: "Access Token",
             passed: false,
@@ -116,7 +132,7 @@ async fn check_token_via_cli(
                 passed: false,
                 detail: format!(
                     "CLI could not connect to {} — possible TLS/network issue: {stderr}",
-                    api_url_label()
+                    ctx.target_label
                 ),
             }
         }
@@ -131,7 +147,7 @@ async fn check_token_via_cli(
                 passed: false,
                 detail: format!(
                     "CLI could not connect to {} — possible TLS/network issue: {stderr}",
-                    api_url_label()
+                    ctx.target_label
                 ),
             }
         }
@@ -145,15 +161,11 @@ async fn check_token_via_cli(
 /// Used for standalone users who don't have API access. The CLI still
 /// connects to CodeScene to validate the license, so a broken CA cert
 /// or network issue will surface here.
-async fn check_cli_connectivity(
-    repo_path: &Path,
-    cli_runner: &dyn CliRunner,
-    timeout: std::time::Duration,
-) -> CheckResult {
+async fn check_cli_connectivity(repo_path: &Path, ctx: &CheckContext<'_>) -> CheckResult {
     let probe = find_probe_file(repo_path);
     let args: Vec<&str> = vec!["review", "--output-format=json", &probe];
-    let cli_future = cli_runner.run(&args, Some(repo_path));
-    match tokio::time::timeout(timeout, cli_future).await {
+    let cli_future = ctx.cli_runner.run(&args, Some(repo_path));
+    match tokio::time::timeout(ctx.cli_timeout, cli_future).await {
         Err(_) => CheckResult {
             name: "CLI Connectivity",
             passed: false,
@@ -168,7 +180,7 @@ async fn check_cli_connectivity(
                 passed: false,
                 detail: format!(
                     "CLI could not connect to {} — possible TLS/network issue: {stderr}",
-                    api_url_label()
+                    ctx.target_label
                 ),
             }
         }
@@ -177,7 +189,7 @@ async fn check_cli_connectivity(
         Ok(_) => CheckResult {
             name: "CLI Connectivity",
             passed: true,
-            detail: format!("CLI connected to {} successfully.", api_url_label()),
+            detail: format!("CLI connected to {} successfully.", ctx.target_label),
         },
     }
 }
@@ -188,37 +200,31 @@ async fn check_cli_connectivity(
 /// certificate misconfiguration that the CLI check alone might miss
 /// (since the CLI and the MCP server build their TLS stacks
 /// independently).
-async fn check_api_connectivity(http_client: &dyn HttpClient) -> CheckResult {
-    let token = std::env::var("CS_ACCESS_TOKEN")
-        .map(|v| v.trim().to_string())
-        .unwrap_or_default();
-    if token.is_empty() {
+async fn check_api_connectivity(ctx: &CheckContext<'_>) -> CheckResult {
+    let Some(credential) = ctx.credential else {
         return CheckResult {
             name: "API Connectivity",
             passed: false,
-            detail: "Skipped — CS_ACCESS_TOKEN is not set.".to_string(),
+            detail: "Skipped — no access token configured and not signed in via OAuth.".to_string(),
         };
-    }
-    match api_client::query_api_with_client("v2/projects", http_client).await {
+    };
+    match api_client::query_api_with_auth("v2/projects", ctx.http_client, Some(credential)).await {
         Ok(_) => CheckResult {
             name: "API Connectivity",
             passed: true,
-            detail: format!("Connected to {} successfully.", api_url_label()),
+            detail: format!("Connected to {} successfully.", ctx.target_label),
         },
         Err(e) => CheckResult {
             name: "API Connectivity",
             passed: false,
-            detail: format!("Could not reach {}: {e}", api_url_label()),
+            detail: format!("Could not reach {}: {e}", ctx.target_label),
         },
     }
 }
 
 /// User-friendly label for the API target (on-prem URL or "CodeScene Cloud").
-fn api_url_label() -> String {
-    std::env::var("CS_ONPREM_URL")
-        .ok()
-        .filter(|v| !v.trim().is_empty())
-        .unwrap_or_else(|| "CodeScene Cloud".to_string())
+fn api_url_label(credential: Option<&AuthCredential>) -> String {
+    crate::auth::resolve_web_root(credential).unwrap_or_else(|| "CodeScene Cloud".to_string())
 }
 
 /// Find a source file in the repo to use as a probe for the license
@@ -289,6 +295,37 @@ mod tests {
 
     use super::*;
 
+    /// Test helper: build a CheckContext for check_token_via_cli / check_cli_connectivity tests.
+    fn test_ctx_cli<'a>(
+        cli_runner: &'a dyn CliRunner,
+        credential: Option<&'a AuthCredential>,
+    ) -> CheckContext<'a> {
+        CheckContext {
+            cli_runner,
+            http_client: &crate::http::ReqwestClient,
+            is_standalone: false,
+            credential,
+            target_label: "CodeScene Cloud".to_string(),
+            cli_timeout: std::time::Duration::from_millis(100),
+        }
+    }
+
+    /// Test helper: build a CheckContext for check_api_connectivity tests.
+    fn test_ctx_http<'a>(
+        http_client: &'a dyn HttpClient,
+        cli_runner: &'a dyn CliRunner,
+        credential: Option<&'a AuthCredential>,
+    ) -> CheckContext<'a> {
+        CheckContext {
+            cli_runner,
+            http_client,
+            is_standalone: false,
+            credential,
+            target_label: "CodeScene Cloud".to_string(),
+            cli_timeout: std::time::Duration::from_millis(100),
+        }
+    }
+
     fn repo_param(path: &str) -> GitRepoParam {
         GitRepoParam {
             git_repository_path: path.to_string(),
@@ -329,7 +366,7 @@ mod tests {
     async fn token_missing_reports_fail() {
         let _g = clear_token();
         let cli = MockCliRunner::with_ok("");
-        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        let result = check_token_via_cli(Path::new("/tmp"), &test_ctx_cli(&cli, None)).await;
         assert!(!result.passed);
         assert!(result.detail.contains("not set"));
     }
@@ -338,7 +375,7 @@ mod tests {
     async fn token_valid_reports_pass() {
         let _g = set_token("tok");
         let cli = MockCliRunner::with_ok("{}");
-        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        let result = check_token_via_cli(Path::new("/tmp"), &test_ctx_cli(&cli, None)).await;
         assert!(result.passed);
         assert!(result.detail.contains("authenticated"));
     }
@@ -347,7 +384,7 @@ mod tests {
     async fn token_invalid_reports_fail() {
         let _g = set_token("bad");
         let cli = mock_license_failure("License check failed: [401]");
-        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        let result = check_token_via_cli(Path::new("/tmp"), &test_ctx_cli(&cli, None)).await;
         assert!(!result.passed);
         assert!(result.detail.contains("invalid or expired"));
     }
@@ -356,7 +393,7 @@ mod tests {
     async fn non_license_error_still_passes_auth() {
         let _g = set_token("tok");
         let cli = MockCliRunner::with_err(1, "no changes found");
-        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        let result = check_token_via_cli(Path::new("/tmp"), &test_ctx_cli(&cli, None)).await;
         assert!(result.passed);
     }
 
@@ -367,7 +404,7 @@ mod tests {
             1,
             "SSL certificate problem: unable to get local issuer certificate",
         );
-        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        let result = check_token_via_cli(Path::new("/tmp"), &test_ctx_cli(&cli, None)).await;
         assert_check(&result, false, "TLS/network");
     }
 
@@ -375,7 +412,7 @@ mod tests {
     async fn connection_refused_from_cli_reports_connectivity_failure() {
         let _g = set_token("tok");
         let cli = MockCliRunner::with_err(1, "connection refused");
-        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        let result = check_token_via_cli(Path::new("/tmp"), &test_ctx_cli(&cli, None)).await;
         assert_check(&result, false, "TLS/network");
     }
 
@@ -383,7 +420,7 @@ mod tests {
     async fn license_check_with_ssl_handshake_reports_connectivity_failure() {
         let _g = set_token("tok");
         let cli = mock_license_failure(SSL_HANDSHAKE_STDERR);
-        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        let result = check_token_via_cli(Path::new("/tmp"), &test_ctx_cli(&cli, None)).await;
         assert_check(&result, false, "TLS/network");
         assert!(
             result.detail.contains("SSLHandshakeException"),
@@ -398,7 +435,7 @@ mod tests {
         let cli = mock_license_failure(
             "License check failed, could not reach CodeScene servers (https://wrong.ee/api/v2/tool-license/cli)"
         );
-        let result = check_token_via_cli(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        let result = check_token_via_cli(Path::new("/tmp"), &test_ctx_cli(&cli, None)).await;
         assert_check(&result, false, "TLS/network");
         assert!(
             result.detail.contains("could not reach"),
@@ -426,19 +463,41 @@ mod tests {
         }
 
         let _g = set_token("tok");
-        let short = std::time::Duration::from_millis(50);
-        let result = check_token_via_cli(Path::new("/tmp"), &HangingCli, short).await;
+        let result = check_token_via_cli(Path::new("/tmp"), &test_ctx_cli(&HangingCli, None)).await;
         assert!(!result.passed);
         assert!(result.detail.contains("timed out"));
     }
 
+    #[tokio::test]
+    async fn oauth_credential_reports_token_pass_without_env() {
+        let _g = clear_token();
+        let cli = MockCliRunner::with_responses(vec![]);
+        let credential = AuthCredential::OAuth {
+            access_token: "oau-token".to_string(),
+            onprem_url: None,
+        };
+        let result =
+            check_token_via_cli(Path::new("/tmp"), &test_ctx_cli(&cli, Some(&credential))).await;
+        assert_check(&result, true, "OAuth");
+        assert!(cli.calls().lock().unwrap().is_empty());
+    }
+
     // -- check_api_connectivity ----------------------------------------------
+
+    fn test_credential() -> AuthCredential {
+        AuthCredential::Configured {
+            access_token: "tok".to_string(),
+            onprem_url: None,
+        }
+    }
 
     #[tokio::test]
     async fn api_connectivity_succeeds() {
         let _g = set_token("tok");
         let http = MockHttpClient::always(HttpResponse::ok(r#"[{"id":1}]"#));
-        let result = check_api_connectivity(&http).await;
+        let cli = MockCliRunner::with_ok("");
+        let cred = test_credential();
+        let result = check_api_connectivity(&test_ctx_http(&http, &cli, Some(&cred))).await;
         assert_check(&result, true, "successfully");
     }
 
@@ -446,7 +505,9 @@ mod tests {
     async fn api_connectivity_fails_on_transport_error() {
         let _g = set_token("tok");
         let http = MockHttpClient::new(vec![]);
-        let result = check_api_connectivity(&http).await;
+        let cli = MockCliRunner::with_ok("");
+        let cred = test_credential();
+        let result = check_api_connectivity(&test_ctx_http(&http, &cli, Some(&cred))).await;
         assert_check(&result, false, "Could not reach");
     }
 
@@ -454,7 +515,8 @@ mod tests {
     async fn api_connectivity_skipped_without_token() {
         let _g = clear_token();
         let http = MockHttpClient::new(vec![]);
-        let result = check_api_connectivity(&http).await;
+        let cli = MockCliRunner::with_ok("");
+        let result = check_api_connectivity(&test_ctx_http(&http, &cli, None)).await;
         assert_check(&result, false, "Skipped");
     }
 
@@ -462,7 +524,12 @@ mod tests {
     async fn api_connectivity_fails_on_auth_error() {
         let _g = set_token("bad-token");
         let http = MockHttpClient::always(HttpResponse::error(401, "Unauthorized"));
-        let result = check_api_connectivity(&http).await;
+        let cli = MockCliRunner::with_ok("");
+        let cred = AuthCredential::Configured {
+            access_token: "bad-token".to_string(),
+            onprem_url: None,
+        };
+        let result = check_api_connectivity(&test_ctx_http(&http, &cli, Some(&cred))).await;
         assert!(!result.passed);
         assert!(result.detail.contains("401"), "detail: {}", result.detail);
     }
@@ -474,7 +541,7 @@ mod tests {
     #[tokio::test]
     async fn cli_connectivity_succeeds_on_ok() {
         let cli = MockCliRunner::with_ok("{}");
-        let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        let result = check_cli_connectivity(Path::new("/tmp"), &test_ctx_cli(&cli, None)).await;
         assert!(result.passed, "detail: {}", result.detail);
         assert!(
             result.detail.contains("successfully"),
@@ -486,7 +553,7 @@ mod tests {
     #[tokio::test]
     async fn cli_connectivity_succeeds_on_non_tls_error() {
         let cli = MockCliRunner::with_err(1, "unsupported file type");
-        let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        let result = check_cli_connectivity(Path::new("/tmp"), &test_ctx_cli(&cli, None)).await;
         assert!(
             result.passed,
             "non-TLS error should still pass: {}",
@@ -500,14 +567,14 @@ mod tests {
             1,
             "SSL certificate problem: unable to get local issuer certificate",
         );
-        let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        let result = check_cli_connectivity(Path::new("/tmp"), &test_ctx_cli(&cli, None)).await;
         assert_check(&result, false, "TLS/network");
     }
 
     #[tokio::test]
     async fn cli_connectivity_fails_on_license_check_ssl_error() {
         let cli = mock_license_failure(SSL_HANDSHAKE_STDERR);
-        let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        let result = check_cli_connectivity(Path::new("/tmp"), &test_ctx_cli(&cli, None)).await;
         assert_check(&result, false, "TLS/network");
     }
 
@@ -516,14 +583,14 @@ mod tests {
         let cli = mock_license_failure(
             "License check failed, could not reach CodeScene servers (https://wrong.ee/api/v2/tool-license/cli)"
         );
-        let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        let result = check_cli_connectivity(Path::new("/tmp"), &test_ctx_cli(&cli, None)).await;
         assert_check(&result, false, "TLS/network");
     }
 
     #[tokio::test]
     async fn cli_connectivity_passes_on_plain_license_failure() {
         let cli = mock_license_failure("License check failed: [401] Unauthorized");
-        let result = check_cli_connectivity(Path::new("/tmp"), &cli, TEST_TIMEOUT).await;
+        let result = check_cli_connectivity(Path::new("/tmp"), &test_ctx_cli(&cli, None)).await;
         assert!(
             result.passed,
             "plain license failure (no TLS) should pass connectivity: {}",
@@ -545,8 +612,8 @@ mod tests {
                 Ok(String::new())
             }
         }
-        let short = std::time::Duration::from_millis(50);
-        let result = check_cli_connectivity(Path::new("/tmp"), &HangingCli, short).await;
+        let result =
+            check_cli_connectivity(Path::new("/tmp"), &test_ctx_cli(&HangingCli, None)).await;
         assert!(!result.passed, "timeout should fail: {}", result.detail);
         assert!(
             result.detail.contains("timed out"),
@@ -653,18 +720,17 @@ mod tests {
     // -- api_url_label -------------------------------------------------------
 
     #[test]
-    fn api_url_label_returns_cloud_when_no_onprem() {
-        let _lock = crate::config::lock_test_env();
-        std::env::remove_var("CS_ONPREM_URL");
-        assert_eq!(api_url_label(), "CodeScene Cloud");
+    fn api_url_label_returns_cloud_when_no_credential() {
+        assert_eq!(api_url_label(None), "CodeScene Cloud");
     }
 
     #[test]
-    fn api_url_label_returns_onprem_url() {
-        let _lock = crate::config::lock_test_env();
-        std::env::set_var("CS_ONPREM_URL", "https://my-instance.com");
-        assert_eq!(api_url_label(), "https://my-instance.com");
-        std::env::remove_var("CS_ONPREM_URL");
+    fn api_url_label_returns_onprem_from_credential() {
+        let cred = AuthCredential::Configured {
+            access_token: "tok".to_string(),
+            onprem_url: Some("https://my-instance.com".to_string()),
+        };
+        assert_eq!(api_url_label(Some(&cred)), "https://my-instance.com");
     }
 
     // -- handle (integration) ------------------------------------------------

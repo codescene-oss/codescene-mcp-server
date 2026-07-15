@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use rmcp::model::CallToolResult;
 
+use crate::auth::AuthManager;
 use crate::cli::{self, CliRunner};
 use crate::config::ConfigData;
 use crate::errors::CliError;
@@ -64,6 +65,7 @@ pub(crate) fn test_deps(id: &str, is_standalone: bool, mocks: TestMocks) -> Serv
         instance_id: id.to_string(),
         is_standalone,
         version_checker: VersionChecker::new("dev"),
+        auth_manager: AuthManager::new(),
         cli_runner: mocks.cli,
         http_client: mocks.http,
         validator: mocks.validator,
@@ -111,6 +113,7 @@ pub(crate) async fn make_server_with_version(
         instance_id: "test".to_string(),
         is_standalone: false,
         version_checker: vc,
+        auth_manager: AuthManager::new(),
         cli_runner: Arc::new(cli::ProductionCliRunner),
         http_client: Arc::new(http::ReqwestClient),
         validator: Arc::new(MockValidator::passing()),
@@ -141,12 +144,14 @@ pub(crate) fn clear_token() -> TokenGuard<'static> {
 
 pub(crate) struct MockCliRunner {
     responses: Mutex<Vec<Result<String, CliError>>>,
+    calls: Arc<Mutex<Vec<Vec<String>>>>,
 }
 
 impl MockCliRunner {
     pub(crate) fn with_responses(responses: Vec<Result<String, CliError>>) -> Self {
         Self {
             responses: Mutex::new(responses),
+            calls: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -160,11 +165,23 @@ impl MockCliRunner {
             stderr: stderr.to_string(),
         })])
     }
+
+    pub(crate) fn calls(&self) -> Arc<Mutex<Vec<Vec<String>>>> {
+        self.calls.clone()
+    }
+
+    pub(crate) fn call_count(&self) -> usize {
+        self.calls.lock().unwrap().len()
+    }
 }
 
 #[async_trait]
 impl CliRunner for MockCliRunner {
-    async fn run(&self, _args: &[&str], _working_dir: Option<&Path>) -> Result<String, CliError> {
+    async fn run(&self, args: &[&str], _working_dir: Option<&Path>) -> Result<String, CliError> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push(args.iter().map(|arg| arg.to_string()).collect());
         self.responses.lock().unwrap().remove(0)
     }
 }
@@ -469,19 +486,19 @@ mod tests {
     #[tokio::test]
     async fn require_token_returns_error_when_missing() {
         let _g = clear_token();
-        assert!(make_server(false).require_token().is_some());
+        assert!(make_server(false).require_token().await.is_some());
     }
 
     #[tokio::test]
     async fn require_token_returns_none_when_set() {
         let _g = set_token("token");
-        assert!(make_server(false).require_token().is_none());
+        assert!(make_server(false).require_token().await.is_none());
     }
 
     #[tokio::test]
     async fn require_token_treats_whitespace_as_missing() {
         let _g = set_token("   ");
-        assert!(make_server(false).require_token().is_some());
+        assert!(make_server(false).require_token().await.is_some());
     }
 
     #[tokio::test]
@@ -564,6 +581,7 @@ mod tests {
             instance_id: "test-filter".to_string(),
             is_standalone,
             version_checker: VersionChecker::new("dev"),
+            auth_manager: AuthManager::new(),
             cli_runner: Arc::new(cli::ProductionCliRunner),
             http_client: Arc::new(http::ReqwestClient),
             validator: Arc::new(MockValidator::passing()),
@@ -579,6 +597,7 @@ mod tests {
             names.contains(&"set_config".to_string()),
             "missing set_config"
         );
+        assert!(names.contains(&"login".to_string()), "missing login");
     }
 
     fn assert_tool_count_and_config(names: &[String], expected: usize) {
@@ -596,7 +615,7 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server(false);
         let names = tool_names(&server);
-        assert_tool_count_and_config(&names, 24);
+        assert_tool_count_and_config(&names, 25);
         assert!(names.contains(&"code_health_review".to_string()));
     }
 
@@ -606,8 +625,8 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server_with_enabled_tools(false, "code_health_review,code_health_score");
         let names = tool_names(&server);
-        // Should have the 2 enabled tools + 2 always-on = 4
-        assert_tool_count_and_config(&names, 4);
+        // Should have the 2 enabled tools + 3 always-on = 5
+        assert_tool_count_and_config(&names, 5);
         assert!(names.contains(&"code_health_review".to_string()));
         assert!(names.contains(&"code_health_score".to_string()));
     }
@@ -642,7 +661,7 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server_with_enabled_tools(false, "analyze_change_set");
         let names = tool_names(&server);
-        assert_tool_count_and_config(&names, 3);
+        assert_tool_count_and_config(&names, 4);
         assert!(names.contains(&"analyze_change_set".to_string()));
     }
 

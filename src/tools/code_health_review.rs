@@ -14,7 +14,7 @@ pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: FilePathParam,
 ) -> Result<CallToolResult, ErrorData> {
-    if let Some(r) = server.require_token() {
+    if let Some(r) = server.require_token().await {
         return Ok(r);
     }
     server.version_checker.check_in_background();
@@ -87,6 +87,39 @@ mod tests {
         };
         let result = server.code_health_review(Parameters(params)).await.unwrap();
         assert_success_contains(&result, "9.5");
+    }
+
+    #[tokio::test]
+    async fn uses_stored_oauth_session_when_env_token_missing() {
+        let _g = clear_token();
+        let auth_token = r#"{"status":"signed_in","access-token":"oau_test","api-url":"https://api.codescene.io/api","expires-at":9999999999}"#;
+        let cli = MockCliRunner::with_responses(vec![
+            Ok(auth_token.to_string()),
+            Ok(r#"{"score":9.5,"review":[]}"#.to_string()),
+        ]);
+        let calls = cli.calls();
+        let server = make_cli_mock_server(cli);
+        let params = FilePathParam {
+            file_path: "/tmp/test.rs".to_string(),
+        };
+
+        let result = server.code_health_review(Parameters(params)).await.unwrap();
+
+        assert_success_contains(&result, "9.5");
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(
+            calls[0],
+            [
+                "auth",
+                "token",
+                "--client",
+                "mcp",
+                "--output-format",
+                "json"
+            ]
+        );
+        assert_eq!(calls[1][0], "review");
     }
 
     #[tokio::test]

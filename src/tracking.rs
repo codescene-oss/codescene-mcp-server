@@ -4,8 +4,6 @@ use serde_json::{json, Value};
 
 use crate::http::{HttpClient, HttpRequest, Method, ReqwestClient};
 
-const DEFAULT_API_URL: &str = "https://api.codescene.io";
-
 struct TrackingEvent {
     url: String,
     event: String,
@@ -13,16 +11,23 @@ struct TrackingEvent {
     environment: String,
     version: &'static str,
     properties: Value,
+    access_token: String,
+}
+
+/// Auth context for tracking events — pre-resolved token and API root.
+pub(crate) struct TrackingAuth {
+    pub(crate) access_token: String,
+    pub(crate) api_root: Option<String>,
 }
 
 /// Send a tracking event in the background (fire-and-forget).
-pub fn track_event(event: &str, properties: Value, instance_id: &str) {
+pub fn track_event(event: &str, properties: Value, instance_id: &str, auth: &TrackingAuth) {
     if is_disabled() {
         return;
     }
 
     let te = TrackingEvent {
-        url: match tracking_url() {
+        url: match resolve_tracking_url(auth.api_root.as_deref()) {
             Some(url) => url,
             None => return,
         },
@@ -31,6 +36,7 @@ pub fn track_event(event: &str, properties: Value, instance_id: &str) {
         environment: tracking_environment(),
         version: env!("CS_MCP_VERSION"),
         properties,
+        access_token: auth.access_token.clone(),
     };
 
     tokio::spawn(async move {
@@ -44,6 +50,7 @@ pub struct ErrorEvent<'a> {
     pub tool_name: &'a str,
     pub instance_id: &'a str,
     pub detail: Option<&'a str>,
+    pub auth: &'a TrackingAuth,
 }
 
 pub fn track_error(evt: &ErrorEvent<'_>) {
@@ -54,7 +61,7 @@ pub fn track_error(evt: &ErrorEvent<'_>) {
     if let Some(d) = evt.detail {
         properties["detail"] = json!(d);
     }
-    track_event("error", properties, evt.instance_id);
+    track_event("error", properties, evt.instance_id, evt.auth);
 }
 
 fn build_tracking_body(te: &mut TrackingEvent) -> Value {
@@ -71,7 +78,6 @@ fn build_tracking_body(te: &mut TrackingEvent) -> Value {
 
 async fn send_event(mut te: TrackingEvent, client: &dyn HttpClient) -> Result<(), String> {
     let body = build_tracking_body(&mut te);
-    let token = std::env::var("CS_ACCESS_TOKEN").unwrap_or_default();
     let mut headers = HashMap::from([
         ("Content-Type".to_string(), "application/json".to_string()),
         ("Accept".to_string(), "application/json".to_string()),
@@ -81,8 +87,11 @@ async fn send_event(mut te: TrackingEvent, client: &dyn HttpClient) -> Result<()
         ),
         ("X-CS-Source".to_string(), "mcp".to_string()),
     ]);
-    if !token.is_empty() {
-        headers.insert("Authorization".to_string(), format!("Bearer {token}"));
+    if !te.access_token.is_empty() {
+        headers.insert(
+            "Authorization".to_string(),
+            format!("Bearer {}", te.access_token),
+        );
     }
 
     let request = HttpRequest {
@@ -97,7 +106,13 @@ async fn send_event(mut te: TrackingEvent, client: &dyn HttpClient) -> Result<()
     Ok(())
 }
 
-fn tracking_url() -> Option<String> {
+/// Resolve the tracking endpoint URL.
+///
+/// Priority:
+/// 1. `CS_TRACKING_URL` env var (explicit override).
+/// 2. `api_root` parameter (from OAuth credential).
+/// 3. `default_api_root()` (from `CS_ONPREM_URL` or cloud fallback).
+fn resolve_tracking_url(api_root: Option<&str>) -> Option<String> {
     if let Ok(url) = std::env::var("CS_TRACKING_URL") {
         if let Err(e) = crate::config::require_https("CS_TRACKING_URL", &url) {
             tracing::warn!("{e}");
@@ -106,19 +121,11 @@ fn tracking_url() -> Option<String> {
         return Some(normalize_tracking_override(&url));
     }
 
-    let api_url = std::env::var("CS_ONPREM_URL")
-        .map(|u| {
-            if let Err(e) = crate::config::require_https("CS_ONPREM_URL", &u) {
-                tracing::warn!("{e}");
-                return Err(e);
-            }
-            Ok(format!("{u}/api"))
-        })
-        .unwrap_or_else(|_| Ok(DEFAULT_API_URL.to_string()));
-
-    api_url
-        .ok()
-        .map(|base| format!("{base}/v2/analytics/track"))
+    let base = match api_root {
+        Some(root) => root.trim_end_matches('/').to_string(),
+        None => crate::auth::default_api_root().ok()?,
+    };
+    Some(format!("{}/v2/analytics/track", base.trim_end_matches('/')))
 }
 
 fn tracking_environment() -> String {
@@ -204,63 +211,63 @@ mod tests {
         std::env::remove_var("CS_TRACKING_URL");
         std::env::remove_var("CS_ONPREM_URL");
         assert_eq!(
-            tracking_url(),
+            resolve_tracking_url(None),
             Some("https://api.codescene.io/v2/analytics/track".to_string())
         );
     }
 
     #[test]
-    fn tracking_url_override() {
+    fn tracking_url_resolution_cases() {
         let _lock = config::lock_test_env();
-        std::env::set_var("CS_TRACKING_URL", "http://custom-tracking");
-        assert_eq!(tracking_url(), None, "HTTP URLs should be blocked");
-        std::env::remove_var("CS_TRACKING_URL");
-    }
 
-    #[test]
-    fn tracking_url_override_https() {
-        let _lock = config::lock_test_env();
+        // CS_TRACKING_URL override: HTTP blocked
+        std::env::set_var("CS_TRACKING_URL", "http://custom-tracking");
+        assert_eq!(resolve_tracking_url(None), None);
+
+        // CS_TRACKING_URL override: HTTPS without full path appends path
         std::env::set_var("CS_TRACKING_URL", "https://custom-tracking");
         assert_eq!(
-            tracking_url(),
+            resolve_tracking_url(None),
             Some("https://custom-tracking/v2/analytics/track".to_string())
         );
-        std::env::remove_var("CS_TRACKING_URL");
-    }
 
-    #[test]
-    fn tracking_url_override_with_full_path_keeps_path() {
-        let _lock = config::lock_test_env();
+        // CS_TRACKING_URL override: full path preserved as-is
         std::env::set_var(
             "CS_TRACKING_URL",
             "https://custom-tracking/v2/analytics/track",
         );
         assert_eq!(
-            tracking_url(),
+            resolve_tracking_url(None),
             Some("https://custom-tracking/v2/analytics/track".to_string())
         );
         std::env::remove_var("CS_TRACKING_URL");
-    }
 
-    #[test]
-    fn tracking_url_from_onprem() {
-        let _lock = config::lock_test_env();
-        std::env::remove_var("CS_TRACKING_URL");
+        // CS_ONPREM_URL fallback: derives from onprem + /api
         std::env::set_var("CS_ONPREM_URL", "https://my-instance.example.com");
         assert_eq!(
-            tracking_url(),
+            resolve_tracking_url(None),
             Some("https://my-instance.example.com/api/v2/analytics/track".to_string())
         );
+
+        // CS_ONPREM_URL: HTTP blocked
+        std::env::set_var("CS_ONPREM_URL", "http://my-instance.example.com");
+        assert_eq!(resolve_tracking_url(None), None);
         std::env::remove_var("CS_ONPREM_URL");
     }
 
     #[test]
-    fn tracking_url_from_onprem_http_blocked() {
+    fn tracking_url_from_oauth_api_root() {
         let _lock = config::lock_test_env();
         std::env::remove_var("CS_TRACKING_URL");
-        std::env::set_var("CS_ONPREM_URL", "http://my-instance.example.com");
-        assert_eq!(tracking_url(), None, "HTTP on-prem URL should be blocked");
         std::env::remove_var("CS_ONPREM_URL");
+        assert_eq!(
+            resolve_tracking_url(Some("https://oauth-host.example.com/api")),
+            Some("https://oauth-host.example.com/api/v2/analytics/track".to_string())
+        );
+        assert_eq!(
+            resolve_tracking_url(Some("https://api.codescene.io")),
+            Some("https://api.codescene.io/v2/analytics/track".to_string())
+        );
     }
 
     #[test]
@@ -301,6 +308,7 @@ mod tests {
             environment: "test-env".to_string(),
             version: "1.0.0",
             properties: json!({"tool": "review"}),
+            access_token: String::new(),
         };
         let body = build_tracking_body(&mut te);
         assert_eq!(body["event-type"], "mcp-test");
@@ -321,6 +329,7 @@ mod tests {
             environment: "env".to_string(),
             version: "1.0.0",
             properties: json!("not-an-object"),
+            access_token: String::new(),
         };
         let body = build_tracking_body(&mut te);
         // Properties stay as-is when not an object
@@ -328,14 +337,9 @@ mod tests {
     }
 
     async fn send_event_and_capture_request(
-        token: Option<&str>,
+        _token: Option<&str>,
         te: TrackingEvent,
     ) -> crate::http::HttpRequest {
-        match token {
-            Some(value) => std::env::set_var("CS_ACCESS_TOKEN", value),
-            None => std::env::remove_var("CS_ACCESS_TOKEN"),
-        }
-
         let mock = MockHttpClient::always(HttpResponse::ok(""));
         let captured = mock.captured_requests.clone();
 
@@ -365,6 +369,7 @@ mod tests {
             environment: "test".to_string(),
             version: "1.0.0",
             properties: json!({"key": "val"}),
+            access_token: "test-tok".to_string(),
         };
         let req = send_event_and_capture_request(Some("test-tok"), te).await;
 
@@ -372,8 +377,6 @@ mod tests {
         assert_eq!(req.method, Method::Post);
         assert_eq!(req.headers.get("Authorization").unwrap(), "Bearer test-tok");
         assert_standard_headers(&req);
-
-        std::env::remove_var("CS_ACCESS_TOKEN");
     }
 
     #[tokio::test]
@@ -386,6 +389,7 @@ mod tests {
             environment: "e".to_string(),
             version: "1.0.0",
             properties: json!({}),
+            access_token: String::new(),
         };
         let req = send_event_and_capture_request(None, te).await;
 
@@ -397,7 +401,6 @@ mod tests {
     #[tokio::test]
     async fn send_event_serializes_body_with_event_type() {
         let _lock = config::lock_test_env();
-        std::env::remove_var("CS_ACCESS_TOKEN");
 
         let mock = MockHttpClient::always(HttpResponse::ok(""));
         let captured = mock.captured_requests.clone();
@@ -409,6 +412,7 @@ mod tests {
             environment: "env".to_string(),
             version: "2.0.0",
             properties: json!({"tool": "score"}),
+            access_token: String::new(),
         };
         let _ = send_event(te, &mock).await;
 
@@ -422,7 +426,6 @@ mod tests {
     #[tokio::test]
     async fn send_event_returns_error_on_transport_failure() {
         let _lock = config::lock_test_env();
-        std::env::remove_var("CS_ACCESS_TOKEN");
 
         let mock = MockHttpClient::new(vec![]);
 
@@ -433,6 +436,7 @@ mod tests {
             environment: "e".to_string(),
             version: "1.0.0",
             properties: json!({}),
+            access_token: String::new(),
         };
         let result = send_event(te, &mock).await;
         assert!(result.is_err());
@@ -442,7 +446,16 @@ mod tests {
     async fn track_event_disabled_does_not_panic() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_TRACKING", "1");
-        track_event("test-event", json!({"key": "value"}), "test-instance");
+        let auth = TrackingAuth {
+            access_token: String::new(),
+            api_root: None,
+        };
+        track_event(
+            "test-event",
+            json!({"key": "value"}),
+            "test-instance",
+            &auth,
+        );
         std::env::remove_var("CS_DISABLE_TRACKING");
     }
 
@@ -450,11 +463,16 @@ mod tests {
     async fn track_error_disabled_does_not_panic() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_TRACKING", "1");
+        let auth = TrackingAuth {
+            access_token: String::new(),
+            api_root: None,
+        };
         track_error(&ErrorEvent {
             error_kind: "some error",
             tool_name: "some-tool",
             instance_id: "test-instance",
             detail: None,
+            auth: &auth,
         });
         std::env::remove_var("CS_DISABLE_TRACKING");
     }
@@ -471,7 +489,11 @@ mod tests {
     #[tokio::test]
     async fn track_event_enabled_spawns_without_panic() {
         run_with_tracking_enabled(|| {
-            track_event("test-enabled", json!({"key": "val"}), "test-id");
+            let auth = TrackingAuth {
+                access_token: String::new(),
+                api_root: None,
+            };
+            track_event("test-enabled", json!({"key": "val"}), "test-id", &auth);
         })
         .await;
     }
@@ -479,11 +501,16 @@ mod tests {
     #[tokio::test]
     async fn track_error_enabled_spawns_without_panic() {
         run_with_tracking_enabled(|| {
+            let auth = TrackingAuth {
+                access_token: String::new(),
+                api_root: None,
+            };
             track_error(&ErrorEvent {
                 error_kind: "err msg",
                 tool_name: "tool-name",
                 instance_id: "test-id",
                 detail: Some(".txt"),
+                auth: &auth,
             });
         })
         .await;

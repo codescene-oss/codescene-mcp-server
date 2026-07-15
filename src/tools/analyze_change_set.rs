@@ -15,7 +15,7 @@ pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: ChangeSetParam,
 ) -> Result<CallToolResult, ErrorData> {
-    if let Some(r) = server.require_token() {
+    if let Some(r) = server.require_token().await {
         return Ok(r);
     }
     server.version_checker.check_in_background();

@@ -1,4 +1,5 @@
 mod api_client;
+mod auth;
 mod business_case;
 mod cli;
 mod config;
@@ -38,12 +39,13 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
+use crate::auth::{AuthCredential, AuthManager};
 use crate::cli::CliRunner;
 use crate::config::ConfigData;
 use crate::http::HttpClient;
 use crate::tools::validation::{ValidationError, Validator};
 use crate::tools::{
-    ChangeSetParam, DownloadSkillParam, FilePathParam, GetConfigParam, GitRepoParam,
+    ChangeSetParam, DownloadSkillParam, FilePathParam, GetConfigParam, GitRepoParam, LoginParam,
     OptionalContext, OwnershipParam, ProjectFileParam, ProjectParam,
     RulesConfigListThresholdsParam, RulesConfigSetRuleParam, RulesConfigSetThresholdParam,
     RulesConfigValidateParam, SetConfigParam, SkillNameParam, SyncSkillsParam,
@@ -52,10 +54,11 @@ use crate::version_checker::VersionChecker;
 
 const TOKEN_MISSING_MSG: &str = "\
 No access token configured.\n\n\
-To use this tool, set your access token using one of these methods:\n\
+To sign in with OAuth, use the `login` tool.\n\n\
+Alternatively, set your access token directly:\n\
 1. Use the `set_config` tool: set_config(key=\"access_token\", value=\"your-token\")\n\
 2. Set the CS_ACCESS_TOKEN environment variable in your MCP client configuration\n\n\
-To get an Access Token, see:\n\
+To get a Personal Access Token, see:\n\
 https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/getting-a-personal-access-token.md";
 
 const _VERSION_NOTICE_SUFFIX: &str = "\n\
@@ -73,7 +76,7 @@ pub(crate) const API_ONLY_TOOLS: &[&str] = &[
 ];
 
 /// Tools that cannot be disabled via `enabled_tools` config.
-pub(crate) const ALWAYS_ENABLED_TOOLS: &[&str] = &["get_config", "set_config"];
+pub(crate) const ALWAYS_ENABLED_TOOLS: &[&str] = &["get_config", "set_config", "login"];
 
 #[derive(Debug)]
 pub(crate) enum CliAction {
@@ -133,6 +136,7 @@ pub(crate) struct ServerDeps {
     pub(crate) instance_id: String,
     pub(crate) is_standalone: bool,
     pub(crate) version_checker: VersionChecker,
+    pub(crate) auth_manager: AuthManager,
     pub(crate) cli_runner: Arc<dyn CliRunner>,
     pub(crate) http_client: Arc<dyn HttpClient>,
     pub(crate) validator: Arc<dyn Validator>,
@@ -142,6 +146,7 @@ pub(crate) struct ServerDeps {
 pub(crate) struct CodeSceneServer {
     pub(crate) tool_router: ToolRouter<Self>,
     pub(crate) version_checker: VersionChecker,
+    pub(crate) auth_manager: AuthManager,
     pub(crate) config_data: Arc<ConfigData>,
     pub(crate) instance_id: String,
     pub(crate) is_standalone: bool,
@@ -151,16 +156,42 @@ pub(crate) struct CodeSceneServer {
 }
 
 impl CodeSceneServer {
-    pub(crate) fn require_token(&self) -> Option<CallToolResult> {
-        if std::env::var("CS_ACCESS_TOKEN")
-            .map(|v| v.trim().is_empty())
-            .unwrap_or(true)
+    pub(crate) async fn require_token(&self) -> Option<CallToolResult> {
+        match self
+            .auth_manager
+            .resolve_credential(&*self.cli_runner)
+            .await
         {
-            return Some(CallToolResult::success(vec![Content::text(
+            Ok(Some(_)) => None,
+            Ok(None) => Some(CallToolResult::success(vec![Content::text(
                 TOKEN_MISSING_MSG,
-            )]));
+            )])),
+            Err(e) => {
+                tracing::warn!(error = %e, "auth token check failed");
+                Some(CallToolResult::success(vec![Content::text(
+                    TOKEN_MISSING_MSG,
+                )]))
+            }
         }
-        None
+    }
+
+    pub(crate) async fn resolve_auth_credential(&self) -> Result<AuthCredential, CallToolResult> {
+        match self
+            .auth_manager
+            .resolve_credential(&*self.cli_runner)
+            .await
+        {
+            Ok(Some(credential)) => Ok(credential),
+            Ok(None) => Err(CallToolResult::success(vec![Content::text(
+                TOKEN_MISSING_MSG,
+            )])),
+            Err(e) => {
+                tracing::warn!(error = %e, "auth token check failed");
+                Err(CallToolResult::success(vec![Content::text(
+                    TOKEN_MISSING_MSG,
+                )]))
+            }
+        }
     }
 
     pub(crate) async fn maybe_version_warning(&self, text: &str) -> String {
@@ -174,47 +205,56 @@ impl CodeSceneServer {
     }
 
     pub(crate) fn track(&self, event: &str, props: serde_json::Value) {
-        tracking::track_event(event, props, &self.instance_id);
+        tracking::track_event(event, props, &self.instance_id, &self.tracking_auth());
     }
 
     pub(crate) fn track_err(&self, tool: &str, err: &errors::CliError) {
         tracing::warn!(tool, error = %err, "tool error");
-        tracking::track_error(&tracking::ErrorEvent {
-            error_kind: err.kind(),
-            tool_name: tool,
-            instance_id: &self.instance_id,
-            detail: None,
-        });
+        self.track_error_event(err.kind(), tool, None);
     }
 
     pub(crate) fn track_api_err(&self, tool: &str, err: &errors::ApiError) {
         tracing::warn!(tool, error = %err, "API error");
-        tracking::track_error(&tracking::ErrorEvent {
-            error_kind: err.kind(),
-            tool_name: tool,
-            instance_id: &self.instance_id,
-            detail: None,
-        });
+        self.track_error_event(err.kind(), tool, None);
     }
 
     pub(crate) fn track_validation_err(&self, tool: &str, err: &ValidationError) {
         tracing::warn!(tool, error = %err, "tool error");
-        tracking::track_error(&tracking::ErrorEvent {
-            error_kind: err.kind,
-            tool_name: tool,
-            instance_id: &self.instance_id,
-            detail: err.detail.as_deref(),
-        });
+        self.track_error_event(err.kind, tool, err.detail.as_deref());
     }
 
     pub(crate) fn track_err_msg(&self, tool: &str, error_kind: &str, err: &str) {
         tracing::warn!(tool, error = err, "tool error");
+        self.track_error_event(error_kind, tool, None);
+    }
+
+    fn track_error_event(&self, error_kind: &str, tool: &str, detail: Option<&str>) {
+        let auth = self.tracking_auth();
         tracking::track_error(&tracking::ErrorEvent {
             error_kind,
             tool_name: tool,
             instance_id: &self.instance_id,
-            detail: None,
+            detail,
+            auth: &auth,
         });
+    }
+
+    /// Resolve the best available token and API root for tracking.
+    /// Prefers configured PAT, falls back to cached OAuth token.
+    fn tracking_auth(&self) -> tracking::TrackingAuth {
+        if let Some(cred) = auth::configured_credential() {
+            return tracking::TrackingAuth {
+                access_token: cred.access_token().to_string(),
+                api_root: cred.api_root().ok(),
+            };
+        }
+        tracking::TrackingAuth {
+            access_token: self
+                .auth_manager
+                .try_cached_access_token()
+                .unwrap_or_default(),
+            api_root: self.auth_manager.try_cached_api_root(),
+        }
     }
 }
 
@@ -253,6 +293,7 @@ impl CodeSceneServer {
         Self {
             tool_router: router,
             version_checker: deps.version_checker,
+            auth_manager: deps.auth_manager,
             config_data: Arc::new(deps.config_data),
             instance_id: deps.instance_id,
             is_standalone: deps.is_standalone,
@@ -468,6 +509,17 @@ impl CodeSceneServer {
     }
 
     #[tool(
+        description = "Sign in to CodeScene using OAuth.\n\nWhen to use:\n    Use this tool when no access token is configured and the user needs\n    to authenticate. The tool opens the user's browser to complete the\n    OAuth flow. If the browser cannot be opened automatically, the URL\n    is printed so the user can open it manually.\n\nLimitations:\n    - Not needed when CS_ACCESS_TOKEN is already set.\n    - Requires the embedded CLI to be available.\n    - Waits up to 2 minutes for the user to complete the browser flow.\n    - For on-prem instances, configure CS_ONPREM_URL before calling this tool.\n\nReturns:\n    A success message when signed in, or an error describing the failure.\n\nExample:\n    Call without arguments to sign in to CodeScene cloud.",
+        input_schema = inlined_schema_for::<LoginParam>()
+    )]
+    async fn login(
+        &self,
+        Parameters(params): Parameters<LoginParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::login::handle(self, params).await
+    }
+
+    #[tool(
         description = "List all available skills embedded in this MCP server.\n\nWhen to use:\n    Use this tool to discover what skills are available for\n    download or inspection.\n\nLimitations:\n    - Returns only skills embedded at compile time.\n    - Does not scan external skill directories.\n\nReturns:\n    A formatted list of skill names with their descriptions.\n\nExample:\n    Call this tool to see all available skills, then use\n    download_skill or sync_skills to install them locally."
     )]
     async fn list_skills(&self) -> Result<CallToolResult, ErrorData> {
@@ -609,6 +661,7 @@ async fn main() -> anyhow::Result<()> {
         instance_id,
         is_standalone,
         version_checker,
+        auth_manager: AuthManager::new(),
         cli_runner: Arc::new(cli::ProductionCliRunner),
         http_client: Arc::new(http::ReqwestClient),
         validator: Arc::new(tools::validation::ProductionCliValidator),
