@@ -127,6 +127,10 @@ pub(crate) struct TokenGuard<'a> {
 impl Drop for TokenGuard<'_> {
     fn drop(&mut self) {
         std::env::remove_var("CS_ACCESS_TOKEN");
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+        std::env::remove_var("CS_OAUTH_REFRESH_EXPIRES_AT");
+        std::env::remove_var("CS_OAUTH_CLIENT");
     }
 }
 
@@ -139,6 +143,10 @@ pub(crate) fn set_token(value: &str) -> TokenGuard<'static> {
 pub(crate) fn clear_token() -> TokenGuard<'static> {
     let lock = crate::config::lock_test_env();
     std::env::remove_var("CS_ACCESS_TOKEN");
+    std::env::remove_var("CS_OAUTH_TOKEN");
+    std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+    std::env::remove_var("CS_OAUTH_REFRESH_EXPIRES_AT");
+    std::env::remove_var("CS_OAUTH_CLIENT");
     TokenGuard { _lock: lock }
 }
 

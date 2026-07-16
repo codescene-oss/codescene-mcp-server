@@ -12,6 +12,7 @@ use std::sync::OnceLock;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::errors::ConfigError;
@@ -34,6 +35,114 @@ pub(crate) fn lock_test_env() -> std::sync::MutexGuard<'static, ()> {
         .get_or_init(|| Mutex::new(()))
         .lock()
         .unwrap_or_else(|e| e.into_inner())
+}
+
+// ---------------------------------------------------------------------------
+// RwLock-guarded access to config-backed environment variables.
+//
+// All reads and writes of config-backed env vars (the vars listed in OPTIONS)
+// should go through `read_env` / `write_env` / `write_env_multi` to ensure
+// consistent concurrent access and atomic persistence to the config file.
+// ---------------------------------------------------------------------------
+
+/// Global RwLock guarding all config-backed environment variable access.
+/// Readers can proceed concurrently; writers get exclusive access and
+/// persist changes to both process env and the config file atomically.
+/// Uses tokio::sync::RwLock so that the write guard can be held across
+/// await points (e.g. CLI subprocess calls).
+static CONFIG_ENV_LOCK: OnceLock<RwLock<()>> = OnceLock::new();
+
+fn config_env_lock() -> &'static RwLock<()> {
+    CONFIG_ENV_LOCK.get_or_init(|| RwLock::new(()))
+}
+
+/// Synchronous read of a config-backed env var. Uses `try_read` to avoid
+/// blocking; returns `None` if the lock is contended or the var is unset.
+pub fn try_read_env(env_var: &str) -> Option<String> {
+    let _guard = config_env_lock().try_read().ok()?;
+    std::env::var(env_var).ok().filter(|v| !v.is_empty())
+}
+
+/// Synchronous read of multiple config-backed env vars. Uses `try_read`.
+/// Returns `None` if the lock is contended.
+pub fn try_read_env_multi(env_vars: &[&str]) -> Option<Vec<Option<String>>> {
+    let _guard = config_env_lock().try_read().ok()?;
+    Some(
+        env_vars
+            .iter()
+            .map(|var| std::env::var(var).ok().filter(|v| !v.is_empty()))
+            .collect(),
+    )
+}
+
+/// Write a single config-backed env var under the exclusive write lock.
+/// Also persists the new value to the config file.
+/// Pass an empty value to remove the key.
+pub async fn write_env(key: &str, value: &str) -> Result<(), ConfigError> {
+    write_env_multi(&[(key, value)]).await
+}
+
+/// Write multiple config-backed env vars atomically under the exclusive write lock.
+/// Also persists all new values to the config file.
+/// Pass an empty value for a key to remove it.
+pub async fn write_env_multi(entries: &[(&str, &str)]) -> Result<(), ConfigError> {
+    let _guard = config_env_lock().write().await;
+    write_env_multi_inner(entries)
+}
+
+/// Acquire the exclusive config write lock. While held, no other thread can
+/// read or write config-backed env vars. Use this when you need to hold the
+/// lock across an external operation (e.g. a CLI call) and then write the
+/// result atomically.
+pub async fn acquire_write_lock() -> ConfigEnvWriteGuard {
+    let guard = config_env_lock().write().await;
+    ConfigEnvWriteGuard { _guard: guard }
+}
+
+/// RAII guard for the config env write lock. While held, provides methods
+/// to read and write env vars without re-acquiring the lock.
+pub struct ConfigEnvWriteGuard {
+    _guard: tokio::sync::RwLockWriteGuard<'static, ()>,
+}
+
+impl ConfigEnvWriteGuard {
+    /// Read an env var while holding the write lock (for double-check patterns).
+    pub fn read_env(&self, env_var: &str) -> Option<String> {
+        std::env::var(env_var).ok().filter(|v| !v.is_empty())
+    }
+
+    /// Write multiple entries to env + config file while holding the lock.
+    pub fn write_env_multi(&self, entries: &[(&str, &str)]) -> Result<(), ConfigError> {
+        write_env_multi_inner(entries)
+    }
+}
+
+/// Shared implementation for writing env vars + persisting to config.
+/// Caller must already hold the write lock.
+fn write_env_multi_inner(entries: &[(&str, &str)]) -> Result<(), ConfigError> {
+    let mut data = load().unwrap_or_default();
+
+    for &(key, value) in entries {
+        let option = match find_option(key) {
+            Some(o) => o,
+            None => continue,
+        };
+
+        if value.is_empty() {
+            data.values.remove(option.key);
+            if !is_client_env_var(option.env_var) {
+                std::env::remove_var(option.env_var);
+            }
+        } else {
+            data.values
+                .insert(option.key.to_string(), value.to_string());
+            if !is_client_env_var(option.env_var) {
+                std::env::set_var(option.env_var, value);
+            }
+        }
+    }
+
+    save(&data)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -501,15 +610,24 @@ mod tests {
         });
     }
 
+    fn apply_to_env_value(config_key: &str, value: &str) {
+        let mut data = ConfigData::default();
+        data.values.insert(config_key.to_string(), value.to_string());
+        apply_to_env(&data);
+    }
+
+    fn enabled_tools_from(value: &str) -> Option<HashSet<String>> {
+        let mut data = ConfigData::default();
+        data.values
+            .insert("enabled_tools".to_string(), value.to_string());
+        enabled_tools(&data)
+    }
+
     #[test]
     fn apply_to_env_skips_already_set_vars() {
         let _lock = lock_test_env();
         std::env::set_var("CS_ONPREM_URL", "already-set");
-        let mut data = ConfigData::default();
-        data.values
-            .insert("onprem_url".to_string(), "from-config".to_string());
-
-        apply_to_env(&data);
+        apply_to_env_value("onprem_url", "from-config");
 
         let val = std::env::var("CS_ONPREM_URL").unwrap();
         assert_eq!(val, "already-set");
@@ -520,12 +638,20 @@ mod tests {
     fn apply_to_env_skips_empty_values() {
         let _lock = lock_test_env();
         std::env::remove_var("CS_ONPREM_URL");
-        let mut data = ConfigData::default();
-        data.values.insert("onprem_url".to_string(), "".to_string());
-
-        apply_to_env(&data);
+        apply_to_env_value("onprem_url", "");
 
         assert!(std::env::var("CS_ONPREM_URL").is_err());
+    }
+
+    #[test]
+    fn apply_to_env_sets_oauth_client() {
+        let _lock = lock_test_env();
+        std::env::remove_var("CS_OAUTH_CLIENT");
+        apply_to_env_value("oauth_client", "mcp");
+
+        let val = std::env::var("CS_OAUTH_CLIENT").unwrap_or_default();
+        assert_eq!(val, "mcp");
+        std::env::remove_var("CS_OAUTH_CLIENT");
     }
 
     #[test]
@@ -572,40 +698,26 @@ mod tests {
 
     #[test]
     fn enabled_tools_returns_none_when_empty() {
-        let mut data = ConfigData::default();
-        data.values
-            .insert("enabled_tools".to_string(), "".to_string());
-        assert!(enabled_tools(&data).is_none());
+        assert!(enabled_tools_from("").is_none());
     }
 
     #[test]
     fn enabled_tools_returns_none_when_whitespace_only() {
-        let mut data = ConfigData::default();
-        data.values
-            .insert("enabled_tools".to_string(), "  ".to_string());
-        assert!(enabled_tools(&data).is_none());
+        assert!(enabled_tools_from("  ").is_none());
     }
 
     #[test]
     fn enabled_tools_parses_single_tool() {
-        let mut data = ConfigData::default();
-        data.values.insert(
-            "enabled_tools".to_string(),
-            "code_health_review".to_string(),
-        );
-        let result = enabled_tools(&data).unwrap();
+        let result = enabled_tools_from("code_health_review").unwrap();
         assert_eq!(result.len(), 1);
         assert!(result.contains("code_health_review"));
     }
 
     #[test]
     fn enabled_tools_parses_multiple_tools() {
-        let mut data = ConfigData::default();
-        data.values.insert(
-            "enabled_tools".to_string(),
-            "code_health_review,code_health_score,analyze_change_set".to_string(),
-        );
-        let result = enabled_tools(&data).unwrap();
+        let result =
+            enabled_tools_from("code_health_review,code_health_score,analyze_change_set")
+                .unwrap();
         assert_eq!(result.len(), 3);
         assert!(result.contains("code_health_review"));
         assert!(result.contains("code_health_score"));
@@ -614,12 +726,7 @@ mod tests {
 
     #[test]
     fn enabled_tools_trims_whitespace() {
-        let mut data = ConfigData::default();
-        data.values.insert(
-            "enabled_tools".to_string(),
-            " code_health_review , code_health_score ".to_string(),
-        );
-        let result = enabled_tools(&data).unwrap();
+        let result = enabled_tools_from(" code_health_review , code_health_score ").unwrap();
         assert_eq!(result.len(), 2);
         assert!(result.contains("code_health_review"));
         assert!(result.contains("code_health_score"));
@@ -627,12 +734,7 @@ mod tests {
 
     #[test]
     fn enabled_tools_ignores_empty_segments() {
-        let mut data = ConfigData::default();
-        data.values.insert(
-            "enabled_tools".to_string(),
-            "code_health_review,,code_health_score,".to_string(),
-        );
-        let result = enabled_tools(&data).unwrap();
+        let result = enabled_tools_from("code_health_review,,code_health_score,").unwrap();
         assert_eq!(result.len(), 2);
     }
 }

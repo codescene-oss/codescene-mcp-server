@@ -1,7 +1,3 @@
-use std::sync::Arc;
-
-use tokio::sync::{Mutex, RwLock};
-
 use crate::cli::CliRunner;
 
 use super::{
@@ -11,191 +7,380 @@ use super::{
 
 /// Tokens are considered stale this many seconds before their actual `expires-at`.
 /// This avoids making an API call with a token that's about to expire mid-flight.
-/// 120 s was chosen to accommodate typical request round-trip + CLI overhead.
 const TOKEN_EXPIRY_MARGIN_SECS: i64 = 60;
 
-/// When the CLI response does not include `expires-at` (older CLI versions),
-/// we cache the response for this duration before re-checking. 5 minutes is
-/// conservative enough to avoid excess CLI calls while limiting staleness.
-const TOKEN_FALLBACK_TTL_SECS: i64 = 300;
+/// Sentinel value for `CS_OAUTH_EXPIRES_AT` indicating the user is signed out
+/// and we should not retry the CLI until an explicit login is requested.
+const SIGNED_OUT_SENTINEL: &str = "0";
 
-/// Time to cache a "signed out" result to avoid launching the CLI on every
-/// tool call when no credentials are configured.
-const SIGNED_OUT_CACHE_TTL_SECS: i64 = 30;
-
-/// Manages OAuth token lifecycle: caching, expiry-aware refresh, and
-/// serialization of concurrent CLI calls behind a single mutex.
-#[derive(Clone)]
-pub(crate) struct AuthManager {
-    cache: Arc<RwLock<Option<CachedToken>>>,
-    refresh_lock: Arc<Mutex<()>>,
-    /// Timestamp of the last "signed out" response. Used for negative caching.
-    signed_out_at: Arc<RwLock<Option<i64>>>,
-}
-
-#[derive(Clone, Debug)]
-struct CachedToken {
-    response: CliTokenResponse,
-    cached_at: i64,
-}
+/// Manages OAuth token lifecycle using the config env RwLock for all state.
+///
+/// All OAuth state lives in process env vars (backed by config file):
+/// - `CS_OAUTH_TOKEN` — the access token
+/// - `CS_OAUTH_EXPIRES_AT` — expiry as epoch seconds, or "0" for signed-out
+/// - `CS_OAUTH_REFRESH_EXPIRES_AT` — refresh token expiry
+///
+/// The config `RwLock` serializes reads and writes. CLI calls that refresh
+/// tokens hold the write lock for the entire duration (including the CLI
+/// subprocess wait) to prevent concurrent refresh attempts and ensure
+/// consistent state.
+#[derive(Clone, Default)]
+pub(crate) struct AuthManager;
 
 impl AuthManager {
     pub(crate) fn new() -> Self {
-        Self {
-            cache: Arc::new(RwLock::new(None)),
-            refresh_lock: Arc::new(Mutex::new(())),
-            signed_out_at: Arc::new(RwLock::new(None)),
-        }
+        Self
     }
 
+    /// Resolve the best available credential.
+    /// Priority: PAT (CS_ACCESS_TOKEN) > fresh OAuth token > CLI refresh > None.
     pub(crate) async fn resolve_credential(
         &self,
         cli_runner: &dyn CliRunner,
     ) -> Result<Option<AuthCredential>, String> {
+        // PAT takes priority.
         if let Some(credential) = configured_credential() {
+            tracing::info!(source = "configured", "resolved auth credential from configured token");
             return Ok(Some(credential));
         }
-        Ok(self
-            .current_token(cli_runner)
-            .await?
-            .and_then(|resp| credential_from_response(&resp)))
+        // Check persisted OAuth token.
+        if let Some(cred) = Self::fresh_oauth_credential() {
+            tracing::info!(
+                source = "oauth_cache",
+                has_onprem_url = cred.api_root().ok().is_some(),
+                "resolved auth credential from cached OAuth token"
+            );
+            return Ok(Some(cred));
+        }
+        // Token missing or expired — try to refresh via CLI.
+        tracing::info!(
+            has_oauth_token = crate::config::try_read_env("CS_OAUTH_TOKEN").is_some(),
+            oauth_expires_at = crate::config::try_read_env("CS_OAUTH_EXPIRES_AT"),
+            signed_out_sentinel = Self::is_signed_out(),
+            "no usable cached credential; attempting CLI auth token refresh"
+        );
+        self.refresh_token(cli_runner).await
     }
 
-    /// Get the current OAuth token (from cache or by refreshing via CLI).
+    /// Get the current OAuth token if it exists and is fresh.
     /// Does NOT check `configured_credential()` — callers that need to prefer
     /// a user-configured PAT should use `resolve_credential` instead.
-    /// Used directly by `login::try_existing_session` which has already
-    /// short-circuited on configured credentials at the handler level.
     pub(crate) async fn current_token(
         &self,
         cli_runner: &dyn CliRunner,
     ) -> Result<Option<CliTokenResponse>, String> {
-        if let Some(cached) = self.fresh_cached_token().await {
-            return Ok(Some(cached.response));
+        // Check if we have a fresh token in env.
+        if Self::has_fresh_oauth_token() {
+            // Build a synthetic CliTokenResponse from env for compatibility.
+            return Ok(Self::token_response_from_env());
         }
-
-        if self.recently_signed_out().await {
+        // If signed out (sentinel), don't retry automatically.
+        if Self::is_signed_out() {
             return Ok(None);
         }
-
-        let _guard = self.refresh_lock.lock().await;
-        if let Some(cached) = self.fresh_cached_token().await {
-            return Ok(Some(cached.response));
+        // Refresh via CLI under write lock.
+        match self.refresh_token_raw(cli_runner).await? {
+            Some(resp) => Ok(Some(resp)),
+            None => Ok(None),
         }
-        if self.recently_signed_out().await {
-            return Ok(None);
-        }
-
-        let token = fetch_token(cli_runner).await?;
-        if let Some(resp) = token.as_ref() {
-            self.store_at(resp.clone(), now_epoch_secs()).await;
-        } else {
-            self.mark_signed_out().await;
-        }
-        Ok(token)
     }
 
-    /// Run the interactive login flow. Serialized with token refreshes.
+    /// Run the interactive login flow. Holds the config write lock for the
+    /// entire duration (browser flow may take up to 2 minutes).
     pub(crate) async fn login(
         &self,
         cli_runner: &dyn CliRunner,
     ) -> Result<CliTokenResponse, String> {
-        let _guard = self.refresh_lock.lock().await;
+        let guard = crate::config::acquire_write_lock().await;
+
+        // Double-check: maybe another call just completed login.
+        if Self::guard_has_fresh_oauth_token(&guard) {
+            let cached = Self::build_token_response_from_guard(&guard);
+            tracing::info!(
+                oauth_expires_at = cached.expires_at,
+                has_oauth_token = cached
+                    .access_token
+                    .as_deref()
+                    .is_some_and(|token| !token.trim().is_empty()),
+                "skipping interactive login because a fresh cached OAuth token already exists"
+            );
+            return Ok(cached);
+        }
+
         let resp = run_login(cli_runner).await?;
         if resp.is_signed_in() {
-            self.store_at(resp.clone(), now_epoch_secs()).await;
+            let persisted = if response_has_access_token(&resp) {
+                Self::persist_response(&guard, &resp);
+                resp.clone()
+            } else {
+                tracing::info!(
+                    status = %resp.status,
+                    "login response did not include an access token; fetching token export from CLI"
+                );
+                let token_resp = fetch_token(cli_runner).await?.ok_or_else(|| {
+                    "CLI login succeeded but token export remained unavailable".to_string()
+                })?;
+                Self::persist_response(&guard, &token_resp);
+                token_resp
+            };
+            tracing::info!(
+                status = %persisted.status,
+                has_access_token = response_has_access_token(&persisted),
+                expires_at = persisted.expires_at,
+                refresh_expires_at = persisted.refresh_token_expires_at,
+                "persisted OAuth login response"
+            );
+            return Ok(persisted);
         } else {
-            self.mark_signed_out().await;
+            Self::persist_signed_out(&guard);
+            tracing::info!(status = %resp.status, "login response was not signed in; persisted signed-out sentinel");
         }
         Ok(resp)
     }
 
-    async fn fresh_cached_token(&self) -> Option<CachedToken> {
-        let guard = self.cache.read().await;
-        guard.as_ref().filter(|cached| cached.is_fresh()).cloned()
-    }
-
-    async fn recently_signed_out(&self) -> bool {
-        let guard = self.signed_out_at.read().await;
-        guard
-            .map(|ts| now_epoch_secs() - ts < SIGNED_OUT_CACHE_TTL_SECS)
-            .unwrap_or(false)
-    }
-
-    async fn mark_signed_out(&self) {
-        // Clear cache and mark signed-out together to avoid a window where
-        // a reader sees empty cache + recently_signed_out == false.
-        {
-            let mut guard = self.cache.write().await;
-            *guard = None;
+    /// Try to read a fresh OAuth credential from env.
+    fn fresh_oauth_credential() -> Option<AuthCredential> {
+        let vals = crate::config::try_read_env_multi(&[
+            "CS_OAUTH_TOKEN",
+            "CS_OAUTH_EXPIRES_AT",
+            "CS_ONPREM_URL",
+        ])?;
+        let token = vals[0].as_deref()?.trim().to_string();
+        if token.is_empty() {
+            tracing::info!(
+                oauth_expires_at = vals[1].clone(),
+                "cached OAuth state has no access token"
+            );
+            return None;
         }
-        let mut guard = self.signed_out_at.write().await;
-        *guard = Some(now_epoch_secs());
-    }
-
-    async fn store_at(&self, response: CliTokenResponse, cached_at: i64) {
-        {
-            let mut guard = self.cache.write().await;
-            *guard = Some(CachedToken {
-                response,
-                cached_at,
-            });
+        // Check expiry.
+        if let Some(expires_str) = vals[1].as_deref() {
+            if let Ok(expires_at) = expires_str.parse::<i64>() {
+                if expires_at <= now_epoch_secs() + TOKEN_EXPIRY_MARGIN_SECS {
+                    tracing::info!(oauth_expires_at = expires_at, "cached OAuth token is expired or within refresh margin");
+                    return None; // expired or signed-out sentinel
+                }
+            }
         }
-        // A successful store invalidates any negative cache.
-        let mut signed_out = self.signed_out_at.write().await;
-        *signed_out = None;
+        let onprem_url = vals[2]
+            .as_deref()
+            .map(|v| v.trim().trim_end_matches('/').to_string())
+            .filter(|v| !v.is_empty());
+        Some(AuthCredential::OAuth {
+            access_token: token,
+            onprem_url,
+        })
     }
 
-    /// Synchronously try to read the cached OAuth credentials for tracking.
-    /// Returns `(access_token, normalized_api_root)` if the cache is available and populated.
-    /// Returns `(None, None)` if the cache is empty or contended.
-    /// Used for fire-and-forget operations (like tracking) that can't await.
-    fn try_cached_auth_info(&self) -> (Option<String>, Option<String>) {
-        let Some(guard) = self.cache.try_read().ok() else {
-            return (None, None);
+    /// Check if we have a non-expired OAuth token in env.
+    fn has_fresh_oauth_token() -> bool {
+        Self::fresh_oauth_credential().is_some()
+    }
+
+    fn guard_has_fresh_oauth_token(guard: &crate::config::ConfigEnvWriteGuard) -> bool {
+        let Some(token) = guard.read_env("CS_OAUTH_TOKEN") else {
+            return false;
         };
-        let Some(cached) = guard.as_ref() else {
-            return (None, None);
+        if token.trim().is_empty() {
+            return false;
+        }
+        let Some(expires_str) = guard.read_env("CS_OAUTH_EXPIRES_AT") else {
+            return false;
         };
-        let token = cached
-            .response
+        let Ok(expires_at) = expires_str.parse::<i64>() else {
+            return false;
+        };
+        expires_at > now_epoch_secs() + TOKEN_EXPIRY_MARGIN_SECS
+    }
+
+    /// Check if the signed-out sentinel is set.
+    fn is_signed_out() -> bool {
+        crate::config::try_read_env("CS_OAUTH_EXPIRES_AT")
+            .as_deref()
+            == Some(SIGNED_OUT_SENTINEL)
+    }
+
+    /// Build a synthetic `CliTokenResponse` from env vars (for compatibility
+    /// with callers that expect a response object).
+    fn token_response_from_env() -> Option<CliTokenResponse> {
+        let vals = crate::config::try_read_env_multi(&[
+            "CS_OAUTH_TOKEN",
+            "CS_OAUTH_EXPIRES_AT",
+            "CS_OAUTH_REFRESH_EXPIRES_AT",
+            "CS_ONPREM_URL",
+        ])?;
+        let token = vals[0].clone()?;
+        let expires_at = vals[1].as_deref().and_then(|s| s.parse::<i64>().ok());
+        let refresh_expires_at = vals[2].as_deref().and_then(|s| s.parse::<i64>().ok());
+        let api_url = vals[3]
+            .as_deref()
+            .map(|u| format!("{}/api", u.trim_end_matches('/')));
+        Some(CliTokenResponse {
+            status: "signed_in".into(),
+            access_token: Some(token),
+            api_url,
+            expires_at,
+            refresh_token_expires_at: refresh_expires_at,
+        })
+    }
+
+    /// Refresh token via CLI, acquiring the config write lock.
+    /// Returns the resolved credential or None.
+    async fn refresh_token(
+        &self,
+        cli_runner: &dyn CliRunner,
+    ) -> Result<Option<AuthCredential>, String> {
+        let resp = self.refresh_token_raw(cli_runner).await?;
+        let credential = resp.and_then(|r| credential_from_response(&r));
+        tracing::info!(resolved = credential.is_some(), "completed CLI auth token refresh");
+        Ok(credential)
+    }
+
+    /// Refresh token via CLI under the config write lock.
+    /// Returns the raw CliTokenResponse.
+    async fn refresh_token_raw(
+        &self,
+        cli_runner: &dyn CliRunner,
+    ) -> Result<Option<CliTokenResponse>, String> {
+        let guard = crate::config::acquire_write_lock().await;
+
+        // Double-check under write lock: another thread may have refreshed.
+        if Self::guard_has_fresh_oauth_token(&guard) {
+            let cached = Self::build_token_response_from_guard(&guard);
+            tracing::info!(
+                oauth_expires_at = cached.expires_at,
+                has_oauth_token = cached
+                    .access_token
+                    .as_deref()
+                    .is_some_and(|token| !token.trim().is_empty()),
+                "reusing OAuth token that appeared while waiting for auth lock"
+            );
+            return Ok(Some(cached));
+        }
+
+        if guard.read_env("CS_OAUTH_EXPIRES_AT").as_deref() == Some(SIGNED_OUT_SENTINEL) {
+            tracing::info!("skipping CLI auth token refresh because signed-out sentinel is set");
+            return Ok(None);
+        }
+
+        tracing::info!("running CLI auth token refresh");
+        let token = fetch_token(cli_runner).await?;
+        match token {
+            Some(resp) if resp.is_signed_in() => {
+                Self::persist_response(&guard, &resp);
+                tracing::info!(
+                    status = %resp.status,
+                    has_access_token = resp.access_token.as_deref().is_some_and(|t| !t.trim().is_empty()),
+                    expires_at = resp.expires_at,
+                    refresh_expires_at = resp.refresh_token_expires_at,
+                    "CLI auth token refresh succeeded"
+                );
+                Ok(Some(resp))
+            }
+            _ => {
+                Self::persist_signed_out(&guard);
+                tracing::info!("CLI auth token refresh reported signed-out state; persisted sentinel");
+                Ok(None)
+            }
+        }
+    }
+
+    /// Persist a successful token response to env + config under the write lock.
+    fn persist_response(guard: &crate::config::ConfigEnvWriteGuard, response: &CliTokenResponse) {
+        let token = response
             .access_token
             .as_deref()
-            .map(|t| t.trim().to_string())
-            .filter(|t| !t.is_empty());
-        let api_root =
-            credential_from_response(&cached.response).and_then(|cred| cred.api_root().ok());
-        (token, api_root)
+            .unwrap_or("")
+            .trim();
+        let expires_at = response
+            .expires_at
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+        let refresh_expires_at = response
+            .refresh_token_expires_at
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+
+        let entries: &[(&str, &str)] = &[
+            ("oauth_token", token),
+            ("oauth_expires_at", &expires_at),
+            ("oauth_refresh_expires_at", &refresh_expires_at),
+        ];
+
+        if let Err(e) = guard.write_env_multi(entries) {
+            tracing::warn!(error = %e, "failed to persist OAuth state to config file");
+        }
+        tracing::info!(
+            has_access_token = !token.is_empty(),
+            expires_at = %expires_at,
+            refresh_expires_at = %refresh_expires_at,
+            "persisted OAuth state to config-backed environment"
+        );
     }
 
+    /// Write the signed-out sentinel to env + config under the write lock.
+    fn persist_signed_out(guard: &crate::config::ConfigEnvWriteGuard) {
+        let entries: &[(&str, &str)] = &[
+            ("oauth_token", ""),
+            ("oauth_expires_at", SIGNED_OUT_SENTINEL),
+            ("oauth_refresh_expires_at", ""),
+        ];
+        if let Err(e) = guard.write_env_multi(entries) {
+            tracing::warn!(error = %e, "failed to persist signed-out state to config file");
+        }
+        tracing::info!("persisted signed-out sentinel to config-backed environment");
+    }
+
+    /// Build a CliTokenResponse from env while holding the write guard.
+    fn build_token_response_from_guard(
+        guard: &crate::config::ConfigEnvWriteGuard,
+    ) -> CliTokenResponse {
+        let token = guard.read_env("CS_OAUTH_TOKEN");
+        let expires_at = guard
+            .read_env("CS_OAUTH_EXPIRES_AT")
+            .and_then(|s| s.parse::<i64>().ok());
+        let refresh_expires_at = guard
+            .read_env("CS_OAUTH_REFRESH_EXPIRES_AT")
+            .and_then(|s| s.parse::<i64>().ok());
+        let api_url = guard
+            .read_env("CS_ONPREM_URL")
+            .map(|u| format!("{}/api", u.trim_end_matches('/')));
+        CliTokenResponse {
+            status: "signed_in".into(),
+            access_token: token,
+            api_url,
+            expires_at,
+            refresh_token_expires_at: refresh_expires_at,
+        }
+    }
+
+    /// Synchronously try to read the OAuth token for tracking purposes.
+    /// Returns `None` if not available.
     pub(crate) fn try_cached_access_token(&self) -> Option<String> {
-        self.try_cached_auth_info().0
+        crate::config::try_read_env("CS_OAUTH_TOKEN")
     }
 
+    /// Synchronously try to read the OAuth API root for tracking purposes.
     pub(crate) fn try_cached_api_root(&self) -> Option<String> {
-        self.try_cached_auth_info().1
+        Self::fresh_oauth_credential().and_then(|cred| cred.api_root().ok())
     }
 
     #[cfg(test)]
-    pub(crate) async fn set_cached_response(&self, response: CliTokenResponse, cached_at: i64) {
-        self.store_at(response, cached_at).await;
+    pub(crate) async fn set_cached_response(
+        &self,
+        response: CliTokenResponse,
+        _cached_at: i64,
+    ) {
+        let guard = crate::config::acquire_write_lock().await;
+        Self::persist_response(&guard, &response);
     }
 }
 
-impl Default for AuthManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl CachedToken {
-    fn is_fresh(&self) -> bool {
-        let now = now_epoch_secs();
-        match self.response.expires_at {
-            Some(expires_at) => expires_at > now + TOKEN_EXPIRY_MARGIN_SECS,
-            None => self.cached_at + TOKEN_FALLBACK_TTL_SECS > now,
-        }
-    }
+fn response_has_access_token(response: &CliTokenResponse) -> bool {
+    response
+        .access_token
+        .as_deref()
+        .is_some_and(|token| !token.trim().is_empty())
 }
 
 #[cfg(test)]
@@ -223,135 +408,118 @@ mod tests {
         )
     }
 
+    fn clean_oauth_env() {
+        std::env::remove_var("CS_ACCESS_TOKEN");
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+        std::env::remove_var("CS_OAUTH_REFRESH_EXPIRES_AT");
+    }
+
     async fn with_clean_env<F, Fut>(f: F)
     where
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = ()>,
     {
         let _lock = with_env_lock();
-        std::env::remove_var("CS_ACCESS_TOKEN");
+        clean_oauth_env();
         f().await;
-        std::env::remove_var("CS_ACCESS_TOKEN");
+        clean_oauth_env();
     }
 
-    struct EnsureTokenCase<'a> {
-        name: &'a str,
-        cached_token: Option<&'a str>,
-        cached_expires_at: Option<i64>,
-        preset_env: Option<&'a str>,
-        cli_response: Option<&'a str>,
-        expect_token: &'a str,
-        expect_cli_calls: usize,
-        expect_env_token: Option<&'a str>,
+    fn empty_cli() -> MockCliRunner {
+        MockCliRunner::with_responses(vec![])
     }
 
-    /// Runs a single resolve_credential scenario: seeds cache, calls auth, checks result.
-    async fn assert_resolve_credential(case: &EnsureTokenCase<'_>) {
-        let _lock = with_env_lock();
-        std::env::remove_var("CS_ACCESS_TOKEN");
+    fn cli_call_count(cli: &MockCliRunner) -> usize {
+        cli.calls().lock().unwrap().len()
+    }
+
+    async fn assert_resolve_credential(
+        setup: impl FnOnce(),
+        cli: MockCliRunner,
+        expected_token: Option<&str>,
+        expected_cli_calls: usize,
+    ) {
         let manager = AuthManager::new();
-        if let Some(token) = case.cached_token {
-            let mut resp = make_response(Some(token), Some("https://api.codescene.io/api"));
-            resp.expires_at = case.cached_expires_at;
-            manager.set_cached_response(resp, now_epoch_secs()).await;
-        }
-        if let Some(env_val) = case.preset_env {
-            std::env::set_var("CS_ACCESS_TOKEN", env_val);
-        }
-        let cli = match case.cli_response {
-            Some(json) => MockCliRunner::with_ok(json),
-            None => MockCliRunner::with_responses(vec![]),
-        };
-        let credential = manager.resolve_credential(&cli).await.unwrap().unwrap();
-        assert_eq!(
-            credential.access_token(),
-            case.expect_token,
-            "{}",
-            case.name
-        );
-        match case.expect_env_token {
-            Some(token) => assert_eq!(std::env::var("CS_ACCESS_TOKEN").unwrap(), token),
-            None => assert!(std::env::var("CS_ACCESS_TOKEN").is_err()),
-        }
-        assert_eq!(
-            cli.calls().lock().unwrap().len(),
-            case.expect_cli_calls,
-            "{}",
-            case.name
-        );
-        std::env::remove_var("CS_ACCESS_TOKEN");
+        setup();
+        let result = manager.resolve_credential(&cli).await.unwrap();
+        assert_eq!(result.as_ref().map(|cred| cred.access_token()), expected_token);
+        assert_eq!(cli_call_count(&cli), expected_cli_calls);
+    }
+
+    async fn assert_current_token(
+        setup: impl FnOnce(),
+        cli: MockCliRunner,
+        expected_token: Option<&str>,
+        expected_cli_calls: usize,
+    ) {
+        let manager = AuthManager::new();
+        setup();
+        let result = manager.current_token(&cli).await.unwrap();
+        assert_eq!(result.as_ref().and_then(|resp| resp.access_token.as_deref()), expected_token);
+        assert_eq!(cli_call_count(&cli), expected_cli_calls);
     }
 
     #[tokio::test]
-    async fn resolve_credential_cache_scenarios() {
-        let fresh = signed_in_json("fresh-token", now_epoch_secs() + 3600);
-        let refreshed = signed_in_json("refreshed", now_epoch_secs() + 7200);
-        let cases = [
-            EnsureTokenCase {
-                name: "fresh cache",
-                cached_token: Some("cached-token"),
-                cached_expires_at: None,
-                preset_env: None,
-                cli_response: None,
-                expect_token: "cached-token",
-                expect_cli_calls: 0,
-                expect_env_token: None,
-            },
-            EnsureTokenCase {
-                name: "expired",
-                cached_token: Some("expired-token"),
-                cached_expires_at: Some(now_epoch_secs() - 10),
-                preset_env: None,
-                cli_response: Some(&fresh),
-                expect_token: "fresh-token",
-                expect_cli_calls: 1,
-                expect_env_token: None,
-            },
-            EnsureTokenCase {
-                name: "configured env",
-                cached_token: Some("expired-token"),
-                cached_expires_at: Some(now_epoch_secs() - 10),
-                preset_env: Some("pat-token"),
-                cli_response: Some(&fresh),
-                expect_token: "pat-token",
-                expect_cli_calls: 0,
-                expect_env_token: Some("pat-token"),
-            },
-            EnsureTokenCase {
-                name: "boundary",
-                cached_token: Some("boundary"),
-                cached_expires_at: Some(now_epoch_secs() + TOKEN_EXPIRY_MARGIN_SECS),
-                preset_env: None,
-                cli_response: Some(&refreshed),
-                expect_token: "refreshed",
-                expect_cli_calls: 1,
-                expect_env_token: None,
-            },
-            EnsureTokenCase {
-                name: "above margin",
-                cached_token: Some("still-fresh"),
-                cached_expires_at: Some(now_epoch_secs() + TOKEN_EXPIRY_MARGIN_SECS + 1),
-                preset_env: None,
-                cli_response: None,
-                expect_token: "still-fresh",
-                expect_cli_calls: 0,
-                expect_env_token: None,
-            },
-            EnsureTokenCase {
-                name: "oauth without env mutation",
-                cached_token: Some("oauth-tok"),
-                cached_expires_at: None,
-                preset_env: None,
-                cli_response: None,
-                expect_token: "oauth-tok",
-                expect_cli_calls: 0,
-                expect_env_token: None,
-            },
-        ];
+    async fn cached_auth_short_circuits_without_cli() {
+        with_clean_env(|| async {
+            assert_resolve_credential(
+                || std::env::set_var("CS_ACCESS_TOKEN", "pat-token"),
+                empty_cli(),
+                Some("pat-token"),
+                0,
+            )
+            .await;
 
-        for case in cases {
-            assert_resolve_credential(&case).await;
-        }
+            clean_oauth_env();
+            assert_resolve_credential(
+                || {
+                    std::env::set_var("CS_OAUTH_TOKEN", "oau-fresh");
+                    std::env::set_var(
+                        "CS_OAUTH_EXPIRES_AT",
+                        (now_epoch_secs() + 3600).to_string(),
+                    );
+                },
+                empty_cli(),
+                Some("oau-fresh"),
+                0,
+            )
+            .await;
+
+            clean_oauth_env();
+            assert_resolve_credential(
+                || std::env::set_var("CS_OAUTH_EXPIRES_AT", SIGNED_OUT_SENTINEL),
+                empty_cli(),
+                None,
+                0,
+            )
+            .await;
+
+            clean_oauth_env();
+            assert_current_token(
+                || std::env::set_var("CS_OAUTH_EXPIRES_AT", SIGNED_OUT_SENTINEL),
+                empty_cli(),
+                None,
+                0,
+            )
+            .await;
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn resolve_credential_refreshes_expired_oauth() {
+        with_clean_env(|| async {
+            std::env::set_var("CS_OAUTH_TOKEN", "oau-expired");
+            std::env::set_var(
+                "CS_OAUTH_EXPIRES_AT",
+                (now_epoch_secs() - 10).to_string(),
+            );
+            let fresh = signed_in_json("oau-new", now_epoch_secs() + 3600);
+            let cli = MockCliRunner::with_ok(&fresh);
+            assert_resolve_credential(|| {}, cli, Some("oau-new"), 1).await;
+        })
+        .await;
     }
 
     #[tokio::test]
@@ -369,120 +537,115 @@ mod tests {
             assert!(a.unwrap().is_some());
             assert!(b.unwrap().is_some());
             assert!(c.unwrap().is_some());
-            assert!(std::env::var("CS_ACCESS_TOKEN").is_err());
+            // Only one CLI call should have been made (write lock serialization).
             assert_eq!(calls.lock().unwrap().len(), 1);
         })
         .await;
     }
 
     #[tokio::test]
-    async fn signed_out_is_cached_briefly() {
+    async fn login_persists_and_returns_token() {
         with_clean_env(|| async {
             let manager = AuthManager::new();
-            let signed_out = r#"{"status":"signed_out","access-token":null,"api-url":null}"#;
-            let cli =
-                MockCliRunner::with_responses(vec![Ok(signed_out.into()), Ok(signed_out.into())]);
-            let calls = cli.calls();
-            let result = manager.resolve_credential(&cli).await.unwrap();
-            assert!(result.is_none());
-            assert_eq!(calls.lock().unwrap().len(), 1);
-            let result = manager.resolve_credential(&cli).await.unwrap();
-            assert!(result.is_none());
-            assert_eq!(calls.lock().unwrap().len(), 1);
-        })
-        .await;
-    }
-
-    #[tokio::test]
-    async fn login_clears_negative_cache() {
-        with_clean_env(|| async {
-            let manager = AuthManager::new();
-            manager.mark_signed_out().await;
-            let cli = MockCliRunner::with_ok(&signed_in_json("new-tok", now_epoch_secs() + 3600));
+            let cli = MockCliRunner::with_ok(&signed_in_json("login-tok", now_epoch_secs() + 3600));
             let resp = manager.login(&cli).await.unwrap();
             assert!(resp.is_signed_in());
-            let fresh = manager.fresh_cached_token().await;
-            assert!(fresh.is_some());
-        })
-        .await;
-    }
-
-    #[tokio::test]
-    async fn cached_cloud_api_root_is_normalized_for_tracking() {
-        with_clean_env(|| async {
-            let manager = AuthManager::new();
-            manager
-                .store_at(
-                    make_response(Some("oau-cloud"), Some("https://api.codescene.io/api")),
-                    now_epoch_secs(),
-                )
-                .await;
-
+            assert_eq!(resp.access_token.as_deref(), Some("login-tok"));
+            // Verify persisted to env.
             assert_eq!(
-                manager.try_cached_api_root().as_deref(),
-                Some("https://api.codescene.io")
+                std::env::var("CS_OAUTH_TOKEN").ok().as_deref(),
+                Some("login-tok")
             );
         })
         .await;
     }
 
     #[tokio::test]
-    async fn current_token_error_preserves_cache() {
+    async fn login_fetches_token_when_login_response_omits_access_token() {
         with_clean_env(|| async {
             let manager = AuthManager::new();
-            let mut resp = make_response(Some("old-tok"), Some("https://api.codescene.io/api"));
-            resp.expires_at = Some(now_epoch_secs() - 10);
-            manager.set_cached_response(resp, now_epoch_secs()).await;
-            let cli = MockCliRunner::with_err(1, "network error");
-            let err = manager.current_token(&cli).await;
-            assert!(err.is_err());
-            let cache = manager.cache.read().await;
-            assert!(cache.is_some());
-        })
-        .await;
-    }
-
-    #[tokio::test]
-    async fn resolve_credential_clears_oauth_cache_on_signed_out() {
-        with_clean_env(|| async {
-            let manager = AuthManager::new();
-            manager
-                .store_at(
-                    make_response(Some("old-oauth"), Some("https://api.codescene.io/api")),
-                    now_epoch_secs() - 600,
-                )
-                .await;
-            {
-                let mut guard = manager.cache.write().await;
-                if let Some(cached) = guard.as_mut() {
-                    cached.response.expires_at = Some(now_epoch_secs() - 10);
-                }
-            }
-            let signed_out = r#"{"status":"signed_out","access-token":null,"api-url":null}"#;
-            let cli = MockCliRunner::with_ok(signed_out);
-            let result = manager.resolve_credential(&cli).await.unwrap();
-            assert!(result.is_none());
-            assert!(manager.cache.read().await.is_none());
-            assert!(std::env::var("CS_ACCESS_TOKEN").is_err());
-        })
-        .await;
-    }
-
-    #[tokio::test]
-    async fn concurrent_login_and_resolve_credential() {
-        with_clean_env(|| async {
-            let manager = AuthManager::new();
-            let cli = MockCliRunner::with_responses(vec![Ok(signed_in_json(
-                "login-token",
+            let login_json = format!(
+                r#"{{"status":"signed_in","access-token":null,"api-url":"https://api.codescene.io/api","expires-at":{},"refresh-token-expires-at":{}}}"#,
                 now_epoch_secs() + 3600,
-            ))]);
-            let calls = cli.calls();
-            let (login_res, ensure_res) =
-                tokio::join!(manager.login(&cli), manager.resolve_credential(&cli),);
-            assert!(login_res.unwrap().is_signed_in());
-            assert!(ensure_res.unwrap().is_some());
-            assert!(std::env::var("CS_ACCESS_TOKEN").is_err());
-            assert_eq!(calls.lock().unwrap().len(), 1);
+                now_epoch_secs() + 7200
+            );
+            let token_json = signed_in_json("fetched-tok", now_epoch_secs() + 3600);
+            let cli = MockCliRunner::with_responses(vec![Ok(login_json), Ok(token_json)]);
+            let resp = manager.login(&cli).await.unwrap();
+            assert!(resp.is_signed_in());
+            assert_eq!(resp.access_token.as_deref(), Some("fetched-tok"));
+            assert_eq!(std::env::var("CS_OAUTH_TOKEN").ok().as_deref(), Some("fetched-tok"));
+            assert_eq!(cli.calls().lock().unwrap().len(), 2);
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn login_skips_if_fresh_token_appeared() {
+        with_clean_env(|| async {
+            // Simulate another thread having just completed login.
+            std::env::set_var("CS_OAUTH_TOKEN", "already-fresh");
+            std::env::set_var(
+                "CS_OAUTH_EXPIRES_AT",
+                (now_epoch_secs() + 3600).to_string(),
+            );
+            let manager = AuthManager::new();
+            let cli = MockCliRunner::with_responses(vec![]);
+            let resp = manager.login(&cli).await.unwrap();
+            assert!(resp.is_signed_in());
+            assert_eq!(resp.access_token.as_deref(), Some("already-fresh"));
+            // CLI should not have been called.
+            assert_eq!(cli.calls().lock().unwrap().len(), 0);
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn current_token_refreshes_when_expiry_exists_but_token_missing() {
+        with_clean_env(|| async {
+            let cli = MockCliRunner::with_ok(&signed_in_json("recovered-token", now_epoch_secs() + 3600));
+            assert_current_token(
+                || {
+                    std::env::set_var(
+                        "CS_OAUTH_EXPIRES_AT",
+                        (now_epoch_secs() + 3600).to_string(),
+                    );
+                },
+                cli,
+                Some("recovered-token"),
+                1,
+            )
+            .await;
+            assert_eq!(std::env::var("CS_OAUTH_TOKEN").ok().as_deref(), Some("recovered-token"));
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn try_cached_access_token_reads_from_env() {
+        with_clean_env(|| async {
+            std::env::set_var("CS_OAUTH_TOKEN", "oau-tracking");
+            let manager = AuthManager::new();
+            assert_eq!(
+                manager.try_cached_access_token().as_deref(),
+                Some("oau-tracking")
+            );
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn login_marks_signed_out_on_failure() {
+        with_clean_env(|| async {
+            let signed_out = r#"{"status":"signed_out","access-token":null,"api-url":null}"#;
+            let manager = AuthManager::new();
+            let cli = MockCliRunner::with_ok(signed_out);
+            let resp = manager.login(&cli).await.unwrap();
+            assert!(!resp.is_signed_in());
+            assert_eq!(
+                std::env::var("CS_OAUTH_EXPIRES_AT").ok().as_deref(),
+                Some(SIGNED_OUT_SENTINEL)
+            );
         })
         .await;
     }

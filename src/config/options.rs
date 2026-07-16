@@ -100,6 +100,46 @@ pub const OPTIONS: &[ConfigOption] = &[
         aliases: &["log_days"],
         docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
     },
+    ConfigOption {
+        key: "oauth_token",
+        env_var: "CS_OAUTH_TOKEN",
+        description: "OAuth access token (managed automatically by login flow)",
+        sensitive: true,
+        hidden: true,
+        api_only: false,
+        aliases: &[],
+        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
+    },
+    ConfigOption {
+        key: "oauth_expires_at",
+        env_var: "CS_OAUTH_EXPIRES_AT",
+        description: "OAuth access token expiry as epoch seconds (managed automatically)",
+        sensitive: false,
+        hidden: true,
+        api_only: false,
+        aliases: &[],
+        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
+    },
+    ConfigOption {
+        key: "oauth_refresh_expires_at",
+        env_var: "CS_OAUTH_REFRESH_EXPIRES_AT",
+        description: "OAuth refresh token expiry as epoch seconds (managed automatically)",
+        sensitive: false,
+        hidden: true,
+        api_only: false,
+        aliases: &[],
+        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
+    },
+    ConfigOption {
+        key: "oauth_client",
+        env_var: "CS_OAUTH_CLIENT",
+        description: "OAuth client slot used by CLI subprocesses (managed automatically)",
+        sensitive: false,
+        hidden: true,
+        api_only: false,
+        aliases: &[],
+        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
+    },
 ];
 
 /// Tool names that can be enabled/disabled via the `enabled_tools` config.
@@ -226,5 +266,12 @@ mod tests {
         let opt = find_option("environment");
         assert!(opt.is_some());
         assert_eq!(opt.unwrap().key, "tracking_environment");
+    }
+
+    #[test]
+    fn find_option_oauth_client_by_env_var() {
+        let opt = find_option("CS_OAUTH_CLIENT");
+        assert!(opt.is_some());
+        assert_eq!(opt.unwrap().key, "oauth_client");
     }
 }

@@ -117,11 +117,15 @@ fn api_base_from_optional_url(
 }
 
 pub(crate) fn configured_credential() -> Option<AuthCredential> {
-    let access_token = std::env::var("CS_ACCESS_TOKEN")
-        .ok()
+    let vals = crate::config::try_read_env_multi(&["CS_ACCESS_TOKEN", "CS_ONPREM_URL"])?;
+    let access_token = vals[0]
+        .as_deref()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())?;
-    let onprem_url = read_onprem_url();
+    let onprem_url = vals[1]
+        .as_deref()
+        .map(|v| v.trim().trim_end_matches('/').to_string())
+        .filter(|v| !v.is_empty());
     Some(AuthCredential::Configured {
         access_token,
         onprem_url,
@@ -164,11 +168,10 @@ pub(crate) fn resolve_web_root(credential: Option<&AuthCredential>) -> Option<St
         .or_else(default_web_root)
 }
 
-/// Read `CS_ONPREM_URL` from the environment, trimmed and normalized.
+/// Read `CS_ONPREM_URL` from the guarded config env, trimmed and normalized.
 /// Returns `None` if unset or empty.
 fn read_onprem_url() -> Option<String> {
-    std::env::var("CS_ONPREM_URL")
-        .ok()
+    crate::config::try_read_env("CS_ONPREM_URL")
         .map(|v| v.trim().trim_end_matches('/').to_string())
         .filter(|v| !v.is_empty())
 }
@@ -178,6 +181,35 @@ pub(crate) fn now_epoch_secs() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+fn sanitized_output_preview(output: &str) -> String {
+    let compact = output.split_whitespace().collect::<Vec<_>>().join(" ");
+    let preview = ["access-token", "refresh-token"]
+        .into_iter()
+        .fold(compact, |preview, key| redact_json_string_value(preview, key));
+    const MAX_PREVIEW_CHARS: usize = 200;
+    if preview.chars().count() <= MAX_PREVIEW_CHARS {
+        preview
+    } else {
+        let truncated = preview.chars().take(MAX_PREVIEW_CHARS).collect::<String>();
+        format!("{truncated}...")
+    }
+}
+
+fn redact_json_string_value(mut text: String, key: &str) -> String {
+    let pattern = format!("\"{key}\":\"");
+    let mut search_from = 0;
+    while let Some(relative_start) = text[search_from..].find(&pattern) {
+        let value_start = search_from + relative_start + pattern.len();
+        let Some(relative_end) = text[value_start..].find('"') else {
+            break;
+        };
+        let value_end = value_start + relative_end;
+        text.replace_range(value_start..value_end, "[redacted]");
+        search_from = value_start + "[redacted]".len();
+    }
+    text
 }
 
 /// Fetch the current OAuth token via `cs auth token --client mcp --output-format json`.
@@ -206,7 +238,12 @@ async fn run_and_parse_auth(
 ) -> Result<CliTokenResponse, String> {
     let output = run_auth_command(cli_runner, command).await?;
     serde_json::from_str(output.trim()).map_err(|e| {
-        tracing::debug!(error = %e, command, "failed to parse auth response");
+        tracing::warn!(
+            command,
+            error = %e,
+            output_preview = %sanitized_output_preview(&output),
+            "failed to parse auth response"
+        );
         format!("Failed to parse {command} response from CLI")
     })
 }
@@ -226,7 +263,7 @@ async fn run_auth_command(cli_runner: &dyn CliRunner, command: &str) -> Result<S
         )
         .await
         .map_err(|e| {
-            tracing::debug!(error = %e, command, "auth command failed");
+            tracing::warn!(error = %e, command, error_kind = e.kind(), "auth command failed");
             match &e {
                 crate::errors::CliError::NotFound(_) => {
                     "CodeScene CLI not found. Ensure it is installed.".to_string()
@@ -331,6 +368,19 @@ mod tests {
         );
         assert_eq!(resp.expires_at, Some(1784044090));
         assert_eq!(resp.refresh_token_expires_at, Some(1815576430));
+    }
+
+    #[test]
+    fn sanitized_output_preview_redacts_tokens_and_truncates() {
+        let raw = format!(
+            "{{\"access-token\":\"secret-access\",\"refresh-token\":\"secret-refresh\",\"message\":\"{}\"}}",
+            "x".repeat(300)
+        );
+        let preview = sanitized_output_preview(&raw);
+        assert!(!preview.contains("secret-access"), "preview: {preview}");
+        assert!(!preview.contains("secret-refresh"), "preview: {preview}");
+        assert!(preview.contains("[redacted]"), "preview: {preview}");
+        assert!(preview.ends_with("..."), "preview: {preview}");
     }
 
     #[test]

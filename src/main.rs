@@ -54,8 +54,9 @@ use crate::version_checker::VersionChecker;
 
 const TOKEN_MISSING_MSG: &str = "\
 No access token configured.\n\n\
-To sign in with OAuth, use the `login` tool.\n\n\
-Alternatively, set your access token directly:\n\
+Call the `login` tool now to sign in with OAuth. Do not ask the user for a token first.\n\n\
+Use a Personal Access Token only when OAuth is not suitable, such as CI/CD or other headless environments.\n\
+If a token must be configured manually:\n\
 1. Use the `set_config` tool: set_config(key=\"access_token\", value=\"your-token\")\n\
 2. Set the CS_ACCESS_TOKEN environment variable in your MCP client configuration\n\n\
 To get a Personal Access Token, see:\n\
@@ -92,6 +93,16 @@ pub(crate) fn display_version(raw_version: &str) -> &str {
 
 pub(crate) fn help_text() -> &'static str {
     "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help       Show this help message and exit\n  -v, --version    Show version and exit\n  --cli-version    Show embedded CLI version and exit"
+}
+
+async fn ensure_oauth_client_configured() {
+    if crate::config::try_read_env("CS_OAUTH_CLIENT").is_some() {
+        return;
+    }
+
+    if let Err(e) = crate::config::write_env("oauth_client", "mcp").await {
+        tracing::warn!(error = %e, "failed to persist default OAuth client");
+    }
 }
 
 pub(crate) fn parse_cli_args(args: &[String], raw_version: &str) -> Result<CliAction, String> {
@@ -162,10 +173,29 @@ impl CodeSceneServer {
             .resolve_credential(&*self.cli_runner)
             .await
         {
-            Ok(Some(_)) => None,
-            Ok(None) => Some(CallToolResult::success(vec![Content::text(
-                TOKEN_MISSING_MSG,
-            )])),
+            Ok(Some(credential)) => {
+                tracing::info!(
+                    source = credential_source(&credential),
+                    has_web_root = credential.web_root().is_some(),
+                    "token requirement satisfied"
+                );
+                None
+            }
+            Ok(None) => {
+                tracing::warn!(
+                    has_configured_token = crate::auth::configured_credential().is_some(),
+                    has_oauth_token = self.auth_manager.try_cached_access_token().is_some(),
+                    oauth_expires_at = crate::config::try_read_env("CS_OAUTH_EXPIRES_AT"),
+                    signed_out_sentinel = crate::config::try_read_env("CS_OAUTH_EXPIRES_AT")
+                        .as_deref()
+                        == Some("0"),
+                    oauth_client = crate::config::try_read_env("CS_OAUTH_CLIENT"),
+                    "token requirement failed: no usable credential resolved"
+                );
+                Some(CallToolResult::success(vec![Content::text(
+                    TOKEN_MISSING_MSG,
+                )]))
+            }
             Err(e) => {
                 tracing::warn!(error = %e, "auth token check failed");
                 Some(CallToolResult::success(vec![Content::text(
@@ -181,10 +211,29 @@ impl CodeSceneServer {
             .resolve_credential(&*self.cli_runner)
             .await
         {
-            Ok(Some(credential)) => Ok(credential),
-            Ok(None) => Err(CallToolResult::success(vec![Content::text(
-                TOKEN_MISSING_MSG,
-            )])),
+            Ok(Some(credential)) => {
+                tracing::info!(
+                    source = credential_source(&credential),
+                    has_web_root = credential.web_root().is_some(),
+                    "resolved auth credential for API tool"
+                );
+                Ok(credential)
+            }
+            Ok(None) => {
+                tracing::warn!(
+                    has_configured_token = crate::auth::configured_credential().is_some(),
+                    has_oauth_token = self.auth_manager.try_cached_access_token().is_some(),
+                    oauth_expires_at = crate::config::try_read_env("CS_OAUTH_EXPIRES_AT"),
+                    signed_out_sentinel = crate::config::try_read_env("CS_OAUTH_EXPIRES_AT")
+                        .as_deref()
+                        == Some("0"),
+                    oauth_client = crate::config::try_read_env("CS_OAUTH_CLIENT"),
+                    "failed to resolve auth credential for API tool"
+                );
+                Err(CallToolResult::success(vec![Content::text(
+                    TOKEN_MISSING_MSG,
+                )]))
+            }
             Err(e) => {
                 tracing::warn!(error = %e, "auth token check failed");
                 Err(CallToolResult::success(vec![Content::text(
@@ -255,6 +304,13 @@ impl CodeSceneServer {
                 .unwrap_or_default(),
             api_root: self.auth_manager.try_cached_api_root(),
         }
+    }
+}
+
+fn credential_source(credential: &AuthCredential) -> &'static str {
+    match credential {
+        AuthCredential::Configured { .. } => "configured",
+        AuthCredential::OAuth { .. } => "oauth",
     }
 }
 
@@ -509,7 +565,7 @@ impl CodeSceneServer {
     }
 
     #[tool(
-        description = "Sign in to CodeScene using OAuth.\n\nWhen to use:\n    Use this tool when no access token is configured and the user needs\n    to authenticate. The tool opens the user's browser to complete the\n    OAuth flow. If the browser cannot be opened automatically, the URL\n    is printed so the user can open it manually.\n\nLimitations:\n    - Not needed when CS_ACCESS_TOKEN is already set.\n    - Requires the embedded CLI to be available.\n    - Waits up to 2 minutes for the user to complete the browser flow.\n    - For on-prem instances, configure CS_ONPREM_URL before calling this tool.\n\nReturns:\n    A success message when signed in, or an error describing the failure.\n\nExample:\n    Call without arguments to sign in to CodeScene cloud.",
+        description = "Sign in to CodeScene using OAuth.\n\nWhen to use:\n    Use this tool when no CS_ACCESS_TOKEN env to authenticate. Can be used during read-only mode. If the browser cannot be opened automatically, the URL\n    is printed so the user can open it manually.\n\nLimitations:\n    - Not needed when CS_ACCESS_TOKEN is already set.\n    - Requires the embedded CLI to be available.\n    - Waits up to 2 minutes for the user to complete the browser flow.\n    - For on-prem instances, configure CS_ONPREM_URL before calling this tool.\n\nReturns:\n    A success message when signed in, or an error describing the failure.",
         input_schema = inlined_schema_for::<LoginParam>()
     )]
     async fn login(
@@ -639,6 +695,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     config::snapshot_client_env_vars();
+    ensure_oauth_client_configured().await;
     let config_data = config::load().unwrap_or_default();
     config::apply_to_env(&config_data);
 

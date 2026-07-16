@@ -14,6 +14,7 @@ async fn try_existing_session(server: &CodeSceneServer) -> Option<CallToolResult
         .current_token(&*server.cli_runner)
         .await
         .ok()??;
+    tracing::info!("reusing existing CodeScene login session");
     server.track("auth-login", json!({"result": "already_signed_in"}));
     Some(CallToolResult::success(vec![Content::text(
         "Already signed in to CodeScene.",
@@ -22,12 +23,15 @@ async fn try_existing_session(server: &CodeSceneServer) -> Option<CallToolResult
 
 /// Run the interactive login flow (opens browser) and apply the result.
 async fn run_and_apply_login(server: &CodeSceneServer) -> CallToolResult {
+    tracing::info!("starting interactive CodeScene login");
     match server.auth_manager.login(&*server.cli_runner).await {
         Ok(resp) if resp.is_signed_in() => {
+            tracing::info!("interactive CodeScene login succeeded");
             server.track("auth-login", json!({"result": "success"}));
             CallToolResult::success(vec![Content::text("Successfully signed in to CodeScene.")])
         }
         Ok(resp) => {
+            tracing::info!(status = %resp.status, "interactive CodeScene login did not sign in");
             server.track("auth-login", json!({"result": "failed"}));
             CallToolResult::success(vec![Content::text(format!(
                 "Login did not complete. Status: {}",
@@ -35,6 +39,7 @@ async fn run_and_apply_login(server: &CodeSceneServer) -> CallToolResult {
             ))])
         }
         Err(e) => {
+            tracing::warn!(error = %e, "interactive CodeScene login failed");
             server.track("auth-login", json!({"result": "error"}));
             CallToolResult::success(vec![Content::text(format!(
                 "Login failed: {e}\n\n\
@@ -50,6 +55,7 @@ pub(crate) async fn handle(
     _params: LoginParam,
 ) -> Result<CallToolResult, ErrorData> {
     if auth::configured_credential().is_some() {
+        tracing::info!("skipping OAuth login because CS_ACCESS_TOKEN is already configured");
         server.track("auth-login", json!({"result": "already_configured"}));
         return Ok(CallToolResult::success(vec![Content::text(
             "CS_ACCESS_TOKEN is already configured. OAuth login is not needed.\n\
@@ -118,6 +124,11 @@ mod tests {
         let text = result_text(&result);
         assert!(text.contains("Successfully signed in"), "got: {text}");
         assert!(std::env::var("CS_ACCESS_TOKEN").is_err());
+
+        // Clear OAuth state from Case 1 before Case 2
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+        std::env::remove_var("CS_OAUTH_REFRESH_EXPIRES_AT");
 
         // Case 2: token check errors → falls through to login
         let cli = MockCliRunner::with_responses(vec![
