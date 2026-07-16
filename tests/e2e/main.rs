@@ -1052,6 +1052,47 @@ fn test_ssl_path_set_config_ca_bundle_applies_immediately() {
     tests::ssl_ca_bundle_path_formats::test_set_config_ca_bundle_applies_immediately();
 }
 
+// --- OAuth Login ---
+#[test]
+fn test_login_skips_when_pat_configured() {
+    tests::oauth_login::test_login_skips_when_pat_configured();
+}
+
+#[test]
+fn test_login_reuses_existing_session() {
+    tests::oauth_login::test_login_reuses_existing_session();
+}
+
+#[test]
+fn test_login_interactive_flow_persists_token() {
+    tests::oauth_login::test_login_interactive_flow_persists_token();
+}
+
+#[test]
+fn test_login_fetches_token_when_login_omits_access_token() {
+    tests::oauth_login::test_login_fetches_token_when_login_omits_access_token();
+}
+
+#[test]
+fn test_failed_login_persists_signed_out_state() {
+    tests::oauth_login::test_failed_login_persists_signed_out_state();
+}
+
+#[test]
+fn test_persisted_oauth_reused_by_second_process() {
+    tests::oauth_login::test_persisted_oauth_reused_by_second_process();
+}
+
+#[test]
+fn test_expiry_without_token_triggers_refresh() {
+    tests::oauth_login::test_expiry_without_token_triggers_refresh();
+}
+
+#[test]
+fn test_pat_takes_precedence_over_oauth() {
+    tests::oauth_login::test_pat_takes_precedence_over_oauth();
+}
+
 // --- Stress Test ---
 #[test]
 #[ignore] // Long-running; run with --ignored

@@ -6,7 +6,7 @@
 //! - Tracking can be disabled via `CS_DISABLE_TRACKING`
 //! - Enriched events contain required common and tool-specific properties
 
-use super::fake_https_server::FakeHttpsServer;
+use super::fake_http_server::FakeHttpServer;
 use super::*;
 
 use sha2::{Digest, Sha256};
@@ -61,32 +61,30 @@ fn analytics_setup_with_env(
     extra: &[(&str, &str)],
 ) -> (Vec<String>, Vec<(String, String)>, PathBuf, TempDir) {
     let (command, mut env, repo_dir, tmp) = setup();
+    use_isolated_config_dir(&mut env, &repo_dir, ".cs_config_analytics");
     for (key, val) in extra {
         env.push((key.to_string(), val.to_string()));
     }
     (command, env, repo_dir, tmp)
 }
 
-fn analytics_setup_with_https_server(
+fn analytics_setup_with_tracking_server(
     extra: &[(&str, &str)],
 ) -> (
     Vec<String>,
     Vec<(String, String)>,
     PathBuf,
-    FakeHttpsServer,
-    TempDir,
+    FakeHttpServer,
     TempDir,
 ) {
-    let cert_dir = create_temp_dir("cs_mcp_certs_").expect("cert dir");
-    let server = FakeHttpsServer::always_ok(cert_dir.path());
+    let server = FakeHttpServer::always_ok();
     let (command, mut env, repo_dir, tmp) = setup();
+    use_isolated_config_dir(&mut env, &repo_dir, ".cs_config_analytics");
     env.push(("CS_TRACKING_URL".to_string(), server.url()));
-    let ca_path = super::docker_ca_bundle(&server.certs.ca_cert_path, &repo_dir);
-    env.push(("REQUESTS_CA_BUNDLE".to_string(), ca_path));
     for (key, val) in extra {
         env.push((key.to_string(), val.to_string()));
     }
-    (command, env, repo_dir, server, tmp, cert_dir)
+    (command, env, repo_dir, server, tmp)
 }
 
 fn call_code_health_score(client: &mut MCPClient, repo_dir: &Path) -> String {
@@ -145,18 +143,18 @@ fn assert_properties_are_nonempty(props: &serde_json::Value, keys: &[&str]) {
     }
 }
 
-fn wait_for_analytics(server: &FakeHttpsServer) {
+fn wait_for_analytics(server: &FakeHttpServer) {
     let deadline = Instant::now() + Duration::from_secs(15);
     while server.request_count() == 0 && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(200));
     }
 }
 
-fn score_with_https_server(extra: &[(&str, &str)]) -> (String, FakeHttpsServer, TempDir, TempDir) {
-    let (command, env, repo_dir, server, tmp, cert_dir) = analytics_setup_with_https_server(extra);
+fn score_with_tracking_server(extra: &[(&str, &str)]) -> (String, FakeHttpServer, TempDir) {
+    let (command, env, repo_dir, server, tmp) = analytics_setup_with_tracking_server(extra);
     let (result, _client) = start_client_and_score(&command, &env, &repo_dir);
     wait_for_analytics(&server);
-    (result, server, tmp, cert_dir)
+    (result, server, tmp)
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +162,7 @@ fn score_with_https_server(extra: &[(&str, &str)]) -> (String, FakeHttpsServer, 
 // ---------------------------------------------------------------------------
 
 pub fn test_analytics_events_are_sent() {
-    let (_result, server, _tmp, _cert_dir) = score_with_https_server(&[]);
+    let (_result, server, _tmp) = score_with_tracking_server(&[]);
     assert!(
         server.request_count() > 0,
         "Analytics server should have received at least one request"
@@ -172,8 +170,7 @@ pub fn test_analytics_events_are_sent() {
 }
 
 pub fn test_disabled_tracking_sends_no_events() {
-    let (_result, server, _tmp, _cert_dir) =
-        score_with_https_server(&[("CS_DISABLE_TRACKING", "1")]);
+    let (_result, server, _tmp) = score_with_tracking_server(&[("CS_DISABLE_TRACKING", "1")]);
     assert_eq!(
         server.request_count(),
         0,
@@ -209,7 +206,7 @@ pub fn test_disabled_tracking_returns_valid_results() {
 }
 
 pub fn test_enriched_event_contains_common_properties() {
-    let (_result, server, _tmp, _cert_dir) = score_with_https_server(&[]);
+    let (_result, server, _tmp) = score_with_tracking_server(&[]);
 
     let payloads = server.get_payloads();
     let props = find_event_properties(&payloads, "mcp-code-health-score");
@@ -228,7 +225,7 @@ pub fn test_enriched_event_contains_common_properties() {
 }
 
 pub fn test_enriched_event_contains_tool_specific_properties() {
-    let (result, server, _tmp, _cert_dir) = score_with_https_server(&[]);
+    let (result, server, _tmp) = score_with_tracking_server(&[]);
 
     let payloads = server.get_payloads();
     let props = find_event_properties(&payloads, "mcp-code-health-score");
@@ -301,17 +298,15 @@ fn run_tool_with_fake_server<F>(
 where
     F: FnOnce(&mut MCPClient, &Path) -> String,
 {
-    let cert_dir = create_temp_dir("cs_mcp_certs_run_").expect("cert dir");
-    let server = FakeHttpsServer::always_ok(cert_dir.path());
+    let server = FakeHttpServer::always_ok();
     let executable = find_or_build_executable();
     let backend = create_backend(executable);
 
     let base = base_env();
     let env_map = backend.get_env(&base, repo_dir);
     let mut env_vec: Vec<(String, String)> = env_map.into_iter().collect();
+    use_isolated_config_dir(&mut env_vec, repo_dir, ".cs_config_analytics");
     env_vec.push(("CS_TRACKING_URL".to_string(), server.url()));
-    let ca_path = super::docker_ca_bundle(&server.certs.ca_cert_path, repo_dir);
-    env_vec.push(("REQUESTS_CA_BUNDLE".to_string(), ca_path));
     for (k, v) in extra_env {
         env_vec.push((k.to_string(), v.to_string()));
     }
