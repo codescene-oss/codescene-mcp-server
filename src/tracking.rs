@@ -271,6 +271,21 @@ mod tests {
     }
 
     #[test]
+    fn tracking_url_resolution_allows_host_docker_internal() {
+        // Regression test: e2e tests running under the Docker backend point
+        // CS_TRACKING_URL at `http://host.docker.internal:<port>` so the
+        // container can reach the fake tracking server on the host. This
+        // must not be blocked by the HTTPS requirement.
+        let _lock = config::lock_test_env();
+        std::env::set_var("CS_TRACKING_URL", "http://host.docker.internal:12345");
+        assert_eq!(
+            resolve_tracking_url(None),
+            Some("http://host.docker.internal:12345/v2/analytics/track".to_string())
+        );
+        std::env::remove_var("CS_TRACKING_URL");
+    }
+
+    #[test]
     fn tracking_environment_uses_detected_environment_when_unset() {
         let _lock = config::lock_test_env();
         std::env::remove_var("CS_ENVIRONMENT");
