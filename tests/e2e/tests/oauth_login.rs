@@ -240,6 +240,14 @@ fn seed_config(config_dir: &Path, values: serde_json::Value) {
         .expect("seed config file");
 }
 
+/// Start the MCP server and complete the JSON-RPC handshake.
+fn start_client(t: &OAuthTestEnv) -> MCPClient {
+    let mut client = make_client(&t.command, &t.env, &t.repo_dir);
+    assert!(client.start(), "Server should start");
+    client.initialize().expect("Initialize should succeed");
+    client
+}
+
 fn call_login(client: &mut MCPClient) -> String {
     let response = client
         .call_tool("login", json!({}), Duration::from_secs(30))
@@ -270,9 +278,7 @@ pub fn test_login_skips_when_pat_configured() {
         return skip_if_docker("fake CLI binary not available in container");
     }
     let t = oauth_setup(&[("CS_ACCESS_TOKEN", "pat-token")]);
-    let mut client = make_client(&t.command, &t.env, &t.repo_dir);
-    assert!(client.start(), "Server should start");
-    client.initialize().expect("Initialize should succeed");
+    let mut client = start_client(&t);
 
     let result = call_login(&mut client);
     assert!(
@@ -303,9 +309,7 @@ pub fn test_login_reuses_existing_session() {
     }
     let token_resp = signed_in_json("session-token", 3600);
     let t = oauth_setup(&[("FAKE_AUTH_TOKEN_RESPONSE", token_resp.as_str())]);
-    let mut client = make_client(&t.command, &t.env, &t.repo_dir);
-    assert!(client.start(), "Server should start");
-    client.initialize().expect("Initialize should succeed");
+    let mut client = start_client(&t);
 
     let result = call_login(&mut client);
     assert!(result.contains("Already signed in"), "got: {result}");
@@ -326,9 +330,7 @@ pub fn test_login_interactive_flow_persists_token() {
         ("FAKE_AUTH_TOKEN_RESPONSE", SIGNED_OUT_JSON),
         ("FAKE_AUTH_LOGIN_RESPONSE", login_resp.as_str()),
     ]);
-    let mut client = make_client(&t.command, &t.env, &t.repo_dir);
-    assert!(client.start(), "Server should start");
-    client.initialize().expect("Initialize should succeed");
+    let mut client = start_client(&t);
 
     let result = call_login(&mut client);
     assert!(result.contains("Successfully signed in"), "got: {result}");
@@ -356,9 +358,7 @@ pub fn test_login_fetches_token_when_login_omits_access_token() {
         ("FAKE_AUTH_TOKEN_RESPONSE_2", fetched_resp.as_str()),
         ("FAKE_AUTH_LOGIN_RESPONSE", login_without_token.as_str()),
     ]);
-    let mut client = make_client(&t.command, &t.env, &t.repo_dir);
-    assert!(client.start(), "Server should start");
-    client.initialize().expect("Initialize should succeed");
+    let mut client = start_client(&t);
 
     let result = call_login(&mut client);
     assert!(result.contains("Successfully signed in"), "got: {result}");
@@ -377,9 +377,7 @@ pub fn test_failed_login_persists_signed_out_state() {
         ("FAKE_AUTH_TOKEN_RESPONSE", SIGNED_OUT_JSON),
         ("FAKE_AUTH_LOGIN_RESPONSE", SIGNED_OUT_JSON),
     ]);
-    let mut client = make_client(&t.command, &t.env, &t.repo_dir);
-    assert!(client.start(), "Server should start");
-    client.initialize().expect("Initialize should succeed");
+    let mut client = start_client(&t);
 
     let result = call_login(&mut client);
     assert!(result.contains("Login did not complete"), "got: {result}");
@@ -407,9 +405,7 @@ pub fn test_persisted_oauth_reused_by_second_process() {
     ]);
 
     {
-        let mut client = make_client(&t.command, &t.env, &t.repo_dir);
-        assert!(client.start(), "First server should start");
-        client.initialize().expect("Initialize should succeed");
+        let mut client = start_client(&t);
         let result = call_login(&mut client);
         assert!(result.contains("Successfully signed in"), "got: {result}");
         client.stop();
@@ -420,9 +416,7 @@ pub fn test_persisted_oauth_reused_by_second_process() {
 
     let log_after_login = std::fs::read_to_string(&t.call_log_path).unwrap_or_default();
 
-    let mut client2 = make_client(&t.command, &t.env, &t.repo_dir);
-    assert!(client2.start(), "Second server should start");
-    client2.initialize().expect("Initialize should succeed");
+    let mut client2 = start_client(&t);
 
     let score = call_score(&mut client2, &t.repo_dir);
     assert!(
@@ -454,9 +448,7 @@ pub fn test_expiry_without_token_triggers_refresh() {
         }),
     );
 
-    let mut client = make_client(&t.command, &t.env, &t.repo_dir);
-    assert!(client.start(), "Server should start");
-    client.initialize().expect("Initialize should succeed");
+    let mut client = start_client(&t);
 
     let score = call_score(&mut client, &t.repo_dir);
     assert!(
@@ -489,9 +481,7 @@ pub fn test_pat_takes_precedence_over_oauth() {
         }),
     );
 
-    let mut client = make_client(&t.command, &t.env, &t.repo_dir);
-    assert!(client.start(), "Server should start");
-    client.initialize().expect("Initialize should succeed");
+    let mut client = start_client(&t);
 
     let score = call_score(&mut client, &t.repo_dir);
     assert!(
