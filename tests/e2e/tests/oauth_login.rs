@@ -319,30 +319,73 @@ pub fn test_login_reuses_existing_session() {
     assert!(config.get("oauth_expires_at").is_some());
 }
 
-/// When no session exists, `login` should run the interactive flow and
-/// persist the resulting token, which a subsequent guarded tool call can use.
-pub fn test_login_interactive_flow_persists_token() {
+/// Expectations for a login-flow scenario that exercises the full
+/// `login` -> persisted config -> guarded tool call path. Shared by the
+/// interactive-success and failed-login regression tests below, which
+/// otherwise differ only in these values.
+struct LoginFlowExpectation<'a> {
+    /// Response the fake CLI returns for `auth login`.
+    login_response: &'a str,
+    /// Substring expected in the `login` tool result text.
+    result_contains: &'a str,
+    /// Expected `oauth_token` value in the persisted config, if any.
+    oauth_token: Option<&'a str>,
+    /// Expected `oauth_expires_at` value in the persisted config, if any.
+    oauth_expires_at: Option<&'a str>,
+    /// Whether a subsequent guarded tool call should succeed using the
+    /// resulting auth state (`true`) or keep reporting a missing token
+    /// (`false`).
+    score_has_token: bool,
+}
+
+/// Runs `login` against a fresh session, then asserts on the tool result,
+/// the persisted config file, and a subsequent guarded tool call.
+fn assert_login_flow(expect: &LoginFlowExpectation) {
     if is_docker() {
         return skip_if_docker("fake CLI binary not available in container");
     }
-    let login_resp = signed_in_json("interactive-token", 3600);
     let t = oauth_setup(&[
         ("FAKE_AUTH_TOKEN_RESPONSE", SIGNED_OUT_JSON),
-        ("FAKE_AUTH_LOGIN_RESPONSE", login_resp.as_str()),
+        ("FAKE_AUTH_LOGIN_RESPONSE", expect.login_response),
     ]);
     let mut client = start_client(&t);
 
     let result = call_login(&mut client);
-    assert!(result.contains("Successfully signed in"), "got: {result}");
+    assert!(result.contains(expect.result_contains), "got: {result}");
 
     let config = read_config(&t.config_dir);
-    assert_eq!(config["oauth_token"].as_str(), Some("interactive-token"));
+    if let Some(token) = expect.oauth_token {
+        assert_eq!(config["oauth_token"].as_str(), Some(token));
+    }
+    if let Some(expires_at) = expect.oauth_expires_at {
+        assert_eq!(config["oauth_expires_at"].as_str(), Some(expires_at));
+    }
 
     let score = call_score(&mut client, &t.repo_dir);
-    assert!(
-        !score.contains("No access token configured"),
-        "Guarded tool should work using the freshly persisted OAuth token, got: {score}"
-    );
+    if expect.score_has_token {
+        assert!(
+            !score.contains("No access token configured"),
+            "Guarded tool should work using the freshly persisted OAuth token, got: {score}"
+        );
+    } else {
+        assert!(
+            score.contains("No access token configured"),
+            "Should keep reporting missing token, got: {score}"
+        );
+    }
+}
+
+/// When no session exists, `login` should run the interactive flow and
+/// persist the resulting token, which a subsequent guarded tool call can use.
+pub fn test_login_interactive_flow_persists_token() {
+    let login_resp = signed_in_json("interactive-token", 3600);
+    assert_login_flow(&LoginFlowExpectation {
+        login_response: login_resp.as_str(),
+        result_contains: "Successfully signed in",
+        oauth_token: Some("interactive-token"),
+        oauth_expires_at: None,
+        score_has_token: true,
+    });
 }
 
 /// Regression test: when the login response omits `access-token`, MCP must
@@ -370,26 +413,13 @@ pub fn test_login_fetches_token_when_login_omits_access_token() {
 /// A login that never completes must persist the signed-out sentinel, and
 /// guarded tools must keep reporting "no token" rather than crashing.
 pub fn test_failed_login_persists_signed_out_state() {
-    if is_docker() {
-        return skip_if_docker("fake CLI binary not available in container");
-    }
-    let t = oauth_setup(&[
-        ("FAKE_AUTH_TOKEN_RESPONSE", SIGNED_OUT_JSON),
-        ("FAKE_AUTH_LOGIN_RESPONSE", SIGNED_OUT_JSON),
-    ]);
-    let mut client = start_client(&t);
-
-    let result = call_login(&mut client);
-    assert!(result.contains("Login did not complete"), "got: {result}");
-
-    let config = read_config(&t.config_dir);
-    assert_eq!(config["oauth_expires_at"].as_str(), Some("0"));
-
-    let score = call_score(&mut client, &t.repo_dir);
-    assert!(
-        score.contains("No access token configured"),
-        "Should keep reporting missing token, got: {score}"
-    );
+    assert_login_flow(&LoginFlowExpectation {
+        login_response: SIGNED_OUT_JSON,
+        result_contains: "Login did not complete",
+        oauth_token: None,
+        oauth_expires_at: Some("0"),
+        score_has_token: false,
+    });
 }
 
 /// OAuth state persisted by one MCP process must be reusable by a second,
