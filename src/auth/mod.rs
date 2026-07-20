@@ -1,4 +1,5 @@
 mod manager;
+mod state;
 
 pub(crate) use manager::AuthManager;
 
@@ -187,7 +188,9 @@ fn sanitized_output_preview(output: &str) -> String {
     let compact = output.split_whitespace().collect::<Vec<_>>().join(" ");
     let preview = ["access-token", "refresh-token"]
         .into_iter()
-        .fold(compact, |preview, key| redact_json_string_value(preview, key));
+        .fold(compact, |preview, key| {
+            redact_json_string_value(preview, key)
+        });
     const MAX_PREVIEW_CHARS: usize = 200;
     if preview.chars().count() <= MAX_PREVIEW_CHARS {
         preview
@@ -238,12 +241,8 @@ async fn run_and_parse_auth(
 ) -> Result<CliTokenResponse, String> {
     let output = run_auth_command(cli_runner, command).await?;
     serde_json::from_str(output.trim()).map_err(|e| {
-        tracing::warn!(
-            command,
-            error = %e,
-            output_preview = %sanitized_output_preview(&output),
-            "failed to parse auth response"
-        );
+        let output_preview = sanitized_output_preview(&output);
+        tracing::warn!(command, error = %e, output_preview, "failed to parse auth response");
         format!("Failed to parse {command} response from CLI")
     })
 }
@@ -535,5 +534,98 @@ mod tests {
         );
         let err = run_login(&cli).await.unwrap_err();
         assert!(!err.contains("secret-token"));
+    }
+
+    // -- default_web_root / resolve_web_root -------------------------------
+
+    #[test]
+    fn default_web_root_returns_none_for_cloud() {
+        let _lock = with_env_lock();
+        std::env::remove_var("CS_ONPREM_URL");
+        assert_eq!(default_web_root(), None);
+    }
+
+    #[test]
+    fn default_web_root_returns_url_for_onprem() {
+        let _lock = with_env_lock();
+        std::env::set_var("CS_ONPREM_URL", "https://onprem.example.com/");
+        assert_eq!(
+            default_web_root(),
+            Some("https://onprem.example.com".to_string())
+        );
+        std::env::remove_var("CS_ONPREM_URL");
+    }
+
+    #[test]
+    fn default_web_root_returns_none_when_https_validation_fails() {
+        let _lock = with_env_lock();
+        std::env::set_var("CS_ONPREM_URL", "http://not-localhost.example.com");
+        assert_eq!(default_web_root(), None);
+        std::env::remove_var("CS_ONPREM_URL");
+    }
+
+    #[test]
+    fn resolve_web_root_prefers_credential_over_env() {
+        let _lock = with_env_lock();
+        std::env::set_var("CS_ONPREM_URL", "https://env-onprem.example.com");
+        let credential = AuthCredential::OAuth {
+            access_token: "tok".to_string(),
+            onprem_url: Some("https://cred-onprem.example.com".to_string()),
+        };
+        assert_eq!(
+            resolve_web_root(Some(&credential)),
+            Some("https://cred-onprem.example.com".to_string())
+        );
+        std::env::remove_var("CS_ONPREM_URL");
+    }
+
+    #[test]
+    fn resolve_web_root_falls_back_to_env_when_no_credential() {
+        let _lock = with_env_lock();
+        std::env::set_var("CS_ONPREM_URL", "https://env-onprem.example.com");
+        assert_eq!(
+            resolve_web_root(None),
+            Some("https://env-onprem.example.com".to_string())
+        );
+        std::env::remove_var("CS_ONPREM_URL");
+    }
+
+    // -- sanitized_output_preview / redact_json_string_value ---------------
+
+    #[test]
+    fn sanitized_output_preview_returns_unchanged_when_short() {
+        let raw = r#"{"status":"signed_out"}"#;
+        assert_eq!(sanitized_output_preview(raw), "{\"status\":\"signed_out\"}");
+    }
+
+    #[test]
+    fn redact_json_string_value_stops_at_unterminated_value() {
+        let raw = r#"prefix "access-token":"unterminated"#;
+        // No closing quote after the value start — the loop should break
+        // without redacting or panicking.
+        assert_eq!(
+            redact_json_string_value(raw.to_string(), "access-token"),
+            raw
+        );
+    }
+
+    // -- run_auth_command CLI error mapping --------------------------------
+
+    #[tokio::test]
+    async fn fetch_token_maps_not_found_cli_error() {
+        let cli = MockCliRunner::with_responses(vec![Err(crate::errors::CliError::NotFound(
+            "cs".to_string(),
+        ))]);
+        let err = fetch_token(&cli).await.unwrap_err();
+        assert!(err.contains("CodeScene CLI not found"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn fetch_token_maps_io_cli_error() {
+        let cli = MockCliRunner::with_responses(vec![Err(crate::errors::CliError::Io(
+            std::io::Error::other("permission denied"),
+        ))]);
+        let err = fetch_token(&cli).await.unwrap_err();
+        assert!(err.contains("I/O error"), "got: {err}");
     }
 }

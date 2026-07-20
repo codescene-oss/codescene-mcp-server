@@ -510,6 +510,180 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn require_token_returns_missing_message_when_no_credential_resolved() {
+        let _g = clear_token();
+        std::env::set_var("CS_OAUTH_EXPIRES_AT", "0"); // signed-out sentinel avoids a CLI call
+        let server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_responses(vec![]),
+            MockHttpClient::new(vec![]),
+        );
+        let result = server.require_token().await.unwrap();
+        assert!(
+            result_text(&result).contains("access token"),
+            "got: {}",
+            result_text(&result)
+        );
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+    }
+
+    #[tokio::test]
+    async fn require_token_returns_missing_message_when_cli_errors() {
+        let _g = clear_token();
+        let cli = MockCliRunner::with_responses(vec![Err(crate::errors::CliError::NotFound(
+            "cs".to_string(),
+        ))]);
+        let server = make_server_with_mocks(false, cli, MockHttpClient::new(vec![]));
+        let result = server.require_token().await.unwrap();
+        assert!(
+            result_text(&result).contains("access token"),
+            "got: {}",
+            result_text(&result)
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_auth_credential_returns_error_result_when_no_credential_resolved() {
+        let _g = clear_token();
+        std::env::set_var("CS_OAUTH_EXPIRES_AT", "0"); // signed-out sentinel avoids a CLI call
+        let server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_responses(vec![]),
+            MockHttpClient::new(vec![]),
+        );
+        let err = server.resolve_auth_credential().await.unwrap_err();
+        assert!(
+            result_text(&err).contains("access token"),
+            "got: {}",
+            result_text(&err)
+        );
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+    }
+
+    #[tokio::test]
+    async fn resolve_auth_credential_returns_ok_when_configured() {
+        let _g = set_token("pat-token");
+        let server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_responses(vec![]),
+            MockHttpClient::new(vec![]),
+        );
+        let credential = server.resolve_auth_credential().await.unwrap();
+        assert_eq!(credential.access_token(), "pat-token");
+    }
+
+    #[test]
+    fn credential_source_reports_configured_and_oauth() {
+        let configured = crate::auth::AuthCredential::Configured {
+            access_token: "tok".to_string(),
+            onprem_url: None,
+        };
+        let oauth = crate::auth::AuthCredential::OAuth {
+            access_token: "tok".to_string(),
+            onprem_url: None,
+        };
+        assert_eq!(crate::credential_source(&configured), "configured");
+        assert_eq!(crate::credential_source(&oauth), "oauth");
+    }
+
+    #[tokio::test]
+    async fn ensure_oauth_client_configured_sets_default_when_unset() {
+        let _lock = config::lock_test_env();
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("CS_CONFIG_DIR", dir.path().as_os_str());
+        std::env::remove_var("CS_OAUTH_CLIENT");
+
+        crate::ensure_oauth_client_configured().await;
+
+        assert_eq!(
+            std::env::var("CS_OAUTH_CLIENT").ok().as_deref(),
+            Some("mcp")
+        );
+
+        std::env::remove_var("CS_OAUTH_CLIENT");
+        std::env::remove_var("CS_CONFIG_DIR");
+    }
+
+    #[tokio::test]
+    async fn ensure_oauth_client_configured_leaves_existing_value_untouched() {
+        let _lock = config::lock_test_env();
+        std::env::set_var("CS_OAUTH_CLIENT", "custom-client");
+
+        crate::ensure_oauth_client_configured().await;
+
+        assert_eq!(
+            std::env::var("CS_OAUTH_CLIENT").ok().as_deref(),
+            Some("custom-client")
+        );
+        std::env::remove_var("CS_OAUTH_CLIENT");
+    }
+
+    #[tokio::test]
+    async fn ensure_oauth_client_configured_tolerates_persistence_failure() {
+        let _lock = config::lock_test_env();
+        let impossible = if cfg!(windows) {
+            r"NUL\impossible"
+        } else {
+            "/dev/null/impossible"
+        };
+        std::env::set_var("CS_CONFIG_DIR", impossible);
+        std::env::remove_var("CS_OAUTH_CLIENT");
+
+        crate::ensure_oauth_client_configured().await;
+
+        assert_eq!(
+            std::env::var("CS_OAUTH_CLIENT").ok().as_deref(),
+            Some("mcp")
+        );
+        std::env::remove_var("CS_OAUTH_CLIENT");
+        std::env::remove_var("CS_CONFIG_DIR");
+    }
+
+    #[tokio::test]
+    async fn login_dispatch_method_delegates_to_login_handler() {
+        use rmcp::handler::server::wrapper::Parameters;
+
+        let _g = set_token("existing-token");
+        let server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_responses(vec![]),
+            MockHttpClient::new(vec![]),
+        );
+        let result = server
+            .login(Parameters(crate::tools::LoginParam {}))
+            .await
+            .unwrap();
+        assert!(
+            result_text(&result).contains("CS_ACCESS_TOKEN is already configured"),
+            "got: {}",
+            result_text(&result)
+        );
+    }
+
+    #[tokio::test]
+    async fn verify_installation_dispatch_method_delegates_to_handler() {
+        use rmcp::handler::server::wrapper::Parameters;
+
+        let _g = set_token("existing-token");
+        let server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_responses(vec![Ok("{}".to_string()), Ok("{}".to_string())]),
+            MockHttpClient::always(crate::http::HttpResponse::ok(r#"[{"id":1}]"#)),
+        );
+        let result = server
+            .verify_installation(Parameters(crate::tools::GitRepoParam {
+                git_repository_path: "/tmp/project".to_string(),
+            }))
+            .await
+            .unwrap();
+        assert!(
+            result_text(&result).contains("CLI Connectivity"),
+            "got: {}",
+            result_text(&result)
+        );
+    }
+
+    #[tokio::test]
     async fn maybe_version_warning_returns_text_when_no_cache() {
         assert_eq!(
             make_server(false).maybe_version_warning("hello").await,

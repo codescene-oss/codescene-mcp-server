@@ -174,24 +174,11 @@ impl CodeSceneServer {
             .await
         {
             Ok(Some(credential)) => {
-                tracing::info!(
-                    source = credential_source(&credential),
-                    has_web_root = credential.web_root().is_some(),
-                    "token requirement satisfied"
-                );
+                self.log_credential_resolved(&credential, "token requirement satisfied");
                 None
             }
             Ok(None) => {
-                tracing::warn!(
-                    has_configured_token = crate::auth::configured_credential().is_some(),
-                    has_oauth_token = self.auth_manager.try_cached_access_token().is_some(),
-                    oauth_expires_at = crate::config::try_read_env("CS_OAUTH_EXPIRES_AT"),
-                    signed_out_sentinel = crate::config::try_read_env("CS_OAUTH_EXPIRES_AT")
-                        .as_deref()
-                        == Some("0"),
-                    oauth_client = crate::config::try_read_env("CS_OAUTH_CLIENT"),
-                    "token requirement failed: no usable credential resolved"
-                );
+                self.log_no_credential("token requirement failed: no usable credential resolved");
                 Some(CallToolResult::success(vec![Content::text(
                     TOKEN_MISSING_MSG,
                 )]))
@@ -212,24 +199,11 @@ impl CodeSceneServer {
             .await
         {
             Ok(Some(credential)) => {
-                tracing::info!(
-                    source = credential_source(&credential),
-                    has_web_root = credential.web_root().is_some(),
-                    "resolved auth credential for API tool"
-                );
+                self.log_credential_resolved(&credential, "resolved auth credential for API tool");
                 Ok(credential)
             }
             Ok(None) => {
-                tracing::warn!(
-                    has_configured_token = crate::auth::configured_credential().is_some(),
-                    has_oauth_token = self.auth_manager.try_cached_access_token().is_some(),
-                    oauth_expires_at = crate::config::try_read_env("CS_OAUTH_EXPIRES_AT"),
-                    signed_out_sentinel = crate::config::try_read_env("CS_OAUTH_EXPIRES_AT")
-                        .as_deref()
-                        == Some("0"),
-                    oauth_client = crate::config::try_read_env("CS_OAUTH_CLIENT"),
-                    "failed to resolve auth credential for API tool"
-                );
+                self.log_no_credential("failed to resolve auth credential for API tool");
                 Err(CallToolResult::success(vec![Content::text(
                     TOKEN_MISSING_MSG,
                 )]))
@@ -241,6 +215,29 @@ impl CodeSceneServer {
                 )]))
             }
         }
+    }
+
+    fn log_credential_resolved(&self, credential: &AuthCredential, message: &'static str) {
+        let source = credential_source(credential);
+        let has_web_root = credential.web_root().is_some();
+        tracing::info!(source, has_web_root, "{}", message);
+    }
+
+    fn log_no_credential(&self, message: &'static str) {
+        let has_configured_token = crate::auth::configured_credential().is_some();
+        let has_oauth_token = self.auth_manager.try_cached_access_token().is_some();
+        let oauth_expires_at = crate::config::try_read_env("CS_OAUTH_EXPIRES_AT");
+        let signed_out_sentinel = oauth_expires_at.as_deref() == Some("0");
+        let oauth_client = crate::config::try_read_env("CS_OAUTH_CLIENT");
+        tracing::warn!(
+            has_configured_token,
+            has_oauth_token,
+            oauth_expires_at,
+            signed_out_sentinel,
+            oauth_client,
+            "{}",
+            message
+        );
     }
 
     pub(crate) async fn maybe_version_warning(&self, text: &str) -> String {

@@ -612,7 +612,8 @@ mod tests {
 
     fn apply_to_env_value(config_key: &str, value: &str) {
         let mut data = ConfigData::default();
-        data.values.insert(config_key.to_string(), value.to_string());
+        data.values
+            .insert(config_key.to_string(), value.to_string());
         apply_to_env(&data);
     }
 
@@ -716,8 +717,7 @@ mod tests {
     #[test]
     fn enabled_tools_parses_multiple_tools() {
         let result =
-            enabled_tools_from("code_health_review,code_health_score,analyze_change_set")
-                .unwrap();
+            enabled_tools_from("code_health_review,code_health_score,analyze_change_set").unwrap();
         assert_eq!(result.len(), 3);
         assert!(result.contains("code_health_review"));
         assert!(result.contains("code_health_score"));
@@ -736,5 +736,29 @@ mod tests {
     fn enabled_tools_ignores_empty_segments() {
         let result = enabled_tools_from("code_health_review,,code_health_score,").unwrap();
         assert_eq!(result.len(), 2);
+    }
+
+    // ---- write_env_multi / write_env_multi_inner ----
+
+    #[tokio::test]
+    async fn write_env_multi_skips_unknown_keys_but_applies_known_ones() {
+        let _lock = lock_test_env();
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("CS_CONFIG_DIR", dir.path().as_os_str());
+
+        let result = write_env_multi(&[
+            ("not_a_real_config_key", "whatever"),
+            ("ca_bundle", "/cert.pem"),
+        ])
+        .await;
+
+        assert!(result.is_ok(), "expected Ok, got {result:?}");
+        assert_eq!(
+            std::env::var("REQUESTS_CA_BUNDLE").ok().as_deref(),
+            Some("/cert.pem")
+        );
+
+        std::env::remove_var("CS_CONFIG_DIR");
+        std::env::remove_var("REQUESTS_CA_BUNDLE");
     }
 }

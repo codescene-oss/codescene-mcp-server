@@ -406,20 +406,6 @@ mod tests {
         std::env::remove_var("CS_CONFIG_DIR");
     }
 
-    /// Helper: run a closure with CS_CONFIG_DIR pointing to a fresh temp dir,
-    /// holding the env lock to prevent parallel test interference.
-    fn with_temp_config_dir<F, R>(f: F) -> R
-    where
-        F: FnOnce() -> R,
-    {
-        let _lock = config::lock_test_env();
-        let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("CS_CONFIG_DIR", dir.path().as_os_str());
-        let result = f();
-        std::env::remove_var("CS_CONFIG_DIR");
-        result
-    }
-
     #[tokio::test]
     async fn set_value_unknown_key_returns_error() {
         let result = set_value("nonexistent", "val").await;
@@ -428,24 +414,35 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn set_value_saves_key_to_config() {
+    async fn set_value_returns_expected_response_metadata() {
         with_temp_config_dir_async(|| async {
-            let result = set_value("ca_bundle", "/path/to/cert.pem").await;
-            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-            assert_eq!(parsed["status"], json!("saved"));
-            assert_eq!(parsed["key"], json!("ca_bundle"));
-            assert!(parsed.get("config_dir").is_some());
-        }).await;
-    }
-
-    #[tokio::test]
-    async fn set_value_access_token_includes_restart_warning() {
-        with_temp_config_dir_async(|| async {
-            let result = set_value("access_token", "my-token").await;
-            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-            assert_eq!(parsed["status"], json!("saved"));
-            assert!(parsed.get("restart_required").is_some());
-        }).await;
+            for (key, value, status, metadata) in [
+                ("ca_bundle", "/path/to/cert.pem", "saved", "config_dir"),
+                ("access_token", "my-token", "saved", "restart_required"),
+                ("ca_bundle", "", "removed", "docs_url"),
+                (
+                    "enabled_tools",
+                    "code_health_review,code_health_score",
+                    "saved",
+                    "restart_required",
+                ),
+            ] {
+                if value.is_empty() {
+                    set_value(key, "/cert.pem").await;
+                }
+                let result = set_value(key, value).await;
+                let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+                assert_eq!(parsed["status"], json!(status), "key: {key}");
+                assert_eq!(parsed["key"], json!(key));
+                assert!(
+                    parsed.get(metadata).is_some(),
+                    "key: {key}, metadata: {metadata}"
+                );
+                assert!(parsed.get("tool_name_warning").is_none(), "key: {key}");
+            }
+            std::env::remove_var("CS_ENABLED_TOOLS");
+        })
+        .await;
     }
 
     #[tokio::test]
@@ -457,37 +454,8 @@ mod tests {
                 data.values.get("access_token").map(|s| s.as_str()),
                 Some("my-token")
             );
-        }).await;
-    }
-
-    #[tokio::test]
-    async fn set_value_includes_docs_url() {
-        with_temp_config_dir_async(|| async {
-            let result = set_value("ca_bundle", "/cert.pem").await;
-            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-            assert!(parsed.get("docs_url").is_some());
-        }).await;
-    }
-
-    #[tokio::test]
-    async fn set_value_empty_deletes_key() {
-        with_temp_config_dir_async(|| async {
-            set_value("ca_bundle", "/cert.pem").await;
-            let result = set_value("ca_bundle", "").await;
-            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-            assert_eq!(parsed["status"], json!("removed"));
-            assert_eq!(parsed["key"], json!("ca_bundle"));
-        }).await;
-    }
-
-    #[tokio::test]
-    async fn set_value_delete_includes_docs_url() {
-        with_temp_config_dir_async(|| async {
-            set_value("ca_bundle", "/cert.pem").await;
-            let result = set_value("ca_bundle", "").await;
-            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-            assert!(parsed.get("docs_url").is_some());
-        }).await;
+        })
+        .await;
     }
 
     #[tokio::test]
@@ -502,28 +470,31 @@ mod tests {
             let warning = parsed["warning"].as_str().unwrap();
             assert!(warning.contains("CS_DISABLE_TRACKING"));
             std::env::remove_var("CS_DISABLE_TRACKING");
-        }).await;
+        })
+        .await;
     }
 
     // ---- save failure paths ----
 
-    /// Helper: run a closure with CS_CONFIG_DIR pointing to an unwritable
-    /// location so that `config::save()` will fail.
-    fn with_unwritable_config_dir<F, R>(f: F) -> R
+    /// Path known to make `create_dir_all` fail so that `config::save()`
+    /// (and hence the guarded config write path) can't write:
+    ///   Unix:    /dev/null is a file, so /dev/null/impossible cannot be created.
+    ///   Windows: NUL is a reserved device name, so NUL\impossible cannot be created.
+    #[cfg(windows)]
+    const IMPOSSIBLE_CONFIG_DIR: &str = r"NUL\impossible";
+    #[cfg(not(windows))]
+    const IMPOSSIBLE_CONFIG_DIR: &str = "/dev/null/impossible";
+
+    /// Helper: run an async closure with CS_CONFIG_DIR pointing to an
+    /// unwritable location so that `config::save()` will fail.
+    async fn with_unwritable_config_dir<F, Fut, R>(f: F) -> R
     where
-        F: FnOnce() -> R,
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = R>,
     {
         let _lock = config::lock_test_env();
-        // Use a path where create_dir_all will fail:
-        //   Unix:    /dev/null is a file, so /dev/null/impossible cannot be created.
-        //   Windows: NUL is a reserved device name, so NUL\impossible cannot be created.
-        let impossible = if cfg!(windows) {
-            r"NUL\impossible"
-        } else {
-            "/dev/null/impossible"
-        };
-        std::env::set_var("CS_CONFIG_DIR", impossible);
-        let result = f();
+        std::env::set_var("CS_CONFIG_DIR", IMPOSSIBLE_CONFIG_DIR);
+        let result = f().await;
         std::env::remove_var("CS_CONFIG_DIR");
         result
     }
@@ -600,17 +571,6 @@ mod tests {
     // ---- set_value for enabled_tools ----
 
     #[tokio::test]
-    async fn set_value_enabled_tools_includes_restart_warning() {
-        with_temp_config_dir_async(|| async {
-            let result = set_value("enabled_tools", "code_health_review,code_health_score").await;
-            std::env::remove_var("CS_ENABLED_TOOLS");
-            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-            assert_eq!(parsed["status"], json!("saved"));
-            assert!(parsed.get("restart_required").is_some());
-        }).await;
-    }
-
-    #[tokio::test]
     async fn set_value_enabled_tools_with_unknown_name_includes_warning() {
         with_temp_config_dir_async(|| async {
             let result = set_value("enabled_tools", "code_health_review,bogus_tool").await;
@@ -620,33 +580,15 @@ mod tests {
             assert!(parsed.get("tool_name_warning").is_some());
             let warning = parsed["tool_name_warning"].as_str().unwrap();
             assert!(warning.contains("bogus_tool"));
-        }).await;
-    }
-
-    #[tokio::test]
-    async fn set_value_enabled_tools_valid_names_no_tool_warning() {
-        with_temp_config_dir_async(|| async {
-            let result = set_value("enabled_tools", "code_health_review,code_health_score").await;
-            std::env::remove_var("CS_ENABLED_TOOLS");
-            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-            assert_eq!(parsed["status"], json!("saved"));
-            assert!(parsed.get("tool_name_warning").is_none());
-        }).await;
+        })
+        .await;
     }
 
     // ---- save failure paths ----
 
     #[tokio::test]
     async fn save_key_returns_error_when_save_fails() {
-        let _lock = config::lock_test_env();
-        let impossible = if cfg!(windows) {
-            r"NUL\impossible"
-        } else {
-            "/dev/null/impossible"
-        };
-        std::env::set_var("CS_CONFIG_DIR", impossible);
-        let result = set_value("ca_bundle", "/cert.pem").await;
-        std::env::remove_var("CS_CONFIG_DIR");
+        let result = with_unwritable_config_dir(|| set_value("ca_bundle", "/cert.pem")).await;
         assert!(
             result.contains("Error saving config"),
             "expected save error, got: {result}"
@@ -655,15 +597,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_key_returns_error_when_save_fails() {
-        let _lock = config::lock_test_env();
-        let impossible = if cfg!(windows) {
-            r"NUL\impossible"
-        } else {
-            "/dev/null/impossible"
-        };
-        std::env::set_var("CS_CONFIG_DIR", impossible);
-        let result = set_value("ca_bundle", "").await;
-        std::env::remove_var("CS_CONFIG_DIR");
+        let result = with_unwritable_config_dir(|| set_value("ca_bundle", "")).await;
         assert!(
             result.contains("Error saving config"),
             "expected save error, got: {result}"
