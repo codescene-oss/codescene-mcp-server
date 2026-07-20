@@ -41,16 +41,22 @@ Environment variables set by your MCP client always take precedence over values 
 | **Sensitive** | Yes (value is masked in tool output) |
 | **Required** | Yes, for most functionality |
 
-The primary authentication credential for the CodeScene MCP Server. This can be either a **Personal Access Token (PAT)** obtained from your CodeScene instance, or a **standalone access token** (if you purchased MCP separately).
+The primary authentication credential for the CodeScene MCP Server. This can be:
+
+- **OAuth access token** (recommended for interactive use) — obtained automatically via the `login` tool. No manual token handling required.
+- **Personal Access Token (PAT)** — obtained from your CodeScene instance. Suitable for CI/CD and headless environments.
+- **Standalone access token** — if you purchased MCP separately.
+
+When `CS_ACCESS_TOKEN` is set it always takes precedence over a stored OAuth session.
 
 The type of token determines which tools are available:
 
-- **CodeScene Personal Access Token** -- Enables the full tool set, including project-level features such as technical debt hotspots, goals, and code ownership lookups.
-- **Standalone access token** -- Enables local Code Health analysis tools only (scoring, review, refactoring). Project-level and API-dependent features are not available.
+- **OAuth / Personal Access Token** — Enables the full tool set, including project-level features such as technical debt hotspots, goals, and code ownership lookups.
+- **Standalone access token** — Enables local Code Health analysis tools only (scoring, review, refactoring). Project-level and API-dependent features are not available.
 
 Changing this value may require a **server restart** for tool registration changes to take effect.
 
-See [Getting a Personal Access Token](getting-a-personal-access-token.md) for instructions on creating a PAT.
+See [Authentication](getting-a-personal-access-token.md) for the recommended login flow and instructions on creating a PAT.
 
 ## `onprem_url`
 

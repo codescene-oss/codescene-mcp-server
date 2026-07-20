@@ -64,6 +64,7 @@ fn resolve_from_docker() -> Option<Result<PathBuf, CliError>> {
 
 pub async fn run_cli(args: &[&str], working_dir: Option<&Path>) -> Result<String, CliError> {
     let cli_path = resolve_cli_path()?;
+    tracing::info!(path = %cli_path.display(), args = ?args, "using CodeScene CLI");
     run_cli_at_path(&cli_path, args, working_dir).await
 }
 
@@ -105,14 +106,6 @@ async fn run_cli_process(
     let mut cmd = tokio::process::Command::new(cli_path);
     let effective_args = with_ssl_cli_args_if_needed(cli_path, args);
 
-    // Scrub sensitive env vars (tokens) from the inherited environment so
-    // child processes that don't need them can't read them from /proc or
-    // inherit them to further subprocesses.  We then selectively add back
-    // only CS_ACCESS_TOKEN, which the CLI needs for on-prem authentication.
-    for var in crate::config::sensitive_env_vars() {
-        cmd.env_remove(var);
-    }
-
     cmd.args(&effective_args)
         .env("CS_CONTEXT", "mcp-server")
         .env("CS_DISABLE_VERSION_CHECK", "1");
@@ -121,22 +114,42 @@ async fn run_cli_process(
         cmd.env("CS_DISABLE_TRACKING", "1");
     }
 
-    if let Ok(token) = std::env::var("CS_ACCESS_TOKEN") {
-        let token = token.trim();
-        if !token.is_empty() {
-            cmd.env("CS_ACCESS_TOKEN", token);
-        }
-    }
-
-    if let Ok(url) = std::env::var("CS_ONPREM_URL") {
-        cmd.env("CS_ONPREM_URL", url);
-    }
+    remove_sensitive_env_vars(&mut cmd);
+    apply_optional_cli_env(&mut cmd, "CS_ACCESS_TOKEN", true);
+    apply_optional_cli_env(&mut cmd, "CS_ONPREM_URL", false);
+    apply_optional_cli_env(&mut cmd, "CS_OAUTH_CLIENT", true);
 
     if let Some(dir) = working_dir {
         cmd.current_dir(dir);
     }
 
     cmd.output().await.map_err(CliError::from)
+}
+
+fn remove_sensitive_env_vars(cmd: &mut tokio::process::Command) {
+    // Scrub sensitive env vars (tokens) from the inherited environment so
+    // child processes that don't need them can't read them from /proc or
+    // inherit them to further subprocesses. We then selectively add back
+    // the specific values the CLI needs.
+    for var in crate::config::sensitive_env_vars() {
+        cmd.env_remove(var);
+    }
+}
+
+fn apply_optional_cli_env(cmd: &mut tokio::process::Command, key: &str, trim: bool) {
+    let Some(value) = crate::config::try_read_env(key) else {
+        return;
+    };
+
+    let value = if trim {
+        value.trim().to_string()
+    } else {
+        value
+    };
+
+    if !value.is_empty() {
+        cmd.env(key, value);
+    }
 }
 
 fn should_retry_after_telemetry_flush_error(stderr: &str) -> bool {
@@ -1296,19 +1309,22 @@ sC0Nc9QdNQt5Tos5Je5S7CWL0w==
         let _lock = config::lock_test_env();
         std::env::set_var("CS_ACCESS_TOKEN", "test-token-xyz");
         std::env::set_var("CS_ONPREM_URL", "https://onprem.example.com");
+        std::env::set_var("CS_OAUTH_CLIENT", "mcp");
 
         let output = run_cli_at_path(
             Path::new("/bin/sh"),
-            &["-c", "echo $CS_ACCESS_TOKEN $CS_ONPREM_URL"],
+            &["-c", "echo $CS_ACCESS_TOKEN $CS_ONPREM_URL $CS_OAUTH_CLIENT"],
             None,
         )
         .await
         .unwrap();
         assert!(output.contains("test-token-xyz"));
         assert!(output.contains("https://onprem.example.com"));
+        assert!(output.contains("mcp"));
 
         std::env::remove_var("CS_ACCESS_TOKEN");
         std::env::remove_var("CS_ONPREM_URL");
+        std::env::remove_var("CS_OAUTH_CLIENT");
     }
 
     #[cfg(unix)]

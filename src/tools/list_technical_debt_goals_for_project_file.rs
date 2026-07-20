@@ -16,9 +16,10 @@ pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: ProjectFileParam,
 ) -> Result<CallToolResult, ErrorData> {
-    if let Some(r) = server.require_token() {
-        return Ok(r);
-    }
+    let credential = match server.resolve_auth_credential().await {
+        Ok(credential) => credential,
+        Err(r) => return Ok(r),
+    };
     if server.is_standalone {
         return Ok(tool_error(
             "This tool requires a CodeScene API token (not a standalone license).",
@@ -26,9 +27,13 @@ pub(crate) async fn handle(
     }
     server.version_checker.check_in_background();
 
-    let analysis_id = api_client::get_latest_analysis_id(params.project_id, &*server.http_client)
-        .await
-        .map_err(|e| format!("Error fetching latest analysis: {e}"));
+    let analysis_id = api_client::get_latest_analysis_id_with_auth(
+        params.project_id,
+        &*server.http_client,
+        Some(&credential),
+    )
+    .await
+    .map_err(|e| format!("Error fetching latest analysis: {e}"));
     let analysis_id = match analysis_id {
         Ok(id) => id,
         Err(e) => {
@@ -44,19 +49,24 @@ pub(crate) async fn handle(
         ("filter".to_string(), format!("path~{}", relative)),
         ("fields".to_string(), "goals".to_string()),
     ];
-    let result = api_client::query_api_keyed_list_with_client(
+    let result = api_client::query_api_keyed_list_with_auth(
         &endpoint,
         &query_params,
         "files",
         &*server.http_client,
+        Some(&credential),
     )
     .await;
     match result {
         Ok(data) => {
             let props = event_properties::goals_file_properties(Path::new(&params.file_path));
             server.track("list-technical-debt-goals-file", props);
-            let link =
-                codescene_links::biomarkers_link(params.project_id, analysis_id, Some(&relative));
+            let link = codescene_links::biomarkers_link(
+                params.project_id,
+                analysis_id,
+                Some(&relative),
+                credential.web_root().as_deref(),
+            );
             let response = json!({ "data": data, "link": link });
             let text = serde_json::to_string(&response).unwrap_or_default();
             let text = server.maybe_version_warning(&text).await;

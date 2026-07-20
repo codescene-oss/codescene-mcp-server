@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use rmcp::model::CallToolResult;
 
+use crate::auth::AuthManager;
 use crate::cli::{self, CliRunner};
 use crate::config::ConfigData;
 use crate::errors::CliError;
@@ -64,6 +65,7 @@ pub(crate) fn test_deps(id: &str, is_standalone: bool, mocks: TestMocks) -> Serv
         instance_id: id.to_string(),
         is_standalone,
         version_checker: VersionChecker::new("dev"),
+        auth_manager: AuthManager::new(),
         cli_runner: mocks.cli,
         http_client: mocks.http,
         validator: mocks.validator,
@@ -111,6 +113,7 @@ pub(crate) async fn make_server_with_version(
         instance_id: "test".to_string(),
         is_standalone: false,
         version_checker: vc,
+        auth_manager: AuthManager::new(),
         cli_runner: Arc::new(cli::ProductionCliRunner),
         http_client: Arc::new(http::ReqwestClient),
         validator: Arc::new(MockValidator::passing()),
@@ -124,6 +127,10 @@ pub(crate) struct TokenGuard<'a> {
 impl Drop for TokenGuard<'_> {
     fn drop(&mut self) {
         std::env::remove_var("CS_ACCESS_TOKEN");
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+        std::env::remove_var("CS_OAUTH_REFRESH_EXPIRES_AT");
+        std::env::remove_var("CS_OAUTH_CLIENT");
     }
 }
 
@@ -136,17 +143,23 @@ pub(crate) fn set_token(value: &str) -> TokenGuard<'static> {
 pub(crate) fn clear_token() -> TokenGuard<'static> {
     let lock = crate::config::lock_test_env();
     std::env::remove_var("CS_ACCESS_TOKEN");
+    std::env::remove_var("CS_OAUTH_TOKEN");
+    std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+    std::env::remove_var("CS_OAUTH_REFRESH_EXPIRES_AT");
+    std::env::remove_var("CS_OAUTH_CLIENT");
     TokenGuard { _lock: lock }
 }
 
 pub(crate) struct MockCliRunner {
     responses: Mutex<Vec<Result<String, CliError>>>,
+    calls: Arc<Mutex<Vec<Vec<String>>>>,
 }
 
 impl MockCliRunner {
     pub(crate) fn with_responses(responses: Vec<Result<String, CliError>>) -> Self {
         Self {
             responses: Mutex::new(responses),
+            calls: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -160,11 +173,23 @@ impl MockCliRunner {
             stderr: stderr.to_string(),
         })])
     }
+
+    pub(crate) fn calls(&self) -> Arc<Mutex<Vec<Vec<String>>>> {
+        self.calls.clone()
+    }
+
+    pub(crate) fn call_count(&self) -> usize {
+        self.calls.lock().unwrap().len()
+    }
 }
 
 #[async_trait]
 impl CliRunner for MockCliRunner {
-    async fn run(&self, _args: &[&str], _working_dir: Option<&Path>) -> Result<String, CliError> {
+    async fn run(&self, args: &[&str], _working_dir: Option<&Path>) -> Result<String, CliError> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push(args.iter().map(|arg| arg.to_string()).collect());
         self.responses.lock().unwrap().remove(0)
     }
 }
@@ -469,19 +494,193 @@ mod tests {
     #[tokio::test]
     async fn require_token_returns_error_when_missing() {
         let _g = clear_token();
-        assert!(make_server(false).require_token().is_some());
+        assert!(make_server(false).require_token().await.is_some());
     }
 
     #[tokio::test]
     async fn require_token_returns_none_when_set() {
         let _g = set_token("token");
-        assert!(make_server(false).require_token().is_none());
+        assert!(make_server(false).require_token().await.is_none());
     }
 
     #[tokio::test]
     async fn require_token_treats_whitespace_as_missing() {
         let _g = set_token("   ");
-        assert!(make_server(false).require_token().is_some());
+        assert!(make_server(false).require_token().await.is_some());
+    }
+
+    #[tokio::test]
+    async fn require_token_returns_missing_message_when_no_credential_resolved() {
+        let _g = clear_token();
+        std::env::set_var("CS_OAUTH_EXPIRES_AT", "0"); // signed-out sentinel avoids a CLI call
+        let server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_responses(vec![]),
+            MockHttpClient::new(vec![]),
+        );
+        let result = server.require_token().await.unwrap();
+        assert!(
+            result_text(&result).contains("access token"),
+            "got: {}",
+            result_text(&result)
+        );
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+    }
+
+    #[tokio::test]
+    async fn require_token_returns_missing_message_when_cli_errors() {
+        let _g = clear_token();
+        let cli = MockCliRunner::with_responses(vec![Err(crate::errors::CliError::NotFound(
+            "cs".to_string(),
+        ))]);
+        let server = make_server_with_mocks(false, cli, MockHttpClient::new(vec![]));
+        let result = server.require_token().await.unwrap();
+        assert!(
+            result_text(&result).contains("access token"),
+            "got: {}",
+            result_text(&result)
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_auth_credential_returns_error_result_when_no_credential_resolved() {
+        let _g = clear_token();
+        std::env::set_var("CS_OAUTH_EXPIRES_AT", "0"); // signed-out sentinel avoids a CLI call
+        let server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_responses(vec![]),
+            MockHttpClient::new(vec![]),
+        );
+        let err = server.resolve_auth_credential().await.unwrap_err();
+        assert!(
+            result_text(&err).contains("access token"),
+            "got: {}",
+            result_text(&err)
+        );
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+    }
+
+    #[tokio::test]
+    async fn resolve_auth_credential_returns_ok_when_configured() {
+        let _g = set_token("pat-token");
+        let server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_responses(vec![]),
+            MockHttpClient::new(vec![]),
+        );
+        let credential = server.resolve_auth_credential().await.unwrap();
+        assert_eq!(credential.access_token(), "pat-token");
+    }
+
+    #[test]
+    fn credential_source_reports_configured_and_oauth() {
+        let configured = crate::auth::AuthCredential::Configured {
+            access_token: "tok".to_string(),
+            onprem_url: None,
+        };
+        let oauth = crate::auth::AuthCredential::OAuth {
+            access_token: "tok".to_string(),
+            onprem_url: None,
+        };
+        assert_eq!(crate::credential_source(&configured), "configured");
+        assert_eq!(crate::credential_source(&oauth), "oauth");
+    }
+
+    #[tokio::test]
+    async fn ensure_oauth_client_configured_sets_default_when_unset() {
+        let _lock = config::lock_test_env();
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("CS_CONFIG_DIR", dir.path().as_os_str());
+        std::env::remove_var("CS_OAUTH_CLIENT");
+
+        crate::ensure_oauth_client_configured().await;
+
+        assert_eq!(
+            std::env::var("CS_OAUTH_CLIENT").ok().as_deref(),
+            Some("mcp")
+        );
+
+        std::env::remove_var("CS_OAUTH_CLIENT");
+        std::env::remove_var("CS_CONFIG_DIR");
+    }
+
+    #[tokio::test]
+    async fn ensure_oauth_client_configured_leaves_existing_value_untouched() {
+        let _lock = config::lock_test_env();
+        std::env::set_var("CS_OAUTH_CLIENT", "custom-client");
+
+        crate::ensure_oauth_client_configured().await;
+
+        assert_eq!(
+            std::env::var("CS_OAUTH_CLIENT").ok().as_deref(),
+            Some("custom-client")
+        );
+        std::env::remove_var("CS_OAUTH_CLIENT");
+    }
+
+    #[tokio::test]
+    async fn ensure_oauth_client_configured_tolerates_persistence_failure() {
+        let _lock = config::lock_test_env();
+        let impossible = if cfg!(windows) {
+            r"NUL\impossible"
+        } else {
+            "/dev/null/impossible"
+        };
+        std::env::set_var("CS_CONFIG_DIR", impossible);
+        std::env::remove_var("CS_OAUTH_CLIENT");
+
+        crate::ensure_oauth_client_configured().await;
+
+        assert_eq!(
+            std::env::var("CS_OAUTH_CLIENT").ok().as_deref(),
+            Some("mcp")
+        );
+        std::env::remove_var("CS_OAUTH_CLIENT");
+        std::env::remove_var("CS_CONFIG_DIR");
+    }
+
+    #[tokio::test]
+    async fn login_dispatch_method_delegates_to_login_handler() {
+        use rmcp::handler::server::wrapper::Parameters;
+
+        let _g = set_token("existing-token");
+        let server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_responses(vec![]),
+            MockHttpClient::new(vec![]),
+        );
+        let result = server
+            .login(Parameters(crate::tools::LoginParam {}))
+            .await
+            .unwrap();
+        assert!(
+            result_text(&result).contains("CS_ACCESS_TOKEN is already configured"),
+            "got: {}",
+            result_text(&result)
+        );
+    }
+
+    #[tokio::test]
+    async fn verify_installation_dispatch_method_delegates_to_handler() {
+        use rmcp::handler::server::wrapper::Parameters;
+
+        let _g = set_token("existing-token");
+        let server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_responses(vec![Ok("{}".to_string()), Ok("{}".to_string())]),
+            MockHttpClient::always(crate::http::HttpResponse::ok(r#"[{"id":1}]"#)),
+        );
+        let result = server
+            .verify_installation(Parameters(crate::tools::GitRepoParam {
+                git_repository_path: "/tmp/project".to_string(),
+            }))
+            .await
+            .unwrap();
+        assert!(
+            result_text(&result).contains("CLI Connectivity"),
+            "got: {}",
+            result_text(&result)
+        );
     }
 
     #[tokio::test]
@@ -564,6 +763,7 @@ mod tests {
             instance_id: "test-filter".to_string(),
             is_standalone,
             version_checker: VersionChecker::new("dev"),
+            auth_manager: AuthManager::new(),
             cli_runner: Arc::new(cli::ProductionCliRunner),
             http_client: Arc::new(http::ReqwestClient),
             validator: Arc::new(MockValidator::passing()),
@@ -579,6 +779,7 @@ mod tests {
             names.contains(&"set_config".to_string()),
             "missing set_config"
         );
+        assert!(names.contains(&"login".to_string()), "missing login");
     }
 
     fn assert_tool_count_and_config(names: &[String], expected: usize) {
@@ -596,7 +797,7 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server(false);
         let names = tool_names(&server);
-        assert_tool_count_and_config(&names, 24);
+        assert_tool_count_and_config(&names, 25);
         assert!(names.contains(&"code_health_review".to_string()));
     }
 
@@ -606,8 +807,8 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server_with_enabled_tools(false, "code_health_review,code_health_score");
         let names = tool_names(&server);
-        // Should have the 2 enabled tools + 2 always-on = 4
-        assert_tool_count_and_config(&names, 4);
+        // Should have the 2 enabled tools + 3 always-on = 5
+        assert_tool_count_and_config(&names, 5);
         assert!(names.contains(&"code_health_review".to_string()));
         assert!(names.contains(&"code_health_score".to_string()));
     }
@@ -642,7 +843,7 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server_with_enabled_tools(false, "analyze_change_set");
         let names = tool_names(&server);
-        assert_tool_count_and_config(&names, 3);
+        assert_tool_count_and_config(&names, 4);
         assert!(names.contains(&"analyze_change_set".to_string()));
     }
 

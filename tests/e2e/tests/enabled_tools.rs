@@ -137,14 +137,15 @@ pub fn test_filter_restricts_tools() {
     );
     assert!(names.contains("get_config"), "get_config always listed");
     assert!(names.contains("set_config"), "set_config always listed");
+    assert!(names.contains("login"), "login always listed");
     assert!(
         !names.contains("explain_code_health"),
         "explain_code_health should NOT be listed"
     );
     assert_eq!(
         names.len(),
-        4,
-        "Expected exactly 4 tools, found {}: {:?}",
+        5,
+        "Expected exactly 5 tools, found {}: {:?}",
         names.len(),
         names
     );

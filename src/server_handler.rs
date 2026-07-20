@@ -191,6 +191,7 @@ pub(crate) fn build_instructions(is_standalone: bool, tools_filtered: bool) -> S
     let mut text = String::from(
         "CodeScene MCP Server - Code Health analysis tools for AI-assisted development.\n\n\
          TOOLS (always available):\n\
+         - login: Sign in to CodeScene with OAuth. When authentication is missing, call this tool first.\n\
          - explain_code_health: Learn about the Code Health metric.\n\
          - explain_code_health_productivity: Business case for Code Health.\n\
          - code_health_review: Detailed review of a single file.\n\

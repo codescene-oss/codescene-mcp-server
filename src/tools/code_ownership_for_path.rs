@@ -14,9 +14,10 @@ pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: OwnershipParam,
 ) -> Result<CallToolResult, ErrorData> {
-    if let Some(r) = server.require_token() {
-        return Ok(r);
-    }
+    let credential = match server.resolve_auth_credential().await {
+        Ok(credential) => credential,
+        Err(r) => return Ok(r),
+    };
     if server.is_standalone {
         return Ok(tool_error(
             "This tool requires a CodeScene API token (not a standalone license).",
@@ -30,11 +31,12 @@ pub(crate) async fn handle(
         ("filter".to_string(), format!("path~{}", relative)),
         ("fields".to_string(), "owner,path".to_string()),
     ];
-    let result = api_client::query_api_keyed_list_with_client(
+    let result = api_client::query_api_keyed_list_with_auth(
         &endpoint,
         &query_params,
         "files",
         &*server.http_client,
+        Some(&credential),
     )
     .await;
     match result {

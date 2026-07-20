@@ -13,6 +13,20 @@ pub use serde_json::json;
 pub use std::path::Path;
 pub use std::time::Duration;
 
+pub fn use_isolated_config_dir(
+    env: &mut Vec<(String, String)>,
+    repo_dir: &Path,
+    dir_name: &str,
+) {
+    let config_dir = repo_dir.join(dir_name);
+    std::fs::create_dir_all(&config_dir).expect("create config dir");
+    env.retain(|(k, _)| k != "CS_CONFIG_DIR");
+    env.push((
+        "CS_CONFIG_DIR".to_string(),
+        docker_config_dir(&config_dir, repo_dir),
+    ));
+}
+
 #[allow(dead_code)]
 pub mod fake_http_server;
 pub mod fake_https_server;
@@ -29,6 +43,7 @@ pub mod enabled_tools;
 pub mod error_logging;
 pub mod git_subtree;
 pub mod git_worktree;
+pub mod oauth_login;
 pub mod platform_specific;
 pub mod relative_paths;
 pub mod require_access_token;

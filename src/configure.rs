@@ -33,7 +33,7 @@ pub fn get_all(data: &ConfigData, is_standalone: bool) -> String {
     serde_json::to_string(&result).unwrap_or_default()
 }
 
-pub fn set_value(key: &str, value: &str) -> String {
+pub async fn set_value(key: &str, value: &str) -> String {
     let option = match config::find_option(key) {
         Some(o) => o,
         None => return unknown_key_error(key),
@@ -51,12 +51,44 @@ pub fn set_value(key: &str, value: &str) -> String {
         }
     }
 
-    let mut data = config::load().unwrap_or_default();
+    // Use the guarded write path: acquires write lock, updates env + config file.
+    if let Err(e) = config::write_env(option.key, value).await {
+        return format!("Error saving config: {e}");
+    }
 
+    serde_json::to_string(&set_value_response(option, value)).unwrap_or_default()
+}
+
+fn set_value_response(option: &config::ConfigOption, value: &str) -> serde_json::Value {
     if value.is_empty() {
-        delete_key(option, &mut data)
-    } else {
-        save_key(option, value, &mut data)
+        let mut result = json!({ "status": "removed", "key": option.key });
+        attach_docs_url(&mut result, option);
+        return result;
+    }
+
+    let mut result = json!({
+        "status": "saved",
+        "key": option.key,
+        "config_dir": config::config_dir().to_string_lossy(),
+    });
+    attach_set_value_warnings(&mut result, option, value);
+    attach_docs_url(&mut result, option);
+    result
+}
+
+fn attach_set_value_warnings(
+    result: &mut serde_json::Value,
+    option: &config::ConfigOption,
+    value: &str,
+) {
+    if let Some(warning) = env_override_warning(option) {
+        result["warning"] = json!(warning);
+    }
+    if let Some(restart) = restart_warning(option) {
+        result["restart_required"] = json!(restart);
+    }
+    if let Some(tool_warning) = unknown_tool_names_warning(option, value) {
+        result["tool_name_warning"] = json!(tool_warning);
     }
 }
 
@@ -102,47 +134,6 @@ fn api_only_error(key: &str, is_standalone: bool) -> String {
         "valid_keys": valid,
     }))
     .unwrap_or_default()
-}
-
-fn delete_key(option: &config::ConfigOption, data: &mut ConfigData) -> String {
-    data.values.remove(option.key);
-    if let Err(e) = config::save(data) {
-        return format!("Error saving config: {e}");
-    }
-    if !config::is_client_env_var(option.env_var) {
-        std::env::remove_var(option.env_var);
-    }
-    let mut result = json!({ "status": "removed", "key": option.key });
-    attach_docs_url(&mut result, option);
-    serde_json::to_string(&result).unwrap_or_default()
-}
-
-fn save_key(option: &config::ConfigOption, value: &str, data: &mut ConfigData) -> String {
-    data.values
-        .insert(option.key.to_string(), value.to_string());
-    if let Err(e) = config::save(data) {
-        return format!("Error saving config: {e}");
-    }
-    if !config::is_client_env_var(option.env_var) {
-        std::env::set_var(option.env_var, value);
-    }
-
-    let mut result = json!({
-        "status": "saved",
-        "key": option.key,
-        "config_dir": config::config_dir().to_string_lossy(),
-    });
-    if let Some(warning) = env_override_warning(option) {
-        result["warning"] = json!(warning);
-    }
-    if let Some(restart) = restart_warning(option) {
-        result["restart_required"] = json!(restart);
-    }
-    if let Some(tool_warning) = unknown_tool_names_warning(option, value) {
-        result["tool_name_warning"] = json!(tool_warning);
-    }
-    attach_docs_url(&mut result, option);
-    serde_json::to_string(&result).unwrap_or_default()
 }
 
 fn env_override_warning(option: &config::ConfigOption) -> Option<String> {
@@ -401,127 +392,109 @@ mod tests {
 
     // ---- set_value / delete_key / save_key via CS_CONFIG_DIR ----
 
-    /// Helper: run a closure with CS_CONFIG_DIR pointing to a fresh temp dir,
+    /// Helper: run an async closure with CS_CONFIG_DIR pointing to a fresh temp dir,
     /// holding the env lock to prevent parallel test interference.
-    fn with_temp_config_dir<F, R>(f: F) -> R
+    async fn with_temp_config_dir_async<F, Fut>(f: F)
     where
-        F: FnOnce() -> R,
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = ()>,
     {
         let _lock = config::lock_test_env();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("CS_CONFIG_DIR", dir.path().as_os_str());
-        let result = f();
+        f().await;
         std::env::remove_var("CS_CONFIG_DIR");
-        result
     }
 
-    #[test]
-    fn set_value_unknown_key_returns_error() {
-        let result = set_value("nonexistent", "val");
+    #[tokio::test]
+    async fn set_value_unknown_key_returns_error() {
+        let result = set_value("nonexistent", "val").await;
         let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert!(parsed.get("error").is_some());
     }
 
-    #[test]
-    fn set_value_saves_key_to_config() {
-        with_temp_config_dir(|| {
-            let result = set_value("ca_bundle", "/path/to/cert.pem");
-            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-            assert_eq!(parsed["status"], json!("saved"));
-            assert_eq!(parsed["key"], json!("ca_bundle"));
-            assert!(parsed.get("config_dir").is_some());
-        });
+    #[tokio::test]
+    async fn set_value_returns_expected_response_metadata() {
+        with_temp_config_dir_async(|| async {
+            for (key, value, status, metadata) in [
+                ("ca_bundle", "/path/to/cert.pem", "saved", "config_dir"),
+                ("access_token", "my-token", "saved", "restart_required"),
+                ("ca_bundle", "", "removed", "docs_url"),
+                (
+                    "enabled_tools",
+                    "code_health_review,code_health_score",
+                    "saved",
+                    "restart_required",
+                ),
+            ] {
+                if value.is_empty() {
+                    set_value(key, "/cert.pem").await;
+                }
+                let result = set_value(key, value).await;
+                let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+                assert_eq!(parsed["status"], json!(status), "key: {key}");
+                assert_eq!(parsed["key"], json!(key));
+                assert!(
+                    parsed.get(metadata).is_some(),
+                    "key: {key}, metadata: {metadata}"
+                );
+                assert!(parsed.get("tool_name_warning").is_none(), "key: {key}");
+            }
+            std::env::remove_var("CS_ENABLED_TOOLS");
+        })
+        .await;
     }
 
-    #[test]
-    fn set_value_access_token_includes_restart_warning() {
-        with_temp_config_dir(|| {
-            let result = set_value("access_token", "my-token");
-            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-            assert_eq!(parsed["status"], json!("saved"));
-            assert!(parsed.get("restart_required").is_some());
-        });
-    }
-
-    #[test]
-    fn set_value_trims_access_token() {
-        with_temp_config_dir(|| {
-            let _ = set_value("access_token", "  my-token  ");
+    #[tokio::test]
+    async fn set_value_trims_access_token() {
+        with_temp_config_dir_async(|| async {
+            let _ = set_value("access_token", "  my-token  ").await;
             let data = config::load().unwrap();
             assert_eq!(
                 data.values.get("access_token").map(|s| s.as_str()),
                 Some("my-token")
             );
-        });
+        })
+        .await;
     }
 
-    #[test]
-    fn set_value_includes_docs_url() {
-        with_temp_config_dir(|| {
-            let result = set_value("ca_bundle", "/cert.pem");
-            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-            assert!(parsed.get("docs_url").is_some());
-        });
-    }
-
-    #[test]
-    fn set_value_empty_deletes_key() {
-        with_temp_config_dir(|| {
-            // First save a value
-            set_value("ca_bundle", "/cert.pem");
-            // Then delete by setting empty
-            let result = set_value("ca_bundle", "");
-            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-            assert_eq!(parsed["status"], json!("removed"));
-            assert_eq!(parsed["key"], json!("ca_bundle"));
-        });
-    }
-
-    #[test]
-    fn set_value_delete_includes_docs_url() {
-        with_temp_config_dir(|| {
-            set_value("ca_bundle", "/cert.pem");
-            let result = set_value("ca_bundle", "");
-            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-            assert!(parsed.get("docs_url").is_some());
-        });
-    }
-
-    #[test]
-    fn set_value_client_var_includes_env_override_warning() {
-        with_temp_config_dir(|| {
-            // Ensure snapshot captures CS_DISABLE_TRACKING as a client var.
+    #[tokio::test]
+    async fn set_value_client_var_includes_env_override_warning() {
+        with_temp_config_dir_async(|| async {
             std::env::set_var("CS_DISABLE_TRACKING", "1");
             config::snapshot_client_env_vars();
-            let result = set_value("disable_tracking", "true");
+            let result = set_value("disable_tracking", "true").await;
             let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
             assert_eq!(parsed["status"], json!("saved"));
             assert!(parsed.get("warning").is_some());
             let warning = parsed["warning"].as_str().unwrap();
             assert!(warning.contains("CS_DISABLE_TRACKING"));
             std::env::remove_var("CS_DISABLE_TRACKING");
-        });
+        })
+        .await;
     }
 
     // ---- save failure paths ----
 
-    /// Helper: run a closure with CS_CONFIG_DIR pointing to an unwritable
-    /// location so that `config::save()` will fail.
-    fn with_unwritable_config_dir<F, R>(f: F) -> R
+    /// Path known to make `create_dir_all` fail so that `config::save()`
+    /// (and hence the guarded config write path) can't write:
+    ///   Unix:    /dev/null is a file, so /dev/null/impossible cannot be created.
+    ///   Windows: NUL is a reserved device name, so NUL\impossible cannot be created.
+    #[cfg(windows)]
+    const IMPOSSIBLE_CONFIG_DIR: &str = r"NUL\impossible";
+    #[cfg(not(windows))]
+    const IMPOSSIBLE_CONFIG_DIR: &str = "/dev/null/impossible";
+
+    /// Helper: run an async closure with CS_CONFIG_DIR pointing to an
+    /// unwritable location so that `config::save()` will fail.
+    async fn with_unwritable_config_dir<F, Fut, R>(f: F) -> R
     where
-        F: FnOnce() -> R,
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = R>,
     {
         let _lock = config::lock_test_env();
-        // Use a path where create_dir_all will fail:
-        //   Unix:    /dev/null is a file, so /dev/null/impossible cannot be created.
-        //   Windows: NUL is a reserved device name, so NUL\impossible cannot be created.
-        let impossible = if cfg!(windows) {
-            r"NUL\impossible"
-        } else {
-            "/dev/null/impossible"
-        };
-        std::env::set_var("CS_CONFIG_DIR", impossible);
-        let result = f();
+        std::env::set_var("CS_CONFIG_DIR", IMPOSSIBLE_CONFIG_DIR);
+        let result = f().await;
         std::env::remove_var("CS_CONFIG_DIR");
         result
     }
@@ -597,64 +570,37 @@ mod tests {
 
     // ---- set_value for enabled_tools ----
 
-    #[test]
-    fn set_value_enabled_tools_includes_restart_warning() {
-        with_temp_config_dir(|| {
-            let result = set_value("enabled_tools", "code_health_review,code_health_score");
-            std::env::remove_var("CS_ENABLED_TOOLS");
-            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-            assert_eq!(parsed["status"], json!("saved"));
-            assert!(parsed.get("restart_required").is_some());
-        });
-    }
-
-    #[test]
-    fn set_value_enabled_tools_with_unknown_name_includes_warning() {
-        with_temp_config_dir(|| {
-            let result = set_value("enabled_tools", "code_health_review,bogus_tool");
+    #[tokio::test]
+    async fn set_value_enabled_tools_with_unknown_name_includes_warning() {
+        with_temp_config_dir_async(|| async {
+            let result = set_value("enabled_tools", "code_health_review,bogus_tool").await;
             std::env::remove_var("CS_ENABLED_TOOLS");
             let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
             assert_eq!(parsed["status"], json!("saved"));
             assert!(parsed.get("tool_name_warning").is_some());
             let warning = parsed["tool_name_warning"].as_str().unwrap();
             assert!(warning.contains("bogus_tool"));
-        });
-    }
-
-    #[test]
-    fn set_value_enabled_tools_valid_names_no_tool_warning() {
-        with_temp_config_dir(|| {
-            let result = set_value("enabled_tools", "code_health_review,code_health_score");
-            std::env::remove_var("CS_ENABLED_TOOLS");
-            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
-            assert_eq!(parsed["status"], json!("saved"));
-            assert!(parsed.get("tool_name_warning").is_none());
-        });
+        })
+        .await;
     }
 
     // ---- save failure paths ----
 
-    #[test]
-    fn save_key_returns_error_when_save_fails() {
-        with_unwritable_config_dir(|| {
-            let result = set_value("ca_bundle", "/cert.pem");
-            assert!(
-                result.contains("Error saving config"),
-                "expected save error, got: {result}"
-            );
-        });
+    #[tokio::test]
+    async fn save_key_returns_error_when_save_fails() {
+        let result = with_unwritable_config_dir(|| set_value("ca_bundle", "/cert.pem")).await;
+        assert!(
+            result.contains("Error saving config"),
+            "expected save error, got: {result}"
+        );
     }
 
-    #[test]
-    fn delete_key_returns_error_when_save_fails() {
-        with_unwritable_config_dir(|| {
-            // First, set a value in ConfigData (won't persist since save fails)
-            // Then try deleting — delete_key also calls save
-            let result = set_value("ca_bundle", "");
-            assert!(
-                result.contains("Error saving config"),
-                "expected save error, got: {result}"
-            );
-        });
+    #[tokio::test]
+    async fn delete_key_returns_error_when_save_fails() {
+        let result = with_unwritable_config_dir(|| set_value("ca_bundle", "")).await;
+        assert!(
+            result.contains("Error saving config"),
+            "expected save error, got: {result}"
+        );
     }
 }

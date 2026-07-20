@@ -2,30 +2,37 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
+use crate::auth::AuthCredential;
 use crate::errors::ApiError;
 use crate::http::{HttpClient, HttpRequest, HttpResponse, Method};
 
-pub fn get_api_url() -> Result<String, ApiError> {
-    if let Ok(url) = std::env::var("CS_ONPREM_URL") {
-        crate::config::require_https("CS_ONPREM_URL", &url)
-            .map_err(|e| ApiError::Transport(e.into()))?;
-        Ok(format!("{}/api", url.trim_end_matches('/')))
-    } else {
-        Ok("https://api.codescene.io".to_string())
-    }
-}
-
+#[cfg(test)]
 pub async fn query_api_with_client(
     endpoint: &str,
     client: &dyn HttpClient,
 ) -> Result<Value, ApiError> {
-    let url = format!("{}/{}", get_api_url()?, endpoint.trim_start_matches('/'));
-    query_api_url_with_client(&url, client).await
+    query_api_with_auth(endpoint, client, None).await
 }
 
-async fn query_api_url_with_client(url: &str, client: &dyn HttpClient) -> Result<Value, ApiError> {
-    let token = std::env::var("CS_ACCESS_TOKEN").unwrap_or_default();
-    let token = token.trim();
+pub async fn query_api_with_auth(
+    endpoint: &str,
+    client: &dyn HttpClient,
+    credential: Option<&AuthCredential>,
+) -> Result<Value, ApiError> {
+    let url = format!(
+        "{}/{}",
+        api_url_for(credential)?,
+        endpoint.trim_start_matches('/')
+    );
+    query_api_url_with_auth(&url, client, credential).await
+}
+
+async fn query_api_url_with_auth(
+    url: &str,
+    client: &dyn HttpClient,
+    credential: Option<&AuthCredential>,
+) -> Result<Value, ApiError> {
+    let token = credential.map(AuthCredential::access_token).unwrap_or("");
 
     let request = HttpRequest {
         method: Method::Get,
@@ -71,9 +78,18 @@ fn parse_api_response(resp: HttpResponse) -> Result<Value, ApiError> {
     })
 }
 
+#[cfg(test)]
 pub async fn query_api_list_with_client(
     endpoint: &str,
     client: &dyn HttpClient,
+) -> Result<Vec<Value>, ApiError> {
+    query_api_list_with_auth(endpoint, client, None).await
+}
+
+pub async fn query_api_list_with_auth(
+    endpoint: &str,
+    client: &dyn HttpClient,
+    credential: Option<&AuthCredential>,
 ) -> Result<Vec<Value>, ApiError> {
     let mut results = Vec::new();
     let mut page = 1;
@@ -81,7 +97,7 @@ pub async fn query_api_list_with_client(
     loop {
         let sep = if endpoint.contains('?') { '&' } else { '?' };
         let paged = format!("{endpoint}{sep}page={page}");
-        let data = query_api_with_client(&paged, client).await?;
+        let data = query_api_with_auth(&paged, client, credential).await?;
 
         let items = match data.as_array() {
             Some(arr) => arr,
@@ -97,11 +113,22 @@ pub async fn query_api_list_with_client(
     Ok(results)
 }
 
+#[cfg(test)]
 pub async fn query_api_keyed_list_with_client(
     endpoint: &str,
     params: &[(String, String)],
     key: &str,
     client: &dyn HttpClient,
+) -> Result<Vec<Value>, ApiError> {
+    query_api_keyed_list_with_auth(endpoint, params, key, client, None).await
+}
+
+pub async fn query_api_keyed_list_with_auth(
+    endpoint: &str,
+    params: &[(String, String)],
+    key: &str,
+    client: &dyn HttpClient,
+    credential: Option<&AuthCredential>,
 ) -> Result<Vec<Value>, ApiError> {
     let mut all_items = Vec::new();
     let mut current_page: i64 = 1;
@@ -110,8 +137,8 @@ pub async fn query_api_keyed_list_with_client(
         let mut query_params = params.to_vec();
         upsert_query_param(&mut query_params, "page", &current_page.to_string());
 
-        let url = endpoint_with_query_params(endpoint, &query_params)?;
-        let data = query_api_url_with_client(&url, client).await?;
+        let url = endpoint_with_query_params(endpoint, &query_params, credential)?;
+        let data = query_api_url_with_auth(&url, client, credential).await?;
 
         let items = data
             .get(key)
@@ -139,12 +166,21 @@ pub async fn query_api_keyed_list_with_client(
     Ok(all_items)
 }
 
+#[cfg(test)]
 pub async fn get_latest_analysis_id(
     project_id: i64,
     client: &dyn HttpClient,
 ) -> Result<i64, ApiError> {
+    get_latest_analysis_id_with_auth(project_id, client, None).await
+}
+
+pub async fn get_latest_analysis_id_with_auth(
+    project_id: i64,
+    client: &dyn HttpClient,
+    credential: Option<&AuthCredential>,
+) -> Result<i64, ApiError> {
     let endpoint = format!("v2/projects/{project_id}/analyses/latest");
-    let data = query_api_with_client(&endpoint, client).await?;
+    let data = query_api_with_auth(&endpoint, client, credential).await?;
     data.get("id")
         .and_then(|v| v.as_i64())
         .ok_or_else(|| ApiError::Transport("Missing 'id' in analysis response".into()))
@@ -153,8 +189,13 @@ pub async fn get_latest_analysis_id(
 fn endpoint_with_query_params(
     endpoint: &str,
     params: &[(String, String)],
+    credential: Option<&AuthCredential>,
 ) -> Result<String, ApiError> {
-    let base = format!("{}/{}", get_api_url()?, endpoint.trim_start_matches('/'));
+    let base = format!(
+        "{}/{}",
+        api_url_for(credential)?,
+        endpoint.trim_start_matches('/')
+    );
     let mut url = reqwest::Url::parse(&base)
         .map_err(|e| ApiError::Transport(format!("invalid API URL: {e}")))?;
     {
@@ -164,6 +205,13 @@ fn endpoint_with_query_params(
         }
     }
     Ok(url.to_string())
+}
+
+fn api_url_for(credential: Option<&AuthCredential>) -> Result<String, ApiError> {
+    match credential {
+        Some(auth) => auth.api_root(),
+        None => crate::auth::default_api_root(),
+    }
 }
 
 fn upsert_query_param(params: &mut Vec<(String, String)>, key: &str, value: &str) {
@@ -199,6 +247,10 @@ mod tests {
         std::env::remove_var("CS_ACCESS_TOKEN");
     }
 
+    fn configured_auth() -> crate::auth::AuthCredential {
+        crate::auth::configured_credential().unwrap()
+    }
+
     fn assert_status_error(err: ApiError, expected_status: u16) {
         match err {
             ApiError::Status { status, .. } => assert_eq!(status, expected_status),
@@ -207,33 +259,45 @@ mod tests {
     }
 
     #[test]
-    fn get_api_url_default() {
+    fn default_api_root_cloud() {
         let _lock = config::lock_test_env();
         std::env::remove_var("CS_ONPREM_URL");
-        assert_eq!(get_api_url().unwrap(), "https://api.codescene.io");
+        assert_eq!(
+            crate::auth::default_api_root().unwrap(),
+            "https://api.codescene.io"
+        );
     }
 
     #[test]
-    fn get_api_url_onprem() {
+    fn default_api_root_onprem() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_ONPREM_URL", "https://my-instance.com");
-        assert_eq!(get_api_url().unwrap(), "https://my-instance.com/api");
+        assert_eq!(
+            crate::auth::default_api_root().unwrap(),
+            "https://my-instance.com/api"
+        );
         std::env::remove_var("CS_ONPREM_URL");
     }
 
     #[test]
-    fn get_api_url_onprem_trailing_slash() {
+    fn default_api_root_onprem_trailing_slash() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_ONPREM_URL", "https://my-instance.com/");
-        assert_eq!(get_api_url().unwrap(), "https://my-instance.com/api");
+        assert_eq!(
+            crate::auth::default_api_root().unwrap(),
+            "https://my-instance.com/api"
+        );
         std::env::remove_var("CS_ONPREM_URL");
     }
 
     #[test]
-    fn get_api_url_onprem_http_blocked() {
+    fn default_api_root_onprem_http_blocked() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_ONPREM_URL", "http://my-instance.com");
-        assert!(get_api_url().is_err(), "HTTP URLs should be blocked");
+        assert!(
+            crate::auth::default_api_root().is_err(),
+            "HTTP URLs should be blocked"
+        );
         std::env::remove_var("CS_ONPREM_URL");
     }
 
@@ -277,9 +341,10 @@ mod tests {
         let captured = mock.captured_requests.clone();
 
         // First request: normal endpoint
-        let _ = query_api_with_client("v2/test", &mock).await;
+        let auth = configured_auth();
+        let _ = query_api_with_auth("v2/test", &mock, Some(&auth)).await;
         // Second request: leading-slash endpoint
-        let _ = query_api_with_client("/v2/test", &mock).await;
+        let _ = query_api_with_auth("/v2/test", &mock, Some(&auth)).await;
 
         let reqs = captured.lock().unwrap();
         assert_eq!(reqs.len(), 2);
@@ -307,7 +372,8 @@ mod tests {
         let mock = MockHttpClient::always(HttpResponse::ok(r#"{}"#));
         let captured = mock.captured_requests.clone();
 
-        let _ = query_api_with_client("v2/test", &mock).await;
+        let auth = configured_auth();
+        let _ = query_api_with_auth("v2/test", &mock, Some(&auth)).await;
 
         let reqs = captured.lock().unwrap();
         assert_eq!(reqs.len(), 1);
@@ -455,11 +521,11 @@ mod tests {
     fn endpoint_with_query_params_appends_correct_separator() {
         let _g = lock_api_env("tok");
         let params = vec![("a".to_string(), "1".to_string())];
-        let one = endpoint_with_query_params("v2/test", &params).unwrap();
+        let one = endpoint_with_query_params("v2/test", &params, None).unwrap();
         assert!(one.starts_with("https://api.codescene.io/v2/test?"));
         assert!(one.contains("a=1"));
 
-        let two = endpoint_with_query_params("v2/test?x=y", &params).unwrap();
+        let two = endpoint_with_query_params("v2/test?x=y", &params, None).unwrap();
         assert!(two.starts_with("https://api.codescene.io/v2/test?"));
         assert!(two.contains("x=y"));
         assert!(two.contains("a=1"));

@@ -15,7 +15,7 @@ pub(crate) async fn handle(
         event_properties::config_properties(event_properties::ConfigAction::Set, &params.key);
     server.track("set-config", props);
 
-    let result = configure::set_value(&params.key, &params.value);
+    let result = configure::set_value(&params.key, &params.value).await;
     let text = server.maybe_version_warning(&result).await;
     Ok(CallToolResult::success(vec![Content::text(text)]))
 }

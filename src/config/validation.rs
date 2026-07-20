@@ -4,7 +4,11 @@ use super::options::{ConfigOption, OPTIONS};
 const URL_KEYS: &[&str] = &["onprem_url"];
 
 /// Localhost hosts that are exempt from the HTTPS requirement.
-const LOCALHOST_HOSTS: &[&str] = &["localhost", "127.0.0.1", "0.0.0.0"];
+/// `host.docker.internal` is included because it is the standard way for a
+/// process running inside a Docker container to reach services on its host
+/// machine (e.g. our e2e tests' fake servers) — it is not a publicly
+/// routable address, so it carries the same trust profile as `localhost`.
+const LOCALHOST_HOSTS: &[&str] = &["localhost", "127.0.0.1", "0.0.0.0", "host.docker.internal"];
 
 /// Check whether a URL (after stripping the scheme) points to a localhost address.
 fn is_localhost_url(url: &str) -> bool {
@@ -27,7 +31,7 @@ fn is_allowed_url(url: &str) -> bool {
 
 /// Validate that a URL value uses the HTTPS scheme.
 /// Returns `Ok(())` for valid HTTPS URLs, or `Err` with a user-facing message.
-/// Localhost addresses (localhost, 127.0.0.1, 0.0.0.0) are exempt.
+/// Localhost addresses (localhost, 127.0.0.1, 0.0.0.0, host.docker.internal) are exempt.
 pub fn validate_https_url(key: &str, url: &str) -> Result<(), String> {
     if !URL_KEYS.contains(&key) {
         return Ok(());
@@ -44,7 +48,7 @@ pub fn validate_https_url(key: &str, url: &str) -> Result<(), String> {
 
 /// Validate that a raw URL string uses HTTPS. Used for env vars not managed
 /// through the config system (e.g. CS_TRACKING_URL).
-/// Localhost addresses (localhost, 127.0.0.1, 0.0.0.0) are exempt.
+/// Localhost addresses (localhost, 127.0.0.1, 0.0.0.0, host.docker.internal) are exempt.
 pub fn require_https(env_var: &str, url: &str) -> Result<(), String> {
     let trimmed = url.trim();
     if is_allowed_url(trimmed) {
@@ -178,6 +182,18 @@ mod tests {
     fn require_https_accepts_http_0_0_0_0() {
         assert!(require_https("CS_TRACKING_URL", "http://0.0.0.0").is_ok());
         assert!(require_https("CS_TRACKING_URL", "http://0.0.0.0:9090").is_ok());
+    }
+
+    #[test]
+    fn validate_https_url_accepts_http_host_docker_internal() {
+        assert!(validate_https_url("onprem_url", "http://host.docker.internal").is_ok());
+        assert!(validate_https_url("onprem_url", "http://host.docker.internal:8080").is_ok());
+    }
+
+    #[test]
+    fn require_https_accepts_http_host_docker_internal() {
+        assert!(require_https("CS_TRACKING_URL", "http://host.docker.internal").is_ok());
+        assert!(require_https("CS_TRACKING_URL", "http://host.docker.internal:9090").is_ok());
     }
 
     #[test]
