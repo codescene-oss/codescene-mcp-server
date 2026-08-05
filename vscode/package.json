@@ -48,28 +48,34 @@
     "configuration": {
       "title": "CodeScene CodeHealth MCP",
       "properties": {
-        "codescene.accessToken": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Optional Personal Access Token or standalone license token. Prefer OAuth: ask the agent to log in. A saved PAT **blocks** OAuth until cleared. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#access_token)",
-          "order": 1
+        "codescene.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable the CodeScene MCP Server.",
+          "order": 0
         },
         "codescene.accountId": {
           "type": "string",
           "default": "",
           "markdownDescription": "Optional CodeScene Cloud account/tenant ID (positive integer). Only needed if you belong to multiple Cloud accounts and want to pin OAuth login to one of them. Set **before** logging in. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#account_id)",
-          "order": 2
+          "order": 1
         },
         "codescene.onpremUrl": {
           "type": "string",
           "default": "",
           "markdownDescription": "Base URL of your self-hosted CodeScene instance (e.g. `https://codescene.mycompany.com`). Leave empty for CodeScene Cloud. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#onprem_url)",
-          "order": 3
+          "order": 2
         },
         "codescene.defaultProjectId": {
           "type": "string",
           "default": "",
           "markdownDescription": "Pre-selects a CodeScene project by its numeric ID, skipping interactive project selection. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#default_project_id)",
+          "order": 3
+        },
+        "codescene.accessToken": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional Personal Access Token or standalone license token. Prefer OAuth: ask the agent to log in. A saved PAT **blocks** OAuth until cleared. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#access_token)",
           "order": 4
         },
         "codescene.enabledTools": {
@@ -89,12 +95,6 @@
           "default": "",
           "markdownDescription": "Path to a PEM-format CA certificate bundle for SSL/TLS verification. Required for corporate proxies or internal CAs. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#ca_bundle)",
           "order": 7
-        },
-        "codescene.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable or disable the CodeScene MCP Server.",
-          "order": 0
         }
       }
     },

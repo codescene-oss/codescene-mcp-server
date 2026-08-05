@@ -78,10 +78,10 @@ See [Authentication](https://github.com/codescene-oss/codescene-mcp-server/blob/
 | Setting | Description |
 |---------|-------------|
 | `codescene.enabled` | Enable/disable the MCP server |
-| `codescene.accessToken` | Optional PAT or standalone token (blocks OAuth when set) |
 | `codescene.accountId` | Optional Cloud account/tenant ID for multi-account OAuth |
 | `codescene.onpremUrl` | Base URL of your self-hosted CodeScene instance |
 | `codescene.defaultProjectId` | Pre-select a project by numeric ID |
+| `codescene.accessToken` | Optional PAT or standalone token (blocks OAuth when set) |
 | `codescene.enabledTools` | Comma-separated list of tools to expose (empty = all) |
 | `codescene.disableVersionCheck` | Suppress automatic version-check on startup |
 | `codescene.caBundlePath` | Path to a PEM CA certificate bundle for SSL/TLS |
