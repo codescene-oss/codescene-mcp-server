@@ -41,9 +41,9 @@ The developer only performs step 1: **pushing the tag**. CI does the rest.
 4. **Publish + update metadata.** On a successful build, `Publish npm Package`
    publishes to npm, and `Update packaging metadata` updates the Homebrew
    formula and Claude Code plugin, committing **directly to `main` — no PRs**.
-5. **Promote to latest.** When `Update packaging metadata` finishes
-   successfully, `Promote release to latest` marks the GitHub Release as latest.
-   This is what signals users they are on an outdated version.
+5. **Promote to latest.** After `Update packaging metadata` commits to `main`,
+   its final `promote` job (same workflow, run via `needs:`) marks the GitHub
+   Release as latest. This is what signals users they are on an outdated version.
 
 ## Implementation
 
@@ -75,7 +75,8 @@ The developer only performs step 1: **pushing the tag**. CI does the rest.
   `Create GitHub Release` workflow owns release creation and note generation.
 - Creating or merging pull requests for the Homebrew or Claude Code updates.
   The pipeline commits those directly to `main`; there are no release PRs.
-- Manually marking the release as latest. `Promote release to latest` does this
+- Manually marking the release as latest. The `promote` job in
+  `Update packaging metadata` does this
   automatically once the pipeline finishes.
 - Hand-writing the changelog. It is generated deterministically from merged PRs;
   fix PR titles/labels instead of editing notes by hand.
