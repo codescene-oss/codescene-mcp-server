@@ -8,9 +8,9 @@ name: Create GitHub Release
 #
 # The same tag push also triggers build-exe.yml and build-release.yml. Those
 # upload artifacts to this release and fan out to the publish + update
-# workflows. The release is created WITHOUT the "latest" flag;
-# promote-release-latest.yml sets it as latest once every downstream
-# publish/update workflow has completed successfully.
+# workflows. The release is created WITHOUT the "latest" flag; the promote job
+# in update-packaging-metadata.yml sets it as latest once every downstream
+# publish/update step has completed successfully.
 #
 # This workflow runs first so the release exists with proper generated notes
 # before build-exe.yml's upload step runs. It is idempotent: if the release was
@@ -47,7 +47,8 @@ jobs:
           set -euo pipefail
           # --generate-notes uses GitHub's deterministic generate-notes engine,
           # categorizing merged PRs per .github/release.yml. Not marked latest
-          # yet; promote-release-latest.yml does that after all builds succeed.
+          # yet; the promote job in update-packaging-metadata.yml does that
+          # after all builds succeed.
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists; regenerating notes."
             NOTES="$(gh api \

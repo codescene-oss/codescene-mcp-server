@@ -6,6 +6,13 @@ name: Update packaging metadata
 #
 # Both updates touch files on main, so they run as ordered steps in one job to
 # avoid the push race two separate workflows would create.
+#
+# The final "promote" job (marking the GitHub Release as latest) lives here as a
+# `needs:`-dependent job rather than in its own workflow. GitHub does not deliver
+# a `workflow_run` event when the triggering run was itself started by a
+# `workflow_run` event, so a third-hop `workflow_run` chain
+# (tag push -> build -> update metadata -> promote) silently skips the promote
+# step. Using `needs:` inside a single workflow avoids that limitation.
 
 on:
   workflow_run:
@@ -30,6 +37,8 @@ jobs:
     if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'MCP-')) || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.tag, 'MCP-')) }}
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - name: Get release version
         id: version
@@ -163,3 +172,25 @@ jobs:
           # Guard against a concurrent push landing between checkout and push.
           git pull --rebase origin main
           git push origin main
+
+  # Final step of the release pipeline. Marks the GitHub Release as "latest" once
+  # packaging metadata has been committed to main. Runs as a `needs:`-dependent
+  # job (not a separate workflow_run workflow) so it cannot be silently skipped
+  # by GitHub's third-hop workflow_run limitation.
+  promote:
+    needs: update-metadata
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Mark release as latest
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.update-metadata.outputs.tag }}"
+          gh release edit "$TAG" --latest --draft=false
+          echo "Marked $TAG as the latest release." >> "$GITHUB_STEP_SUMMARY"
+        env:
+          GH_TOKEN: ${{ github.token }}
