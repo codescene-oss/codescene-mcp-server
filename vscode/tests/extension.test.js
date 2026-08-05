@@ -181,35 +181,8 @@ describe('provideMcpServerDefinitions', () => {
 describe('resolveMcpServerDefinition', () => {
     beforeEach(() => { reset(); });
 
-    it('returns non-matching servers unchanged', async () => {
-        const ctx = makeContext();
-        extension.activate(ctx);
-
-        const provider = findProvider();
-        const server = { label: 'Some Other Server' };
-        const result = await provider.resolveMcpServerDefinition(server);
-
-        assert.equal(result, server);
-    });
-
-    it('prompts for token when not configured', async () => {
+    it('returns server definition without prompting for a token', async () => {
         state.configValues.accessToken = '';
-        state.warningResult = 'Continue Without';
-
-        const ctx = makeContext();
-        extension.activate(ctx);
-
-        const provider = findProvider();
-        const server = { label: 'CodeScene CodeHealth MCP' };
-        const result = await provider.resolveMcpServerDefinition(server);
-
-        assert.equal(result, server);
-        assert.equal(state.shownWarnings.length, 1);
-        assert.ok(state.shownWarnings[0].message.includes('No access token'));
-    });
-
-    it('skips prompt when token is already configured', async () => {
-        state.configValues.accessToken = 'already-set';
 
         const ctx = makeContext();
         extension.activate(ctx);
@@ -222,22 +195,15 @@ describe('resolveMcpServerDefinition', () => {
         assert.equal(state.shownWarnings.length, 0);
     });
 
-    it('invokes configure command when user chooses Configure Now', async () => {
-        state.configValues.accessToken = '';
-        state.warningResult = 'Configure Now';
-        state.inputBoxResult = 'new-token-456';
-
+    it('returns non-matching servers unchanged', async () => {
         const ctx = makeContext();
         extension.activate(ctx);
 
-        const { McpStdioServerDefinition } = globalThis.__vscodeMock.vscode;
-        const server = new McpStdioServerDefinition('CodeScene CodeHealth MCP', '/bin/test', [], {}, '1.0');
-
         const provider = findProvider();
+        const server = { label: 'Some Other Server' };
         const result = await provider.resolveMcpServerDefinition(server);
 
-        // After configure, the updated token should be on the server env
-        assert.equal(result.env['CS_ACCESS_TOKEN'], 'new-token-456');
+        assert.equal(result, server);
     });
 });
 
@@ -257,6 +223,20 @@ describe('codescene.configure command', () => {
         assert.equal(state.configUpdates[0].value, 'my-secret-token');
         assert.equal(state.shownInfoMessages.length, 1);
         assert.ok(state.shownInfoMessages[0].message.includes('Access token saved'));
+        assert.ok(state.shownInfoMessages[0].message.includes('blocks OAuth'));
+    });
+
+    it('clears token when user submits empty string', async () => {
+        state.inputBoxResult = '';
+
+        const ctx = makeContext();
+        extension.activate(ctx);
+
+        await findCommand('codescene.configure')();
+
+        assert.equal(state.configUpdates.length, 1);
+        assert.equal(state.configUpdates[0].value, '');
+        assert.ok(state.shownInfoMessages[0].message.includes('Access token cleared'));
     });
 
     it('does nothing when user cancels input', async () => {
@@ -292,6 +272,7 @@ describe('codescene.showStatus command', () => {
     it('shows status with enabled and no token', () => {
         state.configValues.enabled = true;
         state.configValues.accessToken = '';
+        state.configValues.accountId = '';
 
         const ctx = makeContext({ extensionPath: '/nonexistent' });
         extension.activate(ctx);
@@ -301,9 +282,25 @@ describe('codescene.showStatus command', () => {
         assert.equal(state.shownInfoMessages.length, 1);
         const msg = state.shownInfoMessages[0].message;
         assert.ok(msg.includes('Status: Enabled'));
-        assert.ok(msg.includes('Access Token: Not set'));
+        assert.ok(msg.includes('Auth: OAuth via agent login'));
+        assert.ok(msg.includes('Account ID: Not set'));
         assert.ok(msg.includes('Binary: Not available'));
         assert.ok(msg.includes('Platform:'));
+    });
+
+    it('shows PAT status and account id when configured', () => {
+        state.configValues.enabled = true;
+        state.configValues.accessToken = 'tok';
+        state.configValues.accountId = 42;
+
+        const ctx = makeContext({ extensionPath: '/nonexistent' });
+        extension.activate(ctx);
+
+        findCommand('codescene.showStatus')();
+
+        const msg = state.shownInfoMessages[0].message;
+        assert.ok(msg.includes('Auth: PAT configured (blocks OAuth)'));
+        assert.ok(msg.includes('Account ID: 42'));
     });
 
     it('shows status with disabled', () => {

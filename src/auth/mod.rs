@@ -27,6 +27,10 @@ pub(crate) struct CliTokenResponse {
     #[allow(dead_code)]
     #[serde(rename = "refresh-token-expires-at")]
     pub(crate) refresh_token_expires_at: Option<i64>,
+    /// Cloud account/tenant ID decoded from the OAuth access token, if any.
+    #[allow(dead_code)]
+    #[serde(rename = "account-id", default)]
+    pub(crate) account_id: Option<i64>,
 }
 
 impl CliTokenResponse {
@@ -367,6 +371,14 @@ mod tests {
         );
         assert_eq!(resp.expires_at, Some(1784044090));
         assert_eq!(resp.refresh_token_expires_at, Some(1815576430));
+        assert_eq!(resp.account_id, None);
+    }
+
+    #[test]
+    fn parses_account_id_when_present() {
+        let json = r#"{"status":"signed_in","access-token":"oau_x","api-url":null,"account-id":42}"#;
+        let resp: CliTokenResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.account_id, Some(42));
     }
 
     #[test]
@@ -426,6 +438,7 @@ mod tests {
             api_url: api_url.map(Into::into),
             expires_at: None,
             refresh_token_expires_at: None,
+            account_id: None,
         }
     }
 

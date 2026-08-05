@@ -86,6 +86,7 @@ pub(super) fn response_from_env() -> Option<CliTokenResponse> {
         api_url,
         expires_at,
         refresh_token_expires_at: refresh_expires_at,
+        account_id: None,
     })
 }
 
@@ -106,6 +107,7 @@ pub(super) fn response_from_guard(guard: &crate::config::ConfigEnvWriteGuard) ->
         api_url,
         expires_at,
         refresh_token_expires_at: refresh_expires_at,
+        account_id: None,
     }
 }
 

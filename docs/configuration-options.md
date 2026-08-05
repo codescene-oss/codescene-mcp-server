@@ -39,17 +39,16 @@ Environment variables set by your MCP client always take precedence over values 
 |---|---|
 | **Environment variable** | `CS_ACCESS_TOKEN` |
 | **Sensitive** | Yes (value is masked in tool output) |
-| **Required** | Yes, for most functionality |
+| **Required** | No for interactive OAuth; yes for CI/headless without OAuth |
 
-The primary authentication credential for the CodeScene MCP Server. This can be:
+Optional static credential for the CodeScene MCP Server. Prefer the `login` tool for interactive use. This can be:
 
-- **OAuth access token** (recommended for interactive use) — obtained automatically via the `login` tool. No manual token handling required.
 - **Personal Access Token (PAT)** — obtained from your CodeScene instance. Suitable for CI/CD and headless environments.
 - **Standalone access token** — if you purchased MCP separately.
 
-When `CS_ACCESS_TOKEN` is set it always takes precedence over a stored OAuth session.
+When `CS_ACCESS_TOKEN` is set it always takes precedence over a stored OAuth session and **blocks** the `login` tool until cleared.
 
-The type of token determines which tools are available:
+The type of credential determines which tools are available:
 
 - **OAuth / Personal Access Token** — Enables the full tool set, including project-level features such as technical debt hotspots, goals, and code ownership lookups.
 - **Standalone access token** — Enables local Code Health analysis tools only (scoring, review, refactoring). Project-level and API-dependent features are not available.
@@ -57,6 +56,45 @@ The type of token determines which tools are available:
 Changing this value may require a **server restart** for tool registration changes to take effect.
 
 See [Authentication](getting-a-personal-access-token.md) for the recommended login flow and instructions on creating a PAT.
+
+## `account_id`
+
+| | |
+|---|---|
+| **Environment variable** | `CS_ACCOUNT_ID` |
+| **Sensitive** | No |
+| **API-only** | Yes (hidden when using a standalone license) |
+| **Required** | No |
+
+Optional CodeScene Cloud account/tenant ID for OAuth. Use this only if you belong to **multiple** Cloud accounts and need to pin login to a specific one.
+
+- Must be a **positive integer**.
+- Set **before** calling `login`, and keep the same value afterward so token refresh uses the matching credential slot.
+- Unset → the browser session’s current Cloud account is used.
+- Does **not** affect PAT / `CS_ACCESS_TOKEN` auth or on-prem OAuth.
+
+**Example — ask your AI assistant:**
+
+> "Set my CodeScene account ID to 123"
+
+**Example — environment variable:**
+
+```json
+{
+  "servers": {
+    "codescene": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@codescene/codehealth-mcp"],
+      "env": {
+        "CS_ACCOUNT_ID": "123"
+      }
+    }
+  }
+}
+```
+
+See [Authentication](getting-a-personal-access-token.md) for the multi-account OAuth flow.
 
 ## `onprem_url`
 

@@ -6,16 +6,30 @@ AI-powered code health analysis directly in VS Code's agent mode (Copilot Chat).
 
 - **Zero-config MCP setup** — Installs and registers the CodeScene MCP Server automatically
 - **Platform-specific binaries** — The correct native binary for your OS/arch is bundled inside the extension
-- **Settings UI** — Configure your CodeScene credentials and options through VS Code's settings
+- **OAuth-first auth** — Ask the agent to log in; no token paste required for interactive use
+- **Settings UI** — Optional PAT, Cloud account ID, on-prem URL, and other options
 - **Agent mode tools** — All CodeScene CodeHealth MCP tools are available in Copilot's agent mode
 
 ## Available Tools (in Agent Mode)
 
 Once installed, the following tools become available in VS Code's agent mode.
 
+### Authentication & Server Management (All Users)
+
+| Tool | Description |
+|------|-------------|
+| `login` | Sign in to CodeScene with OAuth (opens browser) |
+| `get_config` | Read current server configuration |
+| `set_config` | Write a configuration value |
+| `verify_installation` | Diagnose setup issues |
+| `list_skills` | List available embedded skills |
+| `get_skill_manifest` | Inspect a skill's file manifest |
+| `download_skill` | Download a skill to a local directory |
+| `sync_skills` | Download all available skills |
+
 ### Code Health Analysis (All Users)
 
-These tools work with any valid access token — standalone or CodeScene Core.
+These tools work after OAuth login or with any valid access token — standalone or CodeScene Core.
 
 | Tool | Description |
 |------|-------------|
@@ -27,9 +41,9 @@ These tools work with any valid access token — standalone or CodeScene Core.
 | `explain_code_health` | Explains the Code Health metric and how scores are interpreted |
 | `explain_code_health_productivity` | Business case data for Code Health improvements |
 
-### Technical Debt & Project Insights (CodeScene Core users — cloud or on-prem)
+### Technical Debt & Project Insights (CodeScene Core — cloud or on-prem)
 
-These tools require a CodeScene Personal Access Token and a CodeScene Core instance.
+These tools require OAuth or a CodeScene Personal Access Token and a CodeScene Core instance.
 
 | Tool | Description |
 |------|-------------|
@@ -40,39 +54,32 @@ These tools require a CodeScene Personal Access Token and a CodeScene Core insta
 | `list_technical_debt_goals_for_project_file` | Goals for a specific file |
 | `code_ownership_for_path` | Identify code owners for a file or directory |
 
-### Server Management (All Users)
-
-| Tool | Description |
-|------|-------------|
-| `get_config` | Read current server configuration |
-| `set_config` | Write a configuration value |
-| `verify_installation` | Diagnose setup issues |
-| `list_skills` | List available embedded skills |
-| `get_skill_manifest` | Inspect a skill's file manifest |
-| `download_skill` | Download a skill to a local directory |
-| `sync_skills` | Download all available skills |
-
 ## Getting Started
 
 1. **Install the extension** from the VS Code Marketplace
-2. **Set your access token** via `CodeScene: Configure Access Token` command (or in Settings)
-3. **Open agent mode** in Copilot Chat and start using CodeScene tools
+2. **(Optional)** If you belong to multiple CodeScene Cloud accounts, set `codescene.accountId` in Settings to your account/tenant ID **before** logging in
+3. **(On-prem only)** Set `codescene.onpremUrl` to your instance URL
+4. **Open agent mode** in Copilot Chat and ask: *“Log me in to CodeScene”* (this calls the `login` tool and opens your browser)
+5. Start using CodeScene tools
 
-### Access Token
+### Authentication
 
-The type of access token determines which tools are available:
+**Recommended (interactive):** OAuth via the `login` tool. No token to copy or paste.
 
-- **CodeScene Personal Access Token** — Enables the full tool set, including project-level features such as technical debt hotspots, goals, and code ownership lookups.
-- **Standalone access token** — Enables local Code Health analysis tools only (scoring, review, refactoring). Project-level features are not available.
+**Optional (CI / headless):** Set a Personal Access Token or standalone license via `CodeScene: Configure Access Token (optional / CI)` or the `codescene.accessToken` setting. A saved PAT **blocks** OAuth until you clear it.
 
-Get a Personal Access Token from your [CodeScene instance](https://codescene.io) under API settings.
+- **OAuth / Personal Access Token** — Full tool set, including project-level features.
+- **Standalone access token** — Local Code Health analysis only (scoring, review, refactoring).
+
+See [Authentication](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/getting-a-personal-access-token.md) for details.
 
 ## Settings
 
 | Setting | Description |
 |---------|-------------|
 | `codescene.enabled` | Enable/disable the MCP server |
-| `codescene.accessToken` | Your CodeScene access token (standalone or PAT) |
+| `codescene.accessToken` | Optional PAT or standalone token (blocks OAuth when set) |
+| `codescene.accountId` | Optional Cloud account/tenant ID for multi-account OAuth |
 | `codescene.onpremUrl` | Base URL of your self-hosted CodeScene instance |
 | `codescene.defaultProjectId` | Pre-select a project by numeric ID |
 | `codescene.enabledTools` | Comma-separated list of tools to expose (empty = all) |
@@ -83,7 +90,7 @@ See [Configuration Options](https://github.com/codescene-oss/codescene-mcp-serve
 
 ## Commands
 
-- `CodeScene: Configure Access Token` — Securely enter your access token
+- `CodeScene: Configure Access Token (optional / CI)` — Set or clear a PAT/standalone token
 - `CodeScene: Restart MCP Server` — Restart the MCP server (after config changes)
 - `CodeScene: Show Server Status` — Display current server status and configuration
 

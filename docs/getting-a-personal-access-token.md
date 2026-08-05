@@ -10,7 +10,15 @@ For interactive desktop use, no token needs to be manually obtained or configure
 
 The assistant will call the `login` tool, which opens your browser to complete the OAuth flow. Once done, the MCP server is authenticated for the session.
 
-**For CodeScene Cloud:** no extra configuration needed — just call `login`.
+**For CodeScene Cloud:** no extra configuration needed for single-account users — just call `login`.
+
+**Multi-account Cloud:** If you belong to more than one CodeScene Cloud account, set your account/tenant ID **before** logging in, and keep it set afterward (it selects the OAuth credential slot):
+
+> "Set my CodeScene account ID to 123"
+
+> "Log me in to CodeScene"
+
+The value must be a positive integer (`CS_ACCOUNT_ID` / `account_id`). It does not apply to PAT auth or on-prem.
 
 **For CodeScene on-prem:** configure your instance URL first, then log in:
 

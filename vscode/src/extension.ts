@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { BINARY_MAP, buildEnvironment, getBinaryName } from './config';
+import { buildEnvironment, getBinaryName, optionalIdString } from './config';
 
 let statusBarItem: vscode.StatusBarItem;
 
@@ -50,55 +50,29 @@ export function activate(context: vscode.ExtensionContext) {
                     ),
                 ];
             },
-            resolveMcpServerDefinition: async (server: vscode.McpServerDefinition) => {
-                if (server.label !== 'CodeScene CodeHealth MCP') {
-                    return server;
-                }
-
-                // Check if access token is configured
-                const config = vscode.workspace.getConfiguration('codescene');
-                const token = config.get<string>('accessToken', '');
-
-                if (!token) {
-                    const action = await vscode.window.showWarningMessage(
-                        'CodeScene: No access token configured. Some features require an access token.',
-                        'Configure Now',
-                        'Continue Without'
-                    );
-
-                    if (action === 'Configure Now') {
-                        await vscode.commands.executeCommand('codescene.configure');
-                        // Re-read config after user input
-                        const updatedConfig = vscode.workspace.getConfiguration('codescene');
-                        const updatedToken = updatedConfig.get<string>('accessToken', '');
-                        if (updatedToken && server instanceof vscode.McpStdioServerDefinition) {
-                            (server as any).env = {
-                                ...(server as any).env,
-                                CS_ACCESS_TOKEN: updatedToken,
-                            };
-                        }
-                    }
-                }
-
-                return server;
-            },
+            // OAuth-first: do not gate on a PAT. Agents call the `login` tool.
+            resolveMcpServerDefinition: async (server: vscode.McpServerDefinition) => server,
         })
     );
 
-    // Command: Configure access token
+    // Command: Configure access token (optional PAT / CI fallback)
     context.subscriptions.push(
         vscode.commands.registerCommand('codescene.configure', async () => {
             const token = await vscode.window.showInputBox({
-                prompt: 'Enter your CodeScene access token',
+                prompt: 'Enter a CodeScene access token (optional — prefer OAuth via agent login)',
                 password: true,
-                placeHolder: 'Paste your CodeScene access token here...',
+                placeHolder: 'Paste PAT or standalone token (leave empty to clear)...',
                 ignoreFocusOut: true,
             });
 
             if (token !== undefined) {
                 const config = vscode.workspace.getConfiguration('codescene');
                 await config.update('accessToken', token, vscode.ConfigurationTarget.Global);
-                vscode.window.showInformationMessage('CodeScene: Access token saved.');
+                vscode.window.showInformationMessage(
+                    token
+                        ? 'CodeScene: Access token saved. Note: a PAT blocks OAuth login until cleared.'
+                        : 'CodeScene: Access token cleared. Ask the agent to log in with OAuth.',
+                );
                 didChangeEmitter.fire(); // Trigger MCP server restart
             }
         })
@@ -118,11 +92,13 @@ export function activate(context: vscode.ExtensionContext) {
             const config = vscode.workspace.getConfiguration('codescene');
             const enabled = config.get<boolean>('enabled', true);
             const token = config.get<string>('accessToken', '');
+            const accountIdStr = optionalIdString(config.get<string | number>('accountId', ''));
             const binaryPath = getBinaryPath(context);
 
             const items: string[] = [
                 `Status: ${enabled ? 'Enabled' : 'Disabled'}`,
-                `Access Token: ${token ? 'Configured' : 'Not set'}`,
+                `Auth: ${token ? 'PAT configured (blocks OAuth)' : 'OAuth via agent login'}`,
+                `Account ID: ${accountIdStr || 'Not set'}`,
                 `Binary: ${binaryPath ? 'Found' : 'Not available'}`,
                 `Platform: ${process.platform}/${process.arch}`,
             ];

@@ -18,6 +18,30 @@ If this plugin is listed in a marketplace, install it with:
 claude --plugin-dir ./claude-code-plugin
 ```
 
+## Authentication
+
+**Recommended (interactive):** Ask Claude to log you in:
+
+> Log me in to CodeScene
+
+This calls the `login` tool and opens your browser for OAuth. No token paste required.
+
+**Multi-account Cloud:** If you belong to multiple CodeScene Cloud accounts, set your account/tenant ID first:
+
+> Set my CodeScene account ID to 123
+
+Then log in. Keep `account_id` set so later sessions use the same credential slot.
+
+**On-prem:** Set your instance URL first, then log in:
+
+> Set my CodeScene on-prem URL to https://codescene.mycompany.com
+
+> Log me in to CodeScene
+
+**CI / headless:** Use a Personal Access Token via `set_config` or `CS_ACCESS_TOKEN`. A saved PAT **blocks** OAuth until cleared.
+
+See [Authentication](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/getting-a-personal-access-token.md) for details.
+
 ## Skills
 
 Once installed, the following skills are available:
@@ -25,7 +49,7 @@ Once installed, the following skills are available:
 <!-- SKILLS-TABLE:START -->
 | Skill | Description |
 |-------|-------------|
-| `/codescene:configuring-codescene-mcp` | Use when the user wants to view, set, or troubleshoot CodeScene MCP configuration such as access tokens, on-prem URLs, default projects, or SSL certificates. |
+| `/codescene:configuring-codescene-mcp` | Use when the user wants to view, set, or troubleshoot CodeScene MCP configuration such as OAuth login, access tokens, account IDs, on-prem URLs, default projects, or SSL certificates. |
 | `/codescene:explaining-code-health` | Use when a user asks what Code Health means, how to interpret scores, or why Code Health matters in daily development. |
 | `/codescene:guiding-refactoring-with-code-health` | Use when refactoring unhealthy code and needing Code Health findings to choose small safe steps and verify improvement. |
 | `/codescene:installing-and-activating-codescene-mcp` | Use when installing the CodeScene MCP Server binary or package, registering it in an AI assistant, or copying agent guidance files into a repository. |
@@ -40,6 +64,14 @@ Once installed, the following skills are available:
 
 The plugin registers the CodeScene MCP server, which provides the following tools:
 
+### Authentication & configuration (all users)
+
+| Tool | Description |
+|------|-------------|
+| `login` | Sign in to CodeScene with OAuth (opens browser) |
+| `get_config` | Read current MCP server configuration |
+| `set_config` | Write MCP server configuration values |
+
 ### Standalone mode (standalone MCP license)
 
 | Tool | Description |
@@ -51,10 +83,8 @@ The plugin registers the CodeScene MCP server, which provides the following tool
 | `code_health_refactoring_business_case` | Generate a data-driven business case for refactoring a file |
 | `explain_code_health` | Explain the Code Health metric and how to interpret scores |
 | `explain_code_health_productivity` | Describe the productivity and defect-risk impact of Code Health |
-| `get_config` | Read current MCP server configuration |
-| `set_config` | Write MCP server configuration values |
 
-### CodeScene Cloud or On-prem mode (PAT/API token)
+### CodeScene Cloud or On-prem mode (OAuth or PAT)
 
 Includes all standalone tools, plus project-level API tools:
 

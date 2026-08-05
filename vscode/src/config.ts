@@ -11,40 +11,38 @@ export interface ConfigLike {
     get<T>(key: string, defaultValue: T): T;
 }
 
+function setIfNonEmpty(env: Record<string, string>, key: string, value: string): void {
+    if (value) {
+        env[key] = value;
+    }
+}
+
+/** Normalize optional string/number settings (e.g. accountId) to a trimmed string. */
+export function optionalIdString(value: string | number | null | undefined): string {
+    if (value == null) {
+        return '';
+    }
+    if (value === '') {
+        return '';
+    }
+    return String(value).trim();
+}
+
 /**
  * Builds the environment variables to pass to the MCP server process.
  */
 export function buildEnvironment(config: ConfigLike): Record<string, string> {
     const env: Record<string, string> = {};
 
-    const token = config.get<string>('accessToken', '');
-    if (token) {
-        env['CS_ACCESS_TOKEN'] = token;
-    }
+    setIfNonEmpty(env, 'CS_ACCESS_TOKEN', config.get<string>('accessToken', ''));
+    setIfNonEmpty(env, 'CS_ONPREM_URL', config.get<string>('onpremUrl', ''));
+    setIfNonEmpty(env, 'CS_ACCOUNT_ID', optionalIdString(config.get<string | number>('accountId', '')));
+    setIfNonEmpty(env, 'CS_DEFAULT_PROJECT_ID', config.get<string>('defaultProjectId', ''));
+    setIfNonEmpty(env, 'CS_ENABLED_TOOLS', config.get<string>('enabledTools', ''));
+    setIfNonEmpty(env, 'REQUESTS_CA_BUNDLE', config.get<string>('caBundlePath', ''));
 
-    const onpremUrl = config.get<string>('onpremUrl', '');
-    if (onpremUrl) {
-        env['CS_ONPREM_URL'] = onpremUrl;
-    }
-
-    const projectId = config.get<string>('defaultProjectId', '');
-    if (projectId) {
-        env['CS_DEFAULT_PROJECT_ID'] = projectId;
-    }
-
-    const enabledTools = config.get<string>('enabledTools', '');
-    if (enabledTools) {
-        env['CS_ENABLED_TOOLS'] = enabledTools;
-    }
-
-    const disableVersionCheck = config.get<boolean>('disableVersionCheck', false);
-    if (disableVersionCheck) {
+    if (config.get<boolean>('disableVersionCheck', false)) {
         env['CS_DISABLE_VERSION_CHECK'] = '1';
-    }
-
-    const caBundlePath = config.get<string>('caBundlePath', '');
-    if (caBundlePath) {
-        env['REQUESTS_CA_BUNDLE'] = caBundlePath;
     }
 
     return env;
