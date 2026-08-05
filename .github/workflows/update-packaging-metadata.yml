@@ -1,0 +1,165 @@
+name: Update packaging metadata
+
+# Runs after the executables are built and uploaded to the release. Updates the
+# Homebrew formula and the Claude Code plugin metadata, then commits BOTH sets
+# of changes directly to main in a single sequential job — no pull requests.
+#
+# Both updates touch files on main, so they run as ordered steps in one job to
+# avoid the push race two separate workflows would create.
+
+on:
+  workflow_run:
+    workflows: ["Build and publish executables"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to process (e.g., MCP-1.4.3)"
+        required: true
+        type: string
+
+concurrency:
+  # Serialize all direct-to-main packaging commits.
+  group: update-packaging-metadata
+  cancel-in-progress: false
+
+jobs:
+  update-metadata:
+    runs-on: ubuntu-latest
+    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'MCP-')) || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.tag, 'MCP-')) }}
+    permissions:
+      contents: write
+    steps:
+      - name: Get release version
+        id: version
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${{ github.event.workflow_run.head_branch }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#MCP-}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          # Use a PAT so the push can pass branch protection on main.
+          token: ${{ secrets.PAT_TOKEN }}
+
+      # --- Homebrew formula ---------------------------------------------------
+
+      - name: Download release assets and compute checksums
+        id: checksums
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          BASE_URL="https://github.com/codescene-oss/codescene-mcp-server/releases/download/MCP-${VERSION}"
+
+          MACOS_ARM64_SHA=$(curl -sL "${BASE_URL}/cs-mcp-macos-aarch64.zip" | sha256sum | cut -d' ' -f1)
+          MACOS_AMD64_SHA=$(curl -sL "${BASE_URL}/cs-mcp-macos-amd64.zip" | sha256sum | cut -d' ' -f1)
+          LINUX_ARM64_SHA=$(curl -sL "${BASE_URL}/cs-mcp-linux-aarch64.zip" | sha256sum | cut -d' ' -f1)
+          LINUX_AMD64_SHA=$(curl -sL "${BASE_URL}/cs-mcp-linux-amd64.zip" | sha256sum | cut -d' ' -f1)
+
+          echo "macos_arm64_sha=$MACOS_ARM64_SHA" >> "$GITHUB_OUTPUT"
+          echo "macos_amd64_sha=$MACOS_AMD64_SHA" >> "$GITHUB_OUTPUT"
+          echo "linux_arm64_sha=$LINUX_ARM64_SHA" >> "$GITHUB_OUTPUT"
+          echo "linux_amd64_sha=$LINUX_AMD64_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Update Homebrew formula
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          FORMULA_FILE="Formula/cs-mcp.rb"
+
+          sed -i "s/version \".*\"/version \"${VERSION}\"/" "$FORMULA_FILE"
+          sed -i "/cs-mcp-macos-aarch64\.zip/,/sha256/s/sha256 \"[a-f0-9]\{64\}\"/sha256 \"${{ steps.checksums.outputs.macos_arm64_sha }}\"/" "$FORMULA_FILE"
+          sed -i "/cs-mcp-macos-amd64\.zip/,/sha256/s/sha256 \"[a-f0-9]\{64\}\"/sha256 \"${{ steps.checksums.outputs.macos_amd64_sha }}\"/" "$FORMULA_FILE"
+          sed -i "/cs-mcp-linux-aarch64\.zip/,/sha256/s/sha256 \"[a-f0-9]\{64\}\"/sha256 \"${{ steps.checksums.outputs.linux_arm64_sha }}\"/" "$FORMULA_FILE"
+          sed -i "/cs-mcp-linux-amd64\.zip/,/sha256/s/sha256 \"[a-f0-9]\{64\}\"/sha256 \"${{ steps.checksums.outputs.linux_amd64_sha }}\"/" "$FORMULA_FILE"
+          cat "$FORMULA_FILE"
+
+      # --- Claude Code plugin -------------------------------------------------
+
+      - name: Update version in manifest and plugin files
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          python3 - <<PY
+          import json
+          from pathlib import Path
+
+          version = "$VERSION"
+          for path in [
+            Path("manifest.json"),
+            Path("claude-code-plugin/.claude-plugin/plugin.json"),
+          ]:
+            if path.exists():
+              data = json.loads(path.read_text())
+              data["version"] = version
+              path.write_text(json.dumps(data, indent=2) + "\n")
+              print(f"Updated {path} to {version}")
+          PY
+
+      - name: Sync skills to Claude Code plugin
+        run: |
+          set -euo pipefail
+          rm -rf claude-code-plugin/skills
+          cp -r skills claude-code-plugin/skills
+          echo "Synced skills/ to claude-code-plugin/skills/"
+
+      - name: Update skills table in README
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          rows = ["| Skill | Description |", "|-------|-------------|"]
+          for skill_dir in sorted(Path("skills").iterdir()):
+              skill_file = skill_dir / "SKILL.md"
+              if not skill_file.is_file():
+                  continue
+              name = skill_dir.name
+              text = skill_file.read_text()
+              match = re.search(r"^description:\s*(.+)$", text, re.MULTILINE)
+              desc = match.group(1).strip() if match else ""
+              rows.append(f"| `/codescene:{name}` | {desc} |")
+
+          table = "\n".join(rows) + "\n"
+          readme = Path("claude-code-plugin/README.md")
+          content = readme.read_text()
+          content = re.sub(
+              r"<!-- SKILLS-TABLE:START -->\n.*?<!-- SKILLS-TABLE:END -->",
+              f"<!-- SKILLS-TABLE:START -->\n{table}<!-- SKILLS-TABLE:END -->",
+              content,
+              flags=re.DOTALL,
+          )
+          readme.write_text(content)
+          print("Updated skills table in README")
+          PY
+
+      # --- Single commit to main ---------------------------------------------
+
+      - name: Commit and push to main
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet; then
+            echo "No packaging metadata changes to commit."
+            exit 0
+          fi
+
+          git add Formula/cs-mcp.rb manifest.json \
+            claude-code-plugin/.claude-plugin/plugin.json \
+            claude-code-plugin/skills claude-code-plugin/README.md
+          git commit -m "chore: update packaging metadata to ${VERSION}"
+
+          # Guard against a concurrent push landing between checkout and push.
+          git pull --rebase origin main
+          git push origin main
