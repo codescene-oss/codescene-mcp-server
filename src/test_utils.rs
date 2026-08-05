@@ -477,6 +477,13 @@ mod tests {
         assert!(matches!(action, CliAction::PrintCliVersion));
     }
 
+    #[test]
+    fn parse_cli_args_supports_auth() {
+        let args = vec!["auth".to_string()];
+        let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
+        assert!(matches!(action, CliAction::Auth));
+    }
+
     #[tokio::test]
     async fn fetch_cli_version_returns_cli_output() {
         let runner = MockCliRunner::with_ok("cs version 1.5.0\n");

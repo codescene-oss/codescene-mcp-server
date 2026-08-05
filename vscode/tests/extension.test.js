@@ -383,3 +383,220 @@ describe('configuration change watcher', () => {
         assert.equal(fired, false);
     });
 });
+
+describe('first-run prompt', () => {
+    beforeEach(() => { reset(); });
+
+    it('shows welcome message on first run', async () => {
+        state.infoMessageResult = 'Skip';
+        const ctx = makeContext({ firstRun: true });
+        extension.activate(ctx);
+
+        // Allow the async showInformationMessage to resolve
+        await new Promise(r => setTimeout(r, 10));
+
+        const welcome = state.shownInfoMessages.find(m => m.message.includes('Welcome'));
+        assert.ok(welcome, 'expected welcome message');
+    });
+
+    it('does not show welcome message on subsequent runs', () => {
+        const ctx = makeContext({ firstRun: false });
+        extension.activate(ctx);
+
+        const welcome = state.shownInfoMessages.find(m => m.message.includes('Welcome'));
+        assert.equal(welcome, undefined);
+    });
+
+    it('triggers sign-in when user clicks Sign In', async () => {
+        state.infoMessageResult = 'Sign In to CodeScene';
+        // inputBoxResult = undefined simulates cancellation in the sign-in flow
+        state.inputBoxResult = undefined;
+        const ctx = makeContext({ firstRun: true });
+        extension.activate(ctx);
+
+        await new Promise(r => setTimeout(r, 10));
+
+        // The sign-in flow should have prompted for on-prem URL
+        const inputBox = state.shownInputBoxes.find(i =>
+            i.options.prompt?.includes('CodeScene instance URL')
+        );
+        assert.ok(inputBox, 'expected on-prem URL prompt from sign-in flow');
+    });
+});
+
+describe('codescene.signIn command', () => {
+    beforeEach(() => { reset(); });
+    afterEach(() => {
+        if (existsSync(FAKE_EXT_PATH)) {
+            rmSync(FAKE_EXT_PATH, { recursive: true, force: true });
+        }
+    });
+
+    function setupBinary(ctx) {
+        const binDir = join(ctx.extensionPath, 'bin');
+        mkdirSync(binDir, { recursive: true });
+        const binaryName = process.platform === 'darwin' && process.arch === 'arm64'
+            ? 'cs-mcp-macos-aarch64'
+            : process.platform === 'linux' ? 'cs-mcp-linux-amd64' : 'cs-mcp-windows-amd64.exe';
+        writeFileSync(join(binDir, binaryName), '#!/bin/sh\necho {}');
+    }
+
+    it('prompts for on-prem URL when not configured', async () => {
+        state.inputBoxResult = '';
+        state.execFileResult = { error: null, stdout: '{"status":"signed_in"}', stderr: '' };
+        const ctx = makeContext();
+        setupBinary(ctx);
+
+        extension.activate(ctx);
+        const handler = findCommand('codescene.signIn');
+        await handler();
+
+        const inputBox = state.shownInputBoxes.find(i =>
+            i.options.prompt?.includes('CodeScene instance URL')
+        );
+        assert.ok(inputBox, 'expected on-prem URL prompt');
+    });
+
+    it('does nothing when user cancels on-prem URL prompt', async () => {
+        state.inputBoxResult = undefined;
+        const ctx = makeContext();
+        extension.activate(ctx);
+
+        const handler = findCommand('codescene.signIn');
+        await handler();
+
+        assert.equal(state.shownErrors.length, 0);
+        assert.equal(state.execFileCalls.length, 0);
+    });
+
+    it('skips on-prem URL prompt when already configured', async () => {
+        state.configValues['onpremUrl'] = 'https://codescene.myco.com';
+        state.execFileResult = { error: null, stdout: '{"status":"signed_in"}', stderr: '' };
+        const ctx = makeContext();
+        setupBinary(ctx);
+
+        extension.activate(ctx);
+        const handler = findCommand('codescene.signIn');
+        await handler();
+
+        const inputBox = state.shownInputBoxes.find(i =>
+            i.options.prompt?.includes('CodeScene instance URL')
+        );
+        assert.equal(inputBox, undefined);
+    });
+
+    it('shows error when binary is not available', async () => {
+        state.inputBoxResult = '';
+        const ctx = makeContext({ extensionPath: '/nonexistent' });
+        extension.activate(ctx);
+
+        const handler = findCommand('codescene.signIn');
+        await handler();
+
+        const errorMsg = state.shownErrors.find(m => m.message.includes('Binary not available'));
+        assert.ok(errorMsg, 'expected binary not available error');
+    });
+
+    it('shows success message on signed_in result', async () => {
+        state.inputBoxResult = '';
+        state.execFileResult = { error: null, stdout: '{"status":"signed_in"}', stderr: '' };
+        const ctx = makeContext();
+        setupBinary(ctx);
+
+        extension.activate(ctx);
+        const handler = findCommand('codescene.signIn');
+        await handler();
+
+        const msg = state.shownInfoMessages.find(m => m.message.includes('Successfully signed in'));
+        assert.ok(msg, 'expected success message');
+    });
+
+    it('shows success message on already_signed_in result', async () => {
+        state.inputBoxResult = '';
+        state.execFileResult = { error: null, stdout: '{"status":"already_signed_in"}', stderr: '' };
+        const ctx = makeContext();
+        setupBinary(ctx);
+
+        extension.activate(ctx);
+        const handler = findCommand('codescene.signIn');
+        await handler();
+
+        const msg = state.shownInfoMessages.find(m => m.message.includes('Successfully signed in'));
+        assert.ok(msg, 'expected success message');
+    });
+
+    it('shows warning on incomplete login', async () => {
+        state.inputBoxResult = '';
+        state.execFileResult = { error: null, stdout: '{"status":"expired","error":"session expired"}', stderr: '' };
+        const ctx = makeContext();
+        setupBinary(ctx);
+
+        extension.activate(ctx);
+        const handler = findCommand('codescene.signIn');
+        await handler();
+
+        const msg = state.shownWarnings.find(m => m.message.includes('Sign in incomplete'));
+        assert.ok(msg, 'expected warning message');
+    });
+
+    it('shows error message on execFile failure', async () => {
+        state.inputBoxResult = '';
+        state.execFileResult = { error: new Error('spawn failed'), stdout: '', stderr: 'timeout' };
+        const ctx = makeContext();
+        setupBinary(ctx);
+
+        extension.activate(ctx);
+        const handler = findCommand('codescene.signIn');
+        await handler();
+
+        const msg = state.shownErrors.find(m => m.message.includes('Sign in failed'));
+        assert.ok(msg, 'expected error message');
+        assert.ok(msg.message.includes('timeout'), 'expected stderr in message');
+    });
+
+    it('handles unparseable stdout gracefully', async () => {
+        state.inputBoxResult = '';
+        state.execFileResult = { error: null, stdout: 'not json', stderr: '' };
+        const ctx = makeContext();
+        setupBinary(ctx);
+
+        extension.activate(ctx);
+        const handler = findCommand('codescene.signIn');
+        await handler();
+
+        const msg = state.shownInfoMessages.find(m => m.message.includes('Sign in completed'));
+        assert.ok(msg, 'expected fallback success message');
+    });
+
+    it('saves on-prem URL when user provides one', async () => {
+        state.inputBoxResult = 'https://cs.internal.io';
+        state.execFileResult = { error: null, stdout: '{"status":"signed_in"}', stderr: '' };
+        const ctx = makeContext();
+        setupBinary(ctx);
+
+        extension.activate(ctx);
+        const handler = findCommand('codescene.signIn');
+        await handler();
+
+        const update = state.configUpdates.find(u => u.key === 'onpremUrl');
+        assert.ok(update, 'expected onpremUrl config update');
+        assert.equal(update.value, 'https://cs.internal.io');
+    });
+
+    it('passes account ID to auth subprocess environment', async () => {
+        state.configValues['onpremUrl'] = 'https://cs.co';
+        state.configValues['accountId'] = '42';
+        state.execFileResult = { error: null, stdout: '{"status":"signed_in"}', stderr: '' };
+        const ctx = makeContext();
+        setupBinary(ctx);
+
+        extension.activate(ctx);
+        const handler = findCommand('codescene.signIn');
+        await handler();
+
+        assert.equal(state.execFileCalls.length, 1);
+        const { options } = state.execFileCalls[0];
+        assert.equal(options.env['CS_ONPREM_URL'], 'https://cs.co');
+        assert.equal(options.env['CS_ACCOUNT_ID'], '42');
+    });
+});

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { BINARY_MAP, buildEnvironment, getBinaryName } from '../out/config.js';
+import { BINARY_MAP, buildEnvironment, getBinaryName, optionalIdString } from '../out/config.js';
 
 /** Helper to create a mock config object. */
 function mockConfig(values = {}) {
@@ -140,5 +140,27 @@ describe('buildEnvironment', () => {
         assert.equal(env['CS_ENABLED_TOOLS'], 'code_health_score');
         assert.equal(env['CS_DISABLE_VERSION_CHECK'], '1');
         assert.equal(env['REQUESTS_CA_BUNDLE'], '/certs/ca.pem');
+    });
+});
+
+describe('optionalIdString', () => {
+    it('returns empty string for null', () => {
+        assert.equal(optionalIdString(null), '');
+    });
+
+    it('returns empty string for undefined', () => {
+        assert.equal(optionalIdString(undefined), '');
+    });
+
+    it('returns empty string for empty string', () => {
+        assert.equal(optionalIdString(''), '');
+    });
+
+    it('trims and returns string value', () => {
+        assert.equal(optionalIdString('  42  '), '42');
+    });
+
+    it('converts number to string', () => {
+        assert.equal(optionalIdString(123), '123');
     });
 });

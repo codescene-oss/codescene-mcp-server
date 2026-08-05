@@ -29,6 +29,7 @@ const state = {
     statusBarItems: [],               // [{ text, tooltip, command, show(), dispose() }]
     shownWarnings: [],                // [{ message, items, result }]
     shownInfoMessages: [],            // [{ message }]
+    shownErrors: [],                  // [{ message }]
     shownInputBoxes: [],              // [{ options, result }]
     configUpdates: [],                // [{ key, value, target }]
     onDidChangeConfigListeners: [],   // [(e) => void]
@@ -47,6 +48,7 @@ function reset() {
     state.statusBarItems = [];
     state.shownWarnings = [];
     state.shownInfoMessages = [];
+    state.shownErrors = [];
     state.shownInputBoxes = [];
     state.configUpdates = [];
     state.onDidChangeConfigListeners = [];
@@ -54,6 +56,8 @@ function reset() {
     state.warningResult = undefined;
     state.infoMessageResult = undefined;
     state.inputBoxResult = undefined;
+    state.execFileResult = null;
+    state.execFileCalls = [];
 }
 
 // ── Mock vscode namespace ──────────────────────────────────────────────────
@@ -100,7 +104,6 @@ const vscode = {
             return Promise.resolve(state.infoMessageResult);
         },
         showErrorMessage(message) {
-            state.shownErrors = state.shownErrors || [];
             state.shownErrors.push({ message });
             return Promise.resolve();
         },
@@ -170,6 +173,26 @@ require.cache['vscode'] = {
     filename: 'vscode',
     loaded: true,
     exports: vscode,
+};
+
+// ── Mock child_process.execFile to avoid spawning real processes ────────────
+
+const childProcess = require('child_process');
+const originalExecFile = childProcess.execFile;
+
+// Tests can set state.execFileResult = { error, stdout, stderr }
+state.execFileResult = null;
+state.execFileCalls = [];
+
+childProcess.execFile = function (file, args, options, callback) {
+    state.execFileCalls.push({ file, args, options });
+    if (state.execFileResult) {
+        const { error, stdout, stderr } = state.execFileResult;
+        if (callback) callback(error || null, stdout || '', stderr || '');
+    } else {
+        // Default: call original (tests that set a binary will need this)
+        return originalExecFile.call(childProcess, file, args, options, callback);
+    }
 };
 
 // ── Expose for tests ───────────────────────────────────────────────────────
