@@ -100,6 +100,10 @@
     },
     "commands": [
       {
+        "command": "codescene.signIn",
+        "title": "CodeScene: Sign In"
+      },
+      {
         "command": "codescene.configure",
         "title": "CodeScene: Configure Access Token (optional / CI)"
       },

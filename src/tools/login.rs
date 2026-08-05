@@ -54,13 +54,29 @@ pub(crate) async fn handle(
     server: &CodeSceneServer,
     _params: LoginParam,
 ) -> Result<CallToolResult, ErrorData> {
-    if auth::configured_credential().is_some() {
-        tracing::info!("skipping OAuth login because CS_ACCESS_TOKEN is already configured");
+    if let Some(cred) = auth::configured_credential() {
+        let token_preview = match &cred {
+            auth::AuthCredential::Configured { access_token, onprem_url } => {
+                let masked = if access_token.len() > 8 {
+                    format!("{}...{}", &access_token[..4], &access_token[access_token.len()-4..])
+                } else {
+                    "****".to_string()
+                };
+                format!(
+                    "token={}, onprem_url={:?}, source=env:CS_ACCESS_TOKEN",
+                    masked,
+                    onprem_url.as_deref().unwrap_or("(none)")
+                )
+            }
+            _ => "unknown".to_string(),
+        };
+        tracing::info!(details = %token_preview, "skipping OAuth login because CS_ACCESS_TOKEN is already configured");
         server.track("auth-login", json!({"result": "already_configured"}));
-        return Ok(CallToolResult::success(vec![Content::text(
-            "CS_ACCESS_TOKEN is already configured. OAuth login is not needed.\n\
-             To use OAuth instead, remove CS_ACCESS_TOKEN from your MCP client configuration.",
-        )]));
+        return Ok(CallToolResult::success(vec![Content::text(format!(
+            "CS_ACCESS_TOKEN is already configured ({token_preview}). OAuth login is not needed.\n\
+             To use OAuth instead, remove CS_ACCESS_TOKEN from your MCP client configuration \
+             or unset it from your shell environment.",
+        ))]));
     }
 
     if let Some(result) = try_existing_session(server).await {

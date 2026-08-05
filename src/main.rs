@@ -85,6 +85,7 @@ pub(crate) enum CliAction {
     PrintHelp,
     PrintVersion(String),
     PrintCliVersion,
+    Auth,
 }
 
 pub(crate) fn display_version(raw_version: &str) -> &str {
@@ -92,7 +93,7 @@ pub(crate) fn display_version(raw_version: &str) -> &str {
 }
 
 pub(crate) fn help_text() -> &'static str {
-    "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help       Show this help message and exit\n  -v, --version    Show version and exit\n  --cli-version    Show embedded CLI version and exit"
+    "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help       Show this help message and exit\n  -v, --version    Show version and exit\n  --cli-version    Show embedded CLI version and exit\n  auth             Sign in to CodeScene via OAuth (opens browser)\n\nEnvironment:\n  CS_ONPREM_URL    Base URL of self-hosted CodeScene instance (for auth subcommand)"
 }
 
 async fn ensure_oauth_client_configured() {
@@ -117,6 +118,7 @@ pub(crate) fn parse_cli_args(args: &[String], raw_version: &str) -> Result<CliAc
                 display_version(raw_version).to_string(),
             )),
             "--cli-version" => Ok(CliAction::PrintCliVersion),
+            "auth" => Ok(CliAction::Auth),
             other => Err(format!("Unknown argument: {other}")),
         };
     }
@@ -126,6 +128,45 @@ pub(crate) fn parse_cli_args(args: &[String], raw_version: &str) -> Result<CliAc
 
 pub(crate) async fn fetch_cli_version(cli_runner: &dyn cli::CliRunner) -> anyhow::Result<String> {
     Ok(cli_runner.run(&["version"], None).await?)
+}
+
+/// Run the OAuth login flow as a standalone CLI command.
+/// Reads CS_ONPREM_URL from environment if set, then delegates to the CLI auth login.
+/// Outputs JSON with the result to stdout for consumption by the VS Code extension.
+async fn run_auth_flow() -> anyhow::Result<()> {
+    config::snapshot_client_env_vars();
+    ensure_oauth_client_configured().await;
+    let config_data = config::load().unwrap_or_default();
+    config::apply_to_env(&config_data);
+
+    let cli_runner = cli::ProductionCliRunner;
+    let auth_manager = AuthManager::new();
+
+    // Check if already signed in
+    if let Ok(Some(_)) = auth_manager.current_token(&cli_runner).await {
+        let result = serde_json::json!({"status": "already_signed_in"});
+        println!("{}", result);
+        return Ok(());
+    }
+
+    // Run interactive login
+    match auth_manager.login(&cli_runner).await {
+        Ok(resp) if resp.is_signed_in() => {
+            let result = serde_json::json!({"status": "signed_in"});
+            println!("{}", result);
+            Ok(())
+        }
+        Ok(resp) => {
+            let result = serde_json::json!({"status": resp.status, "error": "Login did not complete"});
+            println!("{}", result);
+            anyhow::bail!("Login did not complete");
+        }
+        Err(e) => {
+            let result = serde_json::json!({"status": "error", "error": e});
+            println!("{}", result);
+            anyhow::bail!("Login failed: {e}");
+        }
+    }
 }
 
 pub(crate) fn inlined_schema_for<T: JsonSchema + 'static>(
@@ -682,6 +723,10 @@ async fn main() -> anyhow::Result<()> {
         Ok(CliAction::PrintCliVersion) => {
             let output = fetch_cli_version(&cli::ProductionCliRunner).await?;
             print!("{output}");
+            return Ok(());
+        }
+        Ok(CliAction::Auth) => {
+            run_auth_flow().await?;
             return Ok(());
         }
         Err(message) => {

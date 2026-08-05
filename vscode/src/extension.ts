@@ -1,9 +1,12 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { execFile } from 'child_process';
 import { buildEnvironment, getBinaryName, optionalIdString } from './config';
 
 let statusBarItem: vscode.StatusBarItem;
+
+const FIRST_RUN_KEY = 'codescene.firstRunCompleted';
 
 export function activate(context: vscode.ExtensionContext) {
     const didChangeEmitter = new vscode.EventEmitter<void>();
@@ -50,16 +53,20 @@ export function activate(context: vscode.ExtensionContext) {
                     ),
                 ];
             },
-            // OAuth-first: do not gate on a PAT. Agents call the `login` tool.
             resolveMcpServerDefinition: async (server: vscode.McpServerDefinition) => server,
         })
+    );
+
+    // Command: Sign in via OAuth (opens browser)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('codescene.signIn', () => runSignIn(context, didChangeEmitter))
     );
 
     // Command: Configure access token (optional PAT / CI fallback)
     context.subscriptions.push(
         vscode.commands.registerCommand('codescene.configure', async () => {
             const token = await vscode.window.showInputBox({
-                prompt: 'Enter a CodeScene access token (optional — prefer OAuth via agent login)',
+                prompt: 'Enter a CodeScene access token (optional — prefer OAuth via Sign In)',
                 password: true,
                 placeHolder: 'Paste PAT or standalone token (leave empty to clear)...',
                 ignoreFocusOut: true,
@@ -71,9 +78,9 @@ export function activate(context: vscode.ExtensionContext) {
                 vscode.window.showInformationMessage(
                     token
                         ? 'CodeScene: Access token saved. Note: a PAT blocks OAuth login until cleared.'
-                        : 'CodeScene: Access token cleared. Ask the agent to log in with OAuth.',
+                        : 'CodeScene: Access token cleared. Use "CodeScene: Sign In" to authenticate.',
                 );
-                didChangeEmitter.fire(); // Trigger MCP server restart
+                didChangeEmitter.fire();
             }
         })
     );
@@ -97,7 +104,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             const items: string[] = [
                 `Status: ${enabled ? 'Enabled' : 'Disabled'}`,
-                `Auth: ${token ? 'PAT configured (blocks OAuth)' : 'OAuth via agent login'}`,
+                `Auth: ${token ? 'PAT configured' : 'OAuth'}`,
                 `Account ID: ${accountIdStr || 'Not set'}`,
                 `Binary: ${binaryPath ? 'Found' : 'Not available'}`,
                 `Platform: ${process.platform}/${process.arch}`,
@@ -119,6 +126,11 @@ export function activate(context: vscode.ExtensionContext) {
             }
         })
     );
+
+    // First-run prompt
+    if (!context.globalState.get<boolean>(FIRST_RUN_KEY)) {
+        showFirstRunPrompt(context, didChangeEmitter);
+    }
 }
 
 export function deactivate() {
@@ -128,8 +140,134 @@ export function deactivate() {
 }
 
 /**
+ * Shows a first-run welcome prompt offering to sign in.
+ */
+async function showFirstRunPrompt(
+    context: vscode.ExtensionContext,
+    didChangeEmitter: vscode.EventEmitter<void>,
+) {
+    const signIn = 'Sign In to CodeScene';
+    const skip = 'Skip';
+
+    const choice = await vscode.window.showInformationMessage(
+        'Welcome to CodeScene CodeHealth MCP! Sign in to enable full Code Health analysis with your CodeScene account.',
+        signIn,
+        skip,
+    );
+
+    await context.globalState.update(FIRST_RUN_KEY, true);
+
+    if (choice === signIn) {
+        await runSignIn(context, didChangeEmitter);
+    }
+}
+
+/**
+ * Resolves the on-prem URL, prompting the user if not already configured.
+ * Returns undefined if the user cancels, or the URL string (empty for cloud).
+ */
+async function resolveOnpremUrl(config: vscode.WorkspaceConfiguration): Promise<string | undefined> {
+    const existing = config.get<string>('onpremUrl', '');
+    if (existing) {
+        return existing;
+    }
+
+    const input = await vscode.window.showInputBox({
+        prompt: 'CodeScene instance URL (leave empty for CodeScene Cloud)',
+        placeHolder: 'https://codescene.mycompany.com',
+        ignoreFocusOut: true,
+    });
+
+    if (input === undefined) {
+        return undefined; // User cancelled
+    }
+
+    if (input) {
+        await config.update('onpremUrl', input, vscode.ConfigurationTarget.Global);
+    }
+    return input;
+}
+
+/**
+ * Builds the environment for the auth subprocess.
+ */
+function buildAuthEnv(onpremUrl: string, accountId: string): Record<string, string> {
+    const env: Record<string, string> = { ...process.env as Record<string, string> };
+    if (onpremUrl) {
+        env['CS_ONPREM_URL'] = onpremUrl;
+    }
+    if (accountId) {
+        env['CS_ACCOUNT_ID'] = accountId;
+    }
+    return env;
+}
+
+/**
+ * Handles the JSON result from the auth subprocess.
+ */
+function handleAuthResult(
+    stdout: string,
+    didChangeEmitter: vscode.EventEmitter<void>,
+): void {
+    const result = JSON.parse(stdout.trim());
+    if (result.status === 'signed_in' || result.status === 'already_signed_in') {
+        vscode.window.showInformationMessage('CodeScene: Successfully signed in!');
+        didChangeEmitter.fire();
+    } else {
+        vscode.window.showWarningMessage(`CodeScene: Sign in incomplete — ${result.error || result.status}`);
+    }
+}
+
+/**
+ * Runs the OAuth sign-in flow by spawning `cs-mcp auth`.
+ */
+async function runSignIn(
+    context: vscode.ExtensionContext,
+    didChangeEmitter: vscode.EventEmitter<void>,
+) {
+    const config = vscode.workspace.getConfiguration('codescene');
+    const onpremUrl = await resolveOnpremUrl(config);
+    if (onpremUrl === undefined) {
+        return;
+    }
+
+    const binaryPath = getBinaryPath(context);
+    if (!binaryPath) {
+        vscode.window.showErrorMessage('CodeScene: Binary not available for this platform.');
+        return;
+    }
+
+    const accountId = optionalIdString(config.get<string>('accountId', ''));
+    const env = buildAuthEnv(onpremUrl, accountId);
+
+    await vscode.window.withProgress(
+        {
+            location: vscode.ProgressLocation.Notification,
+            title: 'CodeScene: Signing in...',
+            cancellable: false,
+        },
+        () => new Promise<void>((resolve) => {
+            execFile(binaryPath, ['auth'], { env }, (error, stdout, stderr) => {
+                if (error) {
+                    vscode.window.showErrorMessage(
+                        `CodeScene: Sign in failed — ${stderr?.trim() || stdout?.trim() || error.message}`,
+                    );
+                } else {
+                    try {
+                        handleAuthResult(stdout, didChangeEmitter);
+                    } catch {
+                        vscode.window.showInformationMessage('CodeScene: Sign in completed.');
+                        didChangeEmitter.fire();
+                    }
+                }
+                resolve();
+            });
+        }),
+    );
+}
+
+/**
  * Resolves the path to the bundled cs-mcp binary for the current platform.
- * The binary is expected to be in the extension's `bin/` directory.
  */
 function getBinaryPath(context: vscode.ExtensionContext): string | undefined {
     const key = `${process.platform}-${process.arch}`;
