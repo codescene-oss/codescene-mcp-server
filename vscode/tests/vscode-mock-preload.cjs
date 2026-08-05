@@ -36,6 +36,7 @@ const state = {
 
     // Pre-configured results for UI interactions
     warningResult: undefined,         // return value of showWarningMessage
+    infoMessageResult: undefined,     // return value of showInformationMessage
     inputBoxResult: undefined,        // return value of showInputBox
 };
 
@@ -51,6 +52,7 @@ function reset() {
     state.onDidChangeConfigListeners = [];
     state.executedCommands = [];
     state.warningResult = undefined;
+    state.infoMessageResult = undefined;
     state.inputBoxResult = undefined;
 }
 
@@ -58,6 +60,7 @@ function reset() {
 
 const StatusBarAlignment = { Left: 1, Right: 2 };
 const ConfigurationTarget = { Global: 1, Workspace: 2, WorkspaceFolder: 3 };
+const ProgressLocation = { Notification: 15, SourceControl: 1, Window: 10 };
 
 class McpStdioServerDefinition {
     constructor(label, command, args, env, version) {
@@ -72,6 +75,7 @@ class McpStdioServerDefinition {
 const vscode = {
     StatusBarAlignment,
     ConfigurationTarget,
+    ProgressLocation,
     EventEmitter: function () { return createEventEmitter(); },
     McpStdioServerDefinition,
 
@@ -91,12 +95,21 @@ const vscode = {
             state.shownWarnings.push({ message, items });
             return Promise.resolve(state.warningResult);
         },
-        showInformationMessage(message) {
-            state.shownInfoMessages.push({ message });
+        showInformationMessage(message, ...items) {
+            state.shownInfoMessages.push({ message, items });
+            return Promise.resolve(state.infoMessageResult);
+        },
+        showErrorMessage(message) {
+            state.shownErrors = state.shownErrors || [];
+            state.shownErrors.push({ message });
+            return Promise.resolve();
         },
         showInputBox(options) {
             state.shownInputBoxes.push({ options });
             return Promise.resolve(state.inputBoxResult);
+        },
+        withProgress(_options, task) {
+            return task({ report() {} });
         },
     },
 

@@ -28,11 +28,16 @@ const extension = require('../out/extension.js');
 
 const FAKE_EXT_PATH = join(__dirname, '..', '.test-ext');
 
-function makeContext({ extensionPath, version } = {}) {
+function makeContext({ extensionPath, version, firstRun } = {}) {
+    const globalStateStore = { 'codescene.firstRunCompleted': firstRun === true ? undefined : true };
     return {
         extensionPath: extensionPath ?? FAKE_EXT_PATH,
         extension: { packageJSON: { version: version ?? '0.1.0' } },
         subscriptions: [],
+        globalState: {
+            get(key) { return globalStateStore[key]; },
+            update(key, value) { globalStateStore[key] = value; return Promise.resolve(); },
+        },
     };
 }
 
@@ -67,7 +72,7 @@ describe('activate', () => {
         extension.activate(ctx);
 
         // status bar + provider + 3 commands + config watcher = 6
-        assert.equal(ctx.subscriptions.length, 6);
+        assert.equal(ctx.subscriptions.length, 7);
     });
 
     it('registers MCP server definition provider with id codesceneMcp', () => {
@@ -78,10 +83,11 @@ describe('activate', () => {
         assert.equal(state.registeredProviders[0].id, 'codesceneMcp');
     });
 
-    it('registers three commands', () => {
+    it('registers four commands', () => {
         const ctx = makeContext();
         extension.activate(ctx);
 
+        assert.ok(state.registeredCommands['codescene.signIn']);
         assert.ok(state.registeredCommands['codescene.configure']);
         assert.ok(state.registeredCommands['codescene.restart']);
         assert.ok(state.registeredCommands['codescene.showStatus']);
@@ -282,7 +288,7 @@ describe('codescene.showStatus command', () => {
         assert.equal(state.shownInfoMessages.length, 1);
         const msg = state.shownInfoMessages[0].message;
         assert.ok(msg.includes('Status: Enabled'));
-        assert.ok(msg.includes('Auth: OAuth via agent login'));
+        assert.ok(msg.includes('Auth: OAuth'));
         assert.ok(msg.includes('Account ID: Not set'));
         assert.ok(msg.includes('Binary: Not available'));
         assert.ok(msg.includes('Platform:'));
@@ -299,7 +305,7 @@ describe('codescene.showStatus command', () => {
         findCommand('codescene.showStatus')();
 
         const msg = state.shownInfoMessages[0].message;
-        assert.ok(msg.includes('Auth: PAT configured (blocks OAuth)'));
+        assert.ok(msg.includes('Auth: PAT configured'));
         assert.ok(msg.includes('Account ID: 42'));
     });
 
