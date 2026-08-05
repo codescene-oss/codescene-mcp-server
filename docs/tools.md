@@ -128,7 +128,7 @@ Write a CodeScene MCP Server configuration value. Persists the value to the conf
 
 **Availability:** All Users
 
-Check if the CodeScene MCP Server is correctly installed and configured. Use to diagnose setup issues such as missing tokens, unavailable git, or environment misconfigurations. Returns PASS/FAIL status for Git, Git Repository, Access Token, and Runtime Environment checks.
+Check if the CodeScene MCP Server is correctly installed and configured. Use to diagnose setup issues such as missing authentication, unavailable git, or environment misconfigurations. Returns PASS/FAIL status for Git, Git Repository, Authentication (OAuth via `login` or optional PAT), and Runtime Environment checks.
 
 ### `list_skills`
 
