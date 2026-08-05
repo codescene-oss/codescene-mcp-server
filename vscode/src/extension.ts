@@ -92,7 +92,7 @@ export function activate(context: vscode.ExtensionContext) {
             const config = vscode.workspace.getConfiguration('codescene');
             const enabled = config.get<boolean>('enabled', true);
             const token = config.get<string>('accessToken', '');
-            const accountIdStr = optionalIdString(config.get<string | number>('accountId', ''));
+            const accountIdStr = optionalIdString(config.get<string>('accountId', ''));
             const binaryPath = getBinaryPath(context);
 
             const items: string[] = [

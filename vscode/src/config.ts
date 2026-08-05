@@ -36,7 +36,7 @@ export function buildEnvironment(config: ConfigLike): Record<string, string> {
 
     setIfNonEmpty(env, 'CS_ACCESS_TOKEN', config.get<string>('accessToken', ''));
     setIfNonEmpty(env, 'CS_ONPREM_URL', config.get<string>('onpremUrl', ''));
-    setIfNonEmpty(env, 'CS_ACCOUNT_ID', optionalIdString(config.get<string | number>('accountId', '')));
+    setIfNonEmpty(env, 'CS_ACCOUNT_ID', optionalIdString(config.get<string>('accountId', '')));
     setIfNonEmpty(env, 'CS_DEFAULT_PROJECT_ID', config.get<string>('defaultProjectId', ''));
     setIfNonEmpty(env, 'CS_ENABLED_TOOLS', config.get<string>('enabledTools', ''));
     setIfNonEmpty(env, 'REQUESTS_CA_BUNDLE', config.get<string>('caBundlePath', ''));

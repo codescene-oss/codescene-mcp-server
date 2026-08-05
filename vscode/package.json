@@ -55,7 +55,7 @@
           "order": 1
         },
         "codescene.accountId": {
-          "type": ["string", "number"],
+          "type": "string",
           "default": "",
           "markdownDescription": "Optional CodeScene Cloud account/tenant ID (positive integer). Only needed if you belong to multiple Cloud accounts and want to pin OAuth login to one of them. Set **before** logging in. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#account_id)",
           "order": 2
