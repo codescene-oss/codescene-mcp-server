@@ -4,19 +4,21 @@ The CodeScene MCP Server supports two authentication methods.
 
 ## Recommended: OAuth Login
 
-For interactive desktop use, no token needs to be manually obtained or configured. Simply ask your AI assistant:
+For interactive desktop use, no token needs to be manually obtained or configured. Start the OAuth flow in any of these ways:
 
-> "Log me in to CodeScene"
+1. **MCP `login` prompt (slash command)** — In clients that support MCP prompts (for example VS Code Copilot Chat), invoke the `login` prompt from the chat slash-command / prompt picker. This inserts a short instruction that makes the assistant call the `login` tool.
+2. **Ask the assistant** — Say *"Log me in to CodeScene"* so the agent calls the `login` tool.
+3. **VS Code command** — Run **CodeScene: Sign In** from the Command Palette (VS Code extension only).
 
-The assistant will call the `login` tool, which opens your browser to complete the OAuth flow. Once done, the MCP server is authenticated for the session.
+The `login` tool opens your browser to complete the OAuth flow. Once done, the MCP server is authenticated for the session.
 
-**For CodeScene Cloud:** no extra configuration needed for single-account users — just call `login`.
+**For CodeScene Cloud:** no extra configuration needed for single-account users — just sign in.
 
 **Multi-account Cloud:** If you belong to more than one CodeScene Cloud account, set your account/tenant ID **before** logging in, and keep it set afterward (it selects the OAuth credential slot):
 
 > "Set my CodeScene account ID to 123"
 
-> "Log me in to CodeScene"
+Then sign in with the `login` prompt, by asking the assistant, or via **CodeScene: Sign In**.
 
 The value must be a positive integer (`CS_ACCOUNT_ID` / `account_id`). It does not apply to PAT auth or on-prem.
 
@@ -24,7 +26,7 @@ The value must be a positive integer (`CS_ACCOUNT_ID` / `account_id`). It does n
 
 > "Set my CodeScene on-prem URL to https://codescene.mycompany.com"
 
-> "Log me in to CodeScene"
+Then sign in with the `login` prompt, by asking the assistant, or via **CodeScene: Sign In**.
 
 ---
 

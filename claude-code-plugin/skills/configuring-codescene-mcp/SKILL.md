@@ -7,7 +7,7 @@ description: Use when the user wants to view, set, or troubleshoot CodeScene MCP
 
 ## Overview
 
-Use this skill when the task is to configure the CodeScene MCP Server after it has been installed. The MCP server exposes `login`, `get_config`, and `set_config` tools that let the AI assistant authenticate and manage configuration on the user's behalf.
+Use this skill when the task is to configure the CodeScene MCP Server after it has been installed. The MCP server exposes `login`, `get_config`, and `set_config` tools that let the AI assistant authenticate and manage configuration on the user's behalf. Clients that support MCP prompts also expose a `login` prompt (slash command) that instructs the assistant to call the `login` tool.
 
 ## When to Use
 
@@ -25,7 +25,7 @@ Do not use this skill for installing or registering the MCP server in an AI assi
 
 ## Quick Reference
 
-- `login`: Sign in with OAuth (opens browser). Preferred for interactive desktop use.
+- `login`: Sign in with OAuth (opens browser). Preferred for interactive desktop use. Also available as the `login` MCP prompt (slash command).
 - `get_config`: List all configuration options and their current values (sensitive values are masked).
 - `get_config` with a key: Read a single option by name.
 - `set_config`: Set a configuration value persistently.
@@ -56,7 +56,7 @@ Environment variables set by the MCP client always override values in the config
 
 1. Run `get_config` to see the current state of all options.
 2. For interactive auth: if `access_token` is set and the user wants OAuth, clear it first (`set_config` with empty value or ask them to remove `CS_ACCESS_TOKEN` from client env). For multi-account Cloud, ensure `account_id` is set before calling `login`.
-3. Call `login` for OAuth, or `set_config` for PAT / other options.
+3. Call `login` for OAuth (or have the user invoke the `login` MCP prompt), or `set_config` for PAT / other options.
 4. Run `get_config` with the relevant key to confirm the change took effect.
 5. If the user changed `access_token`, inform them that a server restart may be needed for tool registration changes to take effect.
 6. If `get_config` shows a value source of "client environment variable", explain that the env var in their editor's MCP configuration takes precedence and must be changed there instead.

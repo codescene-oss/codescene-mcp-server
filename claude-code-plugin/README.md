@@ -20,11 +20,10 @@ claude --plugin-dir ./claude-code-plugin
 
 ## Authentication
 
-**Recommended (interactive):** Ask Claude to log you in:
+**Recommended (interactive):** Sign in with OAuth — no token paste required:
 
-> Log me in to CodeScene
-
-This calls the `login` tool and opens your browser for OAuth. No token paste required.
+- Invoke the `login` MCP prompt (slash command) if your client exposes MCP prompts
+- Or ask Claude: *Log me in to CodeScene* (calls the `login` tool and opens your browser)
 
 **Multi-account Cloud:** If you belong to multiple CodeScene Cloud accounts, set your account/tenant ID first:
 

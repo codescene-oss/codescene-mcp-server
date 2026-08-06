@@ -110,7 +110,13 @@ Find the owner or owners of a specific path in a project. Use to identify likely
 
 ## Server Management
 
-These tools manage server configuration, installation verification, and skills.
+These tools manage authentication, server configuration, installation verification, and skills.
+
+### `login`
+
+**Availability:** All Users
+
+Sign in to CodeScene with OAuth. Opens a browser to complete the flow (waits up to two minutes). Prefer this for interactive desktop use. Not needed when `CS_ACCESS_TOKEN` is already set — a configured PAT blocks OAuth until cleared. Clients that support MCP prompts can start the same flow via the `login` prompt (slash command).
 
 ### `get_config`
 
@@ -166,10 +172,23 @@ Explains CodeScene's Code Health metric for assessing code quality and maintaina
 
 Describes how to build a business case for Code Health improvements. Covers empirical data on how healthy code lets you ship faster with fewer defects. Returns static documentation text with productivity and defect-risk implications. Does not compute project-specific forecasts.
 
+## Prompts
+
+MCP prompts are short chat templates clients can expose as slash commands. They instruct the assistant to call the matching tools.
+
+| Prompt | Description |
+|--------|-------------|
+| `login` | Sign in to CodeScene with OAuth (calls the `login` tool) |
+| `review_code_health` | Review Code Health for the current open file |
+| `plan_code_health_refactoring` | Plan a prioritized, low-risk Code Health refactoring |
+
+In VS Code Copilot Chat, invoke them from the slash-command / prompt picker (`mcp.<server>.<prompt>`).
+
 ## Summary
 
 | Tool | Availability |
 |------|-------------|
+| `login` | All Users |
 | `code_health_score` | All Users |
 | `code_health_review` | All Users |
 | `pre_commit_code_health_safeguard` | All Users |

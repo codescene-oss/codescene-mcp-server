@@ -75,7 +75,7 @@
         "codescene.accessToken": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional Personal Access Token or standalone license token. Prefer OAuth: ask the agent to log in. A saved PAT **blocks** OAuth until cleared. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#access_token)",
+          "markdownDescription": "Optional Personal Access Token or standalone license token. Prefer OAuth: use the `login` slash command, **CodeScene: Sign In**, or ask the agent to log in. A saved PAT **blocks** OAuth until cleared. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#access_token)",
           "order": 4
         },
         "codescene.enabledTools": {

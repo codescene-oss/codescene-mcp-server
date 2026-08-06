@@ -25,7 +25,7 @@ Do not use this skill for configuring tokens, URLs, or other server options. Use
 - Register the server in the AI assistant so it launches `cs-mcp`.
 - Copy the appropriate agent guidance file into the repository: `docs/AGENTS-full.md` for CodeScene Core users, or `docs/AGENTS-standalone.md` for standalone license users. For Amazon Q, copy `.amazonq/rules` instead.
 - Copy any relevant skills from the CodeScene MCP skills catalogue at `https://github.com/codescene-oss/codescene-mcp-server/tree/main/skills`.
-- After installation, authenticate with OAuth by asking the assistant to log in (`login` tool). Use a PAT only for CI/headless environments.
+- After installation, authenticate with OAuth via the `login` MCP prompt (slash command), by asking the assistant to log in (`login` tool), or with **CodeScene: Sign In** in the VS Code extension. Use a PAT only for CI/headless environments.
 
 ## Implementation
 
@@ -40,7 +40,7 @@ Do not use this skill for configuring tokens, URLs, or other server options. Use
    - For VS Code or GitHub Copilot, install the CodeScene CodeHealth MCP extension, or add a `codescene` server entry in `settings.json` / `.vscode/mcp.json`.
    - For Claude Code, install the plugin (`/plugin install codescene@codescene`) or add the MCP with `claude mcp add`.
 4. Authenticate:
-   - **Interactive (recommended):** Ask the assistant to log in to CodeScene (calls `login` and opens a browser). For multi-account Cloud users, set `account_id` first. For on-prem, set `onprem_url` first.
+   - **Interactive (recommended):** Use the `login` MCP prompt (slash command), ask the assistant to log in (calls `login` and opens a browser), or run **CodeScene: Sign In** in the VS Code extension. For multi-account Cloud users, set `account_id` first. For on-prem, set `onprem_url` first.
    - **CI / headless:** Set a Personal Access Token via `set_config` or `CS_ACCESS_TOKEN`. See the `configuring-codescene-mcp` skill.
 5. Copy the appropriate agent guidance file to the repository: `docs/AGENTS-full.md` for CodeScene Core users, or `docs/AGENTS-standalone.md` for standalone license users. Rename it to `AGENTS.md` in the target repository so the agent picks it up automatically.
 6. If the user is on Amazon Q, copy `.amazonq/rules` instead of the AGENTS file.

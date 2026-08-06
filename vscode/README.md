@@ -6,7 +6,7 @@ AI-powered code health analysis directly in VS Code's agent mode (Copilot Chat).
 
 - **Zero-config MCP setup** — Installs and registers the CodeScene MCP Server automatically
 - **Platform-specific binaries** — The correct native binary for your OS/arch is bundled inside the extension
-- **OAuth-first auth** — Ask the agent to log in; no token paste required for interactive use
+- **OAuth-first auth** — Sign in via the `login` slash command, Sign In command, or by asking the agent; no token paste required for interactive use
 - **Settings UI** — Optional PAT, Cloud account ID, on-prem URL, and other options
 - **Agent mode tools** — All CodeScene CodeHealth MCP tools are available in Copilot's agent mode
 
@@ -59,12 +59,15 @@ These tools require OAuth or a CodeScene Personal Access Token and a CodeScene C
 1. **Install the extension** from the VS Code Marketplace
 2. **(Optional)** If you belong to multiple CodeScene Cloud accounts, set `codescene.accountId` in Settings to your account/tenant ID **before** logging in
 3. **(On-prem only)** Set `codescene.onpremUrl` to your instance URL
-4. **Open agent mode** in Copilot Chat and ask: *“Log me in to CodeScene”* (this calls the `login` tool and opens your browser)
+4. **Sign in** using one of:
+   - The `login` MCP prompt (slash command) in Copilot Chat
+   - **CodeScene: Sign In** from the Command Palette
+   - Asking in agent mode: *“Log me in to CodeScene”* (calls the `login` tool)
 5. Start using CodeScene tools
 
 ### Authentication
 
-**Recommended (interactive):** OAuth via the `login` tool. No token to copy or paste.
+**Recommended (interactive):** OAuth via the `login` MCP prompt / `login` tool, or **CodeScene: Sign In**. No token to copy or paste.
 
 **Optional (CI / headless):** Set a Personal Access Token or standalone license via `CodeScene: Configure Access Token (optional / CI)` or the `codescene.accessToken` setting. A saved PAT **blocks** OAuth until you clear it.
 
@@ -88,8 +91,19 @@ See [Authentication](https://github.com/codescene-oss/codescene-mcp-server/blob/
 
 See [Configuration Options](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md) for full documentation.
 
+## MCP Prompts (slash commands)
+
+| Prompt | Description |
+|--------|-------------|
+| `login` | Sign in to CodeScene with OAuth (instructs the agent to call the `login` tool) |
+| `review_code_health` | Review Code Health for the current file |
+| `plan_code_health_refactoring` | Plan a prioritized, low-risk Code Health refactoring |
+
+In Copilot Chat, pick these from the slash-command / prompt picker (MCP prompts appear as `mcp.<server>.<prompt>`).
+
 ## Commands
 
+- `CodeScene: Sign In` — Start the OAuth browser login flow
 - `CodeScene: Configure Access Token (optional / CI)` — Set or clear a PAT/standalone token
 - `CodeScene: Restart MCP Server` — Restart the MCP server (after config changes)
 - `CodeScene: Show Server Status` — Display current server status and configuration
