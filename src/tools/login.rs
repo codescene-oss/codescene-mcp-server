@@ -59,7 +59,8 @@ pub(crate) async fn handle(
         server.track("auth-login", json!({"result": "already_configured"}));
         return Ok(CallToolResult::success(vec![Content::text(
             "CS_ACCESS_TOKEN is already configured. OAuth login is not needed.\n\
-             To use OAuth instead, remove CS_ACCESS_TOKEN from your MCP client configuration.",
+             To use OAuth instead, remove CS_ACCESS_TOKEN from your MCP client configuration \
+             or unset it from your shell environment.",
         )]));
     }
 

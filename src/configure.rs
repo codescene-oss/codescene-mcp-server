@@ -49,6 +49,9 @@ pub async fn set_value(key: &str, value: &str) -> String {
         if let Err(msg) = config::validate_https_url(option.key, value) {
             return serde_json::to_string(&serde_json::json!({ "error": msg })).unwrap_or_default();
         }
+        if let Err(msg) = config::validate_account_id(option.key, value) {
+            return serde_json::to_string(&serde_json::json!({ "error": msg })).unwrap_or_default();
+        }
     }
 
     // Use the guarded write path: acquires write lock, updates env + config file.
@@ -411,6 +414,29 @@ mod tests {
         let result = set_value("nonexistent", "val").await;
         let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert!(parsed.get("error").is_some());
+    }
+
+    #[tokio::test]
+    async fn set_value_account_id_rejects_non_positive_integer() {
+        with_temp_config_dir_async(|| async {
+            let result = set_value("account_id", "0").await;
+            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+            let err = parsed["error"].as_str().unwrap();
+            assert!(err.contains("positive integer"), "got: {err}");
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn set_value_account_id_accepts_positive_integer() {
+        with_temp_config_dir_async(|| async {
+            let result = set_value("account_id", "123").await;
+            let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+            assert_eq!(parsed["status"], json!("saved"));
+            assert_eq!(parsed["key"], json!("account_id"));
+            std::env::remove_var("CS_ACCOUNT_ID");
+        })
+        .await;
     }
 
     #[tokio::test]

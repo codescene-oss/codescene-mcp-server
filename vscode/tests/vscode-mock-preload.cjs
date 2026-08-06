@@ -29,6 +29,7 @@ const state = {
     statusBarItems: [],               // [{ text, tooltip, command, show(), dispose() }]
     shownWarnings: [],                // [{ message, items, result }]
     shownInfoMessages: [],            // [{ message }]
+    shownErrors: [],                  // [{ message }]
     shownInputBoxes: [],              // [{ options, result }]
     configUpdates: [],                // [{ key, value, target }]
     onDidChangeConfigListeners: [],   // [(e) => void]
@@ -36,6 +37,7 @@ const state = {
 
     // Pre-configured results for UI interactions
     warningResult: undefined,         // return value of showWarningMessage
+    infoMessageResult: undefined,     // return value of showInformationMessage
     inputBoxResult: undefined,        // return value of showInputBox
 };
 
@@ -46,18 +48,23 @@ function reset() {
     state.statusBarItems = [];
     state.shownWarnings = [];
     state.shownInfoMessages = [];
+    state.shownErrors = [];
     state.shownInputBoxes = [];
     state.configUpdates = [];
     state.onDidChangeConfigListeners = [];
     state.executedCommands = [];
     state.warningResult = undefined;
+    state.infoMessageResult = undefined;
     state.inputBoxResult = undefined;
+    state.execFileResult = null;
+    state.execFileCalls = [];
 }
 
 // ── Mock vscode namespace ──────────────────────────────────────────────────
 
 const StatusBarAlignment = { Left: 1, Right: 2 };
 const ConfigurationTarget = { Global: 1, Workspace: 2, WorkspaceFolder: 3 };
+const ProgressLocation = { Notification: 15, SourceControl: 1, Window: 10 };
 
 class McpStdioServerDefinition {
     constructor(label, command, args, env, version) {
@@ -72,6 +79,7 @@ class McpStdioServerDefinition {
 const vscode = {
     StatusBarAlignment,
     ConfigurationTarget,
+    ProgressLocation,
     EventEmitter: function () { return createEventEmitter(); },
     McpStdioServerDefinition,
 
@@ -91,12 +99,20 @@ const vscode = {
             state.shownWarnings.push({ message, items });
             return Promise.resolve(state.warningResult);
         },
-        showInformationMessage(message) {
-            state.shownInfoMessages.push({ message });
+        showInformationMessage(message, ...items) {
+            state.shownInfoMessages.push({ message, items });
+            return Promise.resolve(state.infoMessageResult);
+        },
+        showErrorMessage(message) {
+            state.shownErrors.push({ message });
+            return Promise.resolve();
         },
         showInputBox(options) {
             state.shownInputBoxes.push({ options });
             return Promise.resolve(state.inputBoxResult);
+        },
+        withProgress(_options, task) {
+            return task({ report() {} });
         },
     },
 
@@ -157,6 +173,26 @@ require.cache['vscode'] = {
     filename: 'vscode',
     loaded: true,
     exports: vscode,
+};
+
+// ── Mock child_process.execFile to avoid spawning real processes ────────────
+
+const childProcess = require('child_process');
+const originalExecFile = childProcess.execFile;
+
+// Tests can set state.execFileResult = { error, stdout, stderr }
+state.execFileResult = null;
+state.execFileCalls = [];
+
+childProcess.execFile = function (file, args, options, callback) {
+    state.execFileCalls.push({ file, args, options });
+    if (state.execFileResult) {
+        const { error, stdout, stderr } = state.execFileResult;
+        if (callback) callback(error || null, stdout || '', stderr || '');
+    } else {
+        // Default: call original (tests that set a binary will need this)
+        return originalExecFile.call(childProcess, file, args, options, callback);
+    }
 };
 
 // ── Expose for tests ───────────────────────────────────────────────────────

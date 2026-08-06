@@ -41,6 +41,16 @@ pub const OPTIONS: &[ConfigOption] = &[
         docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
     },
     ConfigOption {
+        key: "account_id",
+        env_var: "CS_ACCOUNT_ID",
+        description: "Optional CodeScene Cloud account/tenant ID for OAuth (positive integer). Pins multi-account users to a specific account.",
+        sensitive: false,
+        hidden: false,
+        api_only: true,
+        aliases: &["account"],
+        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
+    },
+    ConfigOption {
         key: "disable_tracking",
         env_var: "CS_DISABLE_TRACKING",
         description: "Disable anonymous usage analytics",
@@ -273,5 +283,18 @@ mod tests {
         let opt = find_option("CS_OAUTH_CLIENT");
         assert!(opt.is_some());
         assert_eq!(opt.unwrap().key, "oauth_client");
+    }
+
+    #[test]
+    fn find_option_account_id() {
+        let opt = find_option("account_id").unwrap();
+        assert_eq!(opt.env_var, "CS_ACCOUNT_ID");
+        assert!(opt.api_only);
+    }
+
+    #[test]
+    fn find_option_account_id_by_alias_and_env() {
+        assert_eq!(find_option("account").unwrap().key, "account_id");
+        assert_eq!(find_option("CS_ACCOUNT_ID").unwrap().key, "account_id");
     }
 }

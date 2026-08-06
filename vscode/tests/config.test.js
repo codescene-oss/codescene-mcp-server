@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { BINARY_MAP, buildEnvironment, getBinaryName } from '../out/config.js';
+import { BINARY_MAP, buildEnvironment, getBinaryName, optionalIdString } from '../out/config.js';
 
 /** Helper to create a mock config object. */
 function mockConfig(values = {}) {
@@ -69,6 +69,24 @@ describe('buildEnvironment', () => {
         assert.equal(env['CS_DEFAULT_PROJECT_ID'], '42');
     });
 
+    it('sets CS_ACCOUNT_ID when accountId is provided as string', () => {
+        const config = mockConfig({ accountId: '123' });
+        const env = buildEnvironment(config);
+        assert.equal(env['CS_ACCOUNT_ID'], '123');
+    });
+
+    it('sets CS_ACCOUNT_ID when accountId is provided as number', () => {
+        const config = mockConfig({ accountId: 123 });
+        const env = buildEnvironment(config);
+        assert.equal(env['CS_ACCOUNT_ID'], '123');
+    });
+
+    it('does not set CS_ACCESS_TOKEN when accessToken is empty', () => {
+        const config = mockConfig({ accessToken: '' });
+        const env = buildEnvironment(config);
+        assert.ok(!('CS_ACCESS_TOKEN' in env));
+    });
+
     it('sets CS_ENABLED_TOOLS when enabledTools is provided', () => {
         const config = mockConfig({ enabledTools: 'code_health_score,code_health_review' });
         const env = buildEnvironment(config);
@@ -94,7 +112,12 @@ describe('buildEnvironment', () => {
     });
 
     it('does not include empty string values', () => {
-        const config = mockConfig({ accessToken: '', onpremUrl: '', defaultProjectId: '' });
+        const config = mockConfig({
+            accessToken: '',
+            onpremUrl: '',
+            defaultProjectId: '',
+            accountId: '',
+        });
         const env = buildEnvironment(config);
         assert.deepEqual(env, {});
     });
@@ -102,6 +125,7 @@ describe('buildEnvironment', () => {
     it('sets all env vars when all settings are provided', () => {
         const config = mockConfig({
             accessToken: 'token-123',
+            accountId: 99,
             onpremUrl: 'https://cs.corp.com',
             defaultProjectId: '7',
             enabledTools: 'code_health_score',
@@ -110,10 +134,33 @@ describe('buildEnvironment', () => {
         });
         const env = buildEnvironment(config);
         assert.equal(env['CS_ACCESS_TOKEN'], 'token-123');
+        assert.equal(env['CS_ACCOUNT_ID'], '99');
         assert.equal(env['CS_ONPREM_URL'], 'https://cs.corp.com');
         assert.equal(env['CS_DEFAULT_PROJECT_ID'], '7');
         assert.equal(env['CS_ENABLED_TOOLS'], 'code_health_score');
         assert.equal(env['CS_DISABLE_VERSION_CHECK'], '1');
         assert.equal(env['REQUESTS_CA_BUNDLE'], '/certs/ca.pem');
+    });
+});
+
+describe('optionalIdString', () => {
+    it('returns empty string for null', () => {
+        assert.equal(optionalIdString(null), '');
+    });
+
+    it('returns empty string for undefined', () => {
+        assert.equal(optionalIdString(undefined), '');
+    });
+
+    it('returns empty string for empty string', () => {
+        assert.equal(optionalIdString(''), '');
+    });
+
+    it('trims and returns string value', () => {
+        assert.equal(optionalIdString('  42  '), '42');
+    });
+
+    it('converts number to string', () => {
+        assert.equal(optionalIdString(123), '123');
     });
 });

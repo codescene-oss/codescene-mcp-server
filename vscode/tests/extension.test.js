@@ -28,11 +28,16 @@ const extension = require('../out/extension.js');
 
 const FAKE_EXT_PATH = join(__dirname, '..', '.test-ext');
 
-function makeContext({ extensionPath, version } = {}) {
+function makeContext({ extensionPath, version, firstRun } = {}) {
+    const globalStateStore = { 'codescene.firstRunCompleted': firstRun === true ? undefined : true };
     return {
         extensionPath: extensionPath ?? FAKE_EXT_PATH,
         extension: { packageJSON: { version: version ?? '0.1.0' } },
         subscriptions: [],
+        globalState: {
+            get(key) { return globalStateStore[key]; },
+            update(key, value) { globalStateStore[key] = value; return Promise.resolve(); },
+        },
     };
 }
 
@@ -67,7 +72,7 @@ describe('activate', () => {
         extension.activate(ctx);
 
         // status bar + provider + 3 commands + config watcher = 6
-        assert.equal(ctx.subscriptions.length, 6);
+        assert.equal(ctx.subscriptions.length, 7);
     });
 
     it('registers MCP server definition provider with id codesceneMcp', () => {
@@ -78,10 +83,11 @@ describe('activate', () => {
         assert.equal(state.registeredProviders[0].id, 'codesceneMcp');
     });
 
-    it('registers three commands', () => {
+    it('registers four commands', () => {
         const ctx = makeContext();
         extension.activate(ctx);
 
+        assert.ok(state.registeredCommands['codescene.signIn']);
         assert.ok(state.registeredCommands['codescene.configure']);
         assert.ok(state.registeredCommands['codescene.restart']);
         assert.ok(state.registeredCommands['codescene.showStatus']);
@@ -181,35 +187,8 @@ describe('provideMcpServerDefinitions', () => {
 describe('resolveMcpServerDefinition', () => {
     beforeEach(() => { reset(); });
 
-    it('returns non-matching servers unchanged', async () => {
-        const ctx = makeContext();
-        extension.activate(ctx);
-
-        const provider = findProvider();
-        const server = { label: 'Some Other Server' };
-        const result = await provider.resolveMcpServerDefinition(server);
-
-        assert.equal(result, server);
-    });
-
-    it('prompts for token when not configured', async () => {
+    it('returns server definition without prompting for a token', async () => {
         state.configValues.accessToken = '';
-        state.warningResult = 'Continue Without';
-
-        const ctx = makeContext();
-        extension.activate(ctx);
-
-        const provider = findProvider();
-        const server = { label: 'CodeScene CodeHealth MCP' };
-        const result = await provider.resolveMcpServerDefinition(server);
-
-        assert.equal(result, server);
-        assert.equal(state.shownWarnings.length, 1);
-        assert.ok(state.shownWarnings[0].message.includes('No access token'));
-    });
-
-    it('skips prompt when token is already configured', async () => {
-        state.configValues.accessToken = 'already-set';
 
         const ctx = makeContext();
         extension.activate(ctx);
@@ -222,22 +201,15 @@ describe('resolveMcpServerDefinition', () => {
         assert.equal(state.shownWarnings.length, 0);
     });
 
-    it('invokes configure command when user chooses Configure Now', async () => {
-        state.configValues.accessToken = '';
-        state.warningResult = 'Configure Now';
-        state.inputBoxResult = 'new-token-456';
-
+    it('returns non-matching servers unchanged', async () => {
         const ctx = makeContext();
         extension.activate(ctx);
 
-        const { McpStdioServerDefinition } = globalThis.__vscodeMock.vscode;
-        const server = new McpStdioServerDefinition('CodeScene CodeHealth MCP', '/bin/test', [], {}, '1.0');
-
         const provider = findProvider();
+        const server = { label: 'Some Other Server' };
         const result = await provider.resolveMcpServerDefinition(server);
 
-        // After configure, the updated token should be on the server env
-        assert.equal(result.env['CS_ACCESS_TOKEN'], 'new-token-456');
+        assert.equal(result, server);
     });
 });
 
@@ -257,6 +229,20 @@ describe('codescene.configure command', () => {
         assert.equal(state.configUpdates[0].value, 'my-secret-token');
         assert.equal(state.shownInfoMessages.length, 1);
         assert.ok(state.shownInfoMessages[0].message.includes('Access token saved'));
+        assert.ok(state.shownInfoMessages[0].message.includes('blocks OAuth'));
+    });
+
+    it('clears token when user submits empty string', async () => {
+        state.inputBoxResult = '';
+
+        const ctx = makeContext();
+        extension.activate(ctx);
+
+        await findCommand('codescene.configure')();
+
+        assert.equal(state.configUpdates.length, 1);
+        assert.equal(state.configUpdates[0].value, '');
+        assert.ok(state.shownInfoMessages[0].message.includes('Access token cleared'));
     });
 
     it('does nothing when user cancels input', async () => {
@@ -292,6 +278,7 @@ describe('codescene.showStatus command', () => {
     it('shows status with enabled and no token', () => {
         state.configValues.enabled = true;
         state.configValues.accessToken = '';
+        state.configValues.accountId = '';
 
         const ctx = makeContext({ extensionPath: '/nonexistent' });
         extension.activate(ctx);
@@ -301,9 +288,25 @@ describe('codescene.showStatus command', () => {
         assert.equal(state.shownInfoMessages.length, 1);
         const msg = state.shownInfoMessages[0].message;
         assert.ok(msg.includes('Status: Enabled'));
-        assert.ok(msg.includes('Access Token: Not set'));
+        assert.ok(msg.includes('Auth: OAuth'));
+        assert.ok(msg.includes('Account ID: Not set'));
         assert.ok(msg.includes('Binary: Not available'));
         assert.ok(msg.includes('Platform:'));
+    });
+
+    it('shows PAT status and account id when configured', () => {
+        state.configValues.enabled = true;
+        state.configValues.accessToken = 'tok';
+        state.configValues.accountId = 42;
+
+        const ctx = makeContext({ extensionPath: '/nonexistent' });
+        extension.activate(ctx);
+
+        findCommand('codescene.showStatus')();
+
+        const msg = state.shownInfoMessages[0].message;
+        assert.ok(msg.includes('Auth: PAT configured'));
+        assert.ok(msg.includes('Account ID: 42'));
     });
 
     it('shows status with disabled', () => {
@@ -378,5 +381,174 @@ describe('configuration change watcher', () => {
         listener({ affectsConfiguration: (section) => section === 'other.setting' });
 
         assert.equal(fired, false);
+    });
+});
+
+describe('first-run prompt', () => {
+    beforeEach(() => { reset(); });
+
+    it('shows welcome message on first run', async () => {
+        state.infoMessageResult = 'Skip';
+        const ctx = makeContext({ firstRun: true });
+        extension.activate(ctx);
+
+        // Allow the async showInformationMessage to resolve
+        await new Promise(r => setTimeout(r, 10));
+
+        const welcome = state.shownInfoMessages.find(m => m.message.includes('Welcome'));
+        assert.ok(welcome, 'expected welcome message');
+    });
+
+    it('does not show welcome message on subsequent runs', () => {
+        const ctx = makeContext({ firstRun: false });
+        extension.activate(ctx);
+
+        const welcome = state.shownInfoMessages.find(m => m.message.includes('Welcome'));
+        assert.equal(welcome, undefined);
+    });
+
+    it('triggers sign-in when user clicks Sign In', async () => {
+        state.infoMessageResult = 'Sign In to CodeScene';
+        // inputBoxResult = undefined simulates cancellation in the sign-in flow
+        state.inputBoxResult = undefined;
+        const ctx = makeContext({ firstRun: true });
+        extension.activate(ctx);
+
+        await new Promise(r => setTimeout(r, 10));
+
+        // The sign-in flow should have prompted for on-prem URL
+        const inputBox = state.shownInputBoxes.find(i =>
+            i.options.prompt?.includes('CodeScene instance URL')
+        );
+        assert.ok(inputBox, 'expected on-prem URL prompt from sign-in flow');
+    });
+});
+
+describe('codescene.signIn command', () => {
+    beforeEach(() => { reset(); });
+    afterEach(() => {
+        if (existsSync(FAKE_EXT_PATH)) {
+            rmSync(FAKE_EXT_PATH, { recursive: true, force: true });
+        }
+    });
+
+    function setupBinary(ctx) {
+        const binDir = join(ctx.extensionPath, 'bin');
+        mkdirSync(binDir, { recursive: true });
+        const binaryName = process.platform === 'darwin' && process.arch === 'arm64'
+            ? 'cs-mcp-macos-aarch64'
+            : process.platform === 'linux' ? 'cs-mcp-linux-amd64' : 'cs-mcp-windows-amd64.exe';
+        writeFileSync(join(binDir, binaryName), '#!/bin/sh\necho {}');
+    }
+
+    /** Activate extension with binary and invoke signIn, returning the handler result. */
+    async function invokeSignIn({ execResult, inputBox, configOverrides } = {}) {
+        if (inputBox !== undefined) state.inputBoxResult = inputBox;
+        if (execResult) state.execFileResult = execResult;
+        if (configOverrides) Object.assign(state.configValues, configOverrides);
+        const ctx = makeContext();
+        setupBinary(ctx);
+        extension.activate(ctx);
+        const handler = findCommand('codescene.signIn');
+        await handler();
+    }
+
+    it('prompts for on-prem URL when not configured', async () => {
+        await invokeSignIn({ inputBox: '', execResult: { error: null, stdout: '{"status":"signed_in"}', stderr: '' } });
+
+        const inputBox = state.shownInputBoxes.find(i =>
+            i.options.prompt?.includes('CodeScene instance URL')
+        );
+        assert.ok(inputBox, 'expected on-prem URL prompt');
+    });
+
+    it('does nothing when user cancels on-prem URL prompt', async () => {
+        state.inputBoxResult = undefined;
+        const ctx = makeContext();
+        extension.activate(ctx);
+        const handler = findCommand('codescene.signIn');
+        await handler();
+
+        assert.equal(state.shownErrors.length, 0);
+        assert.equal(state.execFileCalls.length, 0);
+    });
+
+    it('skips on-prem URL prompt when already configured', async () => {
+        await invokeSignIn({
+            configOverrides: { onpremUrl: 'https://codescene.myco.com' },
+            execResult: { error: null, stdout: '{"status":"signed_in"}', stderr: '' },
+        });
+
+        const inputBox = state.shownInputBoxes.find(i =>
+            i.options.prompt?.includes('CodeScene instance URL')
+        );
+        assert.equal(inputBox, undefined);
+    });
+
+    it('shows error when binary is not available', async () => {
+        state.inputBoxResult = '';
+        const ctx = makeContext({ extensionPath: '/nonexistent' });
+        extension.activate(ctx);
+        const handler = findCommand('codescene.signIn');
+        await handler();
+
+        const errorMsg = state.shownErrors.find(m => m.message.includes('Binary not available'));
+        assert.ok(errorMsg, 'expected binary not available error');
+    });
+
+    it('shows success message on signed_in result', async () => {
+        await invokeSignIn({ inputBox: '', execResult: { error: null, stdout: '{"status":"signed_in"}', stderr: '' } });
+
+        const msg = state.shownInfoMessages.find(m => m.message.includes('Successfully signed in'));
+        assert.ok(msg, 'expected success message');
+    });
+
+    it('shows success message on already_signed_in result', async () => {
+        await invokeSignIn({ inputBox: '', execResult: { error: null, stdout: '{"status":"already_signed_in"}', stderr: '' } });
+
+        const msg = state.shownInfoMessages.find(m => m.message.includes('Successfully signed in'));
+        assert.ok(msg, 'expected success message');
+    });
+
+    it('shows warning on incomplete login', async () => {
+        await invokeSignIn({ inputBox: '', execResult: { error: null, stdout: '{"status":"expired","error":"session expired"}', stderr: '' } });
+
+        const msg = state.shownWarnings.find(m => m.message.includes('Sign in incomplete'));
+        assert.ok(msg, 'expected warning message');
+    });
+
+    it('shows error message on execFile failure', async () => {
+        await invokeSignIn({ inputBox: '', execResult: { error: new Error('spawn failed'), stdout: '', stderr: 'timeout' } });
+
+        const msg = state.shownErrors.find(m => m.message.includes('Sign in failed'));
+        assert.ok(msg, 'expected error message');
+        assert.ok(msg.message.includes('timeout'), 'expected stderr in message');
+    });
+
+    it('handles unparseable stdout gracefully', async () => {
+        await invokeSignIn({ inputBox: '', execResult: { error: null, stdout: 'not json', stderr: '' } });
+
+        const msg = state.shownInfoMessages.find(m => m.message.includes('Sign in completed'));
+        assert.ok(msg, 'expected fallback success message');
+    });
+
+    it('saves on-prem URL when user provides one', async () => {
+        await invokeSignIn({ inputBox: 'https://cs.internal.io', execResult: { error: null, stdout: '{"status":"signed_in"}', stderr: '' } });
+
+        const update = state.configUpdates.find(u => u.key === 'onpremUrl');
+        assert.ok(update, 'expected onpremUrl config update');
+        assert.equal(update.value, 'https://cs.internal.io');
+    });
+
+    it('passes account ID to auth subprocess environment', async () => {
+        await invokeSignIn({
+            configOverrides: { onpremUrl: 'https://cs.co', accountId: '42' },
+            execResult: { error: null, stdout: '{"status":"signed_in"}', stderr: '' },
+        });
+
+        assert.equal(state.execFileCalls.length, 1);
+        const { options } = state.execFileCalls[0];
+        assert.equal(options.env['CS_ONPREM_URL'], 'https://cs.co');
+        assert.equal(options.env['CS_ACCOUNT_ID'], '42');
     });
 });

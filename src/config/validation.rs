@@ -46,6 +46,22 @@ pub fn validate_https_url(key: &str, url: &str) -> Result<(), String> {
     ))
 }
 
+/// Validate `account_id` / `CS_ACCOUNT_ID`: empty is allowed (unset); otherwise
+/// must be a positive integer, matching CLI behavior.
+pub fn validate_account_id(key: &str, value: &str) -> Result<(), String> {
+    if key != "account_id" {
+        return Ok(());
+    }
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    match trimmed.parse::<i64>() {
+        Ok(n) if n > 0 => Ok(()),
+        _ => Err("CS_ACCOUNT_ID must be a positive integer.".to_string()),
+    }
+}
+
 /// Validate that a raw URL string uses HTTPS. Used for env vars not managed
 /// through the config system (e.g. CS_TRACKING_URL).
 /// Localhost addresses (localhost, 127.0.0.1, 0.0.0.0, host.docker.internal) are exempt.
@@ -206,6 +222,34 @@ mod tests {
     fn require_https_still_rejects_http_non_localhost() {
         assert!(require_https("CS_ONPREM_URL", "http://example.com").is_err());
         assert!(require_https("CS_TRACKING_URL", "http://not-localhost.com").is_err());
+    }
+
+    #[test]
+    fn validate_account_id_accepts_positive_integer() {
+        assert!(validate_account_id("account_id", "123").is_ok());
+        assert!(validate_account_id("account_id", " 42 ").is_ok());
+    }
+
+    #[test]
+    fn validate_account_id_accepts_empty() {
+        assert!(validate_account_id("account_id", "").is_ok());
+        assert!(validate_account_id("account_id", "  ").is_ok());
+    }
+
+    #[test]
+    fn validate_account_id_rejects_zero_negative_and_non_integer() {
+        for bad in ["0", "-1", "abc", "12.5", "1e2"] {
+            let err = validate_account_id("account_id", bad).unwrap_err();
+            assert!(
+                err.contains("positive integer"),
+                "expected positive-integer error for {bad:?}, got {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_account_id_ignores_other_keys() {
+        assert!(validate_account_id("access_token", "not-a-number").is_ok());
     }
 
     #[test]

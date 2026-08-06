@@ -298,6 +298,10 @@ pub fn apply_to_env(data: &ConfigData) {
             tracing::warn!("{e} — skipping config value");
             continue;
         }
+        if let Err(e) = validate_account_id(option.key, val) {
+            tracing::warn!("{e} — skipping config value");
+            continue;
+        }
         std::env::set_var(option.env_var, val);
     }
 }

@@ -97,10 +97,12 @@ fn is_connectivity_error(stderr: &str) -> bool {
     KEYWORDS.iter().any(|kw| lower.contains(kw))
 }
 
+const AUTH_CHECK_NAME: &str = "Authentication";
+
 async fn check_token_via_cli(repo_path: &Path, ctx: &CheckContext<'_>) -> CheckResult {
     if matches!(ctx.credential, Some(AuthCredential::OAuth { .. })) {
         return CheckResult {
-            name: "Access Token",
+            name: AUTH_CHECK_NAME,
             passed: true,
             detail: "Authenticated via OAuth session.".to_string(),
         };
@@ -111,9 +113,12 @@ async fn check_token_via_cli(repo_path: &Path, ctx: &CheckContext<'_>) -> CheckR
         .unwrap_or_default();
     if token.is_empty() {
         return CheckResult {
-            name: "Access Token",
+            name: AUTH_CHECK_NAME,
             passed: false,
-            detail: "CS_ACCESS_TOKEN is not set or empty.".to_string(),
+            detail: "Not signed in. Call the `login` tool to authenticate with OAuth. \
+                     Optionally set a Personal Access Token via `set_config` (key `access_token`) \
+                     or CS_ACCESS_TOKEN for CI/headless use."
+                .to_string(),
         };
     }
     let probe = find_probe_file(repo_path);
@@ -121,14 +126,14 @@ async fn check_token_via_cli(repo_path: &Path, ctx: &CheckContext<'_>) -> CheckR
     let cli_future = ctx.cli_runner.run(&args, Some(repo_path));
     match tokio::time::timeout(ctx.cli_timeout, cli_future).await {
         Err(_) => CheckResult {
-            name: "Access Token",
+            name: AUTH_CHECK_NAME,
             passed: false,
             detail: "Token check timed out after 30 s.".to_string(),
         },
         Ok(Ok(_)) => token_pass(),
         Ok(Err(CliError::LicenseCheckFailed { ref stderr })) if is_connectivity_error(stderr) => {
             CheckResult {
-                name: "Access Token",
+                name: AUTH_CHECK_NAME,
                 passed: false,
                 detail: format!(
                     "CLI could not connect to {} — possible TLS/network issue: {stderr}",
@@ -137,13 +142,13 @@ async fn check_token_via_cli(repo_path: &Path, ctx: &CheckContext<'_>) -> CheckR
             }
         }
         Ok(Err(CliError::LicenseCheckFailed { .. })) => CheckResult {
-            name: "Access Token",
+            name: AUTH_CHECK_NAME,
             passed: false,
             detail: "Token is set but invalid or expired.".to_string(),
         },
         Ok(Err(CliError::NonZeroExit { stderr, .. })) if is_connectivity_error(&stderr) => {
             CheckResult {
-                name: "Access Token",
+                name: AUTH_CHECK_NAME,
                 passed: false,
                 detail: format!(
                     "CLI could not connect to {} — possible TLS/network issue: {stderr}",
@@ -205,7 +210,8 @@ async fn check_api_connectivity(ctx: &CheckContext<'_>) -> CheckResult {
         return CheckResult {
             name: "API Connectivity",
             passed: false,
-            detail: "Skipped — no access token configured and not signed in via OAuth.".to_string(),
+            detail: "Skipped — not signed in. Call the `login` tool (or optionally set a PAT) first."
+                .to_string(),
         };
     };
     match api_client::query_api_with_auth("v2/projects", ctx.http_client, Some(credential)).await {
@@ -244,7 +250,7 @@ fn find_probe_file(repo_path: &Path) -> String {
 
 fn token_pass() -> CheckResult {
     CheckResult {
-        name: "Access Token",
+        name: AUTH_CHECK_NAME,
         passed: true,
         detail: "Token is set and authenticated successfully.".to_string(),
     }
@@ -368,7 +374,17 @@ mod tests {
         let cli = MockCliRunner::with_ok("");
         let result = check_token_via_cli(Path::new("/tmp"), &test_ctx_cli(&cli, None)).await;
         assert!(!result.passed);
-        assert!(result.detail.contains("not set"));
+        assert_eq!(result.name, AUTH_CHECK_NAME);
+        assert!(
+            result.detail.contains("`login`"),
+            "should recommend login tool first: {}",
+            result.detail
+        );
+        assert!(
+            result.detail.contains("Optionally") && result.detail.contains("CS_ACCESS_TOKEN"),
+            "should mention PAT as optional: {}",
+            result.detail
+        );
     }
 
     #[tokio::test]
@@ -518,6 +534,11 @@ mod tests {
         let cli = MockCliRunner::with_ok("");
         let result = check_api_connectivity(&test_ctx_http(&http, &cli, None)).await;
         assert_check(&result, false, "Skipped");
+        assert!(
+            result.detail.contains("`login`"),
+            "should recommend login: {}",
+            result.detail
+        );
     }
 
     #[tokio::test]

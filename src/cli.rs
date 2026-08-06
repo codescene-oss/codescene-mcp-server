@@ -118,6 +118,7 @@ async fn run_cli_process(
     apply_optional_cli_env(&mut cmd, "CS_ACCESS_TOKEN", true);
     apply_optional_cli_env(&mut cmd, "CS_ONPREM_URL", false);
     apply_optional_cli_env(&mut cmd, "CS_OAUTH_CLIENT", true);
+    apply_optional_cli_env(&mut cmd, "CS_ACCOUNT_ID", true);
 
     if let Some(dir) = working_dir {
         cmd.current_dir(dir);
@@ -1310,10 +1311,14 @@ sC0Nc9QdNQt5Tos5Je5S7CWL0w==
         std::env::set_var("CS_ACCESS_TOKEN", "test-token-xyz");
         std::env::set_var("CS_ONPREM_URL", "https://onprem.example.com");
         std::env::set_var("CS_OAUTH_CLIENT", "mcp");
+        std::env::set_var("CS_ACCOUNT_ID", "123");
 
         let output = run_cli_at_path(
             Path::new("/bin/sh"),
-            &["-c", "echo $CS_ACCESS_TOKEN $CS_ONPREM_URL $CS_OAUTH_CLIENT"],
+            &[
+                "-c",
+                "echo $CS_ACCESS_TOKEN $CS_ONPREM_URL $CS_OAUTH_CLIENT $CS_ACCOUNT_ID",
+            ],
             None,
         )
         .await
@@ -1321,10 +1326,12 @@ sC0Nc9QdNQt5Tos5Je5S7CWL0w==
         assert!(output.contains("test-token-xyz"));
         assert!(output.contains("https://onprem.example.com"));
         assert!(output.contains("mcp"));
+        assert!(output.contains("123"));
 
         std::env::remove_var("CS_ACCESS_TOKEN");
         std::env::remove_var("CS_ONPREM_URL");
         std::env::remove_var("CS_OAUTH_CLIENT");
+        std::env::remove_var("CS_ACCOUNT_ID");
     }
 
     #[cfg(unix)]
