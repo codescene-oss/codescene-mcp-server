@@ -1,8 +1,10 @@
+pub mod login;
 pub mod plan_code_health_refactoring;
 pub mod review_code_health;
 
 pub fn resolve_prompt_text(name: &str) -> Option<&'static str> {
     match name {
+        "login" => Some(login::TEXT),
         "review_code_health" => Some(review_code_health::TEXT),
         "plan_code_health_refactoring" => Some(plan_code_health_refactoring::TEXT),
         _ => None,
@@ -12,6 +14,11 @@ pub fn resolve_prompt_text(name: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::resolve_prompt_text;
+
+    #[test]
+    fn resolve_login_prompt() {
+        assert!(resolve_prompt_text("login").is_some());
+    }
 
     #[test]
     fn resolve_review_prompt() {

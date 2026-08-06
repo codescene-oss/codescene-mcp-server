@@ -79,6 +79,15 @@ fn protocol_version_2025_11_25() -> rmcp::model::ProtocolVersion {
 fn build_prompts_list() -> ListPromptsResult {
     let prompts_list = vec![
         Prompt::new(
+            "login",
+            Some(
+                "Sign in to CodeScene with OAuth. Invokes the login tool to open a browser and complete authentication.",
+            ),
+            Some(vec![PromptArgument::new("context")
+                .with_description("Optional context string.")
+                .with_required(false)]),
+        ),
+        Prompt::new(
             "review_code_health",
             Some(
                 "Review Code Health and assess code quality for the current open file. The file path needs to be sent to the code_health_review MCP tool when using this prompt.",
@@ -205,6 +214,11 @@ pub(crate) fn build_instructions(is_standalone: bool, tools_filtered: bool) -> S
          - rules_config_set_threshold: Set a Code Health threshold in a rules file.\n\
          - get_config / set_config: Manage server configuration.\n\
          \n\
+         PROMPTS:\n\
+         - login: Sign in to CodeScene with OAuth (calls the login tool).\n\
+         - review_code_health: Review Code Health for the current file.\n\
+         - plan_code_health_refactoring: Plan a low-risk Code Health refactoring.\n\
+         \n\
          RESOURCES:\n\
          - skill://<name>/SKILL.md: Agent skill instructions for Code Health workflows.\n\
          - skill://<name>/_manifest: File listing for a skill.\n\
@@ -243,10 +257,11 @@ mod tests {
     }
 
     #[test]
-    fn prompts_list_contains_two_prompts() {
+    fn prompts_list_contains_expected_prompts() {
         let result = build_prompts_list();
-        assert_eq!(result.prompts.len(), 2);
+        assert_eq!(result.prompts.len(), 3);
         let names: Vec<&str> = result.prompts.iter().map(|p| p.name.as_str()).collect();
+        assert!(names.contains(&"login"));
         assert!(names.contains(&"review_code_health"));
         assert!(names.contains(&"plan_code_health_refactoring"));
     }
@@ -257,6 +272,18 @@ mod tests {
         assert!(result.is_ok());
         let prompt = result.unwrap();
         assert!(!prompt.messages.is_empty());
+    }
+
+    #[test]
+    fn resolve_login_prompt_succeeds() {
+        let result = resolve_prompt("login");
+        assert!(result.is_ok());
+        let prompt = result.unwrap();
+        let text = match &prompt.messages[0].content {
+            rmcp::model::PromptMessageContent::Text { text } => text.as_str(),
+            _ => panic!("expected text content"),
+        };
+        assert!(text.contains("login tool"));
     }
 
     #[test]
