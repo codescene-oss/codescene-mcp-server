@@ -62,6 +62,22 @@ If a token must be configured manually:\n\
 To get a Personal Access Token, see:\n\
 https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/authentication.md";
 
+const TOKEN_MISSING_MSG_DOCKER: &str = "\
+No access token configured.\n\n\
+OAuth login is not available in Docker. Configure a Personal Access Token:\n\
+1. Set the CS_ACCESS_TOKEN environment variable in your MCP client / Docker configuration\n\
+2. Or use the `set_config` tool: set_config(key=\"access_token\", value=\"your-token\")\n\n\
+To get a Personal Access Token, see:\n\
+https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/authentication.md";
+
+fn token_missing_msg() -> &'static str {
+    if environment::is_docker() {
+        TOKEN_MISSING_MSG_DOCKER
+    } else {
+        TOKEN_MISSING_MSG
+    }
+}
+
 const _VERSION_NOTICE_SUFFIX: &str = "\n\
 Note: If the result contains version update information (indicated by\n\
 \"VERSION UPDATE AVAILABLE\"), please inform the user about this update\n\
@@ -221,13 +237,13 @@ impl CodeSceneServer {
             Ok(None) => {
                 self.log_no_credential("token requirement failed: no usable credential resolved");
                 Some(CallToolResult::success(vec![Content::text(
-                    TOKEN_MISSING_MSG,
+                    token_missing_msg(),
                 )]))
             }
             Err(e) => {
                 tracing::warn!(error = %e, "auth token check failed");
                 Some(CallToolResult::success(vec![Content::text(
-                    TOKEN_MISSING_MSG,
+                    token_missing_msg(),
                 )]))
             }
         }
@@ -246,13 +262,13 @@ impl CodeSceneServer {
             Ok(None) => {
                 self.log_no_credential("failed to resolve auth credential for API tool");
                 Err(CallToolResult::success(vec![Content::text(
-                    TOKEN_MISSING_MSG,
+                    token_missing_msg(),
                 )]))
             }
             Err(e) => {
                 tracing::warn!(error = %e, "auth token check failed");
                 Err(CallToolResult::success(vec![Content::text(
-                    TOKEN_MISSING_MSG,
+                    token_missing_msg(),
                 )]))
             }
         }
@@ -358,6 +374,11 @@ fn remove_standalone_tools(router: &mut ToolRouter<CodeSceneServer>) {
     }
 }
 
+/// Tools that cannot work in Docker (OAuth browser callback is unsupported).
+fn remove_docker_unsupported_tools(router: &mut ToolRouter<CodeSceneServer>) {
+    router.remove_route("login");
+}
+
 fn apply_enabled_tools_filter(router: &mut ToolRouter<CodeSceneServer>, config_data: &ConfigData) {
     let enabled = match config::enabled_tools(config_data) {
         Some(set) => set,
@@ -381,6 +402,9 @@ impl CodeSceneServer {
         let mut router = Self::tool_router();
         if deps.is_standalone {
             remove_standalone_tools(&mut router);
+        }
+        if environment::is_docker() {
+            remove_docker_unsupported_tools(&mut router);
         }
         apply_enabled_tools_filter(&mut router, &deps.config_data);
 

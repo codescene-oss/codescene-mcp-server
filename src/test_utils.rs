@@ -722,14 +722,14 @@ mod tests {
 
     #[test]
     fn build_instructions_standalone_omits_api_tools() {
-        let text = build_instructions(true, false);
+        let text = build_instructions(true, false, false);
         assert!(text.contains("code_health_review"));
         assert!(!text.contains("select_project"));
     }
 
     #[test]
     fn build_instructions_api_mode_includes_all_tools() {
-        let text = build_instructions(false, false);
+        let text = build_instructions(false, false, false);
         assert!(text.contains("code_health_review"));
         assert!(text.contains("select_project"));
         assert!(text.contains("code_ownership_for_path"));
@@ -737,14 +737,14 @@ mod tests {
 
     #[test]
     fn build_instructions_tools_filtered_adds_note() {
-        let text = build_instructions(false, true);
+        let text = build_instructions(false, true, false);
         assert!(text.contains("enabled_tools"));
         assert!(text.contains("restricted"));
     }
 
     #[test]
     fn build_instructions_tools_not_filtered_no_note() {
-        let text = build_instructions(false, false);
+        let text = build_instructions(false, false, false);
         assert!(!text.contains("restricted"));
     }
 

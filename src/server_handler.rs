@@ -8,7 +8,7 @@ use rmcp::model::{
 use rmcp::service::RequestContext;
 use rmcp::{tool_handler, ErrorData, RoleServer, ServerHandler};
 
-use crate::{config, prompts, skills, CodeSceneServer};
+use crate::{config, environment, prompts, skills, CodeSceneServer};
 
 #[tool_handler(router = "self.tool_router")]
 impl ServerHandler for CodeSceneServer {
@@ -28,6 +28,7 @@ impl ServerHandler for CodeSceneServer {
         .with_instructions(build_instructions(
             self.is_standalone,
             config::enabled_tools(&self.config_data).is_some(),
+            environment::is_docker(),
         ))
     }
 
@@ -36,7 +37,7 @@ impl ServerHandler for CodeSceneServer {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListPromptsResult, ErrorData> {
-        Ok(build_prompts_list())
+        Ok(build_prompts_list(environment::is_docker()))
     }
 
     async fn get_prompt(
@@ -44,7 +45,7 @@ impl ServerHandler for CodeSceneServer {
         request: GetPromptRequestParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<GetPromptResult, ErrorData> {
-        resolve_prompt(&request.name)
+        resolve_prompt(&request.name, environment::is_docker())
     }
 
     async fn list_resources(
@@ -76,9 +77,10 @@ fn protocol_version_2025_11_25() -> rmcp::model::ProtocolVersion {
     serde_json::from_str("\"2025-11-25\"").expect("valid MCP protocol version literal")
 }
 
-fn build_prompts_list() -> ListPromptsResult {
-    let prompts_list = vec![
-        Prompt::new(
+fn build_prompts_list(is_docker: bool) -> ListPromptsResult {
+    let mut prompts_list = Vec::new();
+    if !is_docker {
+        prompts_list.push(Prompt::new(
             "login",
             Some(
                 "Sign in to CodeScene with OAuth. Invokes the login tool to open a browser and complete authentication.",
@@ -86,28 +88,35 @@ fn build_prompts_list() -> ListPromptsResult {
             Some(vec![PromptArgument::new("context")
                 .with_description("Optional context string.")
                 .with_required(false)]),
+        ));
+    }
+    prompts_list.push(Prompt::new(
+        "review_code_health",
+        Some(
+            "Review Code Health and assess code quality for the current open file. The file path needs to be sent to the code_health_review MCP tool when using this prompt.",
         ),
-        Prompt::new(
-            "review_code_health",
-            Some(
-                "Review Code Health and assess code quality for the current open file. The file path needs to be sent to the code_health_review MCP tool when using this prompt.",
-            ),
-            Some(vec![PromptArgument::new("context")
-                .with_description("Optional context string.")
-                .with_required(false)]),
-        ),
-        Prompt::new(
-            "plan_code_health_refactoring",
-            Some("Plan a prioritized, low-risk refactoring to remediate detected Code Health issues."),
-            Some(vec![PromptArgument::new("context")
-                .with_description("Optional context string.")
-                .with_required(false)]),
-        ),
-    ];
+        Some(vec![PromptArgument::new("context")
+            .with_description("Optional context string.")
+            .with_required(false)]),
+    ));
+    prompts_list.push(Prompt::new(
+        "plan_code_health_refactoring",
+        Some("Plan a prioritized, low-risk refactoring to remediate detected Code Health issues."),
+        Some(vec![PromptArgument::new("context")
+            .with_description("Optional context string.")
+            .with_required(false)]),
+    ));
     ListPromptsResult::with_all_items(prompts_list)
 }
 
-fn resolve_prompt(name: &str) -> Result<GetPromptResult, ErrorData> {
+fn resolve_prompt(name: &str, is_docker: bool) -> Result<GetPromptResult, ErrorData> {
+    if is_docker && name == "login" {
+        return Err(ErrorData::new(
+            rmcp::model::ErrorCode::INVALID_REQUEST,
+            format!("Unknown prompt: {name}"),
+            None,
+        ));
+    }
     let text = prompts::resolve_prompt_text(name).ok_or_else(|| {
         ErrorData::new(
             rmcp::model::ErrorCode::INVALID_REQUEST,
@@ -196,11 +205,67 @@ fn build_resource_templates() -> ListResourceTemplatesResult {
     }
 }
 
-pub(crate) fn build_instructions(is_standalone: bool, tools_filtered: bool) -> String {
-    let mut text = String::from(
+fn login_tool_instruction_line(is_docker: bool) -> &'static str {
+    if is_docker {
+        ""
+    } else {
+        "- login: Sign in to CodeScene with OAuth. When authentication is missing, call this tool first.\n\
+         "
+    }
+}
+
+fn login_prompt_instruction_line(is_docker: bool) -> &'static str {
+    if is_docker {
+        ""
+    } else {
+        "- login: Sign in to CodeScene with OAuth (calls the login tool).\n\
+         "
+    }
+}
+
+fn append_docker_auth_note(text: &mut String, is_docker: bool) {
+    if is_docker {
+        text.push_str(
+            "\nNote: OAuth login is not available in Docker. Authenticate with a Personal Access Token \
+             via CS_ACCESS_TOKEN or set_config(key=\"access_token\", value=\"...\").\n",
+        );
+    }
+}
+
+fn append_api_tools_section(text: &mut String, is_standalone: bool) {
+    if !is_standalone {
+        text.push_str(
+            "\nTOOLS (API-connected):\n\
+             - select_project: Choose a CodeScene project.\n\
+             - list_technical_debt_goals_for_project: View debt goals.\n\
+             - list_technical_debt_goals_for_project_file: File-level goals.\n\
+             - list_technical_debt_hotspots_for_project: View hotspots.\n\
+             - list_technical_debt_hotspots_for_project_file: File-level hotspots.\n\
+             - code_ownership_for_path: Find code owners.\n",
+        );
+    }
+}
+
+fn append_tools_filtered_note(text: &mut String, tools_filtered: bool) {
+    if tools_filtered {
+        text.push_str(
+            "\nNote: Tool availability is restricted by the 'enabled_tools' configuration. \
+             Use get_config with key 'enabled_tools' to see the current setting.\n",
+        );
+    }
+}
+
+pub(crate) fn build_instructions(
+    is_standalone: bool,
+    tools_filtered: bool,
+    is_docker: bool,
+) -> String {
+    let login_tool_line = login_tool_instruction_line(is_docker);
+    let login_prompt_line = login_prompt_instruction_line(is_docker);
+    let mut text = format!(
         "CodeScene MCP Server - Code Health analysis tools for AI-assisted development.\n\n\
          TOOLS (always available):\n\
-         - login: Sign in to CodeScene with OAuth. When authentication is missing, call this tool first.\n\
+         {login_tool_line}\
          - explain_code_health: Learn about the Code Health metric.\n\
          - explain_code_health_productivity: Business case for Code Health.\n\
          - code_health_review: Detailed review of a single file.\n\
@@ -215,34 +280,19 @@ pub(crate) fn build_instructions(is_standalone: bool, tools_filtered: bool) -> S
          - get_config / set_config: Manage server configuration.\n\
          \n\
          PROMPTS:\n\
-         - login: Sign in to CodeScene with OAuth (calls the login tool).\n\
+         {login_prompt_line}\
          - review_code_health: Review Code Health for the current file.\n\
          - plan_code_health_refactoring: Plan a low-risk Code Health refactoring.\n\
          \n\
          RESOURCES:\n\
          - skill://<name>/SKILL.md: Agent skill instructions for Code Health workflows.\n\
          - skill://<name>/_manifest: File listing for a skill.\n\
-         Use resources/list to discover available skills.\n",
+         Use resources/list to discover available skills.\n"
     );
 
-    if !is_standalone {
-        text.push_str(
-            "\nTOOLS (API-connected):\n\
-             - select_project: Choose a CodeScene project.\n\
-             - list_technical_debt_goals_for_project: View debt goals.\n\
-             - list_technical_debt_goals_for_project_file: File-level goals.\n\
-             - list_technical_debt_hotspots_for_project: View hotspots.\n\
-             - list_technical_debt_hotspots_for_project_file: File-level hotspots.\n\
-             - code_ownership_for_path: Find code owners.\n",
-        );
-    }
-
-    if tools_filtered {
-        text.push_str(
-            "\nNote: Tool availability is restricted by the 'enabled_tools' configuration. \
-             Use get_config with key 'enabled_tools' to see the current setting.\n",
-        );
-    }
+    append_docker_auth_note(&mut text, is_docker);
+    append_api_tools_section(&mut text, is_standalone);
+    append_tools_filtered_note(&mut text, tools_filtered);
 
     text
 }
@@ -258,7 +308,7 @@ mod tests {
 
     #[test]
     fn prompts_list_contains_expected_prompts() {
-        let result = build_prompts_list();
+        let result = build_prompts_list(false);
         assert_eq!(result.prompts.len(), 3);
         let names: Vec<&str> = result.prompts.iter().map(|p| p.name.as_str()).collect();
         assert!(names.contains(&"login"));
@@ -267,8 +317,18 @@ mod tests {
     }
 
     #[test]
+    fn prompts_list_omits_login_in_docker() {
+        let result = build_prompts_list(true);
+        assert_eq!(result.prompts.len(), 2);
+        let names: Vec<&str> = result.prompts.iter().map(|p| p.name.as_str()).collect();
+        assert!(!names.contains(&"login"));
+        assert!(names.contains(&"review_code_health"));
+        assert!(names.contains(&"plan_code_health_refactoring"));
+    }
+
+    #[test]
     fn resolve_known_prompt_succeeds() {
-        let result = resolve_prompt("review_code_health");
+        let result = resolve_prompt("review_code_health", false);
         assert!(result.is_ok());
         let prompt = result.unwrap();
         assert!(!prompt.messages.is_empty());
@@ -276,7 +336,7 @@ mod tests {
 
     #[test]
     fn resolve_login_prompt_succeeds() {
-        let result = resolve_prompt("login");
+        let result = resolve_prompt("login", false);
         assert!(result.is_ok());
         let prompt = result.unwrap();
         let text = match &prompt.messages[0].content {
@@ -287,11 +347,34 @@ mod tests {
     }
 
     #[test]
-    fn resolve_unknown_prompt_returns_error() {
-        let result = resolve_prompt("nonexistent_prompt");
+    fn resolve_login_prompt_fails_in_docker() {
+        let result = resolve_prompt("login", true);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.message.contains("Unknown prompt"));
+    }
+
+    #[test]
+    fn resolve_unknown_prompt_returns_error() {
+        let result = resolve_prompt("nonexistent_prompt", false);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.message.contains("Unknown prompt"));
+    }
+
+    #[test]
+    fn build_instructions_omits_login_in_docker() {
+        let text = build_instructions(false, false, true);
+        assert!(!text.contains("- login:"));
+        assert!(text.contains("OAuth login is not available in Docker"));
+        assert!(text.contains("CS_ACCESS_TOKEN"));
+    }
+
+    #[test]
+    fn build_instructions_includes_login_outside_docker() {
+        let text = build_instructions(false, false, false);
+        assert!(text.contains("- login: Sign in to CodeScene with OAuth"));
+        assert!(!text.contains("OAuth login is not available in Docker"));
     }
 
     #[test]

@@ -7,7 +7,7 @@ description: Use when the user wants to view, set, or troubleshoot CodeScene MCP
 
 ## Overview
 
-Use this skill when the task is to configure the CodeScene MCP Server after it has been installed. The MCP server exposes `login`, `get_config`, and `set_config` tools that let the AI assistant authenticate and manage configuration on the user's behalf. Clients that support MCP prompts also expose a `login` prompt (slash command) that instructs the assistant to call the `login` tool.
+Use this skill when the task is to configure the CodeScene MCP Server after it has been installed. The MCP server exposes `get_config` and `set_config` tools (and, outside Docker, `login`) that let the AI assistant authenticate and manage configuration on the user's behalf. Clients that support MCP prompts also expose a `login` prompt (slash command) that instructs the assistant to call the `login` tool — except in Docker, where OAuth login is unavailable and a Personal Access Token (`CS_ACCESS_TOKEN`) is required.
 
 ## When to Use
 
@@ -25,7 +25,7 @@ Do not use this skill for installing or registering the MCP server in an AI assi
 
 ## Quick Reference
 
-- `login`: Sign in with OAuth (opens browser). Preferred for interactive desktop use. Also available as the `login` MCP prompt (slash command).
+- `login`: Sign in with OAuth (opens browser). Preferred for interactive desktop use. Also available as the `login` MCP prompt (slash command). Not available in Docker — use a PAT instead.
 - `get_config`: List all configuration options and their current values (sensitive values are masked).
 - `get_config` with a key: Read a single option by name.
 - `set_config`: Set a configuration value persistently.
@@ -82,4 +82,4 @@ For individual, interactive use, prefer `login` for auth and `set_config` for ot
 - Providing a CA bundle path that is not accessible to the MCP server process or Docker container.
 - Setting `enabled_tools` with misspelled tool names. The server warns about unknown names, but the misspelled tools are silently ignored. Use `get_config` with key `enabled_tools` to see the list of available tool names.
 - Forgetting that `enabled_tools` changes require a server restart. The tool list is built once at startup.
-- Trying to disable `get_config`, `set_config`, or `login` via `enabled_tools`. These tools are always enabled to prevent configuration lockout.
+- Trying to disable `get_config`, `set_config`, or `login` via `enabled_tools`. Outside Docker these tools are always enabled to prevent configuration lockout. In Docker, `login` is not registered at all (use PAT / `CS_ACCESS_TOKEN`).
