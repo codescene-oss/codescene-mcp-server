@@ -352,7 +352,7 @@ Controls which MCP tools the server exposes to the AI assistant. When set, only 
 
 This is useful for reducing token usage by limiting the number of tool descriptions sent to the AI model. Each exposed tool adds to the prompt context, so disabling tools you don't need can lower costs and improve response times.
 
-The `get_config` and `set_config` tools are always enabled and cannot be disabled. This prevents accidental lockout from the configuration system.
+The `get_config` and `set_config` tools are always enabled and cannot be disabled. This prevents accidental lockout from the configuration system. Outside Docker, the `login` tool is also always enabled. In Docker, OAuth is unsupported, so the `login` tool and `login` prompt are not registered — use `CS_ACCESS_TOKEN` or `set_config` with `access_token` instead.
 
 Changes to this setting require a server restart to take effect.
 

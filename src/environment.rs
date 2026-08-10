@@ -13,8 +13,42 @@ pub fn detect() -> &'static str {
 }
 
 pub fn is_docker() -> bool {
+    #[cfg(test)]
+    if let Some(forced) = test_override::docker_override() {
+        return forced;
+    }
     detect() == "docker"
 }
+
+#[cfg(test)]
+mod test_override {
+    use std::cell::Cell;
+
+    thread_local! {
+        static DOCKER_OVERRIDE: Cell<Option<bool>> = const { Cell::new(None) };
+    }
+
+    pub(super) fn docker_override() -> Option<bool> {
+        DOCKER_OVERRIDE.with(|c| c.get())
+    }
+
+    /// Force [`super::is_docker`] for the duration of the returned guard.
+    pub struct DockerOverrideGuard;
+
+    impl Drop for DockerOverrideGuard {
+        fn drop(&mut self) {
+            DOCKER_OVERRIDE.with(|c| c.set(None));
+        }
+    }
+
+    pub fn force_docker(is_docker: bool) -> DockerOverrideGuard {
+        DOCKER_OVERRIDE.with(|c| c.set(Some(is_docker)));
+        DockerOverrideGuard
+    }
+}
+
+#[cfg(test)]
+pub use test_override::force_docker;
 
 #[cfg(test)]
 mod tests {
@@ -37,5 +71,17 @@ mod tests {
         let first = detect();
         let second = detect();
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn force_docker_overrides_detect() {
+        let _guard = force_docker(true);
+        assert!(is_docker());
+    }
+
+    #[test]
+    fn force_docker_false_overrides_detect() {
+        let _guard = force_docker(false);
+        assert!(!is_docker());
     }
 }

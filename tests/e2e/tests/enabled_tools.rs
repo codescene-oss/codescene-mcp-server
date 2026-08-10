@@ -108,11 +108,40 @@ pub fn test_all_tools_without_filter() {
         names.contains("explain_code_health"),
         "explain_code_health should be listed"
     );
+    if is_docker() {
+        assert!(
+            !names.contains("login"),
+            "login must not be listed in Docker"
+        );
+    } else {
+        assert!(names.contains("login"), "login should be listed outside Docker");
+    }
     assert!(
         names.len() >= 10,
         "Expected >= 10 tools, found {}",
         names.len()
     );
+
+    let prompts_response = client
+        .send_request("prompts/list", json!({}), Duration::from_secs(15))
+        .expect("prompts/list should succeed");
+    let prompt_names: HashSet<String> = prompts_response["result"]["prompts"]
+        .as_array()
+        .expect("prompts should be an array")
+        .iter()
+        .map(|p| p["name"].as_str().expect("prompt name").to_string())
+        .collect();
+    if is_docker() {
+        assert!(
+            !prompt_names.contains("login"),
+            "login prompt must not be listed in Docker"
+        );
+    } else {
+        assert!(
+            prompt_names.contains("login"),
+            "login prompt should be listed outside Docker"
+        );
+    }
 }
 
 #[test]
@@ -137,17 +166,31 @@ pub fn test_filter_restricts_tools() {
     );
     assert!(names.contains("get_config"), "get_config always listed");
     assert!(names.contains("set_config"), "set_config always listed");
-    assert!(names.contains("login"), "login always listed");
+    if is_docker() {
+        assert!(
+            !names.contains("login"),
+            "login must not be listed in Docker"
+        );
+        assert_eq!(
+            names.len(),
+            4,
+            "Expected exactly 4 tools in Docker, found {}: {:?}",
+            names.len(),
+            names
+        );
+    } else {
+        assert!(names.contains("login"), "login always listed outside Docker");
+        assert_eq!(
+            names.len(),
+            5,
+            "Expected exactly 5 tools, found {}: {:?}",
+            names.len(),
+            names
+        );
+    }
     assert!(
         !names.contains("explain_code_health"),
         "explain_code_health should NOT be listed"
-    );
-    assert_eq!(
-        names.len(),
-        5,
-        "Expected exactly 5 tools, found {}: {:?}",
-        names.len(),
-        names
     );
 }
 
