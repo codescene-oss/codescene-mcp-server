@@ -1093,6 +1093,17 @@ fn test_pat_takes_precedence_over_oauth() {
     tests::oauth_login::test_pat_takes_precedence_over_oauth();
 }
 
+// --- OAuth Login Flow (real CLI + mock IdP, host-only) ---
+#[test]
+fn test_oauth_authorization_code_flow_persists_token() {
+    tests::oauth_login_flow::test_oauth_authorization_code_flow_persists_token();
+}
+
+#[test]
+fn test_oauth_flow_fails_when_routes_missing() {
+    tests::oauth_login_flow::test_oauth_flow_fails_when_routes_missing();
+}
+
 // --- Stress Test ---
 #[test]
 #[ignore] // Long-running; run with --ignored

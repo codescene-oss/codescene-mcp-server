@@ -79,6 +79,8 @@ CS_MCP_EXECUTABLE=target/release/cs-mcp cargo test --test e2e
 | `error_logging` | Error telemetry redaction and file logging |
 | `git_subtree` | Git subtree repository support |
 | `git_worktree` | Git worktree repository support |
+| `oauth_login` | MCP OAuth contract via fake CLI (`CS_CLI_PATH`) |
+| `oauth_login_flow` | Real CLI Authorization Code flow against mock OAuth server (host-only; skips Docker) |
 | `platform_specific` | Path handling (absolute, relative, symlinks, spaces, unicode) |
 | `relative_paths` | Relative path resolution |
 | `require_access_token` | Access token validation |

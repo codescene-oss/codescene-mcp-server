@@ -30,6 +30,7 @@ pub fn use_isolated_config_dir(
 #[allow(dead_code)]
 pub mod fake_http_server;
 pub mod fake_https_server;
+pub mod fake_oauth_server;
 
 pub mod analytics_environment_override;
 pub mod analytics_tracking;
@@ -44,6 +45,7 @@ pub mod error_logging;
 pub mod git_subtree;
 pub mod git_worktree;
 pub mod oauth_login;
+pub mod oauth_login_flow;
 pub mod platform_specific;
 pub mod relative_paths;
 pub mod require_access_token;
