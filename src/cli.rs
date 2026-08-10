@@ -829,6 +829,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn is_owned_by_current_user_rejects_world_writable_file() {
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
@@ -852,6 +853,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn create_or_get_truststore_rejects_world_writable_existing_file() {
         use std::os::unix::fs::PermissionsExt;
         let _lock = TRUSTSTORE_TEST_MUTEX.lock().unwrap();
@@ -895,6 +897,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn atomic_write_sets_restricted_permissions() {
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();

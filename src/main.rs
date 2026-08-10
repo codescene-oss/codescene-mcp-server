@@ -70,7 +70,7 @@ OAuth login is not available in Docker. Configure a Personal Access Token:\n\
 To get a Personal Access Token, see:\n\
 https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/authentication.md";
 
-fn token_missing_msg() -> &'static str {
+pub(crate) fn token_missing_msg() -> &'static str {
     if environment::is_docker() {
         TOKEN_MISSING_MSG_DOCKER
     } else {
@@ -375,7 +375,7 @@ fn remove_standalone_tools(router: &mut ToolRouter<CodeSceneServer>) {
 }
 
 /// Tools that cannot work in Docker (OAuth browser callback is unsupported).
-fn remove_docker_unsupported_tools(router: &mut ToolRouter<CodeSceneServer>) {
+pub(crate) fn remove_docker_unsupported_tools(router: &mut ToolRouter<CodeSceneServer>) {
     router.remove_route("login");
 }
 

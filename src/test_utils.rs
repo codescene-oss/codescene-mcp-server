@@ -282,10 +282,12 @@ mod tests {
 
     use super::*;
     use crate::config::{self, ConfigData};
+    use crate::environment;
     use crate::server_handler::build_instructions;
     use crate::version_checker::VersionChecker;
     use crate::{
-        display_version, fetch_cli_version, help_text, parse_cli_args, CliAction, API_ONLY_TOOLS,
+        display_version, fetch_cli_version, help_text, parse_cli_args, remove_docker_unsupported_tools,
+        token_missing_msg, CliAction, API_ONLY_TOOLS,
     };
 
     #[derive(Clone)]
@@ -904,5 +906,115 @@ mod tests {
 
         let close_result = service.close().await;
         assert!(close_result.is_ok());
+    }
+
+    #[test]
+    fn token_missing_msg_uses_docker_copy_when_forced() {
+        let _docker = environment::force_docker(true);
+        let msg = token_missing_msg();
+        assert!(msg.contains("not available in Docker"));
+        assert!(msg.contains("CS_ACCESS_TOKEN"));
+        assert!(!msg.contains("Call the `login` tool"));
+    }
+
+    #[test]
+    fn token_missing_msg_uses_oauth_copy_outside_docker() {
+        let _docker = environment::force_docker(false);
+        let msg = token_missing_msg();
+        assert!(msg.contains("Call the `login` tool"));
+    }
+
+    #[test]
+    fn remove_docker_unsupported_tools_drops_login_route() {
+        let mut router = CodeSceneServer::tool_router();
+        assert!(
+            router.list_all().iter().any(|t| t.name == "login"),
+            "login should be present before removal"
+        );
+        remove_docker_unsupported_tools(&mut router);
+        assert!(
+            !router.list_all().iter().any(|t| t.name == "login"),
+            "login should be removed for Docker"
+        );
+    }
+
+    #[test]
+    fn docker_mode_removes_login_tool_at_construction() {
+        let _lock = config::lock_test_env();
+        let _docker = environment::force_docker(true);
+        let server = make_server(false);
+        let names = tool_names(&server);
+        assert!(
+            !names.contains(&"login".to_string()),
+            "login must be absent in Docker mode"
+        );
+        assert!(names.contains(&"get_config".to_string()));
+        assert!(names.contains(&"set_config".to_string()));
+    }
+
+    fn prompts_list_request_message() -> ClientJsonRpcMessage {
+        serde_json::from_value(json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "prompts/list",
+            "params": {}
+        }))
+        .unwrap()
+    }
+
+    fn prompts_get_request_message(name: &str) -> ClientJsonRpcMessage {
+        serde_json::from_value(json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "prompts/get",
+            "params": { "name": name }
+        }))
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn list_prompts_and_get_prompt_handlers_work() {
+        use rmcp::ServiceExt;
+
+        let transport = ScriptedTransport::from_messages(vec![
+            initialize_request_message(),
+            initialized_notification_message(),
+            prompts_list_request_message(),
+            prompts_get_request_message("review_code_health"),
+        ]);
+        let sent = transport.sent.clone();
+        let server = make_server(false);
+
+        let service = server
+            .serve(transport)
+            .await
+            .expect("MCP handshake should succeed");
+
+        // Drain remaining client requests (prompts/list + prompts/get).
+        let _ = tokio::time::timeout(std::time::Duration::from_millis(500), service.waiting()).await;
+
+        let messages = sent.lock().unwrap().clone();
+        let bodies: Vec<serde_json::Value> = messages
+            .iter()
+            .filter_map(|m| serde_json::to_value(m).ok())
+            .collect();
+
+        let list_ok = bodies.iter().any(|b| {
+            b.get("id") == Some(&json!(2))
+                && b.pointer("/result/prompts")
+                    .and_then(|p| p.as_array())
+                    .is_some_and(|prompts| {
+                        prompts.iter().any(|p| p.get("name") == Some(&json!("review_code_health")))
+                    })
+        });
+        assert!(list_ok, "prompts/list handler should return review_code_health; got {bodies:?}");
+
+        let get_ok = bodies.iter().any(|b| {
+            b.get("id") == Some(&json!(3))
+                && b.pointer("/result/messages")
+                    .and_then(|m| m.as_array())
+                    .is_some_and(|messages| !messages.is_empty())
+        });
+        assert!(get_ok, "prompts/get handler should return messages; got {bodies:?}");
     }
 }
