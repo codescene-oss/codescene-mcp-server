@@ -6,7 +6,7 @@ You can install the CodeScene MCP Server on Windows using a simple PowerShell co
 
 - Windows 10 or later
 - PowerShell 5.1 or later
-- A CodeScene account with an access token (see [Getting a Personal Access Token](getting-a-personal-access-token.md))
+- A CodeScene account with an active license (see [Authentication](authentication.md))
 
 ## Quick Installation
 
@@ -44,7 +44,7 @@ irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/un
 
 After installing, configure your AI assistant to use the `cs-mcp` binary directly (no Docker required).
 
-> **Tip:** Once connected, you can configure your access token and other settings by simply asking your AI assistant — for example, *"Set my CodeScene access token to cs_abc123"*. See [Configuration Options](configuration-options.md) for all available settings.
+> **Tip:** Once connected, ask your AI Assistant to log in, or use the login tool. you can configure your optional access token and other settings by simply asking your AI assistant — for example, *"Set my CodeScene access token to cs_abc123"*. See [Configuration Options](configuration-options.md) for all available settings.
 
 ### VS Code / GitHub Copilot
 

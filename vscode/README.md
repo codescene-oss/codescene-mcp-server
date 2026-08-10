@@ -74,7 +74,7 @@ These tools require OAuth or a CodeScene Personal Access Token and a CodeScene C
 - **OAuth / Personal Access Token** — Full tool set, including project-level features.
 - **Standalone access token** — Local Code Health analysis only (scoring, review, refactoring).
 
-See [Authentication](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/getting-a-personal-access-token.md) for details.
+See [Authentication](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/authentication.md) for details.
 
 ## Settings
 

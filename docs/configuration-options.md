@@ -55,7 +55,7 @@ The type of credential determines which tools are available:
 
 Changing this value may require a **server restart** for tool registration changes to take effect.
 
-See [Authentication](getting-a-personal-access-token.md) for the recommended login flow and instructions on creating a PAT.
+See [Authentication](authentication.md) for the recommended login flow and instructions on creating a PAT.
 
 ## `account_id`
 
@@ -94,7 +94,7 @@ Optional CodeScene Cloud account/tenant ID for OAuth. Use this only if you belon
 }
 ```
 
-See [Authentication](getting-a-personal-access-token.md) for the multi-account OAuth flow.
+See [Authentication](authentication.md) for the multi-account OAuth flow.
 
 ## `onprem_url`
 
