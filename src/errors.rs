@@ -18,7 +18,7 @@ pub enum CliError {
          1. Use the `set_config` tool: set_config(key=\"access_token\", value=\"your-token\")\n\
          2. Set the CS_ACCESS_TOKEN environment variable in your MCP client configuration\n\n\
          To get a new Access Token, see:\n\
-         https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/getting-a-personal-access-token.md"
+         https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/authentication.md"
     )]
     LicenseCheckFailed { stderr: String },
 }

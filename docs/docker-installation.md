@@ -5,7 +5,7 @@ Docker provides a self-contained way to run the CodeScene MCP Server without ins
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-started/get-docker/) installed and running
-- A CodeScene account with an access token (see [Getting a Personal Access Token](getting-a-personal-access-token.md))
+- A CodeScene account with an access token (see [Authentication](authentication.md))
 
 ## Quick Start
 
@@ -19,12 +19,14 @@ docker pull codescene/codescene-mcp
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `CS_ACCESS_TOKEN` | Yes | Your CodeScene personal access token |
+| `CS_ACCESS_TOKEN` | Yes | Your CodeScene personal access token. OAuth is not supported with Docker. |
 | `CS_MOUNT_PATH` | Yes | Absolute path to your code directory |
 
 For additional environment variables (on-prem, SSL, proxy settings, etc.), see [Configuration Options](configuration-options.md).
 
 ## Integration with AI Assistants
+
+> **Note:** OAuth is not supported in Docker. use PAT for Authentication
 
 > **Note:** Docker containers cannot read the host's config file, so `CS_ACCESS_TOKEN` must be passed as an environment variable in the examples below. For other configuration options (on-prem, SSL, etc.), you can ask your AI assistant directly — for example, *"Set my CodeScene on-prem URL to https://my-instance.example.com"*. See [Configuration Options](configuration-options.md) for all available settings.
 

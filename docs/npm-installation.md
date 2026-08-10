@@ -5,7 +5,7 @@ You can install and run the CodeScene MCP Server using `npx` on macOS, Linux, an
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 18 or later
-- An Access Token (see [Getting a Personal Access Token](getting-a-personal-access-token.md))
+- A CodeScene account with an active license (see [Authentication](authentication.md))
 
 ## Quick Start
 
@@ -31,7 +31,7 @@ The first run automatically downloads the correct platform-specific binary for y
 
 After installing, configure your AI assistant to use `npx @codescene/codehealth-mcp` as the command.
 
-> **Tip:** Once connected, you can configure your access token and other settings by simply asking your AI assistant — for example, *"Set my CodeScene access token to cs_abc123"*. See [Configuration Options](configuration-options.md) for all available settings.
+> **Tip:** Once connected, ask your AI Assistant to log in, or use the login tool. you can configure your optional access token and other settings by simply asking your AI assistant — for example, *"Set my CodeScene access token to cs_abc123"*. See [Configuration Options](configuration-options.md) for all available settings.
 
 ### Claude Code
 

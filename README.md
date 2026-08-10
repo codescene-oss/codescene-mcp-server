@@ -15,7 +15,7 @@ The repository also includes a downloadable set of public agent skills in [skill
 
 Want AI to perform the setup? Start with [skills/installing-and-activating-codescene-mcp/SKILL.md](skills/installing-and-activating-codescene-mcp/SKILL.md).
 
-1. Get an Access Token for the MCP Server — see [Getting a Personal Access Token](docs/getting-a-personal-access-token.md).
+1. Setting up Authentication to the MCP Server — see [Authentication](docs/authentication.md).
 2. Install the MCP Server using one of the [installation options](#installation) below.
 3. Add the MCP Server to your AI assistant. See the detailed instructions for your environment in the installation guide.
 4. Copy the agent guidance that matches your license into your repository: [AGENTS-full.md](docs/AGENTS-full.md) for CodeScene Core users, [AGENTS-standalone.md](docs/AGENTS-standalone.md) for standalone license users, or [.amazonq/rules](.amazonq/rules) for Amazon Q. Also copy any relevant public [skills](skills) for reusable workflow prompts.
@@ -176,7 +176,7 @@ Use Code Health reviews to inform AI-driven summaries, diagnostics, or code tran
 
 <summary>Do I need a CodeScene account to use the MCP?</summary>
 
-The full feature set — including hotspots, technical debt goals, and code ownership — requires a [CodeScene subscription](https://codescene.com/pricing). Use your CodeScene instance to create the `CS_ACCESS_TOKEN` which activates the MCP.
+The full feature set — including hotspots, technical debt goals, and code ownership — requires a [CodeScene subscription](https://codescene.com/pricing). Authenticate by asking your AI Assistant to login to CodeScene, or use the login too. Alternatively, use your CodeScene instance to create the `CS_ACCESS_TOKEN` which activates the MCP.
 The MCP supports both CodeScene Cloud and CodeScene on-prem.
 
 For local Code Health analysis without a CodeScene subscription, you can use the standalone [CodeScene Code Health MCP](https://codescene.com/early-access-codescene-mcp-server).

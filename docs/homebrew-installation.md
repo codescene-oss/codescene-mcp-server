@@ -5,7 +5,7 @@ You can install the CodeScene MCP Server using Homebrew on macOS and Linux.
 ## Prerequisites
 
 - [Homebrew](https://brew.sh/) installed
-- A CodeScene account with an access token (see [Getting a Personal Access Token](getting-a-personal-access-token.md))
+- A CodeScene account with an active license (see [Authentication](authentication.md))
 
 ## Quick Installation
 
@@ -61,7 +61,7 @@ brew untap codescene-oss/codescene-mcp-server
 
 After installing via Homebrew, configure your AI assistant to use the `cs-mcp` binary directly (no Docker required).
 
-> **Tip:** Once connected, you can configure your access token and other settings by simply asking your AI assistant — for example, *"Set my CodeScene access token to cs_abc123"*. See [Configuration Options](configuration-options.md) for all available settings.
+> **Tip:** Once connected, you can ask your AI assistant to log in, or use the login tool. Configure your optional access token and other settings by simply asking your AI assistant — for example, *"Set my CodeScene access token to cs_abc123"*. See [Configuration Options](configuration-options.md) for all available settings.
 
 ### Claude Code
 

@@ -28,6 +28,8 @@ The value must be a positive integer (`CS_ACCOUNT_ID` / `account_id`). It does n
 
 Then sign in with the `login` prompt, by asking the assistant, or via **CodeScene: Sign In**.
 
+> **Note:** OAuth is not supported in Docker installation
+
 ---
 
 ## Alternative: Personal Access Token (PAT)

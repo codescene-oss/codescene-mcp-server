@@ -39,7 +39,7 @@ Then log in. Keep `account_id` set so later sessions use the same credential slo
 
 **CI / headless:** Use a Personal Access Token via `set_config` or `CS_ACCESS_TOKEN`. A saved PAT **blocks** OAuth until cleared.
 
-See [Authentication](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/getting-a-personal-access-token.md) for details.
+See [Authentication](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/authentication.md) for details.
 
 ## Skills
 
