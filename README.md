@@ -1,5 +1,7 @@
 # CodeScene MCP Server
 
+[![MCP Toplist](https://mcptoplist.com/badge/com.codescene%2Fcodescene-mcp-server.svg)](https://mcptoplist.com/server/com.codescene%2Fcodescene-mcp-server)
+
 [![CodeScene Hotspot Code Health](https://codescene.io/projects/72556/status-badges/hotspot-code-health)](https://codescene.io/projects/72556)
 [![CodeScene Average Code Health](https://codescene.io/projects/72556/status-badges/average-code-health)](https://codescene.io/projects/72556)
 [![CodeScene System Mastery](https://codescene.io/projects/72556/status-badges/system-mastery)](https://codescene.io/projects/72556)
