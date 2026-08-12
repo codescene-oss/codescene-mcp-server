@@ -130,6 +130,8 @@ impl Drop for TokenGuard<'_> {
         std::env::remove_var("CS_OAUTH_TOKEN");
         std::env::remove_var("CS_OAUTH_EXPIRES_AT");
         std::env::remove_var("CS_OAUTH_REFRESH_EXPIRES_AT");
+        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+        std::env::remove_var("CS_ACCOUNT_ID");
         std::env::remove_var("CS_OAUTH_CLIENT");
     }
 }
@@ -146,6 +148,8 @@ pub(crate) fn clear_token() -> TokenGuard<'static> {
     std::env::remove_var("CS_OAUTH_TOKEN");
     std::env::remove_var("CS_OAUTH_EXPIRES_AT");
     std::env::remove_var("CS_OAUTH_REFRESH_EXPIRES_AT");
+    std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+    std::env::remove_var("CS_ACCOUNT_ID");
     std::env::remove_var("CS_OAUTH_CLIENT");
     TokenGuard { _lock: lock }
 }
@@ -775,6 +779,11 @@ mod tests {
             std::env::set_var("CS_CONFIG_DIR", dir.path().as_os_str());
             std::env::set_var("CS_OAUTH_CLIENT", "mcp");
             std::env::remove_var("CS_ACCESS_TOKEN");
+            std::env::remove_var("CS_OAUTH_TOKEN");
+            std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+            std::env::remove_var("CS_OAUTH_REFRESH_EXPIRES_AT");
+            std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+            std::env::remove_var("CS_ACCOUNT_ID");
             Self {
                 _lock: lock,
                 _dir: dir,
@@ -793,7 +802,11 @@ mod tests {
         fn drop(&mut self) {
             std::env::remove_var("CS_OAUTH_CLIENT");
             std::env::remove_var("CS_CONFIG_DIR");
+            std::env::remove_var("CS_OAUTH_TOKEN");
             std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+            std::env::remove_var("CS_OAUTH_REFRESH_EXPIRES_AT");
+            std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+            std::env::remove_var("CS_ACCOUNT_ID");
         }
     }
 
@@ -809,13 +822,27 @@ mod tests {
 
     #[tokio::test]
     async fn run_switch_account_flow_with_succeeds() {
-        let _env = LogoutFlowEnv::new();
-        std::env::set_var("CS_OAUTH_TOKEN", "tok");
-        std::env::set_var("CS_OAUTH_EXPIRES_AT", "9999999999");
-        std::env::set_var("CS_OAUTH_ACCOUNT_ID", "42");
+        let env = LogoutFlowEnv::new();
+        // Seed via config file only — do not set CS_OAUTH_* in the process env
+        // before run_switch_account_flow_with, or snapshot_client_env_vars would
+        // treat them as client-owned and block later logout tests from clearing them.
+        let config_path = std::path::PathBuf::from(std::env::var("CS_CONFIG_DIR").unwrap())
+            .join("config.json");
+        std::fs::write(
+            &config_path,
+            serde_json::json!({
+                "instance_id": "test-switch-flow",
+                "oauth_token": "tok",
+                "oauth_expires_at": "9999999999",
+                "oauth_account_id": "42",
+            })
+            .to_string(),
+        )
+        .unwrap();
         let runner = MockCliRunner::with_responses(vec![]);
         run_switch_account_flow_with(&runner, 42).await.unwrap();
         assert_eq!(std::env::var("CS_ACCOUNT_ID").ok().as_deref(), Some("42"));
+        drop(env);
         std::env::remove_var("CS_OAUTH_TOKEN");
         std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
         std::env::remove_var("CS_ACCOUNT_ID");
