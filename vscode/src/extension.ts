@@ -62,6 +62,11 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('codescene.signIn', () => runSignIn(context, didChangeEmitter))
     );
 
+    // Command: Sign out of OAuth
+    context.subscriptions.push(
+        vscode.commands.registerCommand('codescene.signOut', () => runSignOut(context, didChangeEmitter))
+    );
+
     // Command: Configure access token (optional PAT / CI fallback)
     context.subscriptions.push(
         vscode.commands.registerCommand('codescene.configure', async () => {
@@ -219,6 +224,23 @@ function handleAuthResult(
 }
 
 /**
+ * Handles the JSON result from the logout subprocess.
+ */
+function handleLogoutResult(
+    stdout: string,
+    didChangeEmitter: vscode.EventEmitter<void>,
+): void {
+    const result = JSON.parse(stdout.trim());
+    if (result.status === 'signed_out') {
+        vscode.window.showInformationMessage('CodeScene: Successfully signed out!');
+        didChangeEmitter.fire();
+    } else {
+        vscode.window.showWarningMessage(`CodeScene: Sign out incomplete — ${result.error || result.status}`);
+        didChangeEmitter.fire();
+    }
+}
+
+/**
  * Runs the OAuth sign-in flow by spawning `cs-mcp auth`.
  */
 async function runSignIn(
@@ -257,6 +279,51 @@ async function runSignIn(
                         handleAuthResult(stdout, didChangeEmitter);
                     } catch {
                         vscode.window.showInformationMessage('CodeScene: Sign in completed.');
+                        didChangeEmitter.fire();
+                    }
+                }
+                resolve();
+            });
+        }),
+    );
+}
+
+/**
+ * Runs OAuth sign-out by spawning `cs-mcp logout`.
+ */
+async function runSignOut(
+    context: vscode.ExtensionContext,
+    didChangeEmitter: vscode.EventEmitter<void>,
+) {
+    const binaryPath = getBinaryPath(context);
+    if (!binaryPath) {
+        vscode.window.showErrorMessage('CodeScene: Binary not available for this platform.');
+        return;
+    }
+
+    const config = vscode.workspace.getConfiguration('codescene');
+    const onpremUrl = (config.get<string>('onpremUrl', '') || '').trim();
+    const accountId = optionalIdString(config.get<string>('accountId', ''));
+    const env = buildAuthEnv(onpremUrl, accountId);
+
+    await vscode.window.withProgress(
+        {
+            location: vscode.ProgressLocation.Notification,
+            title: 'CodeScene: Signing out...',
+            cancellable: false,
+        },
+        () => new Promise<void>((resolve) => {
+            execFile(binaryPath, ['logout'], { env }, (error, stdout, stderr) => {
+                if (error) {
+                    vscode.window.showErrorMessage(
+                        `CodeScene: Sign out failed — ${stderr?.trim() || stdout?.trim() || error.message}`,
+                    );
+                    didChangeEmitter.fire();
+                } else {
+                    try {
+                        handleLogoutResult(stdout, didChangeEmitter);
+                    } catch {
+                        vscode.window.showInformationMessage('CodeScene: Sign out completed.');
                         didChangeEmitter.fire();
                     }
                 }

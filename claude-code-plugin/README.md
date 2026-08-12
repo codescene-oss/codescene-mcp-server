@@ -25,6 +25,8 @@ claude --plugin-dir ./claude-code-plugin
 - Invoke the `login` MCP prompt (slash command) if your client exposes MCP prompts
 - Or ask Claude: *Log me in to CodeScene* (calls the `login` tool and opens your browser)
 
+To sign out, use the `logout` prompt/tool, or ask Claude to log you out.
+
 **Multi-account Cloud:** If you belong to multiple CodeScene Cloud accounts, set your account/tenant ID first:
 
 > Set my CodeScene account ID to 123
@@ -68,6 +70,7 @@ The plugin registers the CodeScene MCP server, which provides the following tool
 | Tool | Description |
 |------|-------------|
 | `login` | Sign in to CodeScene with OAuth (opens browser) |
+| `logout` | Sign out of CodeScene OAuth and clear the stored session |
 | `get_config` | Read current MCP server configuration |
 | `set_config` | Write MCP server configuration values |
 

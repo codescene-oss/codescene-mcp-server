@@ -12,6 +12,16 @@ For interactive desktop use, no token needs to be manually obtained or configure
 
 The `login` tool opens your browser to complete the OAuth flow. Once done, the MCP server is authenticated for the session.
 
+### Sign out
+
+To clear a stored OAuth session:
+
+1. **MCP `logout` prompt (slash command)** — Invokes the `logout` tool.
+2. **Ask the assistant** — Say *"Log me out of CodeScene"* so the agent calls the `logout` tool.
+3. **VS Code command** — Run **CodeScene: Sign Out** from the Command Palette (VS Code extension only).
+
+Logout revokes/removes the CLI OAuth credentials and clears MCP OAuth config. It does **not** remove a Personal Access Token (`CS_ACCESS_TOKEN`); clear that separately via `set_config` or your MCP client settings.
+
 **For CodeScene Cloud:** no extra configuration needed for single-account users — just sign in.
 
 **Multi-account Cloud:** If you belong to more than one CodeScene Cloud account, set your account/tenant ID **before** logging in, and keep it set afterward (it selects the OAuth credential slot):

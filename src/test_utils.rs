@@ -486,6 +486,13 @@ mod tests {
         assert!(matches!(action, CliAction::Auth));
     }
 
+    #[test]
+    fn parse_cli_args_supports_logout() {
+        let args = vec!["logout".to_string()];
+        let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
+        assert!(matches!(action, CliAction::Logout));
+    }
+
     #[tokio::test]
     async fn fetch_cli_version_returns_cli_output() {
         let runner = MockCliRunner::with_ok("cs version 1.5.0\n");
@@ -714,6 +721,8 @@ mod tests {
         assert!(text.contains("Usage:"));
         assert!(text.contains("--help"));
         assert!(text.contains("--version"));
+        assert!(text.contains("auth"));
+        assert!(text.contains("logout"));
     }
 
     #[test]
@@ -789,6 +798,7 @@ mod tests {
             "missing set_config"
         );
         assert!(names.contains(&"login".to_string()), "missing login");
+        assert!(names.contains(&"logout".to_string()), "missing logout");
     }
 
     fn assert_tool_count_and_config(names: &[String], expected: usize) {
@@ -806,7 +816,7 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server(false);
         let names = tool_names(&server);
-        assert_tool_count_and_config(&names, 25);
+        assert_tool_count_and_config(&names, 26);
         assert!(names.contains(&"code_health_review".to_string()));
     }
 
@@ -816,8 +826,8 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server_with_enabled_tools(false, "code_health_review,code_health_score");
         let names = tool_names(&server);
-        // Should have the 2 enabled tools + 3 always-on = 5
-        assert_tool_count_and_config(&names, 5);
+        // Should have the 2 enabled tools + 4 always-on = 6
+        assert_tool_count_and_config(&names, 6);
         assert!(names.contains(&"code_health_review".to_string()));
         assert!(names.contains(&"code_health_score".to_string()));
     }
@@ -852,7 +862,7 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server_with_enabled_tools(false, "analyze_change_set");
         let names = tool_names(&server);
-        assert_tool_count_and_config(&names, 4);
+        assert_tool_count_and_config(&names, 5);
         assert!(names.contains(&"analyze_change_set".to_string()));
     }
 
@@ -947,6 +957,10 @@ mod tests {
         assert!(
             !names.contains(&"login".to_string()),
             "login must be absent in Docker mode"
+        );
+        assert!(
+            names.contains(&"logout".to_string()),
+            "logout must remain available in Docker"
         );
         assert!(names.contains(&"get_config".to_string()));
         assert!(names.contains(&"set_config".to_string()));

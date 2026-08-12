@@ -1,6 +1,6 @@
 # Tools
 
-The CodeScene MCP Server provides 24 tools organized into four categories:
+The CodeScene MCP Server provides 25 tools organized into four categories:
 **Code Health Analysis**, **Code Health Rules Configuration**, **Technical Debt & Project Insights**, and **Server Management**.
 
 Tools marked **All Users** work with any valid license (standalone or API-connected).
@@ -118,6 +118,12 @@ These tools manage authentication, server configuration, installation verificati
 
 Sign in to CodeScene with OAuth. Opens a browser to complete the flow (waits up to two minutes). Prefer this for interactive desktop use. Not needed when `CS_ACCESS_TOKEN` is already set — a configured PAT blocks OAuth until cleared. Clients that support MCP prompts can start the same flow via the `login` prompt (slash command).
 
+### `logout`
+
+**Availability:** All Users
+
+Sign out of CodeScene OAuth. Calls the CLI logout and clears stored OAuth config (including a signed-out sentinel so the session cannot be silently refreshed). Does not remove `CS_ACCESS_TOKEN`; clear a PAT separately via `set_config` or your MCP client environment. Also available as the `logout` MCP prompt (slash command).
+
 ### `get_config`
 
 **Availability:** All Users
@@ -179,6 +185,7 @@ MCP prompts are short chat templates clients can expose as slash commands. They 
 | Prompt | Description |
 |--------|-------------|
 | `login` | Sign in to CodeScene with OAuth (calls the `login` tool) |
+| `logout` | Sign out of CodeScene OAuth (calls the `logout` tool) |
 | `review_code_health` | Review Code Health for the current open file |
 | `plan_code_health_refactoring` | Plan a prioritized, low-risk Code Health refactoring |
 
@@ -189,6 +196,7 @@ In VS Code Copilot Chat, invoke them from the slash-command / prompt picker (`mc
 | Tool | Availability |
 |------|-------------|
 | `login` | All Users |
+| `logout` | All Users |
 | `code_health_score` | All Users |
 | `code_health_review` | All Users |
 | `pre_commit_code_health_safeguard` | All Users |

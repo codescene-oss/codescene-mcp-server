@@ -71,8 +71,8 @@ describe('activate', () => {
         const ctx = makeContext();
         extension.activate(ctx);
 
-        // status bar + provider + 3 commands + config watcher = 6
-        assert.equal(ctx.subscriptions.length, 7);
+        // status bar + provider + 5 commands + config watcher = 8
+        assert.equal(ctx.subscriptions.length, 8);
     });
 
     it('registers MCP server definition provider with id codesceneMcp', () => {
@@ -83,11 +83,12 @@ describe('activate', () => {
         assert.equal(state.registeredProviders[0].id, 'codesceneMcp');
     });
 
-    it('registers four commands', () => {
+    it('registers five commands', () => {
         const ctx = makeContext();
         extension.activate(ctx);
 
         assert.ok(state.registeredCommands['codescene.signIn']);
+        assert.ok(state.registeredCommands['codescene.signOut']);
         assert.ok(state.registeredCommands['codescene.configure']);
         assert.ok(state.registeredCommands['codescene.restart']);
         assert.ok(state.registeredCommands['codescene.showStatus']);
@@ -550,5 +551,78 @@ describe('codescene.signIn command', () => {
         const { options } = state.execFileCalls[0];
         assert.equal(options.env['CS_ONPREM_URL'], 'https://cs.co');
         assert.equal(options.env['CS_ACCOUNT_ID'], '42');
+    });
+});
+
+describe('codescene.signOut command', () => {
+    beforeEach(() => { reset(); });
+    afterEach(() => {
+        if (existsSync(FAKE_EXT_PATH)) {
+            rmSync(FAKE_EXT_PATH, { recursive: true, force: true });
+        }
+    });
+
+    function setupBinary(ctx) {
+        const binDir = join(ctx.extensionPath, 'bin');
+        mkdirSync(binDir, { recursive: true });
+        const binaryName = process.platform === 'darwin' && process.arch === 'arm64'
+            ? 'cs-mcp-macos-aarch64'
+            : process.platform === 'linux' ? 'cs-mcp-linux-amd64' : 'cs-mcp-windows-amd64.exe';
+        writeFileSync(join(binDir, binaryName), '#!/bin/sh\necho {}');
+    }
+
+    async function invokeSignOut({ execResult, configOverrides } = {}) {
+        if (execResult) state.execFileResult = execResult;
+        if (configOverrides) Object.assign(state.configValues, configOverrides);
+        const ctx = makeContext();
+        setupBinary(ctx);
+        extension.activate(ctx);
+        const handler = findCommand('codescene.signOut');
+        await handler();
+    }
+
+    it('shows error when binary is not available', async () => {
+        const ctx = makeContext({ extensionPath: '/nonexistent' });
+        extension.activate(ctx);
+        const handler = findCommand('codescene.signOut');
+        await handler();
+
+        const errorMsg = state.shownErrors.find(m => m.message.includes('Binary not available'));
+        assert.ok(errorMsg, 'expected binary not available error');
+    });
+
+    it('shows success message on signed_out result', async () => {
+        await invokeSignOut({ execResult: { error: null, stdout: '{"status":"signed_out"}', stderr: '' } });
+
+        const msg = state.shownInfoMessages.find(m => m.message.includes('Successfully signed out'));
+        assert.ok(msg, 'expected success message');
+        assert.equal(state.execFileCalls.length, 1);
+        assert.deepEqual(state.execFileCalls[0].args, ['logout']);
+    });
+
+    it('shows warning on incomplete logout', async () => {
+        await invokeSignOut({
+            execResult: { error: null, stdout: '{"status":"error","error":"connection refused"}', stderr: '' },
+        });
+
+        const msg = state.shownWarnings.find(m => m.message.includes('Sign out incomplete'));
+        assert.ok(msg, 'expected warning message');
+    });
+
+    it('shows error message on execFile failure', async () => {
+        await invokeSignOut({
+            execResult: { error: new Error('spawn failed'), stdout: '', stderr: 'timeout' },
+        });
+
+        const msg = state.shownErrors.find(m => m.message.includes('Sign out failed'));
+        assert.ok(msg, 'expected error message');
+        assert.ok(msg.message.includes('timeout'), 'expected stderr in message');
+    });
+
+    it('handles unparseable stdout gracefully', async () => {
+        await invokeSignOut({ execResult: { error: null, stdout: 'not json', stderr: '' } });
+
+        const msg = state.shownInfoMessages.find(m => m.message.includes('Sign out completed'));
+        assert.ok(msg, 'expected fallback success message');
     });
 });
