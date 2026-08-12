@@ -41,7 +41,8 @@ export function activate(context: vscode.ExtensionContext) {
                 }
 
                 const env = buildEnvironment(config);
-                updateStatusBar(true);
+                const accountId = optionalIdString(config.get<string>('accountId', ''));
+                updateStatusBar(true, accountId);
 
                 return [
                     new vscode.McpStdioServerDefinition(
@@ -67,6 +68,12 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('codescene.signOut', () =>
             runAuthCommand(context, didChangeEmitter, 'sign-out'))
+    );
+
+    // Command: Switch Cloud OAuth account
+    context.subscriptions.push(
+        vscode.commands.registerCommand('codescene.switchAccount', () =>
+            runSwitchAccountCommand(context, didChangeEmitter))
     );
 
     // Command: Configure access token (optional PAT / CI fallback)
@@ -121,6 +128,7 @@ export function activate(context: vscode.ExtensionContext) {
                 items.push(`Binary path: ${binaryPath}`);
             }
 
+            updateStatusBar(enabled, accountIdStr);
             vscode.window.showInformationMessage(items.join(' | '));
         })
     );
@@ -209,7 +217,7 @@ function buildAuthEnv(onpremUrl: string, accountId: string): Record<string, stri
     return env;
 }
 
-type AuthSubprocessKind = 'sign-in' | 'sign-out';
+type AuthSubprocessKind = 'sign-in' | 'sign-out' | 'switch-account';
 
 interface AuthFlowOptions {
     kind: AuthSubprocessKind;
@@ -219,10 +227,19 @@ interface AuthFlowOptions {
     /** When true, always refresh MCP definitions after the subprocess finishes. */
     alwaysRefresh: boolean;
     successStatuses: string[];
+    /** Optional account id to inject into the auth subprocess env / messaging. */
+    accountIdOverride?: string;
 }
 
 function authFlowLabel(kind: AuthSubprocessKind): string {
-    return kind === 'sign-in' ? 'Sign in' : 'Sign out';
+    switch (kind) {
+        case 'sign-in':
+            return 'Sign in';
+        case 'sign-out':
+            return 'Sign out';
+        case 'switch-account':
+            return 'Switch account';
+    }
 }
 
 /**
@@ -235,8 +252,16 @@ function handleAuthSubprocessResult(
 ): void {
     const result = JSON.parse(stdout.trim());
     if (options.successStatuses.includes(result.status)) {
-        const successVerb = options.kind === 'sign-in' ? 'signed in' : 'signed out';
-        vscode.window.showInformationMessage(`CodeScene: Successfully ${successVerb}!`);
+        let message: string;
+        if (options.kind === 'switch-account') {
+            const accountId = result.account_id ?? 'unknown';
+            message = `CodeScene: Switched to account ${accountId} (${result.status}).`;
+        } else if (options.kind === 'sign-in') {
+            message = 'CodeScene: Successfully signed in!';
+        } else {
+            message = 'CodeScene: Successfully signed out!';
+        }
+        vscode.window.showInformationMessage(message);
         didChangeEmitter.fire();
         return;
     }
@@ -268,10 +293,17 @@ async function runAuthFlow(
         return;
     }
 
-    const accountId = optionalIdString(config.get<string>('accountId', ''));
+    const accountId =
+        options.accountIdOverride ??
+        optionalIdString(config.get<string>('accountId', ''));
     const env = buildAuthEnv(onpremUrl, accountId);
     const label = authFlowLabel(options.kind);
-    const progressTitle = `CodeScene: ${options.kind === 'sign-in' ? 'Signing in' : 'Signing out'}...`;
+    const progressTitle =
+        options.kind === 'sign-in'
+            ? 'CodeScene: Signing in...'
+            : options.kind === 'sign-out'
+              ? 'CodeScene: Signing out...'
+              : 'CodeScene: Switching account...';
     const completedMessage = `CodeScene: ${label} completed.`;
 
     await vscode.window.withProgress(
@@ -303,7 +335,10 @@ async function runAuthFlow(
     );
 }
 
-const AUTH_FLOWS: Record<AuthSubprocessKind, Omit<AuthFlowOptions, 'kind'>> = {
+const AUTH_FLOWS: Record<
+    Exclude<AuthSubprocessKind, 'switch-account'>,
+    Omit<AuthFlowOptions, 'kind'>
+> = {
     'sign-in': {
         args: ['auth'],
         resolveOnpremUrl,
@@ -323,9 +358,52 @@ const AUTH_FLOWS: Record<AuthSubprocessKind, Omit<AuthFlowOptions, 'kind'>> = {
 async function runAuthCommand(
     context: vscode.ExtensionContext,
     didChangeEmitter: vscode.EventEmitter<void>,
-    kind: AuthSubprocessKind,
+    kind: Exclude<AuthSubprocessKind, 'switch-account'>,
 ) {
     await runAuthFlow(context, didChangeEmitter, { kind, ...AUTH_FLOWS[kind] });
+}
+
+/**
+ * Prompts for a Cloud account ID, saves `codescene.accountId`, then runs
+ * `cs-mcp auth switch <id>`.
+ */
+async function runSwitchAccountCommand(
+    context: vscode.ExtensionContext,
+    didChangeEmitter: vscode.EventEmitter<void>,
+): Promise<void> {
+    const config = vscode.workspace.getConfiguration('codescene');
+    const existing = optionalIdString(config.get<string>('accountId', ''));
+    const input = await vscode.window.showInputBox({
+        prompt: 'CodeScene Cloud account ID to switch to',
+        placeHolder: 'e.g. 12345',
+        value: existing,
+        ignoreFocusOut: true,
+        validateInput: (value) => {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return 'Account ID is required';
+            }
+            if (!/^\d+$/.test(trimmed) || Number(trimmed) <= 0) {
+                return 'Account ID must be a positive integer';
+            }
+            return undefined;
+        },
+    });
+    if (input === undefined) {
+        return;
+    }
+    const accountId = input.trim();
+    await config.update('accountId', accountId, vscode.ConfigurationTarget.Global);
+    updateStatusBar(config.get<boolean>('enabled', true), accountId);
+
+    await runAuthFlow(context, didChangeEmitter, {
+        kind: 'switch-account',
+        args: ['auth', 'switch', accountId],
+        resolveOnpremUrl: async (cfg) => (cfg.get<string>('onpremUrl', '') || '').trim(),
+        alwaysRefresh: true,
+        successStatuses: ['already_on_account', 'reused_session', 'signed_in'],
+        accountIdOverride: accountId,
+    });
 }
 
 /**
@@ -351,10 +429,12 @@ function getBinaryPath(context: vscode.ExtensionContext): string | undefined {
 /**
  * Updates the status bar item.
  */
-function updateStatusBar(active: boolean) {
+function updateStatusBar(active: boolean, accountId?: string) {
     if (active) {
         statusBarItem.text = '$(shield) CodeScene';
-        statusBarItem.tooltip = 'CodeScene CodeHealth MCP — Active';
+        statusBarItem.tooltip = accountId
+            ? `CodeScene CodeHealth MCP — Active (account ${accountId})`
+            : 'CodeScene CodeHealth MCP — Active';
         statusBarItem.show();
     } else {
         statusBarItem.text = '$(shield) CodeScene (off)';

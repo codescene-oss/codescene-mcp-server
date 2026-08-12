@@ -86,6 +86,8 @@ fn attach_set_value_warnings(
 ) {
     if let Some(warning) = env_override_warning(option) {
         result["warning"] = json!(warning);
+    } else if let Some(warning) = account_id_switch_warning(option, value) {
+        result["warning"] = json!(warning);
     }
     if let Some(restart) = restart_warning(option) {
         result["restart_required"] = json!(restart);
@@ -93,6 +95,17 @@ fn attach_set_value_warnings(
     if let Some(tool_warning) = unknown_tool_names_warning(option, value) {
         result["tool_name_warning"] = json!(tool_warning);
     }
+}
+
+fn account_id_switch_warning(option: &config::ConfigOption, value: &str) -> Option<String> {
+    if option.key != "account_id" || value.trim().is_empty() {
+        return None;
+    }
+    Some(
+        "Changing account_id alone does not switch the active OAuth session. \
+         Call the switch_account tool (or CodeScene: Switch Account) to retarget Cloud OAuth."
+            .to_string(),
+    )
 }
 
 fn format_option_json(option: &config::ConfigOption, data: &ConfigData) -> serde_json::Value {
@@ -434,6 +447,11 @@ mod tests {
             let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
             assert_eq!(parsed["status"], json!("saved"));
             assert_eq!(parsed["key"], json!("account_id"));
+            let warning = parsed["warning"].as_str().unwrap();
+            assert!(
+                warning.contains("switch_account"),
+                "expected switch_account guidance, got: {warning}"
+            );
             std::env::remove_var("CS_ACCOUNT_ID");
         })
         .await;

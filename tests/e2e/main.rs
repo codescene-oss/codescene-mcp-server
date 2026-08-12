@@ -1103,6 +1103,11 @@ fn test_logout_notes_pat_still_configured() {
     tests::oauth_login::test_logout_notes_pat_still_configured();
 }
 
+#[test]
+fn test_switch_account_reuses_cli_slot() {
+    tests::oauth_login::test_switch_account_reuses_cli_slot();
+}
+
 // --- OAuth Login Flow (real CLI + mock IdP, host-only) ---
 #[test]
 fn test_oauth_authorization_code_flow_persists_token() {
