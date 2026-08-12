@@ -103,6 +103,24 @@ mod tests {
     use crate::http::tests::MockHttpClient;
     use crate::test_utils::MockCliRunner;
     use crate::tests::{clear_token, make_server_with_mocks, result_text, set_token};
+    use crate::CodeSceneServer;
+
+    const SIGNED_OUT_JSON: &str = r#"{"status":"signed_out","access-token":null,"api-url":null}"#;
+
+    #[derive(Clone, Copy)]
+    enum ExpectedOutcome {
+        ReusedSession { account_id: i64 },
+        AlreadyOnAccount { account_id: i64 },
+        InteractiveSignIn { account_id: i64 },
+        Error,
+    }
+
+    struct SessionCase {
+        session_token: &'static str,
+        session_account: i64,
+        target_account: i64,
+        expected: ExpectedOutcome,
+    }
 
     fn params(account_id: i64) -> SwitchAccountParam {
         SwitchAccountParam { account_id }
@@ -115,123 +133,130 @@ mod tests {
         )
     }
 
+    fn server_with_cli(cli: MockCliRunner) -> CodeSceneServer {
+        make_server_with_mocks(false, cli, MockHttpClient::new(vec![]))
+    }
+
+    fn seed_oauth_session(token: &str, account_id: i64) {
+        std::env::set_var("CS_OAUTH_TOKEN", token);
+        std::env::set_var("CS_OAUTH_EXPIRES_AT", (now_epoch_secs() + 3600).to_string());
+        std::env::set_var("CS_OAUTH_ACCOUNT_ID", account_id.to_string());
+    }
+
+    fn clear_oauth_session() {
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+        std::env::remove_var("CS_ACCOUNT_ID");
+    }
+
+    async fn switch_text(server: &CodeSceneServer, account_id: i64) -> String {
+        result_text(&handle(server, params(account_id)).await.unwrap()).to_string()
+    }
+
+    fn assert_expected_text(text: &str, expected: ExpectedOutcome) {
+        match expected {
+            ExpectedOutcome::ReusedSession { account_id } => {
+                assert!(
+                    text.contains(&format!("Switched to CodeScene account {account_id}"))
+                        && text.contains("stored OAuth session"),
+                    "got: {text}"
+                );
+            }
+            ExpectedOutcome::AlreadyOnAccount { account_id } => {
+                assert!(
+                    text.contains("Already signed in")
+                        && text.contains(&account_id.to_string()),
+                    "got: {text}"
+                );
+            }
+            ExpectedOutcome::InteractiveSignIn { account_id } => {
+                assert!(
+                    text.contains("interactive sign-in")
+                        && text.contains(&account_id.to_string()),
+                    "got: {text}"
+                );
+            }
+            ExpectedOutcome::Error => {
+                assert!(
+                    text.contains("Failed to switch CodeScene account")
+                        && text.contains("switch_account"),
+                    "got: {text}"
+                );
+            }
+        }
+    }
+
+    async fn assert_switch_with_session(case: SessionCase, cli: MockCliRunner) {
+        let _g = clear_token();
+        seed_oauth_session(case.session_token, case.session_account);
+        let text = switch_text(&server_with_cli(cli), case.target_account).await;
+        assert_expected_text(&text, case.expected);
+        clear_oauth_session();
+    }
+
     #[tokio::test]
     async fn rejects_non_positive_account_id() {
         let _g = clear_token();
-        let server = make_server_with_mocks(
-            false,
-            MockCliRunner::with_ok(""),
-            MockHttpClient::new(vec![]),
-        );
-        let result = handle(&server, params(0)).await.unwrap();
-        let text = result_text(&result);
+        let text = switch_text(&server_with_cli(MockCliRunner::with_ok("")), 0).await;
         assert!(text.contains("positive integer"), "got: {text}");
     }
 
     #[tokio::test]
     async fn rejects_when_pat_configured() {
         let _g = set_token("pat");
-        let server = make_server_with_mocks(
-            false,
-            MockCliRunner::with_ok(""),
-            MockHttpClient::new(vec![]),
-        );
-        let result = handle(&server, params(42)).await.unwrap();
-        let text = result_text(&result);
+        let text = switch_text(&server_with_cli(MockCliRunner::with_ok("")), 42).await;
         assert!(text.contains("CS_ACCESS_TOKEN"), "got: {text}");
     }
 
     #[tokio::test]
-    async fn switches_via_reused_session() {
-        let _g = clear_token();
-        std::env::set_var("CS_OAUTH_TOKEN", "old");
-        std::env::set_var("CS_OAUTH_EXPIRES_AT", (now_epoch_secs() + 3600).to_string());
-        std::env::set_var("CS_OAUTH_ACCOUNT_ID", "1");
-        let cli = MockCliRunner::with_ok(&signed_in_json("slot", 99));
-        let server = make_server_with_mocks(false, cli, MockHttpClient::new(vec![]));
-        let result = handle(&server, params(99)).await.unwrap();
-        let text = result_text(&result);
-        assert!(
-            text.contains("Switched to CodeScene account 99")
-                && text.contains("stored OAuth session"),
-            "got: {text}"
-        );
-        std::env::remove_var("CS_OAUTH_TOKEN");
-        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
-        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
-        std::env::remove_var("CS_ACCOUNT_ID");
-    }
-
-    #[tokio::test]
-    async fn reports_already_on_account() {
-        let _g = clear_token();
-        std::env::set_var("CS_OAUTH_TOKEN", "tok");
-        std::env::set_var("CS_OAUTH_EXPIRES_AT", (now_epoch_secs() + 3600).to_string());
-        std::env::set_var("CS_OAUTH_ACCOUNT_ID", "42");
-        let server = make_server_with_mocks(
-            false,
-            MockCliRunner::with_responses(vec![]),
-            MockHttpClient::new(vec![]),
-        );
-        let result = handle(&server, params(42)).await.unwrap();
-        let text = result_text(&result);
-        assert!(
-            text.contains("Already signed in") && text.contains("42"),
-            "got: {text}"
-        );
-        std::env::remove_var("CS_OAUTH_TOKEN");
-        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
-        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
-        std::env::remove_var("CS_ACCOUNT_ID");
-    }
-
-    #[tokio::test]
-    async fn reports_interactive_sign_in() {
-        let _g = clear_token();
-        std::env::set_var("CS_OAUTH_TOKEN", "old");
-        std::env::set_var("CS_OAUTH_EXPIRES_AT", (now_epoch_secs() + 3600).to_string());
-        std::env::set_var("CS_OAUTH_ACCOUNT_ID", "1");
-        let signed_out = r#"{"status":"signed_out","access-token":null,"api-url":null}"#;
-        let login = signed_in_json("new", 77);
-        let cli = MockCliRunner::with_responses(vec![
-            Ok(signed_out.to_string()),
-            Ok(login),
-        ]);
-        let server = make_server_with_mocks(false, cli, MockHttpClient::new(vec![]));
-        let result = handle(&server, params(77)).await.unwrap();
-        let text = result_text(&result);
-        assert!(
-            text.contains("interactive sign-in") && text.contains("77"),
-            "got: {text}"
-        );
-        std::env::remove_var("CS_OAUTH_TOKEN");
-        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
-        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
-        std::env::remove_var("CS_ACCOUNT_ID");
-    }
-
-    #[tokio::test]
-    async fn reports_switch_error() {
-        let _g = clear_token();
-        std::env::set_var("CS_OAUTH_TOKEN", "old");
-        std::env::set_var("CS_OAUTH_EXPIRES_AT", (now_epoch_secs() + 3600).to_string());
-        std::env::set_var("CS_OAUTH_ACCOUNT_ID", "1");
-        let signed_out = r#"{"status":"signed_out","access-token":null,"api-url":null}"#;
-        let cli = MockCliRunner::with_responses(vec![
-            Ok(signed_out.to_string()),
-            Ok(signed_out.to_string()),
-        ]);
-        let server = make_server_with_mocks(false, cli, MockHttpClient::new(vec![]));
-        let result = handle(&server, params(77)).await.unwrap();
-        let text = result_text(&result);
-        assert!(
-            text.contains("Failed to switch CodeScene account")
-                && text.contains("switch_account"),
-            "got: {text}"
-        );
-        std::env::remove_var("CS_OAUTH_TOKEN");
-        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
-        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
-        std::env::remove_var("CS_ACCOUNT_ID");
+    async fn oauth_session_switch_outcomes() {
+        let cases = [
+            (
+                SessionCase {
+                    session_token: "old",
+                    session_account: 1,
+                    target_account: 99,
+                    expected: ExpectedOutcome::ReusedSession { account_id: 99 },
+                },
+                MockCliRunner::with_ok(&signed_in_json("slot", 99)),
+            ),
+            (
+                SessionCase {
+                    session_token: "tok",
+                    session_account: 42,
+                    target_account: 42,
+                    expected: ExpectedOutcome::AlreadyOnAccount { account_id: 42 },
+                },
+                MockCliRunner::with_responses(vec![]),
+            ),
+            (
+                SessionCase {
+                    session_token: "old",
+                    session_account: 1,
+                    target_account: 77,
+                    expected: ExpectedOutcome::InteractiveSignIn { account_id: 77 },
+                },
+                MockCliRunner::with_responses(vec![
+                    Ok(SIGNED_OUT_JSON.to_string()),
+                    Ok(signed_in_json("new", 77)),
+                ]),
+            ),
+            (
+                SessionCase {
+                    session_token: "old",
+                    session_account: 1,
+                    target_account: 77,
+                    expected: ExpectedOutcome::Error,
+                },
+                MockCliRunner::with_responses(vec![
+                    Ok(SIGNED_OUT_JSON.to_string()),
+                    Ok(SIGNED_OUT_JSON.to_string()),
+                ]),
+            ),
+        ];
+        for (case, cli) in cases {
+            assert_switch_with_session(case, cli).await;
+        }
     }
 }
