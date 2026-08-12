@@ -287,7 +287,7 @@ mod tests {
     use crate::version_checker::VersionChecker;
     use crate::{
         display_version, fetch_cli_version, help_text, parse_cli_args, remove_docker_unsupported_tools,
-        token_missing_msg, CliAction, API_ONLY_TOOLS,
+        run_logout_flow_with, token_missing_msg, CliAction, API_ONLY_TOOLS,
     };
 
     #[derive(Clone)]
@@ -681,6 +681,90 @@ mod tests {
             "got: {}",
             result_text(&result)
         );
+    }
+
+    #[tokio::test]
+    async fn logout_dispatch_method_delegates_to_logout_handler() {
+        use rmcp::handler::server::wrapper::Parameters;
+
+        let _g = clear_token();
+        std::env::set_var("CS_OAUTH_TOKEN", "oau-dispatch");
+        std::env::set_var("CS_OAUTH_EXPIRES_AT", "9999999999");
+        let server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_ok(
+                r#"{"status":"signed_out","access-token":null,"api-url":null}"#,
+            ),
+            MockHttpClient::new(vec![]),
+        );
+        let result = server
+            .logout(Parameters(crate::tools::LogoutParam {}))
+            .await
+            .unwrap();
+        assert!(
+            result_text(&result).contains("Successfully signed out"),
+            "got: {}",
+            result_text(&result)
+        );
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+    }
+
+    /// Env setup for `run_logout_flow_with` tests. Keeps the tempdir alive until drop.
+    struct LogoutFlowEnv {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        _dir: tempfile::TempDir,
+    }
+
+    impl LogoutFlowEnv {
+        fn new() -> Self {
+            let lock = config::lock_test_env();
+            let dir = tempfile::tempdir().unwrap();
+            std::env::set_var("CS_CONFIG_DIR", dir.path().as_os_str());
+            std::env::set_var("CS_OAUTH_CLIENT", "mcp");
+            std::env::remove_var("CS_ACCESS_TOKEN");
+            Self {
+                _lock: lock,
+                _dir: dir,
+            }
+        }
+
+        fn assert_signed_out_sentinel(&self) {
+            assert_eq!(
+                std::env::var("CS_OAUTH_EXPIRES_AT").ok().as_deref(),
+                Some("0")
+            );
+        }
+    }
+
+    impl Drop for LogoutFlowEnv {
+        fn drop(&mut self) {
+            std::env::remove_var("CS_OAUTH_CLIENT");
+            std::env::remove_var("CS_CONFIG_DIR");
+            std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+        }
+    }
+
+    #[tokio::test]
+    async fn run_logout_flow_with_succeeds() {
+        let env = LogoutFlowEnv::new();
+        let runner = MockCliRunner::with_ok(
+            r#"{"status":"signed_out","access-token":null,"api-url":null}"#,
+        );
+        run_logout_flow_with(&runner).await.unwrap();
+        env.assert_signed_out_sentinel();
+    }
+
+    #[tokio::test]
+    async fn run_logout_flow_with_reports_cli_error() {
+        let env = LogoutFlowEnv::new();
+        let runner = MockCliRunner::with_err(1, "connection refused");
+        let err = run_logout_flow_with(&runner).await.unwrap_err();
+        assert!(
+            err.to_string().contains("Logout failed"),
+            "got: {err}"
+        );
+        env.assert_signed_out_sentinel();
     }
 
     #[tokio::test]

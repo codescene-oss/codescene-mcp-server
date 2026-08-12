@@ -109,4 +109,22 @@ mod tests {
         );
         std::env::remove_var("CS_OAUTH_EXPIRES_AT");
     }
+
+    #[tokio::test]
+    async fn logout_cli_error_notes_pat_when_still_configured() {
+        let _g = set_token("pat-still-here");
+        let cli = MockCliRunner::with_err(1, "connection refused");
+        let server = make_server_with_mocks(false, cli, MockHttpClient::new(vec![]));
+        let result = handle(&server, params()).await.unwrap();
+        let text = result_text(&result);
+        assert!(text.contains("CLI logout reported an error"), "got: {text}");
+        assert!(
+            text.contains("CS_ACCESS_TOKEN is still configured"),
+            "got: {text}"
+        );
+        assert!(
+            text.contains("Remove it to fully stop using that credential"),
+            "got: {text}"
+        );
+    }
 }

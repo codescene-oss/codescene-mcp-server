@@ -5,3 +5,15 @@ Logout clears the stored OAuth credentials; it does not remove a Personal Access
 (CS_ACCESS_TOKEN). If logout reports that a PAT is still configured, explain how to clear \
 it with set_config or the MCP client environment. After a successful logout, briefly confirm \
 that I am signed out.";
+
+#[cfg(test)]
+mod tests {
+    use super::TEXT;
+
+    #[test]
+    fn logout_prompt_instructs_immediate_tool_call() {
+        assert!(TEXT.contains("logout tool"));
+        assert!(TEXT.contains("CS_ACCESS_TOKEN"));
+        assert!(TEXT.contains("signed out"));
+    }
+}

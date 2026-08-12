@@ -142,11 +142,18 @@ pub(crate) fn parse_cli_args(args: &[String], raw_version: &str) -> Result<CliAc
         };
     }
 
-    if args.len() == 2 && args[0] == "auth" && args[1] == "logout" {
+    if is_auth_logout_args(args) {
         return Ok(CliAction::Logout);
     }
 
     Err(format!("Unexpected arguments: {}", args.join(" ")))
+}
+
+fn is_auth_logout_args(args: &[String]) -> bool {
+    matches!(
+        args,
+        [cmd, sub] if cmd == "auth" && sub == "logout"
+    )
 }
 
 pub(crate) async fn fetch_cli_version(cli_runner: &dyn cli::CliRunner) -> anyhow::Result<String> {
@@ -196,15 +203,20 @@ async fn run_auth_flow() -> anyhow::Result<()> {
 /// Delegates to `cs auth logout --client mcp`, then clears MCP OAuth config.
 /// Outputs JSON with the result to stdout for consumption by the VS Code extension.
 async fn run_logout_flow() -> anyhow::Result<()> {
+    run_logout_flow_with(&cli::ProductionCliRunner).await
+}
+
+/// Testable logout CLI flow using an injected runner.
+pub(crate) async fn run_logout_flow_with(
+    cli_runner: &dyn cli::CliRunner,
+) -> anyhow::Result<()> {
     config::snapshot_client_env_vars();
     ensure_oauth_client_configured().await;
     let config_data = config::load().unwrap_or_default();
     config::apply_to_env(&config_data);
 
-    let cli_runner = cli::ProductionCliRunner;
     let auth_manager = AuthManager::new();
-
-    match auth_manager.logout(&cli_runner).await {
+    match auth_manager.logout(cli_runner).await {
         Ok(()) => {
             let result = serde_json::json!({"status": "signed_out"});
             println!("{}", result);
