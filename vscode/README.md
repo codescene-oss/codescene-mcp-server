@@ -58,17 +58,19 @@ These tools require OAuth or a CodeScene Personal Access Token and a CodeScene C
 ## Getting Started
 
 1. **Install the extension** from the VS Code Marketplace
-2. **(Optional)** If you belong to multiple CodeScene Cloud accounts, set `codescene.accountId` in Settings to your account/tenant ID **before** logging in
-3. **(On-prem only)** Set `codescene.onpremUrl` to your instance URL
-4. **Sign in** using one of:
+2. **(On-prem only)** Set `codescene.onpremUrl` to your instance URL
+3. **Sign in** using one of:
    - The `login` MCP prompt (slash command) in Copilot Chat
    - **CodeScene: Sign In** from the Command Palette
    - Asking in agent mode: *“Log me in to CodeScene”* (calls the `login` tool)
+4. **(Multi-account Cloud)** Use **CodeScene: Switch Account** (or the `switch_account` tool) with your numeric account ID — do not rely on changing `codescene.accountId` alone while signed in
 5. Start using CodeScene tools
 
 ### Authentication
 
 **Recommended (interactive):** OAuth via the `login` MCP prompt / `login` tool, or **CodeScene: Sign In**. No token to copy or paste. Sign out with the `logout` prompt / tool, or **CodeScene: Sign Out**.
+
+**Multi-account Cloud:** Use **CodeScene: Switch Account** or ask the agent to call `switch_account`. Changing `codescene.accountId` in Settings alone does not retarget an active OAuth session.
 
 **Optional (CI / headless):** Set a Personal Access Token or standalone license via `CodeScene: Configure Access Token (optional / CI)` or the `codescene.accessToken` setting. A saved PAT **blocks** OAuth until you clear it. Sign Out clears OAuth only — remove the PAT separately if needed.
 
@@ -82,7 +84,7 @@ See [Authentication](https://github.com/codescene-oss/codescene-mcp-server/blob/
 | Setting | Description |
 |---------|-------------|
 | `codescene.enabled` | Enable/disable the MCP server |
-| `codescene.accountId` | Optional Cloud account/tenant ID for multi-account OAuth |
+| `codescene.accountId` | Optional Cloud account/tenant ID (prefer Switch Account while signed in) |
 | `codescene.onpremUrl` | Base URL of your self-hosted CodeScene instance |
 | `codescene.defaultProjectId` | Pre-select a project by numeric ID |
 | `codescene.accessToken` | Optional PAT or standalone token (blocks OAuth when set) |
@@ -97,6 +99,7 @@ See [Configuration Options](https://github.com/codescene-oss/codescene-mcp-serve
 | Prompt | Description |
 |--------|-------------|
 | `login` | Sign in to CodeScene with OAuth (instructs the agent to call the `login` tool) |
+| `switch_account` | Switch CodeScene Cloud OAuth account (instructs the agent to call `switch_account`) |
 | `logout` | Sign out of CodeScene OAuth (instructs the agent to call the `logout` tool) |
 | `review_code_health` | Review Code Health for the current file |
 | `plan_code_health_refactoring` | Plan a prioritized, low-risk Code Health refactoring |
@@ -107,6 +110,7 @@ In Copilot Chat, pick these from the slash-command / prompt picker (MCP prompts 
 
 - `CodeScene: Sign In` — Start the OAuth browser login flow
 - `CodeScene: Sign Out` — Clear the stored OAuth session
+- `CodeScene: Switch Account` — Switch Cloud OAuth account (reuses a stored session when possible)
 - `CodeScene: Configure Access Token (optional / CI)` — Set or clear a PAT/standalone token
 - `CodeScene: Restart MCP Server` — Restart the MCP server (after config changes)
 - `CodeScene: Show Server Status` — Display current server status and configuration

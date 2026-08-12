@@ -21,6 +21,7 @@ pub mod list_technical_debt_hotspots_for_project_file;
 pub mod login;
 pub mod logout;
 pub mod pre_commit_code_health_safeguard;
+pub mod switch_account;
 pub mod rules_config;
 pub mod rules_config_list_thresholds;
 pub mod rules_config_set_rule;
@@ -39,6 +40,13 @@ pub struct LoginParam {}
 /// Parameters for the `logout` tool (currently accepts no arguments).
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct LogoutParam {}
+
+/// Parameters for the `switch_account` tool.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SwitchAccountParam {
+    /// CodeScene Cloud account/tenant ID (positive integer) to switch to.
+    pub account_id: i64,
+}
 
 /// Optional context parameter used by explain tools.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]

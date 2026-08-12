@@ -43,7 +43,7 @@ Do not use this skill for installing or registering the MCP server in an AI assi
 
 | Key | Purpose |
 |-----|---------|
-| `account_id` | Optional Cloud account/tenant ID (positive integer). Pin multi-account OAuth to a specific account. Set **before** `login` and keep set afterward. |
+| `account_id` | Optional Cloud account/tenant ID (positive integer). Pin multi-account OAuth to a specific account. Use `switch_account` to change accounts while signed in; setting this alone does not retarget the session. |
 | `access_token` | Optional Personal Access Token or standalone MCP license token (CI/headless). |
 | `onprem_url` | Base URL for a self-hosted CodeScene instance (API-mode only). |
 | `default_project_id` | Pre-select a CodeScene project by numeric ID (API-mode only). |
@@ -57,8 +57,8 @@ Environment variables set by the MCP client always override values in the config
 ## Implementation
 
 1. Run `get_config` to see the current state of all options.
-2. For interactive auth: if `access_token` is set and the user wants OAuth, clear it first (`set_config` with empty value or ask them to remove `CS_ACCESS_TOKEN` from client env). For multi-account Cloud, ensure `account_id` is set before calling `login`.
-3. Call `login` for OAuth (or have the user invoke the `login` MCP prompt), or `set_config` for PAT / other options. To sign out, call `logout` (or the `logout` prompt).
+2. For interactive auth: if `access_token` is set and the user wants OAuth, clear it first (`set_config` with empty value or ask them to remove `CS_ACCESS_TOKEN` from client env). For multi-account Cloud while already signed in, call `switch_account` with the target account ID (do not only `set_config` `account_id`).
+3. Call `login` for OAuth (or have the user invoke the `login` MCP prompt), or `set_config` for PAT / other options. To change Cloud account, call `switch_account`. To sign out, call `logout` (or the `logout` prompt).
 4. Run `get_config` with the relevant key to confirm the change took effect.
 5. If the user changed `access_token`, inform them that a server restart may be needed for tool registration changes to take effect.
 6. If `get_config` shows a value source of "client environment variable", explain that the env var in their editor's MCP configuration takes precedence and must be changed there instead.
@@ -77,11 +77,11 @@ For individual, interactive use, prefer `login` for auth and `set_config` for ot
 
 - Setting a value with `set_config` when the same key is already provided as an environment variable by the MCP client. The env var wins and the stored value is silently ignored.
 - Leaving `access_token` / `CS_ACCESS_TOKEN` set and then trying to use `login` — PAT always blocks OAuth.
-- Setting `account_id` after `login` without logging in again — the credential slot is chosen at login time and must match later CLI calls.
+- Setting `account_id` after `login` without calling `switch_account` — the pin alone does not retarget the active OAuth session; use `switch_account`.
 - Forgetting that `access_token` changes may require a server restart.
 - Confusing the config key name with the environment variable name. Use the short key (e.g., `access_token`, `account_id`) with `set_config`, not the env var name (`CS_ACCESS_TOKEN`, `CS_ACCOUNT_ID`).
 - Setting `onprem_url` or `default_project_id` when using a standalone license. These options are only available with CodeScene Core (OAuth or PAT).
 - Providing a CA bundle path that is not accessible to the MCP server process or Docker container.
 - Setting `enabled_tools` with misspelled tool names. The server warns about unknown names, but the misspelled tools are silently ignored. Use `get_config` with key `enabled_tools` to see the list of available tool names.
 - Forgetting that `enabled_tools` changes require a server restart. The tool list is built once at startup.
-- Trying to disable `get_config`, `set_config`, `login`, or `logout` via `enabled_tools`. Outside Docker these tools are always enabled to prevent configuration lockout. In Docker, `login` is not registered at all (use PAT / `CS_ACCESS_TOKEN`); `logout` remains available.
+- Trying to disable `get_config`, `set_config`, `login`, `logout`, or `switch_account` via `enabled_tools`. Outside Docker these tools are always enabled to prevent configuration lockout. In Docker, `login` and `switch_account` are not registered (use PAT / `CS_ACCESS_TOKEN`); `logout` remains available.

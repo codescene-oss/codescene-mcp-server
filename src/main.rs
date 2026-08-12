@@ -48,7 +48,7 @@ use crate::tools::{
     ChangeSetParam, DownloadSkillParam, FilePathParam, GetConfigParam, GitRepoParam, LoginParam,
     LogoutParam, OptionalContext, OwnershipParam, ProjectFileParam, ProjectParam,
     RulesConfigListThresholdsParam, RulesConfigSetRuleParam, RulesConfigSetThresholdParam,
-    RulesConfigValidateParam, SetConfigParam, SkillNameParam, SyncSkillsParam,
+    RulesConfigValidateParam, SetConfigParam, SkillNameParam, SwitchAccountParam, SyncSkillsParam,
 };
 use crate::version_checker::VersionChecker;
 
@@ -94,7 +94,7 @@ pub(crate) const API_ONLY_TOOLS: &[&str] = &[
 
 /// Tools that cannot be disabled via `enabled_tools` config.
 pub(crate) const ALWAYS_ENABLED_TOOLS: &[&str] =
-    &["get_config", "set_config", "login", "logout"];
+    &["get_config", "set_config", "login", "logout", "switch_account"];
 
 #[derive(Debug)]
 pub(crate) enum CliAction {
@@ -104,6 +104,7 @@ pub(crate) enum CliAction {
     PrintCliVersion,
     Auth,
     Logout,
+    SwitchAccount(i64),
 }
 
 pub(crate) fn display_version(raw_version: &str) -> &str {
@@ -111,7 +112,7 @@ pub(crate) fn display_version(raw_version: &str) -> &str {
 }
 
 pub(crate) fn help_text() -> &'static str {
-    "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help       Show this help message and exit\n  -v, --version    Show version and exit\n  --cli-version    Show embedded CLI version and exit\n  auth             Sign in to CodeScene via OAuth (opens browser)\n  auth logout      Sign out of CodeScene OAuth and clear the stored session\n\nEnvironment:\n  CS_ONPREM_URL    Base URL of self-hosted CodeScene instance (for auth subcommand)"
+    "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help              Show this help message and exit\n  -v, --version           Show version and exit\n  --cli-version           Show embedded CLI version and exit\n  auth                    Sign in to CodeScene via OAuth (opens browser)\n  auth logout             Sign out of CodeScene OAuth and clear the stored session\n  auth switch <account>   Switch Cloud OAuth account (reuses stored session when possible)\n\nEnvironment:\n  CS_ONPREM_URL    Base URL of self-hosted CodeScene instance (for auth subcommand)\n  CS_ACCOUNT_ID    Optional Cloud account/tenant ID for OAuth credential slot selection"
 }
 
 async fn ensure_oauth_client_configured() {
@@ -146,6 +147,10 @@ pub(crate) fn parse_cli_args(args: &[String], raw_version: &str) -> Result<CliAc
         return Ok(CliAction::Logout);
     }
 
+    if let Some(account_id) = parse_auth_switch_args(args)? {
+        return Ok(CliAction::SwitchAccount(account_id));
+    }
+
     Err(format!("Unexpected arguments: {}", args.join(" ")))
 }
 
@@ -154,6 +159,24 @@ fn is_auth_logout_args(args: &[String]) -> bool {
         args,
         [cmd, sub] if cmd == "auth" && sub == "logout"
     )
+}
+
+fn parse_auth_switch_args(args: &[String]) -> Result<Option<i64>, String> {
+    match args {
+        [cmd, sub, id] if cmd == "auth" && sub == "switch" => {
+            let account_id: i64 = id
+                .parse()
+                .map_err(|_| format!("Invalid account id for auth switch: {id}"))?;
+            if account_id <= 0 {
+                return Err("account id for auth switch must be a positive integer".to_string());
+            }
+            Ok(Some(account_id))
+        }
+        [cmd, sub] if cmd == "auth" && sub == "switch" => Err(
+            "auth switch requires an account id, e.g. cs-mcp auth switch 123".to_string(),
+        ),
+        _ => Ok(None),
+    }
 }
 
 pub(crate) async fn fetch_cli_version(cli_runner: &dyn cli::CliRunner) -> anyhow::Result<String> {
@@ -204,6 +227,43 @@ async fn run_auth_flow() -> anyhow::Result<()> {
 /// Outputs JSON with the result to stdout for consumption by the VS Code extension.
 async fn run_logout_flow() -> anyhow::Result<()> {
     run_logout_flow_with(&cli::ProductionCliRunner).await
+}
+
+/// Run Cloud account switch as a standalone CLI command (`cs-mcp auth switch <id>`).
+async fn run_switch_account_flow(account_id: i64) -> anyhow::Result<()> {
+    run_switch_account_flow_with(&cli::ProductionCliRunner, account_id).await
+}
+
+/// Testable account-switch CLI flow using an injected runner.
+pub(crate) async fn run_switch_account_flow_with(
+    cli_runner: &dyn cli::CliRunner,
+    account_id: i64,
+) -> anyhow::Result<()> {
+    config::snapshot_client_env_vars();
+    ensure_oauth_client_configured().await;
+    let config_data = config::load().unwrap_or_default();
+    config::apply_to_env(&config_data);
+
+    let auth_manager = AuthManager::new();
+    match auth_manager.switch_account(cli_runner, account_id).await {
+        Ok(result) => {
+            let payload = serde_json::json!({
+                "status": result.status_str(),
+                "account_id": result.account_id,
+            });
+            println!("{payload}");
+            Ok(())
+        }
+        Err(e) => {
+            let payload = serde_json::json!({
+                "status": "error",
+                "account_id": account_id,
+                "error": e,
+            });
+            println!("{payload}");
+            anyhow::bail!("Account switch failed: {e}");
+        }
+    }
 }
 
 /// Testable logout CLI flow using an injected runner.
@@ -423,6 +483,7 @@ fn remove_standalone_tools(router: &mut ToolRouter<CodeSceneServer>) {
 /// Tools that cannot work in Docker (OAuth browser callback is unsupported).
 pub(crate) fn remove_docker_unsupported_tools(router: &mut ToolRouter<CodeSceneServer>) {
     router.remove_route("login");
+    router.remove_route("switch_account");
 }
 
 fn apply_enabled_tools_filter(router: &mut ToolRouter<CodeSceneServer>, config_data: &ConfigData) {
@@ -695,6 +756,17 @@ impl CodeSceneServer {
     }
 
     #[tool(
+        description = "Switch the active CodeScene Cloud OAuth account.\n\nWhen to use:\n    Use this tool when the user belongs to multiple Cloud accounts and needs to\n    change which account the MCP server uses. Prefer this over set_config(account_id)\n    alone — changing the pin without switch_account does not retarget the active\n    OAuth session.\n\nLimitations:\n    - Cloud OAuth only; does not apply to PAT / CS_ACCESS_TOKEN auth or on-prem.\n    - Requires a positive integer account_id.\n    - Reuses a stored CLI credential slot when available; otherwise opens a browser\n      for interactive login into that account.\n    - Not available in Docker (no OAuth browser flow).\n\nReturns:\n    A success message with the active account_id, or an error describing the failure.",
+        input_schema = inlined_schema_for::<SwitchAccountParam>()
+    )]
+    async fn switch_account(
+        &self,
+        Parameters(params): Parameters<SwitchAccountParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::switch_account::handle(self, params).await
+    }
+
+    #[tool(
         description = "List all available skills embedded in this MCP server.\n\nWhen to use:\n    Use this tool to discover what skills are available for\n    download or inspection.\n\nLimitations:\n    - Returns only skills embedded at compile time.\n    - Does not scan external skill directories.\n\nReturns:\n    A formatted list of skill names with their descriptions.\n\nExample:\n    Call this tool to see all available skills, then use\n    download_skill or sync_skills to install them locally."
     )]
     async fn list_skills(&self) -> Result<CallToolResult, ErrorData> {
@@ -812,6 +884,10 @@ async fn main() -> anyhow::Result<()> {
         }
         Ok(CliAction::Logout) => {
             run_logout_flow().await?;
+            return Ok(());
+        }
+        Ok(CliAction::SwitchAccount(account_id)) => {
+            run_switch_account_flow(account_id).await?;
             return Ok(());
         }
         Err(message) => {

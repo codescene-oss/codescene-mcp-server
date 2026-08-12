@@ -87,44 +87,36 @@ fn start_client(
 // Tests
 // ---------------------------------------------------------------------------
 
+fn assert_oauth_name_presence(names: &HashSet<String>, kind: &str) {
+    assert!(names.contains("logout"), "logout {kind} should be listed");
+    let login_ok = names.contains("login");
+    let switch_ok = names.contains("switch_account");
+    if is_docker() {
+        assert!(!login_ok, "login {kind} must not be listed in Docker");
+        assert!(!switch_ok, "switch_account {kind} must not be listed in Docker");
+        return;
+    }
+    assert!(login_ok, "login {kind} should be listed outside Docker");
+    assert!(switch_ok, "switch_account {kind} should be listed outside Docker");
+}
+
 #[test]
 pub fn test_all_tools_without_filter() {
     let (command, env, repo_dir, _config_dir, _tmp) = enabled_tools_setup();
     let mut client = start_client(&command, &env, &repo_dir, &[]);
 
     let names = get_tool_names(&mut client);
-
-    assert!(names.contains("get_config"), "get_config should be listed");
-    assert!(names.contains("set_config"), "set_config should be listed");
-    assert!(
-        names.contains("code_health_review"),
-        "code_health_review should be listed"
-    );
-    assert!(
-        names.contains("code_health_score"),
-        "code_health_score should be listed"
-    );
-    assert!(
-        names.contains("explain_code_health"),
-        "explain_code_health should be listed"
-    );
-    if is_docker() {
-        assert!(
-            !names.contains("login"),
-            "login must not be listed in Docker"
-        );
-    } else {
-        assert!(names.contains("login"), "login should be listed outside Docker");
+    for required in [
+        "get_config",
+        "set_config",
+        "code_health_review",
+        "code_health_score",
+        "explain_code_health",
+    ] {
+        assert!(names.contains(required), "{required} should be listed");
     }
-    assert!(
-        names.contains("logout"),
-        "logout should be listed (including Docker)"
-    );
-    assert!(
-        names.len() >= 10,
-        "Expected >= 10 tools, found {}",
-        names.len()
-    );
+    assert_oauth_name_presence(&names, "tool");
+    assert!(names.len() >= 10, "Expected >= 10 tools, found {}", names.len());
 
     let prompts_response = client
         .send_request("prompts/list", json!({}), Duration::from_secs(15))
@@ -135,21 +127,7 @@ pub fn test_all_tools_without_filter() {
         .iter()
         .map(|p| p["name"].as_str().expect("prompt name").to_string())
         .collect();
-    if is_docker() {
-        assert!(
-            !prompt_names.contains("login"),
-            "login prompt must not be listed in Docker"
-        );
-    } else {
-        assert!(
-            prompt_names.contains("login"),
-            "login prompt should be listed outside Docker"
-        );
-    }
-    assert!(
-        prompt_names.contains("logout"),
-        "logout prompt should be listed (including Docker)"
-    );
+    assert_oauth_name_presence(&prompt_names, "prompt");
 }
 
 #[test]
@@ -180,6 +158,10 @@ pub fn test_filter_restricts_tools() {
             !names.contains("login"),
             "login must not be listed in Docker"
         );
+        assert!(
+            !names.contains("switch_account"),
+            "switch_account must not be listed in Docker"
+        );
         assert_eq!(
             names.len(),
             5,
@@ -189,10 +171,14 @@ pub fn test_filter_restricts_tools() {
         );
     } else {
         assert!(names.contains("login"), "login always listed outside Docker");
+        assert!(
+            names.contains("switch_account"),
+            "switch_account always listed outside Docker"
+        );
         assert_eq!(
             names.len(),
-            6,
-            "Expected exactly 6 tools, found {}: {:?}",
+            7,
+            "Expected exactly 7 tools, found {}: {:?}",
             names.len(),
             names
         );

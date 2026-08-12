@@ -71,8 +71,8 @@ describe('activate', () => {
         const ctx = makeContext();
         extension.activate(ctx);
 
-        // status bar + provider + 5 commands + config watcher = 8
-        assert.equal(ctx.subscriptions.length, 8);
+        // status bar + provider + 6 commands + config watcher = 9
+        assert.equal(ctx.subscriptions.length, 9);
     });
 
     it('registers MCP server definition provider with id codesceneMcp', () => {
@@ -83,12 +83,13 @@ describe('activate', () => {
         assert.equal(state.registeredProviders[0].id, 'codesceneMcp');
     });
 
-    it('registers five commands', () => {
+    it('registers six commands', () => {
         const ctx = makeContext();
         extension.activate(ctx);
 
         assert.ok(state.registeredCommands['codescene.signIn']);
         assert.ok(state.registeredCommands['codescene.signOut']);
+        assert.ok(state.registeredCommands['codescene.switchAccount']);
         assert.ok(state.registeredCommands['codescene.configure']);
         assert.ok(state.registeredCommands['codescene.restart']);
         assert.ok(state.registeredCommands['codescene.showStatus']);
@@ -624,5 +625,107 @@ describe('codescene.signOut command', () => {
 
         const msg = state.shownInfoMessages.find(m => m.message.includes('Sign out completed'));
         assert.ok(msg, 'expected fallback success message');
+    });
+});
+
+describe('codescene.switchAccount command', () => {
+    beforeEach(() => { reset(); });
+    afterEach(() => {
+        if (existsSync(FAKE_EXT_PATH)) {
+            rmSync(FAKE_EXT_PATH, { recursive: true, force: true });
+        }
+    });
+
+    function setupBinary(ctx) {
+        const binDir = join(ctx.extensionPath, 'bin');
+        mkdirSync(binDir, { recursive: true });
+        const binaryName = process.platform === 'darwin' && process.arch === 'arm64'
+            ? 'cs-mcp-macos-aarch64'
+            : process.platform === 'linux' ? 'cs-mcp-linux-amd64' : 'cs-mcp-windows-amd64.exe';
+        writeFileSync(join(binDir, binaryName), '#!/bin/sh\necho {}');
+    }
+
+    async function invokeSwitchAccount({ execResult, inputBox, configOverrides } = {}) {
+        if (inputBox !== undefined) state.inputBoxResult = inputBox;
+        if (execResult) state.execFileResult = execResult;
+        if (configOverrides) Object.assign(state.configValues, configOverrides);
+        const ctx = makeContext();
+        setupBinary(ctx);
+        extension.activate(ctx);
+        const handler = findCommand('codescene.switchAccount');
+        await handler();
+    }
+
+    it('does nothing when user cancels account ID prompt', async () => {
+        state.inputBoxResult = undefined;
+        const ctx = makeContext();
+        extension.activate(ctx);
+        const handler = findCommand('codescene.switchAccount');
+        await handler();
+
+        assert.equal(state.execFileCalls.length, 0);
+        assert.equal(state.configUpdates.length, 0);
+    });
+
+    it('saves account ID and runs auth switch', async () => {
+        await invokeSwitchAccount({
+            inputBox: '99',
+            execResult: {
+                error: null,
+                stdout: '{"status":"reused_session","account_id":99}',
+                stderr: '',
+            },
+        });
+
+        const update = state.configUpdates.find(u => u.key === 'accountId');
+        assert.ok(update, 'expected accountId config update');
+        assert.equal(update.value, '99');
+        assert.equal(state.execFileCalls.length, 1);
+        assert.deepEqual(state.execFileCalls[0].args, ['auth', 'switch', '99']);
+        assert.equal(state.execFileCalls[0].options.env['CS_ACCOUNT_ID'], '99');
+
+        const msg = state.shownInfoMessages.find(m =>
+            m.message.includes('Switched to account 99')
+        );
+        assert.ok(msg, 'expected switch success message');
+    });
+
+    it('prompts for account ID', async () => {
+        await invokeSwitchAccount({
+            inputBox: '42',
+            execResult: {
+                error: null,
+                stdout: '{"status":"already_on_account","account_id":42}',
+                stderr: '',
+            },
+        });
+
+        const inputBox = state.shownInputBoxes.find(i =>
+            i.options.prompt?.includes('account ID')
+        );
+        assert.ok(inputBox, 'expected account ID prompt');
+    });
+
+    it('validates account ID input', async () => {
+        await invokeSwitchAccount({
+            inputBox: '7',
+            execResult: {
+                error: null,
+                stdout: '{"status":"signed_in","account_id":7}',
+                stderr: '',
+            },
+        });
+
+        const inputBox = state.shownInputBoxes.find(i =>
+            i.options.prompt?.includes('account ID')
+        );
+        assert.ok(inputBox?.options.validateInput, 'expected validateInput');
+        const validate = inputBox.options.validateInput;
+        assert.equal(validate(''), 'Account ID is required');
+        assert.equal(validate('   '), 'Account ID is required');
+        assert.equal(validate('abc'), 'Account ID must be a positive integer');
+        assert.equal(validate('0'), 'Account ID must be a positive integer');
+        assert.equal(validate('-1'), 'Account ID must be a positive integer');
+        assert.equal(validate('42'), undefined);
     });
 });

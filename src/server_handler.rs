@@ -89,6 +89,15 @@ fn build_prompts_list(is_docker: bool) -> ListPromptsResult {
                 .with_description("Optional context string.")
                 .with_required(false)]),
         ));
+        prompts_list.push(Prompt::new(
+            "switch_account",
+            Some(
+                "Switch CodeScene Cloud OAuth account. Invokes the switch_account tool with a numeric account ID.",
+            ),
+            Some(vec![PromptArgument::new("context")
+                .with_description("Optional context string (include the account ID when known).")
+                .with_required(false)]),
+        ));
     }
     prompts_list.push(Prompt::new(
         "logout",
@@ -116,8 +125,12 @@ fn build_prompts_list(is_docker: bool) -> ListPromptsResult {
     ListPromptsResult::with_all_items(prompts_list)
 }
 
+fn docker_hides_prompt(name: &str) -> bool {
+    matches!(name, "login" | "switch_account")
+}
+
 fn resolve_prompt(name: &str, is_docker: bool) -> Result<GetPromptResult, ErrorData> {
-    if is_docker && name == "login" {
+    if is_docker && docker_hides_prompt(name) {
         return Err(ErrorData::new(
             rmcp::model::ErrorCode::INVALID_REQUEST,
             format!("Unknown prompt: {name}"),
@@ -215,22 +228,24 @@ fn build_resource_templates() -> ListResourceTemplatesResult {
 fn login_tool_instruction_line(is_docker: bool) -> &'static str {
     if is_docker {
         "- logout: Sign out of CodeScene OAuth and clear the stored session. Does not remove CS_ACCESS_TOKEN.\n\
-         "
+        "
     } else {
         "- login: Sign in to CodeScene with OAuth. When authentication is missing, call this tool first.\n\
          - logout: Sign out of CodeScene OAuth and clear the stored session. Does not remove CS_ACCESS_TOKEN.\n\
-         "
+         - switch_account: Switch Cloud OAuth account (prefer over set_config(account_id) alone).\n\
+        "
     }
 }
 
 fn login_prompt_instruction_line(is_docker: bool) -> &'static str {
     if is_docker {
         "- logout: Sign out of CodeScene OAuth (calls the logout tool).\n\
-         "
+        "
     } else {
         "- login: Sign in to CodeScene with OAuth (calls the login tool).\n\
          - logout: Sign out of CodeScene OAuth (calls the logout tool).\n\
-         "
+         - switch_account: Switch Cloud OAuth account (calls the switch_account tool).\n\
+        "
     }
 }
 
@@ -317,26 +332,37 @@ mod tests {
         assert_eq!(protocol_version_2025_11_25().as_str(), "2025-11-25");
     }
 
-    #[test]
-    fn prompts_list_contains_expected_prompts() {
-        let result = build_prompts_list(false);
-        assert_eq!(result.prompts.len(), 4);
-        let names: Vec<&str> = result.prompts.iter().map(|p| p.name.as_str()).collect();
-        assert!(names.contains(&"login"));
-        assert!(names.contains(&"logout"));
-        assert!(names.contains(&"review_code_health"));
-        assert!(names.contains(&"plan_code_health_refactoring"));
+    fn prompt_names(is_docker: bool) -> Vec<String> {
+        build_prompts_list(is_docker)
+            .prompts
+            .iter()
+            .map(|p| p.name.to_string())
+            .collect()
     }
 
     #[test]
-    fn prompts_list_omits_login_in_docker() {
-        let result = build_prompts_list(true);
-        assert_eq!(result.prompts.len(), 3);
-        let names: Vec<&str> = result.prompts.iter().map(|p| p.name.as_str()).collect();
-        assert!(!names.contains(&"login"));
-        assert!(names.contains(&"logout"));
-        assert!(names.contains(&"review_code_health"));
-        assert!(names.contains(&"plan_code_health_refactoring"));
+    fn prompts_list_contains_expected_prompts() {
+        let names = prompt_names(false);
+        assert_eq!(names.len(), 5);
+        for expected in [
+            "login",
+            "switch_account",
+            "logout",
+            "review_code_health",
+            "plan_code_health_refactoring",
+        ] {
+            assert!(names.iter().any(|n| n == expected), "missing {expected}");
+        }
+    }
+
+    #[test]
+    fn prompts_list_omits_login_and_switch_account_in_docker() {
+        let names = prompt_names(true);
+        assert_eq!(names.len(), 3);
+        assert!(!names.iter().any(|n| n == "login" || n == "switch_account"));
+        for expected in ["logout", "review_code_health", "plan_code_health_refactoring"] {
+            assert!(names.iter().any(|n| n == expected), "missing {expected}");
+        }
     }
 
     #[test]
@@ -390,18 +416,34 @@ mod tests {
     #[test]
     fn build_instructions_omits_login_in_docker() {
         let text = build_instructions(false, false, true);
-        assert!(!text.contains("- login:"));
-        assert!(text.contains("- logout: Sign out of CodeScene OAuth"));
-        assert!(text.contains("OAuth login is not available in Docker"));
-        assert!(text.contains("CS_ACCESS_TOKEN"));
+        assert!(
+            !text.contains("- login:")
+                && text.contains("- logout: Sign out of CodeScene OAuth")
+                && text.contains("OAuth login is not available in Docker")
+                && text.contains("CS_ACCESS_TOKEN")
+        );
     }
 
     #[test]
     fn build_instructions_includes_login_outside_docker() {
         let text = build_instructions(false, false, false);
-        assert!(text.contains("- login: Sign in to CodeScene with OAuth"));
-        assert!(text.contains("- logout: Sign out of CodeScene OAuth"));
-        assert!(!text.contains("OAuth login is not available in Docker"));
+        assert!(
+            text.contains("- login: Sign in to CodeScene with OAuth")
+                && text.contains("- logout: Sign out of CodeScene OAuth")
+                && text.contains("- switch_account: Switch Cloud OAuth account")
+                && !text.contains("OAuth login is not available in Docker")
+        );
+    }
+
+    #[test]
+    fn resolve_switch_account_prompt_succeeds() {
+        assert_prompt_text_contains("switch_account", "switch_account tool");
+    }
+
+    #[test]
+    fn resolve_switch_account_prompt_fails_in_docker() {
+        let result = resolve_prompt("switch_account", true);
+        assert!(result.is_err());
     }
 
     #[test]

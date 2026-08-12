@@ -38,6 +38,14 @@ fn signed_in_json(token: &str, expires_in_secs: i64) -> String {
     )
 }
 
+fn signed_in_json_with_account(token: &str, expires_in_secs: i64, account_id: i64) -> String {
+    let expires_at = now_epoch() + expires_in_secs;
+    format!(
+        r#"{{"status":"signed_in","access-token":"{token}","api-url":"https://api.codescene.io/api","expires-at":{expires_at},"refresh-token-expires-at":{},"account-id":{account_id}}}"#,
+        expires_at + 3600
+    )
+}
+
 fn signed_in_without_access_token(expires_in_secs: i64) -> String {
     let expires_at = now_epoch() + expires_in_secs;
     format!(
@@ -266,6 +274,17 @@ fn call_logout(client: &mut MCPClient) -> String {
     let response = client
         .call_tool("logout", json!({}), Duration::from_secs(30))
         .expect("logout call should succeed");
+    extract_result_text(&response)
+}
+
+fn call_switch_account(client: &mut MCPClient, account_id: i64) -> String {
+    let response = client
+        .call_tool(
+            "switch_account",
+            json!({"account_id": account_id}),
+            Duration::from_secs(30),
+        )
+        .expect("switch_account call should succeed");
     extract_result_text(&response)
 }
 
@@ -588,6 +607,51 @@ pub fn test_logout_clears_oauth_after_login() {
     assert!(
         score.contains("No access token configured") || score.contains("login"),
         "after logout, tools should report missing auth, got: {score}"
+    );
+}
+
+/// `switch_account` reuses a CLI credential slot for the target account and
+/// persists both the pin and oauth_account_id.
+pub fn test_switch_account_reuses_cli_slot() {
+    if is_docker() {
+        return skip_if_docker("fake CLI binary not available in container");
+    }
+    let slot_resp = signed_in_json_with_account("switched-token", 3600, 99);
+    let t = oauth_setup(&[("FAKE_AUTH_TOKEN_RESPONSE", slot_resp.as_str())]);
+    seed_config(
+        &t.config_dir,
+        json!({
+            "instance_id": "test-instance-id",
+            "oauth_token": "old-account-token",
+            "oauth_expires_at": (now_epoch() + 3600).to_string(),
+            "oauth_account_id": "1",
+        }),
+    );
+    let mut client = start_client(&t);
+
+    let result = call_switch_account(&mut client, 99);
+    assert!(
+        result.contains("Switched to CodeScene account 99"),
+        "got: {result}"
+    );
+    assert!(
+        result.contains("stored OAuth session"),
+        "got: {result}"
+    );
+
+    let config = read_config(&t.config_dir);
+    assert_eq!(config["oauth_token"].as_str(), Some("switched-token"));
+    assert_eq!(config["oauth_account_id"].as_str(), Some("99"));
+    assert_eq!(config["account_id"].as_str(), Some("99"));
+
+    let log = std::fs::read_to_string(&t.call_log_path).unwrap_or_default();
+    assert!(
+        log.contains("auth token"),
+        "CLI auth token should be called for slot reuse, got log: {log}"
+    );
+    assert!(
+        !log.contains("auth login"),
+        "interactive login should not be needed when slot exists, got log: {log}"
     );
 }
 

@@ -27,11 +27,11 @@ claude --plugin-dir ./claude-code-plugin
 
 To sign out, use the `logout` prompt/tool, or ask Claude to log you out.
 
-**Multi-account Cloud:** If you belong to multiple CodeScene Cloud accounts, set your account/tenant ID first:
+**Multi-account Cloud:** If you belong to multiple CodeScene Cloud accounts, switch with:
 
-> Set my CodeScene account ID to 123
+> Switch my CodeScene account to 123
 
-Then log in. Keep `account_id` set so later sessions use the same credential slot.
+That calls `switch_account` (do not rely on `set_config(account_id=…)` alone while signed in).
 
 **On-prem:** Set your instance URL first, then log in:
 

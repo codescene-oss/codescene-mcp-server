@@ -130,6 +130,8 @@ impl Drop for TokenGuard<'_> {
         std::env::remove_var("CS_OAUTH_TOKEN");
         std::env::remove_var("CS_OAUTH_EXPIRES_AT");
         std::env::remove_var("CS_OAUTH_REFRESH_EXPIRES_AT");
+        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+        std::env::remove_var("CS_ACCOUNT_ID");
         std::env::remove_var("CS_OAUTH_CLIENT");
     }
 }
@@ -146,6 +148,8 @@ pub(crate) fn clear_token() -> TokenGuard<'static> {
     std::env::remove_var("CS_OAUTH_TOKEN");
     std::env::remove_var("CS_OAUTH_EXPIRES_AT");
     std::env::remove_var("CS_OAUTH_REFRESH_EXPIRES_AT");
+    std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+    std::env::remove_var("CS_ACCOUNT_ID");
     std::env::remove_var("CS_OAUTH_CLIENT");
     TokenGuard { _lock: lock }
 }
@@ -190,7 +194,17 @@ impl CliRunner for MockCliRunner {
             .lock()
             .unwrap()
             .push(args.iter().map(|arg| arg.to_string()).collect());
-        self.responses.lock().unwrap().remove(0)
+        let mut responses = self.responses.lock().unwrap();
+        if responses.is_empty() {
+            return Err(CliError::NonZeroExit {
+                code: 1,
+                stderr: format!(
+                    "MockCliRunner: no queued responses left (args: {})",
+                    args.join(" ")
+                ),
+            });
+        }
+        responses.remove(0)
     }
 }
 
@@ -287,7 +301,8 @@ mod tests {
     use crate::version_checker::VersionChecker;
     use crate::{
         display_version, fetch_cli_version, help_text, parse_cli_args, remove_docker_unsupported_tools,
-        run_logout_flow_with, token_missing_msg, CliAction, API_ONLY_TOOLS,
+        run_logout_flow_with, run_switch_account_flow_with, token_missing_msg, CliAction,
+        API_ONLY_TOOLS,
     };
 
     #[derive(Clone)]
@@ -500,6 +515,27 @@ mod tests {
         assert!(matches!(action, CliAction::Logout));
     }
 
+    #[test]
+    fn parse_cli_args_supports_auth_switch() {
+        let args = vec!["auth".to_string(), "switch".to_string(), "42".to_string()];
+        let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
+        assert!(matches!(action, CliAction::SwitchAccount(42)));
+    }
+
+    #[test]
+    fn parse_cli_args_rejects_auth_switch_without_id() {
+        let args = vec!["auth".to_string(), "switch".to_string()];
+        let err = parse_cli_args(&args, "MCP-1.2.3").unwrap_err();
+        assert!(err.contains("account id"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_cli_args_rejects_non_positive_auth_switch_id() {
+        let args = vec!["auth".to_string(), "switch".to_string(), "0".to_string()];
+        let err = parse_cli_args(&args, "MCP-1.2.3").unwrap_err();
+        assert!(err.contains("positive"), "got: {err}");
+    }
+
     #[tokio::test]
     async fn fetch_cli_version_returns_cli_output() {
         let runner = MockCliRunner::with_ok("cs version 1.5.0\n");
@@ -710,6 +746,42 @@ mod tests {
         std::env::remove_var("CS_OAUTH_EXPIRES_AT");
     }
 
+    #[tokio::test]
+    async fn switch_account_dispatch_method_delegates_to_handler() {
+        use rmcp::handler::server::wrapper::Parameters;
+
+        let _g = clear_token();
+        let expires_at = crate::auth::now_epoch_secs() + 3600;
+        std::env::set_var("CS_OAUTH_TOKEN", "tok");
+        std::env::set_var("CS_OAUTH_EXPIRES_AT", expires_at.to_string());
+        std::env::set_var("CS_OAUTH_ACCOUNT_ID", "42");
+        // Queue a signed-in response so a concurrent env race that forces a CLI
+        // token lookup still completes instead of panicking on an empty mock.
+        let signed_in = format!(
+            r#"{{"status":"signed_in","access-token":"tok","api-url":"https://api.codescene.io/api","expires-at":{expires_at},"account-id":42}}"#
+        );
+        let server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_ok(&signed_in),
+            MockHttpClient::new(vec![]),
+        );
+        let result = server
+            .switch_account(Parameters(crate::tools::SwitchAccountParam {
+                account_id: 42,
+            }))
+            .await
+            .unwrap();
+        let text = result_text(&result);
+        assert!(
+            text.contains("Already signed in") || text.contains("Switched to CodeScene account 42"),
+            "got: {text}"
+        );
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+        std::env::remove_var("CS_ACCOUNT_ID");
+    }
+
     /// Env setup for `run_logout_flow_with` tests. Keeps the tempdir alive until drop.
     struct LogoutFlowEnv {
         _lock: std::sync::MutexGuard<'static, ()>,
@@ -723,6 +795,11 @@ mod tests {
             std::env::set_var("CS_CONFIG_DIR", dir.path().as_os_str());
             std::env::set_var("CS_OAUTH_CLIENT", "mcp");
             std::env::remove_var("CS_ACCESS_TOKEN");
+            std::env::remove_var("CS_OAUTH_TOKEN");
+            std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+            std::env::remove_var("CS_OAUTH_REFRESH_EXPIRES_AT");
+            std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+            std::env::remove_var("CS_ACCOUNT_ID");
             Self {
                 _lock: lock,
                 _dir: dir,
@@ -741,7 +818,11 @@ mod tests {
         fn drop(&mut self) {
             std::env::remove_var("CS_OAUTH_CLIENT");
             std::env::remove_var("CS_CONFIG_DIR");
+            std::env::remove_var("CS_OAUTH_TOKEN");
             std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+            std::env::remove_var("CS_OAUTH_REFRESH_EXPIRES_AT");
+            std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+            std::env::remove_var("CS_ACCOUNT_ID");
         }
     }
 
@@ -753,6 +834,66 @@ mod tests {
         );
         run_logout_flow_with(&runner).await.unwrap();
         env.assert_signed_out_sentinel();
+    }
+
+    #[tokio::test]
+    async fn run_switch_account_flow_with_succeeds() {
+        let env = LogoutFlowEnv::new();
+        // Seed via config file only — do not set CS_OAUTH_* in the process env
+        // before run_switch_account_flow_with, or snapshot_client_env_vars would
+        // treat them as client-owned and block later logout tests from clearing them.
+        let config_path = std::path::PathBuf::from(std::env::var("CS_CONFIG_DIR").unwrap())
+            .join("config.json");
+        std::fs::write(
+            &config_path,
+            serde_json::json!({
+                "instance_id": "test-switch-flow",
+                "oauth_token": "tok",
+                "oauth_expires_at": "9999999999",
+                "oauth_account_id": "42",
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let runner = MockCliRunner::with_responses(vec![]);
+        run_switch_account_flow_with(&runner, 42).await.unwrap();
+        assert_eq!(std::env::var("CS_ACCOUNT_ID").ok().as_deref(), Some("42"));
+        drop(env);
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+        std::env::remove_var("CS_ACCOUNT_ID");
+    }
+
+    #[tokio::test]
+    async fn run_switch_account_flow_with_reports_error() {
+        let env = LogoutFlowEnv::new();
+        let config_path = std::path::PathBuf::from(std::env::var("CS_CONFIG_DIR").unwrap())
+            .join("config.json");
+        std::fs::write(
+            &config_path,
+            serde_json::json!({
+                "instance_id": "test-switch-flow-err",
+                "oauth_token": "tok",
+                "oauth_expires_at": "9999999999",
+                "oauth_account_id": "1",
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let signed_out = r#"{"status":"signed_out","access-token":null,"api-url":null}"#;
+        let runner = MockCliRunner::with_responses(vec![
+            Ok(signed_out.to_string()),
+            Ok(signed_out.to_string()),
+        ]);
+        let err = run_switch_account_flow_with(&runner, 99).await.unwrap_err();
+        assert!(
+            err.to_string().contains("Account switch failed"),
+            "got: {err}"
+        );
+        drop(env);
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+        std::env::remove_var("CS_ACCOUNT_ID");
     }
 
     #[tokio::test]
@@ -814,6 +955,7 @@ mod tests {
         assert!(text.contains("--version"));
         assert!(text.contains("auth"));
         assert!(text.contains("auth logout"));
+        assert!(text.contains("auth switch"));
     }
 
     #[test]
@@ -890,6 +1032,10 @@ mod tests {
         );
         assert!(names.contains(&"login".to_string()), "missing login");
         assert!(names.contains(&"logout".to_string()), "missing logout");
+        assert!(
+            names.contains(&"switch_account".to_string()),
+            "missing switch_account"
+        );
     }
 
     fn assert_tool_count_and_config(names: &[String], expected: usize) {
@@ -907,7 +1053,7 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server(false);
         let names = tool_names(&server);
-        assert_tool_count_and_config(&names, 26);
+        assert_tool_count_and_config(&names, 27);
         assert!(names.contains(&"code_health_review".to_string()));
     }
 
@@ -917,8 +1063,8 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server_with_enabled_tools(false, "code_health_review,code_health_score");
         let names = tool_names(&server);
-        // Should have the 2 enabled tools + 4 always-on = 6
-        assert_tool_count_and_config(&names, 6);
+        // Should have the 2 enabled tools + 5 always-on = 7
+        assert_tool_count_and_config(&names, 7);
         assert!(names.contains(&"code_health_review".to_string()));
         assert!(names.contains(&"code_health_score".to_string()));
     }
@@ -953,7 +1099,7 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server_with_enabled_tools(false, "analyze_change_set");
         let names = tool_names(&server);
-        assert_tool_count_and_config(&names, 5);
+        assert_tool_count_and_config(&names, 6);
         assert!(names.contains(&"analyze_change_set".to_string()));
     }
 
@@ -1026,21 +1172,29 @@ mod tests {
     }
 
     #[test]
-    fn remove_docker_unsupported_tools_drops_login_route() {
+    fn remove_docker_unsupported_tools_drops_login_and_switch_account_routes() {
         let mut router = CodeSceneServer::tool_router();
         assert!(
             router.list_all().iter().any(|t| t.name == "login"),
             "login should be present before removal"
+        );
+        assert!(
+            router.list_all().iter().any(|t| t.name == "switch_account"),
+            "switch_account should be present before removal"
         );
         remove_docker_unsupported_tools(&mut router);
         assert!(
             !router.list_all().iter().any(|t| t.name == "login"),
             "login should be removed for Docker"
         );
+        assert!(
+            !router.list_all().iter().any(|t| t.name == "switch_account"),
+            "switch_account should be removed for Docker"
+        );
     }
 
     #[test]
-    fn docker_mode_removes_login_tool_at_construction() {
+    fn docker_mode_removes_login_and_switch_account_tools_at_construction() {
         let _lock = config::lock_test_env();
         let _docker = environment::force_docker(true);
         let server = make_server(false);
@@ -1048,6 +1202,10 @@ mod tests {
         assert!(
             !names.contains(&"login".to_string()),
             "login must be absent in Docker mode"
+        );
+        assert!(
+            !names.contains(&"switch_account".to_string()),
+            "switch_account must be absent in Docker mode"
         );
         assert!(
             names.contains(&"logout".to_string()),
