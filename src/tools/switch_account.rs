@@ -184,4 +184,54 @@ mod tests {
         std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
         std::env::remove_var("CS_ACCOUNT_ID");
     }
+
+    #[tokio::test]
+    async fn reports_interactive_sign_in() {
+        let _g = clear_token();
+        std::env::set_var("CS_OAUTH_TOKEN", "old");
+        std::env::set_var("CS_OAUTH_EXPIRES_AT", (now_epoch_secs() + 3600).to_string());
+        std::env::set_var("CS_OAUTH_ACCOUNT_ID", "1");
+        let signed_out = r#"{"status":"signed_out","access-token":null,"api-url":null}"#;
+        let login = signed_in_json("new", 77);
+        let cli = MockCliRunner::with_responses(vec![
+            Ok(signed_out.to_string()),
+            Ok(login),
+        ]);
+        let server = make_server_with_mocks(false, cli, MockHttpClient::new(vec![]));
+        let result = handle(&server, params(77)).await.unwrap();
+        let text = result_text(&result);
+        assert!(
+            text.contains("interactive sign-in") && text.contains("77"),
+            "got: {text}"
+        );
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+        std::env::remove_var("CS_ACCOUNT_ID");
+    }
+
+    #[tokio::test]
+    async fn reports_switch_error() {
+        let _g = clear_token();
+        std::env::set_var("CS_OAUTH_TOKEN", "old");
+        std::env::set_var("CS_OAUTH_EXPIRES_AT", (now_epoch_secs() + 3600).to_string());
+        std::env::set_var("CS_OAUTH_ACCOUNT_ID", "1");
+        let signed_out = r#"{"status":"signed_out","access-token":null,"api-url":null}"#;
+        let cli = MockCliRunner::with_responses(vec![
+            Ok(signed_out.to_string()),
+            Ok(signed_out.to_string()),
+        ]);
+        let server = make_server_with_mocks(false, cli, MockHttpClient::new(vec![]));
+        let result = handle(&server, params(77)).await.unwrap();
+        let text = result_text(&result);
+        assert!(
+            text.contains("Failed to switch CodeScene account")
+                && text.contains("switch_account"),
+            "got: {text}"
+        );
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+        std::env::remove_var("CS_ACCOUNT_ID");
+    }
 }

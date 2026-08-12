@@ -1105,4 +1105,172 @@ mod tests {
         })
         .await;
     }
+
+    #[test]
+    fn switch_account_status_str_covers_all_variants() {
+        let cases = [
+            (SwitchAccountStatus::AlreadyOnAccount, "already_on_account"),
+            (SwitchAccountStatus::ReusedSession, "reused_session"),
+            (SwitchAccountStatus::SignedIn, "signed_in"),
+        ];
+        for (status, expected) in cases {
+            let result = SwitchAccountResult {
+                status,
+                account_id: 1,
+            };
+            assert_eq!(result.status_str(), expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn try_cached_oauth_account_id_reads_env() {
+        with_clean_env(|| async {
+            let manager = AuthManager::new();
+            assert_eq!(manager.try_cached_oauth_account_id(), None);
+            std::env::set_var("CS_OAUTH_ACCOUNT_ID", "42");
+            assert_eq!(manager.try_cached_oauth_account_id(), Some(42));
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn switch_account_rejects_non_positive_account_id() {
+        with_clean_env(|| async {
+            let manager = AuthManager::new();
+            let err = manager
+                .switch_account(&empty_cli(), 0)
+                .await
+                .unwrap_err();
+            assert!(err.contains("positive integer"), "got: {err}");
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn switch_account_skips_backfill_when_signed_out_sentinel() {
+        with_clean_env(|| async {
+            std::env::set_var("CS_OAUTH_EXPIRES_AT", SIGNED_OUT_SENTINEL);
+            let login_json =
+                signed_in_json_with_account("fresh", now_epoch_secs() + 3600, 88);
+            // First CLI call would be reuse (token); signed-out means no backfill call.
+            let cli = MockCliRunner::with_responses(vec![
+                Ok(r#"{"status":"signed_out","access-token":null,"api-url":null}"#.to_string()),
+                Ok(login_json),
+            ]);
+            let manager = AuthManager::new();
+            let result = manager.switch_account(&cli, 88).await.unwrap();
+            assert_eq!(result.status_str(), "signed_in");
+            assert_eq!(result.account_id, 88);
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn switch_account_backfill_soft_fails_on_cli_error() {
+        with_clean_env(|| async {
+            // Fresh token, unknown account — backfill fetch fails (soft), reuse then errors.
+            std::env::set_var("CS_OAUTH_TOKEN", "legacy");
+            std::env::set_var("CS_OAUTH_EXPIRES_AT", (now_epoch_secs() + 3600).to_string());
+            let cli = MockCliRunner::with_responses(vec![
+                Err(crate::errors::CliError::NonZeroExit {
+                    code: 1,
+                    stderr: "token failed".into(),
+                }),
+                Err(crate::errors::CliError::NonZeroExit {
+                    code: 1,
+                    stderr: "token failed".into(),
+                }),
+            ]);
+            let manager = AuthManager::new();
+            let err = manager.switch_account(&cli, 33).await.unwrap_err();
+            assert!(
+                err.to_lowercase().contains("token") || err.contains("failed"),
+                "got: {err}"
+            );
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn switch_account_backfills_account_id_when_token_omitted() {
+        with_clean_env(|| async {
+            std::env::set_var("CS_OAUTH_TOKEN", "legacy");
+            std::env::set_var("CS_OAUTH_EXPIRES_AT", (now_epoch_secs() + 3600).to_string());
+            // Signed-in metadata without access token — persist oauth_account_id only.
+            let metadata = format!(
+                r#"{{"status":"signed_in","access-token":null,"api-url":"https://api.codescene.io/api","expires-at":{},"account-id":55}}"#,
+                now_epoch_secs() + 3600
+            );
+            let cli = MockCliRunner::with_ok(&metadata);
+            let manager = AuthManager::new();
+            let result = manager.switch_account(&cli, 55).await.unwrap();
+            assert_eq!(result.status, SwitchAccountStatus::AlreadyOnAccount);
+            assert_eq!(
+                std::env::var("CS_OAUTH_ACCOUNT_ID").ok().as_deref(),
+                Some("55")
+            );
+            // Existing MCP token preserved (response had no access token).
+            assert_eq!(
+                std::env::var("CS_OAUTH_TOKEN").ok().as_deref(),
+                Some("legacy")
+            );
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn switch_account_login_incomplete_returns_error() {
+        with_clean_env(|| async {
+            std::env::set_var("CS_OAUTH_TOKEN", "old");
+            std::env::set_var("CS_OAUTH_EXPIRES_AT", (now_epoch_secs() + 3600).to_string());
+            std::env::set_var("CS_OAUTH_ACCOUNT_ID", "1");
+            let signed_out = r#"{"status":"signed_out","access-token":null,"api-url":null}"#;
+            let cli = MockCliRunner::with_responses(vec![
+                Ok(signed_out.to_string()),
+                Ok(signed_out.to_string()),
+            ]);
+            let manager = AuthManager::new();
+            let err = manager.switch_account(&cli, 77).await.unwrap_err();
+            assert!(
+                err.contains("Login did not complete") && err.contains("77"),
+                "got: {err}"
+            );
+            assert_eq!(
+                std::env::var("CS_OAUTH_EXPIRES_AT").ok().as_deref(),
+                Some(SIGNED_OUT_SENTINEL)
+            );
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn switch_account_login_fetches_token_when_omitted() {
+        with_clean_env(|| async {
+            std::env::set_var("CS_OAUTH_TOKEN", "old");
+            std::env::set_var("CS_OAUTH_EXPIRES_AT", (now_epoch_secs() + 3600).to_string());
+            std::env::set_var("CS_OAUTH_ACCOUNT_ID", "1");
+            let signed_out = r#"{"status":"signed_out","access-token":null,"api-url":null}"#;
+            let login_no_token = format!(
+                r#"{{"status":"signed_in","access-token":null,"api-url":"https://api.codescene.io/api","expires-at":{},"account-id":77}}"#,
+                now_epoch_secs() + 3600
+            );
+            let token_export = signed_in_json_with_account("exported", now_epoch_secs() + 3600, 77);
+            let cli = MockCliRunner::with_responses(vec![
+                Ok(signed_out.to_string()),
+                Ok(login_no_token),
+                Ok(token_export),
+            ]);
+            let manager = AuthManager::new();
+            let result = manager.switch_account(&cli, 77).await.unwrap();
+            assert_eq!(
+                (result.status_str(), result.account_id),
+                ("signed_in", 77)
+            );
+            assert_eq!(
+                std::env::var("CS_OAUTH_TOKEN").ok().as_deref(),
+                Some("exported")
+            );
+        })
+        .await;
+    }
 }

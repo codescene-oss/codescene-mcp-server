@@ -849,6 +849,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn run_switch_account_flow_with_reports_error() {
+        let env = LogoutFlowEnv::new();
+        let config_path = std::path::PathBuf::from(std::env::var("CS_CONFIG_DIR").unwrap())
+            .join("config.json");
+        std::fs::write(
+            &config_path,
+            serde_json::json!({
+                "instance_id": "test-switch-flow-err",
+                "oauth_token": "tok",
+                "oauth_expires_at": "9999999999",
+                "oauth_account_id": "1",
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let signed_out = r#"{"status":"signed_out","access-token":null,"api-url":null}"#;
+        let runner = MockCliRunner::with_responses(vec![
+            Ok(signed_out.to_string()),
+            Ok(signed_out.to_string()),
+        ]);
+        let err = run_switch_account_flow_with(&runner, 99).await.unwrap_err();
+        assert!(
+            err.to_string().contains("Account switch failed"),
+            "got: {err}"
+        );
+        drop(env);
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+        std::env::remove_var("CS_ACCOUNT_ID");
+    }
+
+    #[tokio::test]
     async fn run_logout_flow_with_reports_cli_error() {
         let env = LogoutFlowEnv::new();
         let runner = MockCliRunner::with_err(1, "connection refused");

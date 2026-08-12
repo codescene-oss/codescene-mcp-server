@@ -31,7 +31,10 @@ mod tests {
 
     #[test]
     fn resolve_switch_account_prompt() {
-        assert!(resolve_prompt_text("switch_account").is_some());
+        let text = resolve_prompt_text("switch_account").expect("switch_account prompt");
+        assert!(text.contains("switch_account tool"));
+        assert!(text.contains("account_id"));
+        assert!(text.contains("set_config"));
     }
 
     #[test]

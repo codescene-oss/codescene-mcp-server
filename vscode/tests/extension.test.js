@@ -705,4 +705,27 @@ describe('codescene.switchAccount command', () => {
         );
         assert.ok(inputBox, 'expected account ID prompt');
     });
+
+    it('validates account ID input', async () => {
+        await invokeSwitchAccount({
+            inputBox: '7',
+            execResult: {
+                error: null,
+                stdout: '{"status":"signed_in","account_id":7}',
+                stderr: '',
+            },
+        });
+
+        const inputBox = state.shownInputBoxes.find(i =>
+            i.options.prompt?.includes('account ID')
+        );
+        assert.ok(inputBox?.options.validateInput, 'expected validateInput');
+        const validate = inputBox.options.validateInput;
+        assert.equal(validate(''), 'Account ID is required');
+        assert.equal(validate('   '), 'Account ID is required');
+        assert.equal(validate('abc'), 'Account ID must be a positive integer');
+        assert.equal(validate('0'), 'Account ID must be a positive integer');
+        assert.equal(validate('-1'), 'Account ID must be a positive integer');
+        assert.equal(validate('42'), undefined);
+    });
 });
