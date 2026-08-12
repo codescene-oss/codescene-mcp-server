@@ -597,7 +597,7 @@ describe('codescene.signOut command', () => {
         const msg = state.shownInfoMessages.find(m => m.message.includes('Successfully signed out'));
         assert.ok(msg, 'expected success message');
         assert.equal(state.execFileCalls.length, 1);
-        assert.deepEqual(state.execFileCalls[0].args, ['logout']);
+        assert.deepEqual(state.execFileCalls[0].args, ['auth', 'logout']);
     });
 
     it('shows warning on incomplete logout', async () => {

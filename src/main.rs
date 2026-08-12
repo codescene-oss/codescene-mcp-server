@@ -111,7 +111,7 @@ pub(crate) fn display_version(raw_version: &str) -> &str {
 }
 
 pub(crate) fn help_text() -> &'static str {
-    "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help       Show this help message and exit\n  -v, --version    Show version and exit\n  --cli-version    Show embedded CLI version and exit\n  auth             Sign in to CodeScene via OAuth (opens browser)\n  logout           Sign out of CodeScene OAuth and clear the stored session\n\nEnvironment:\n  CS_ONPREM_URL    Base URL of self-hosted CodeScene instance (for auth subcommand)"
+    "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help       Show this help message and exit\n  -v, --version    Show version and exit\n  --cli-version    Show embedded CLI version and exit\n  auth             Sign in to CodeScene via OAuth (opens browser)\n  auth logout      Sign out of CodeScene OAuth and clear the stored session\n\nEnvironment:\n  CS_ONPREM_URL    Base URL of self-hosted CodeScene instance (for auth subcommand)"
 }
 
 async fn ensure_oauth_client_configured() {
@@ -140,6 +140,10 @@ pub(crate) fn parse_cli_args(args: &[String], raw_version: &str) -> Result<CliAc
             "logout" => Ok(CliAction::Logout),
             other => Err(format!("Unknown argument: {other}")),
         };
+    }
+
+    if args.len() == 2 && args[0] == "auth" && args[1] == "logout" {
+        return Ok(CliAction::Logout);
     }
 
     Err(format!("Unexpected arguments: {}", args.join(" ")))
@@ -188,7 +192,8 @@ async fn run_auth_flow() -> anyhow::Result<()> {
     }
 }
 
-/// Run OAuth logout as a standalone CLI command.
+/// Run OAuth logout as a standalone CLI command (`cs-mcp auth logout`).
+/// Delegates to `cs auth logout --client mcp`, then clears MCP OAuth config.
 /// Outputs JSON with the result to stdout for consumption by the VS Code extension.
 async fn run_logout_flow() -> anyhow::Result<()> {
     config::snapshot_client_env_vars();

@@ -226,7 +226,7 @@ function authFlowLabel(kind: AuthSubprocessKind): string {
 }
 
 /**
- * Handles JSON stdout from `cs-mcp auth` / `cs-mcp logout`.
+ * Handles JSON stdout from `cs-mcp auth` / `cs-mcp auth logout`.
  */
 function handleAuthSubprocessResult(
     stdout: string,
@@ -311,14 +311,15 @@ const AUTH_FLOWS: Record<AuthSubprocessKind, Omit<AuthFlowOptions, 'kind'>> = {
         successStatuses: ['signed_in', 'already_signed_in'],
     },
     'sign-out': {
-        args: ['logout'],
+        // Mirrors `cs auth logout` via the bundled binary: `cs-mcp auth logout`.
+        args: ['auth', 'logout'],
         resolveOnpremUrl: async (config) => (config.get<string>('onpremUrl', '') || '').trim(),
         alwaysRefresh: true,
         successStatuses: ['signed_out'],
     },
 };
 
-/** Runs `cs-mcp auth` or `cs-mcp logout` for the given flow kind. */
+/** Runs `cs-mcp auth` or `cs-mcp auth logout` for the given flow kind. */
 async function runAuthCommand(
     context: vscode.ExtensionContext,
     didChangeEmitter: vscode.EventEmitter<void>,

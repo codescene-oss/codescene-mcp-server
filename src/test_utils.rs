@@ -493,6 +493,13 @@ mod tests {
         assert!(matches!(action, CliAction::Logout));
     }
 
+    #[test]
+    fn parse_cli_args_supports_auth_logout() {
+        let args = vec!["auth".to_string(), "logout".to_string()];
+        let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
+        assert!(matches!(action, CliAction::Logout));
+    }
+
     #[tokio::test]
     async fn fetch_cli_version_returns_cli_output() {
         let runner = MockCliRunner::with_ok("cs version 1.5.0\n");
@@ -722,7 +729,7 @@ mod tests {
         assert!(text.contains("--help"));
         assert!(text.contains("--version"));
         assert!(text.contains("auth"));
-        assert!(text.contains("logout"));
+        assert!(text.contains("auth logout"));
     }
 
     #[test]
