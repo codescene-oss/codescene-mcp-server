@@ -1,8 +1,8 @@
 use crate::cli::CliRunner;
 
 use super::{
-    configured_credential, credential_from_response, fetch_token, run_login, state, AuthCredential,
-    CliTokenResponse,
+    configured_credential, credential_from_response, fetch_token, run_login, run_logout, state,
+    AuthCredential, CliTokenResponse,
 };
 
 /// Manages OAuth token lifecycle using the config env RwLock for all state.
@@ -206,6 +206,32 @@ impl AuthManager {
                 Ok(None)
             }
         }
+    }
+
+    /// Sign out: run CLI logout and persist the signed-out sentinel.
+    ///
+    /// Always clears MCP OAuth config (even if the CLI call fails) so a later
+    /// `auth token` refresh cannot rehydrate the session. Returns `Err` when
+    /// the CLI logout fails; callers should still treat local state as signed out.
+    pub(crate) async fn logout(&self, cli_runner: &dyn CliRunner) -> Result<(), String> {
+        let guard = crate::config::acquire_write_lock().await;
+        let result = run_logout(cli_runner).await;
+        state::persist_signed_out(&guard);
+        match &result {
+            Ok(resp) => {
+                tracing::info!(
+                    status = %resp.status,
+                    "CLI logout completed; persisted signed-out sentinel"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "CLI logout failed; still persisted signed-out sentinel"
+                );
+            }
+        }
+        result.map(|_| ())
     }
 
     /// Synchronously try to read the OAuth token for tracking purposes.
@@ -653,6 +679,49 @@ mod tests {
             );
             assert!(!manager.login(&cli).await.unwrap().is_signed_in());
             std::env::remove_var("CS_CONFIG_DIR");
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn logout_clears_oauth_and_sets_sentinel() {
+        with_clean_env(|| async {
+            std::env::set_var("CS_OAUTH_TOKEN", "oau-to-clear");
+            std::env::set_var("CS_OAUTH_EXPIRES_AT", (now_epoch_secs() + 3600).to_string());
+            std::env::set_var("CS_OAUTH_REFRESH_EXPIRES_AT", "9999999999");
+            let manager = AuthManager::new();
+            let cli = MockCliRunner::with_ok(
+                r#"{"status":"signed_out","access-token":null,"api-url":null}"#,
+            );
+            manager.logout(&cli).await.unwrap();
+            assert!(std::env::var("CS_OAUTH_TOKEN").is_err());
+            assert_eq!(
+                std::env::var("CS_OAUTH_EXPIRES_AT").ok().as_deref(),
+                Some(SIGNED_OUT_SENTINEL)
+            );
+            assert!(std::env::var("CS_OAUTH_REFRESH_EXPIRES_AT").is_err());
+            let calls = cli.calls();
+            let args = calls.lock().unwrap()[0].clone();
+            assert_eq!(args[0], "auth");
+            assert_eq!(args[1], "logout");
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn logout_persists_sentinel_even_when_cli_fails() {
+        with_clean_env(|| async {
+            std::env::set_var("CS_OAUTH_TOKEN", "oau-stale");
+            std::env::set_var("CS_OAUTH_EXPIRES_AT", (now_epoch_secs() + 3600).to_string());
+            let manager = AuthManager::new();
+            let cli = MockCliRunner::with_err(1, "logout failed");
+            let err = manager.logout(&cli).await.unwrap_err();
+            assert!(err.contains("logout") || err.contains("failed"), "got: {err}");
+            assert!(std::env::var("CS_OAUTH_TOKEN").is_err());
+            assert_eq!(
+                std::env::var("CS_OAUTH_EXPIRES_AT").ok().as_deref(),
+                Some(SIGNED_OUT_SENTINEL)
+            );
         })
         .await;
     }

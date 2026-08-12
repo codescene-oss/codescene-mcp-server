@@ -19,6 +19,7 @@ pub mod list_technical_debt_goals_for_project_file;
 pub mod list_technical_debt_hotspots_for_project;
 pub mod list_technical_debt_hotspots_for_project_file;
 pub mod login;
+pub mod logout;
 pub mod pre_commit_code_health_safeguard;
 pub mod rules_config;
 pub mod rules_config_list_thresholds;
@@ -34,6 +35,10 @@ pub mod verify_installation;
 /// Parameters for the `login` tool (currently accepts no arguments).
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct LoginParam {}
+
+/// Parameters for the `logout` tool (currently accepts no arguments).
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct LogoutParam {}
 
 /// Optional context parameter used by explain tools.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]

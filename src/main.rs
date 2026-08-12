@@ -46,7 +46,7 @@ use crate::http::HttpClient;
 use crate::tools::validation::{ValidationError, Validator};
 use crate::tools::{
     ChangeSetParam, DownloadSkillParam, FilePathParam, GetConfigParam, GitRepoParam, LoginParam,
-    OptionalContext, OwnershipParam, ProjectFileParam, ProjectParam,
+    LogoutParam, OptionalContext, OwnershipParam, ProjectFileParam, ProjectParam,
     RulesConfigListThresholdsParam, RulesConfigSetRuleParam, RulesConfigSetThresholdParam,
     RulesConfigValidateParam, SetConfigParam, SkillNameParam, SyncSkillsParam,
 };
@@ -93,7 +93,8 @@ pub(crate) const API_ONLY_TOOLS: &[&str] = &[
 ];
 
 /// Tools that cannot be disabled via `enabled_tools` config.
-pub(crate) const ALWAYS_ENABLED_TOOLS: &[&str] = &["get_config", "set_config", "login"];
+pub(crate) const ALWAYS_ENABLED_TOOLS: &[&str] =
+    &["get_config", "set_config", "login", "logout"];
 
 #[derive(Debug)]
 pub(crate) enum CliAction {
@@ -102,6 +103,7 @@ pub(crate) enum CliAction {
     PrintVersion(String),
     PrintCliVersion,
     Auth,
+    Logout,
 }
 
 pub(crate) fn display_version(raw_version: &str) -> &str {
@@ -109,7 +111,7 @@ pub(crate) fn display_version(raw_version: &str) -> &str {
 }
 
 pub(crate) fn help_text() -> &'static str {
-    "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help       Show this help message and exit\n  -v, --version    Show version and exit\n  --cli-version    Show embedded CLI version and exit\n  auth             Sign in to CodeScene via OAuth (opens browser)\n\nEnvironment:\n  CS_ONPREM_URL    Base URL of self-hosted CodeScene instance (for auth subcommand)"
+    "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help       Show this help message and exit\n  -v, --version    Show version and exit\n  --cli-version    Show embedded CLI version and exit\n  auth             Sign in to CodeScene via OAuth (opens browser)\n  auth logout      Sign out of CodeScene OAuth and clear the stored session\n\nEnvironment:\n  CS_ONPREM_URL    Base URL of self-hosted CodeScene instance (for auth subcommand)"
 }
 
 async fn ensure_oauth_client_configured() {
@@ -135,11 +137,23 @@ pub(crate) fn parse_cli_args(args: &[String], raw_version: &str) -> Result<CliAc
             )),
             "--cli-version" => Ok(CliAction::PrintCliVersion),
             "auth" => Ok(CliAction::Auth),
+            "logout" => Ok(CliAction::Logout),
             other => Err(format!("Unknown argument: {other}")),
         };
     }
 
+    if is_auth_logout_args(args) {
+        return Ok(CliAction::Logout);
+    }
+
     Err(format!("Unexpected arguments: {}", args.join(" ")))
+}
+
+fn is_auth_logout_args(args: &[String]) -> bool {
+    matches!(
+        args,
+        [cmd, sub] if cmd == "auth" && sub == "logout"
+    )
 }
 
 pub(crate) async fn fetch_cli_version(cli_runner: &dyn cli::CliRunner) -> anyhow::Result<String> {
@@ -181,6 +195,38 @@ async fn run_auth_flow() -> anyhow::Result<()> {
             let result = serde_json::json!({"status": "error", "error": e});
             println!("{}", result);
             anyhow::bail!("Login failed: {e}");
+        }
+    }
+}
+
+/// Run OAuth logout as a standalone CLI command (`cs-mcp auth logout`).
+/// Delegates to `cs auth logout --client mcp`, then clears MCP OAuth config.
+/// Outputs JSON with the result to stdout for consumption by the VS Code extension.
+async fn run_logout_flow() -> anyhow::Result<()> {
+    run_logout_flow_with(&cli::ProductionCliRunner).await
+}
+
+/// Testable logout CLI flow using an injected runner.
+pub(crate) async fn run_logout_flow_with(
+    cli_runner: &dyn cli::CliRunner,
+) -> anyhow::Result<()> {
+    config::snapshot_client_env_vars();
+    ensure_oauth_client_configured().await;
+    let config_data = config::load().unwrap_or_default();
+    config::apply_to_env(&config_data);
+
+    let auth_manager = AuthManager::new();
+    match auth_manager.logout(cli_runner).await {
+        Ok(()) => {
+            let result = serde_json::json!({"status": "signed_out"});
+            println!("{}", result);
+            Ok(())
+        }
+        Err(e) => {
+            // Local OAuth state is already cleared; still report the CLI error.
+            let result = serde_json::json!({"status": "error", "error": e});
+            println!("{}", result);
+            anyhow::bail!("Logout failed: {e}");
         }
     }
 }
@@ -638,6 +684,17 @@ impl CodeSceneServer {
     }
 
     #[tool(
+        description = "Sign out of CodeScene OAuth.\n\nWhen to use:\n    Use this tool to clear the stored OAuth session (CLI credentials and MCP OAuth config).\n\nLimitations:\n    - Does not remove CS_ACCESS_TOKEN / a Personal Access Token; clear that separately via set_config or your MCP client environment.\n    - Requires the embedded CLI to be available for a full CLI logout; local OAuth config is still cleared if the CLI call fails.\n\nReturns:\n    A success message when signed out, noting if a PAT remains configured.",
+        input_schema = inlined_schema_for::<LogoutParam>()
+    )]
+    async fn logout(
+        &self,
+        Parameters(params): Parameters<LogoutParam>,
+    ) -> Result<CallToolResult, ErrorData> {
+        tools::logout::handle(self, params).await
+    }
+
+    #[tool(
         description = "List all available skills embedded in this MCP server.\n\nWhen to use:\n    Use this tool to discover what skills are available for\n    download or inspection.\n\nLimitations:\n    - Returns only skills embedded at compile time.\n    - Does not scan external skill directories.\n\nReturns:\n    A formatted list of skill names with their descriptions.\n\nExample:\n    Call this tool to see all available skills, then use\n    download_skill or sync_skills to install them locally."
     )]
     async fn list_skills(&self) -> Result<CallToolResult, ErrorData> {
@@ -751,6 +808,10 @@ async fn main() -> anyhow::Result<()> {
         }
         Ok(CliAction::Auth) => {
             run_auth_flow().await?;
+            return Ok(());
+        }
+        Ok(CliAction::Logout) => {
+            run_logout_flow().await?;
             return Ok(());
         }
         Err(message) => {

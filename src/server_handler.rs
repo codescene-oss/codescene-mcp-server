@@ -91,6 +91,13 @@ fn build_prompts_list(is_docker: bool) -> ListPromptsResult {
         ));
     }
     prompts_list.push(Prompt::new(
+        "logout",
+        Some("Sign out of CodeScene OAuth. Invokes the logout tool to clear the stored session."),
+        Some(vec![PromptArgument::new("context")
+            .with_description("Optional context string.")
+            .with_required(false)]),
+    ));
+    prompts_list.push(Prompt::new(
         "review_code_health",
         Some(
             "Review Code Health and assess code quality for the current open file. The file path needs to be sent to the code_health_review MCP tool when using this prompt.",
@@ -207,18 +214,22 @@ fn build_resource_templates() -> ListResourceTemplatesResult {
 
 fn login_tool_instruction_line(is_docker: bool) -> &'static str {
     if is_docker {
-        ""
+        "- logout: Sign out of CodeScene OAuth and clear the stored session. Does not remove CS_ACCESS_TOKEN.\n\
+         "
     } else {
         "- login: Sign in to CodeScene with OAuth. When authentication is missing, call this tool first.\n\
+         - logout: Sign out of CodeScene OAuth and clear the stored session. Does not remove CS_ACCESS_TOKEN.\n\
          "
     }
 }
 
 fn login_prompt_instruction_line(is_docker: bool) -> &'static str {
     if is_docker {
-        ""
+        "- logout: Sign out of CodeScene OAuth (calls the logout tool).\n\
+         "
     } else {
         "- login: Sign in to CodeScene with OAuth (calls the login tool).\n\
+         - logout: Sign out of CodeScene OAuth (calls the logout tool).\n\
          "
     }
 }
@@ -309,9 +320,10 @@ mod tests {
     #[test]
     fn prompts_list_contains_expected_prompts() {
         let result = build_prompts_list(false);
-        assert_eq!(result.prompts.len(), 3);
+        assert_eq!(result.prompts.len(), 4);
         let names: Vec<&str> = result.prompts.iter().map(|p| p.name.as_str()).collect();
         assert!(names.contains(&"login"));
+        assert!(names.contains(&"logout"));
         assert!(names.contains(&"review_code_health"));
         assert!(names.contains(&"plan_code_health_refactoring"));
     }
@@ -319,9 +331,10 @@ mod tests {
     #[test]
     fn prompts_list_omits_login_in_docker() {
         let result = build_prompts_list(true);
-        assert_eq!(result.prompts.len(), 2);
+        assert_eq!(result.prompts.len(), 3);
         let names: Vec<&str> = result.prompts.iter().map(|p| p.name.as_str()).collect();
         assert!(!names.contains(&"login"));
+        assert!(names.contains(&"logout"));
         assert!(names.contains(&"review_code_health"));
         assert!(names.contains(&"plan_code_health_refactoring"));
     }
@@ -334,16 +347,23 @@ mod tests {
         assert!(!prompt.messages.is_empty());
     }
 
-    #[test]
-    fn resolve_login_prompt_succeeds() {
-        let result = resolve_prompt("login", false);
+    fn assert_prompt_text_contains(name: &str, expected: &str) {
+        let result = resolve_prompt(name, false);
         assert!(result.is_ok());
         let prompt = result.unwrap();
         let text = match &prompt.messages[0].content {
             rmcp::model::PromptMessageContent::Text { text } => text.as_str(),
             _ => panic!("expected text content"),
         };
-        assert!(text.contains("login tool"));
+        assert!(
+            text.contains(expected),
+            "prompt {name} missing {expected:?}, got: {text}"
+        );
+    }
+
+    #[test]
+    fn resolve_login_prompt_succeeds() {
+        assert_prompt_text_contains("login", "login tool");
     }
 
     #[test]
@@ -352,6 +372,11 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.message.contains("Unknown prompt"));
+    }
+
+    #[test]
+    fn resolve_logout_prompt_succeeds() {
+        assert_prompt_text_contains("logout", "logout tool");
     }
 
     #[test]
@@ -366,6 +391,7 @@ mod tests {
     fn build_instructions_omits_login_in_docker() {
         let text = build_instructions(false, false, true);
         assert!(!text.contains("- login:"));
+        assert!(text.contains("- logout: Sign out of CodeScene OAuth"));
         assert!(text.contains("OAuth login is not available in Docker"));
         assert!(text.contains("CS_ACCESS_TOKEN"));
     }
@@ -374,6 +400,7 @@ mod tests {
     fn build_instructions_includes_login_outside_docker() {
         let text = build_instructions(false, false, false);
         assert!(text.contains("- login: Sign in to CodeScene with OAuth"));
+        assert!(text.contains("- logout: Sign out of CodeScene OAuth"));
         assert!(!text.contains("OAuth login is not available in Docker"));
     }
 

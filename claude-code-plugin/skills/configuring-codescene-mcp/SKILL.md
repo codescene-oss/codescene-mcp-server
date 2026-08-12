@@ -7,11 +7,12 @@ description: Use when the user wants to view, set, or troubleshoot CodeScene MCP
 
 ## Overview
 
-Use this skill when the task is to configure the CodeScene MCP Server after it has been installed. The MCP server exposes `get_config` and `set_config` tools (and, outside Docker, `login`) that let the AI assistant authenticate and manage configuration on the user's behalf. Clients that support MCP prompts also expose a `login` prompt (slash command) that instructs the assistant to call the `login` tool — except in Docker, where OAuth login is unavailable and a Personal Access Token (`CS_ACCESS_TOKEN`) is required.
+Use this skill when the task is to configure the CodeScene MCP Server after it has been installed. The MCP server exposes `get_config`, `set_config`, and `logout` tools (and, outside Docker, `login`) that let the AI assistant authenticate and manage configuration on the user's behalf. Clients that support MCP prompts also expose `login` and `logout` prompts (slash commands) — except in Docker, where OAuth login is unavailable and a Personal Access Token (`CS_ACCESS_TOKEN`) is required.
 
 ## When to Use
 
 - The user wants to sign in to CodeScene (OAuth).
+- The user wants to sign out of CodeScene (clear the OAuth session).
 - The user wants to set or change their CodeScene access token (PAT / standalone).
 - The user belongs to multiple Cloud accounts and needs to pin an account ID.
 - The user needs to connect to a self-hosted CodeScene instance.
@@ -26,6 +27,7 @@ Do not use this skill for installing or registering the MCP server in an AI assi
 ## Quick Reference
 
 - `login`: Sign in with OAuth (opens browser). Preferred for interactive desktop use. Also available as the `login` MCP prompt (slash command). Not available in Docker — use a PAT instead.
+- `logout`: Sign out of OAuth (clears CLI credentials and MCP OAuth config). Does not remove `CS_ACCESS_TOKEN`. Also available as the `logout` MCP prompt.
 - `get_config`: List all configuration options and their current values (sensitive values are masked).
 - `get_config` with a key: Read a single option by name.
 - `set_config`: Set a configuration value persistently.
@@ -56,7 +58,7 @@ Environment variables set by the MCP client always override values in the config
 
 1. Run `get_config` to see the current state of all options.
 2. For interactive auth: if `access_token` is set and the user wants OAuth, clear it first (`set_config` with empty value or ask them to remove `CS_ACCESS_TOKEN` from client env). For multi-account Cloud, ensure `account_id` is set before calling `login`.
-3. Call `login` for OAuth (or have the user invoke the `login` MCP prompt), or `set_config` for PAT / other options.
+3. Call `login` for OAuth (or have the user invoke the `login` MCP prompt), or `set_config` for PAT / other options. To sign out, call `logout` (or the `logout` prompt).
 4. Run `get_config` with the relevant key to confirm the change took effect.
 5. If the user changed `access_token`, inform them that a server restart may be needed for tool registration changes to take effect.
 6. If `get_config` shows a value source of "client environment variable", explain that the env var in their editor's MCP configuration takes precedence and must be changed there instead.
@@ -82,4 +84,4 @@ For individual, interactive use, prefer `login` for auth and `set_config` for ot
 - Providing a CA bundle path that is not accessible to the MCP server process or Docker container.
 - Setting `enabled_tools` with misspelled tool names. The server warns about unknown names, but the misspelled tools are silently ignored. Use `get_config` with key `enabled_tools` to see the list of available tool names.
 - Forgetting that `enabled_tools` changes require a server restart. The tool list is built once at startup.
-- Trying to disable `get_config`, `set_config`, or `login` via `enabled_tools`. Outside Docker these tools are always enabled to prevent configuration lockout. In Docker, `login` is not registered at all (use PAT / `CS_ACCESS_TOKEN`).
+- Trying to disable `get_config`, `set_config`, `login`, or `logout` via `enabled_tools`. Outside Docker these tools are always enabled to prevent configuration lockout. In Docker, `login` is not registered at all (use PAT / `CS_ACCESS_TOKEN`); `logout` remains available.

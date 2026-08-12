@@ -108,6 +108,13 @@ fn main() {
             println!("{resp}");
             process::exit(0);
         }
+        (Some("auth"), Some("logout")) => {
+            let resp = env::var("FAKE_AUTH_LOGOUT_RESPONSE").unwrap_or_else(|_| {
+                r#"{"status":"signed_out","access-token":null,"api-url":null}"#.to_string()
+            });
+            println!("{resp}");
+            process::exit(0);
+        }
         (Some("review"), _) => {
             println!(r#"{{"score":9.5,"review":[]}}"#);
             process::exit(0);
@@ -252,6 +259,13 @@ fn call_login(client: &mut MCPClient) -> String {
     let response = client
         .call_tool("login", json!({}), Duration::from_secs(30))
         .expect("login call should succeed");
+    extract_result_text(&response)
+}
+
+fn call_logout(client: &mut MCPClient) -> String {
+    let response = client
+        .call_tool("logout", json!({}), Duration::from_secs(30))
+        .expect("logout call should succeed");
     extract_result_text(&response)
 }
 
@@ -523,5 +537,93 @@ pub fn test_pat_takes_precedence_over_oauth() {
     assert!(
         log.is_empty(),
         "CLI auth endpoints should not be called when PAT is configured, got log: {log}"
+    );
+}
+
+/// After a successful login, `logout` must call CLI logout, clear OAuth config
+/// (with signed-out sentinel), and leave subsequent tools unauthenticated.
+pub fn test_logout_clears_oauth_after_login() {
+    if is_docker() {
+        return skip_if_docker("fake CLI binary not available in container");
+    }
+    let login_resp = signed_in_json("logout-me-token", 3600);
+    let t = oauth_setup(&[
+        ("FAKE_AUTH_TOKEN_RESPONSE", SIGNED_OUT_JSON),
+        ("FAKE_AUTH_LOGIN_RESPONSE", login_resp.as_str()),
+    ]);
+    let mut client = start_client(&t);
+
+    let login_result = call_login(&mut client);
+    assert!(
+        login_result.contains("Successfully signed in"),
+        "got: {login_result}"
+    );
+    let config = read_config(&t.config_dir);
+    assert_eq!(config["oauth_token"].as_str(), Some("logout-me-token"));
+
+    let logout_result = call_logout(&mut client);
+    assert!(
+        logout_result.contains("Successfully signed out"),
+        "got: {logout_result}"
+    );
+
+    let config = read_config(&t.config_dir);
+    assert!(
+        config.get("oauth_token").is_none(),
+        "oauth_token should be cleared, got: {config}"
+    );
+    assert_eq!(
+        config["oauth_expires_at"].as_str(),
+        Some("0"),
+        "signed-out sentinel should be set, got: {config}"
+    );
+
+    let log = std::fs::read_to_string(&t.call_log_path).unwrap_or_default();
+    assert!(
+        log.contains("auth logout"),
+        "CLI auth logout should be called, got log: {log}"
+    );
+
+    let score = call_score(&mut client, &t.repo_dir);
+    assert!(
+        score.contains("No access token configured") || score.contains("login"),
+        "after logout, tools should report missing auth, got: {score}"
+    );
+}
+
+/// Logout with a PAT still configured clears OAuth state and notes that the
+/// PAT remains in effect.
+pub fn test_logout_notes_pat_still_configured() {
+    if is_docker() {
+        return skip_if_docker("fake CLI binary not available in container");
+    }
+    let t = oauth_setup(&[("CS_ACCESS_TOKEN", "pat-token")]);
+    seed_config(
+        &t.config_dir,
+        json!({
+            "instance_id": "test-instance-id",
+            "oauth_token": "stale-oauth-token",
+            "oauth_expires_at": (now_epoch() + 3600).to_string(),
+        }),
+    );
+    let mut client = start_client(&t);
+
+    let result = call_logout(&mut client);
+    assert!(
+        result.contains("CS_ACCESS_TOKEN is still configured"),
+        "got: {result}"
+    );
+
+    let config = read_config(&t.config_dir);
+    assert!(
+        config.get("oauth_token").is_none(),
+        "oauth_token should be cleared even when PAT is set, got: {config}"
+    );
+    assert_eq!(config["oauth_expires_at"].as_str(), Some("0"));
+
+    let log = std::fs::read_to_string(&t.call_log_path).unwrap_or_default();
+    assert!(
+        log.contains("auth logout"),
+        "CLI auth logout should still be called, got log: {log}"
     );
 }

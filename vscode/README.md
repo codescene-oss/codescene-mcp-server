@@ -19,6 +19,7 @@ Once installed, the following tools become available in VS Code's agent mode.
 | Tool | Description |
 |------|-------------|
 | `login` | Sign in to CodeScene with OAuth (opens browser) |
+| `logout` | Sign out of CodeScene OAuth and clear the stored session |
 | `get_config` | Read current server configuration |
 | `set_config` | Write a configuration value |
 | `verify_installation` | Diagnose setup issues |
@@ -67,9 +68,9 @@ These tools require OAuth or a CodeScene Personal Access Token and a CodeScene C
 
 ### Authentication
 
-**Recommended (interactive):** OAuth via the `login` MCP prompt / `login` tool, or **CodeScene: Sign In**. No token to copy or paste.
+**Recommended (interactive):** OAuth via the `login` MCP prompt / `login` tool, or **CodeScene: Sign In**. No token to copy or paste. Sign out with the `logout` prompt / tool, or **CodeScene: Sign Out**.
 
-**Optional (CI / headless):** Set a Personal Access Token or standalone license via `CodeScene: Configure Access Token (optional / CI)` or the `codescene.accessToken` setting. A saved PAT **blocks** OAuth until you clear it.
+**Optional (CI / headless):** Set a Personal Access Token or standalone license via `CodeScene: Configure Access Token (optional / CI)` or the `codescene.accessToken` setting. A saved PAT **blocks** OAuth until you clear it. Sign Out clears OAuth only — remove the PAT separately if needed.
 
 - **OAuth / Personal Access Token** — Full tool set, including project-level features.
 - **Standalone access token** — Local Code Health analysis only (scoring, review, refactoring).
@@ -96,6 +97,7 @@ See [Configuration Options](https://github.com/codescene-oss/codescene-mcp-serve
 | Prompt | Description |
 |--------|-------------|
 | `login` | Sign in to CodeScene with OAuth (instructs the agent to call the `login` tool) |
+| `logout` | Sign out of CodeScene OAuth (instructs the agent to call the `logout` tool) |
 | `review_code_health` | Review Code Health for the current file |
 | `plan_code_health_refactoring` | Plan a prioritized, low-risk Code Health refactoring |
 
@@ -104,6 +106,7 @@ In Copilot Chat, pick these from the slash-command / prompt picker (MCP prompts 
 ## Commands
 
 - `CodeScene: Sign In` — Start the OAuth browser login flow
+- `CodeScene: Sign Out` — Clear the stored OAuth session
 - `CodeScene: Configure Access Token (optional / CI)` — Set or clear a PAT/standalone token
 - `CodeScene: Restart MCP Server` — Restart the MCP server (after config changes)
 - `CodeScene: Show Server Status` — Display current server status and configuration

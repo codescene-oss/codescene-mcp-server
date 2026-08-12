@@ -117,6 +117,10 @@ pub fn test_all_tools_without_filter() {
         assert!(names.contains("login"), "login should be listed outside Docker");
     }
     assert!(
+        names.contains("logout"),
+        "logout should be listed (including Docker)"
+    );
+    assert!(
         names.len() >= 10,
         "Expected >= 10 tools, found {}",
         names.len()
@@ -142,6 +146,10 @@ pub fn test_all_tools_without_filter() {
             "login prompt should be listed outside Docker"
         );
     }
+    assert!(
+        prompt_names.contains("logout"),
+        "logout prompt should be listed (including Docker)"
+    );
 }
 
 #[test]
@@ -166,6 +174,7 @@ pub fn test_filter_restricts_tools() {
     );
     assert!(names.contains("get_config"), "get_config always listed");
     assert!(names.contains("set_config"), "set_config always listed");
+    assert!(names.contains("logout"), "logout always listed (including Docker)");
     if is_docker() {
         assert!(
             !names.contains("login"),
@@ -173,8 +182,8 @@ pub fn test_filter_restricts_tools() {
         );
         assert_eq!(
             names.len(),
-            4,
-            "Expected exactly 4 tools in Docker, found {}: {:?}",
+            5,
+            "Expected exactly 5 tools in Docker, found {}: {:?}",
             names.len(),
             names
         );
@@ -182,8 +191,8 @@ pub fn test_filter_restricts_tools() {
         assert!(names.contains("login"), "login always listed outside Docker");
         assert_eq!(
             names.len(),
-            5,
-            "Expected exactly 5 tools, found {}: {:?}",
+            6,
+            "Expected exactly 6 tools, found {}: {:?}",
             names.len(),
             names
         );

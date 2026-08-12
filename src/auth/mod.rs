@@ -232,6 +232,14 @@ pub(crate) async fn fetch_token(
     Ok(Some(parsed))
 }
 
+/// Run `cs auth logout --client mcp --output-format json`.
+/// Returns the parsed response on success (typically `status: signed_out`).
+pub(crate) async fn run_logout(
+    cli_runner: &dyn CliRunner,
+) -> Result<CliTokenResponse, String> {
+    run_and_parse_auth(cli_runner, "logout").await
+}
+
 /// Run `cs auth login --client mcp --output-format json` (blocking until the
 /// browser flow completes or the CLI's built-in 2-minute timeout fires).
 /// Returns the parsed response on success.
@@ -516,6 +524,23 @@ mod tests {
     async fn fetch_token_returns_err_on_invalid_json() {
         let cli = MockCliRunner::with_ok("not json");
         assert!(fetch_token(&cli).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn run_logout_returns_signed_out_response() {
+        let json = r#"{"status":"signed_out","access-token":null,"api-url":null}"#;
+        let cli = MockCliRunner::with_ok(json);
+        let result = run_logout(&cli).await.unwrap();
+        assert_eq!(result.status, "signed_out");
+        let calls = cli.calls();
+        let args = calls.lock().unwrap()[0].clone();
+        assert_eq!(args[..2], ["auth".to_string(), "logout".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn run_logout_returns_err_on_cli_failure() {
+        let cli = MockCliRunner::with_err(1, "connection refused");
+        assert!(run_logout(&cli).await.is_err());
     }
 
     #[tokio::test]

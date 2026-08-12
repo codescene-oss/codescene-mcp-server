@@ -287,7 +287,7 @@ mod tests {
     use crate::version_checker::VersionChecker;
     use crate::{
         display_version, fetch_cli_version, help_text, parse_cli_args, remove_docker_unsupported_tools,
-        token_missing_msg, CliAction, API_ONLY_TOOLS,
+        run_logout_flow_with, token_missing_msg, CliAction, API_ONLY_TOOLS,
     };
 
     #[derive(Clone)]
@@ -486,6 +486,20 @@ mod tests {
         assert!(matches!(action, CliAction::Auth));
     }
 
+    #[test]
+    fn parse_cli_args_supports_logout() {
+        let args = vec!["logout".to_string()];
+        let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
+        assert!(matches!(action, CliAction::Logout));
+    }
+
+    #[test]
+    fn parse_cli_args_supports_auth_logout() {
+        let args = vec!["auth".to_string(), "logout".to_string()];
+        let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
+        assert!(matches!(action, CliAction::Logout));
+    }
+
     #[tokio::test]
     async fn fetch_cli_version_returns_cli_output() {
         let runner = MockCliRunner::with_ok("cs version 1.5.0\n");
@@ -670,6 +684,90 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn logout_dispatch_method_delegates_to_logout_handler() {
+        use rmcp::handler::server::wrapper::Parameters;
+
+        let _g = clear_token();
+        std::env::set_var("CS_OAUTH_TOKEN", "oau-dispatch");
+        std::env::set_var("CS_OAUTH_EXPIRES_AT", "9999999999");
+        let server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_ok(
+                r#"{"status":"signed_out","access-token":null,"api-url":null}"#,
+            ),
+            MockHttpClient::new(vec![]),
+        );
+        let result = server
+            .logout(Parameters(crate::tools::LogoutParam {}))
+            .await
+            .unwrap();
+        assert!(
+            result_text(&result).contains("Successfully signed out"),
+            "got: {}",
+            result_text(&result)
+        );
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+    }
+
+    /// Env setup for `run_logout_flow_with` tests. Keeps the tempdir alive until drop.
+    struct LogoutFlowEnv {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        _dir: tempfile::TempDir,
+    }
+
+    impl LogoutFlowEnv {
+        fn new() -> Self {
+            let lock = config::lock_test_env();
+            let dir = tempfile::tempdir().unwrap();
+            std::env::set_var("CS_CONFIG_DIR", dir.path().as_os_str());
+            std::env::set_var("CS_OAUTH_CLIENT", "mcp");
+            std::env::remove_var("CS_ACCESS_TOKEN");
+            Self {
+                _lock: lock,
+                _dir: dir,
+            }
+        }
+
+        fn assert_signed_out_sentinel(&self) {
+            assert_eq!(
+                std::env::var("CS_OAUTH_EXPIRES_AT").ok().as_deref(),
+                Some("0")
+            );
+        }
+    }
+
+    impl Drop for LogoutFlowEnv {
+        fn drop(&mut self) {
+            std::env::remove_var("CS_OAUTH_CLIENT");
+            std::env::remove_var("CS_CONFIG_DIR");
+            std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+        }
+    }
+
+    #[tokio::test]
+    async fn run_logout_flow_with_succeeds() {
+        let env = LogoutFlowEnv::new();
+        let runner = MockCliRunner::with_ok(
+            r#"{"status":"signed_out","access-token":null,"api-url":null}"#,
+        );
+        run_logout_flow_with(&runner).await.unwrap();
+        env.assert_signed_out_sentinel();
+    }
+
+    #[tokio::test]
+    async fn run_logout_flow_with_reports_cli_error() {
+        let env = LogoutFlowEnv::new();
+        let runner = MockCliRunner::with_err(1, "connection refused");
+        let err = run_logout_flow_with(&runner).await.unwrap_err();
+        assert!(
+            err.to_string().contains("Logout failed"),
+            "got: {err}"
+        );
+        env.assert_signed_out_sentinel();
+    }
+
+    #[tokio::test]
     async fn verify_installation_dispatch_method_delegates_to_handler() {
         use rmcp::handler::server::wrapper::Parameters;
 
@@ -714,6 +812,8 @@ mod tests {
         assert!(text.contains("Usage:"));
         assert!(text.contains("--help"));
         assert!(text.contains("--version"));
+        assert!(text.contains("auth"));
+        assert!(text.contains("auth logout"));
     }
 
     #[test]
@@ -789,6 +889,7 @@ mod tests {
             "missing set_config"
         );
         assert!(names.contains(&"login".to_string()), "missing login");
+        assert!(names.contains(&"logout".to_string()), "missing logout");
     }
 
     fn assert_tool_count_and_config(names: &[String], expected: usize) {
@@ -806,7 +907,7 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server(false);
         let names = tool_names(&server);
-        assert_tool_count_and_config(&names, 25);
+        assert_tool_count_and_config(&names, 26);
         assert!(names.contains(&"code_health_review".to_string()));
     }
 
@@ -816,8 +917,8 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server_with_enabled_tools(false, "code_health_review,code_health_score");
         let names = tool_names(&server);
-        // Should have the 2 enabled tools + 3 always-on = 5
-        assert_tool_count_and_config(&names, 5);
+        // Should have the 2 enabled tools + 4 always-on = 6
+        assert_tool_count_and_config(&names, 6);
         assert!(names.contains(&"code_health_review".to_string()));
         assert!(names.contains(&"code_health_score".to_string()));
     }
@@ -852,7 +953,7 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server_with_enabled_tools(false, "analyze_change_set");
         let names = tool_names(&server);
-        assert_tool_count_and_config(&names, 4);
+        assert_tool_count_and_config(&names, 5);
         assert!(names.contains(&"analyze_change_set".to_string()));
     }
 
@@ -947,6 +1048,10 @@ mod tests {
         assert!(
             !names.contains(&"login".to_string()),
             "login must be absent in Docker mode"
+        );
+        assert!(
+            names.contains(&"logout".to_string()),
+            "logout must remain available in Docker"
         );
         assert!(names.contains(&"get_config".to_string()));
         assert!(names.contains(&"set_config".to_string()));

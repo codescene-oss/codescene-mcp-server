@@ -104,6 +104,10 @@
         "title": "CodeScene: Sign In"
       },
       {
+        "command": "codescene.signOut",
+        "title": "CodeScene: Sign Out"
+      },
+      {
         "command": "codescene.configure",
         "title": "CodeScene: Configure Access Token (optional / CI)"
       },

@@ -1093,6 +1093,16 @@ fn test_pat_takes_precedence_over_oauth() {
     tests::oauth_login::test_pat_takes_precedence_over_oauth();
 }
 
+#[test]
+fn test_logout_clears_oauth_after_login() {
+    tests::oauth_login::test_logout_clears_oauth_after_login();
+}
+
+#[test]
+fn test_logout_notes_pat_still_configured() {
+    tests::oauth_login::test_logout_notes_pat_still_configured();
+}
+
 // --- OAuth Login Flow (real CLI + mock IdP, host-only) ---
 #[test]
 fn test_oauth_authorization_code_flow_persists_token() {
