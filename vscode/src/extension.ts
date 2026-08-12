@@ -59,12 +59,14 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Command: Sign in via OAuth (opens browser)
     context.subscriptions.push(
-        vscode.commands.registerCommand('codescene.signIn', () => runSignIn(context, didChangeEmitter))
+        vscode.commands.registerCommand('codescene.signIn', () =>
+            runAuthCommand(context, didChangeEmitter, 'sign-in'))
     );
 
     // Command: Sign out of OAuth
     context.subscriptions.push(
-        vscode.commands.registerCommand('codescene.signOut', () => runSignOut(context, didChangeEmitter))
+        vscode.commands.registerCommand('codescene.signOut', () =>
+            runAuthCommand(context, didChangeEmitter, 'sign-out'))
     );
 
     // Command: Configure access token (optional PAT / CI fallback)
@@ -163,7 +165,7 @@ async function showFirstRunPrompt(
     await context.globalState.update(FIRST_RUN_KEY, true);
 
     if (choice === signIn) {
-        await runSignIn(context, didChangeEmitter);
+        await runAuthCommand(context, didChangeEmitter, 'sign-in');
     }
 }
 
@@ -207,48 +209,55 @@ function buildAuthEnv(onpremUrl: string, accountId: string): Record<string, stri
     return env;
 }
 
+type AuthSubprocessKind = 'sign-in' | 'sign-out';
+
+interface AuthFlowOptions {
+    kind: AuthSubprocessKind;
+    args: string[];
+    /** Return `undefined` to abort (e.g. user cancelled the on-prem prompt). */
+    resolveOnpremUrl: (config: vscode.WorkspaceConfiguration) => Promise<string | undefined>;
+    /** When true, always refresh MCP definitions after the subprocess finishes. */
+    alwaysRefresh: boolean;
+    successStatuses: string[];
+}
+
+function authFlowLabel(kind: AuthSubprocessKind): string {
+    return kind === 'sign-in' ? 'Sign in' : 'Sign out';
+}
+
 /**
- * Handles the JSON result from the auth subprocess.
+ * Handles JSON stdout from `cs-mcp auth` / `cs-mcp logout`.
  */
-function handleAuthResult(
+function handleAuthSubprocessResult(
     stdout: string,
     didChangeEmitter: vscode.EventEmitter<void>,
+    options: Pick<AuthFlowOptions, 'kind' | 'successStatuses' | 'alwaysRefresh'>,
 ): void {
     const result = JSON.parse(stdout.trim());
-    if (result.status === 'signed_in' || result.status === 'already_signed_in') {
-        vscode.window.showInformationMessage('CodeScene: Successfully signed in!');
+    if (options.successStatuses.includes(result.status)) {
+        const successVerb = options.kind === 'sign-in' ? 'signed in' : 'signed out';
+        vscode.window.showInformationMessage(`CodeScene: Successfully ${successVerb}!`);
         didChangeEmitter.fire();
-    } else {
-        vscode.window.showWarningMessage(`CodeScene: Sign in incomplete — ${result.error || result.status}`);
+        return;
+    }
+    vscode.window.showWarningMessage(
+        `CodeScene: ${authFlowLabel(options.kind)} incomplete — ${result.error || result.status}`,
+    );
+    if (options.alwaysRefresh) {
+        didChangeEmitter.fire();
     }
 }
 
 /**
- * Handles the JSON result from the logout subprocess.
+ * Resolves on-prem URL / account env, then spawns a bundled auth subcommand.
  */
-function handleLogoutResult(
-    stdout: string,
-    didChangeEmitter: vscode.EventEmitter<void>,
-): void {
-    const result = JSON.parse(stdout.trim());
-    if (result.status === 'signed_out') {
-        vscode.window.showInformationMessage('CodeScene: Successfully signed out!');
-        didChangeEmitter.fire();
-    } else {
-        vscode.window.showWarningMessage(`CodeScene: Sign out incomplete — ${result.error || result.status}`);
-        didChangeEmitter.fire();
-    }
-}
-
-/**
- * Runs the OAuth sign-in flow by spawning `cs-mcp auth`.
- */
-async function runSignIn(
+async function runAuthFlow(
     context: vscode.ExtensionContext,
     didChangeEmitter: vscode.EventEmitter<void>,
-) {
+    options: AuthFlowOptions,
+): Promise<void> {
     const config = vscode.workspace.getConfiguration('codescene');
-    const onpremUrl = await resolveOnpremUrl(config);
+    const onpremUrl = await options.resolveOnpremUrl(config);
     if (onpremUrl === undefined) {
         return;
     }
@@ -261,24 +270,30 @@ async function runSignIn(
 
     const accountId = optionalIdString(config.get<string>('accountId', ''));
     const env = buildAuthEnv(onpremUrl, accountId);
+    const label = authFlowLabel(options.kind);
+    const progressTitle = `CodeScene: ${options.kind === 'sign-in' ? 'Signing in' : 'Signing out'}...`;
+    const completedMessage = `CodeScene: ${label} completed.`;
 
     await vscode.window.withProgress(
         {
             location: vscode.ProgressLocation.Notification,
-            title: 'CodeScene: Signing in...',
+            title: progressTitle,
             cancellable: false,
         },
         () => new Promise<void>((resolve) => {
-            execFile(binaryPath, ['auth'], { env }, (error, stdout, stderr) => {
+            execFile(binaryPath, options.args, { env }, (error, stdout, stderr) => {
                 if (error) {
                     vscode.window.showErrorMessage(
-                        `CodeScene: Sign in failed — ${stderr?.trim() || stdout?.trim() || error.message}`,
+                        `CodeScene: ${label} failed — ${stderr?.trim() || stdout?.trim() || error.message}`,
                     );
+                    if (options.alwaysRefresh) {
+                        didChangeEmitter.fire();
+                    }
                 } else {
                     try {
-                        handleAuthResult(stdout, didChangeEmitter);
+                        handleAuthSubprocessResult(stdout, didChangeEmitter, options);
                     } catch {
-                        vscode.window.showInformationMessage('CodeScene: Sign in completed.');
+                        vscode.window.showInformationMessage(completedMessage);
                         didChangeEmitter.fire();
                     }
                 }
@@ -288,49 +303,28 @@ async function runSignIn(
     );
 }
 
-/**
- * Runs OAuth sign-out by spawning `cs-mcp logout`.
- */
-async function runSignOut(
+const AUTH_FLOWS: Record<AuthSubprocessKind, Omit<AuthFlowOptions, 'kind'>> = {
+    'sign-in': {
+        args: ['auth'],
+        resolveOnpremUrl,
+        alwaysRefresh: false,
+        successStatuses: ['signed_in', 'already_signed_in'],
+    },
+    'sign-out': {
+        args: ['logout'],
+        resolveOnpremUrl: async (config) => (config.get<string>('onpremUrl', '') || '').trim(),
+        alwaysRefresh: true,
+        successStatuses: ['signed_out'],
+    },
+};
+
+/** Runs `cs-mcp auth` or `cs-mcp logout` for the given flow kind. */
+async function runAuthCommand(
     context: vscode.ExtensionContext,
     didChangeEmitter: vscode.EventEmitter<void>,
+    kind: AuthSubprocessKind,
 ) {
-    const binaryPath = getBinaryPath(context);
-    if (!binaryPath) {
-        vscode.window.showErrorMessage('CodeScene: Binary not available for this platform.');
-        return;
-    }
-
-    const config = vscode.workspace.getConfiguration('codescene');
-    const onpremUrl = (config.get<string>('onpremUrl', '') || '').trim();
-    const accountId = optionalIdString(config.get<string>('accountId', ''));
-    const env = buildAuthEnv(onpremUrl, accountId);
-
-    await vscode.window.withProgress(
-        {
-            location: vscode.ProgressLocation.Notification,
-            title: 'CodeScene: Signing out...',
-            cancellable: false,
-        },
-        () => new Promise<void>((resolve) => {
-            execFile(binaryPath, ['logout'], { env }, (error, stdout, stderr) => {
-                if (error) {
-                    vscode.window.showErrorMessage(
-                        `CodeScene: Sign out failed — ${stderr?.trim() || stdout?.trim() || error.message}`,
-                    );
-                    didChangeEmitter.fire();
-                } else {
-                    try {
-                        handleLogoutResult(stdout, didChangeEmitter);
-                    } catch {
-                        vscode.window.showInformationMessage('CodeScene: Sign out completed.');
-                        didChangeEmitter.fire();
-                    }
-                }
-                resolve();
-            });
-        }),
-    );
+    await runAuthFlow(context, didChangeEmitter, { kind, ...AUTH_FLOWS[kind] });
 }
 
 /**

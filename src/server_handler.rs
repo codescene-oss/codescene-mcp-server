@@ -347,16 +347,23 @@ mod tests {
         assert!(!prompt.messages.is_empty());
     }
 
-    #[test]
-    fn resolve_login_prompt_succeeds() {
-        let result = resolve_prompt("login", false);
+    fn assert_prompt_text_contains(name: &str, expected: &str) {
+        let result = resolve_prompt(name, false);
         assert!(result.is_ok());
         let prompt = result.unwrap();
         let text = match &prompt.messages[0].content {
             rmcp::model::PromptMessageContent::Text { text } => text.as_str(),
             _ => panic!("expected text content"),
         };
-        assert!(text.contains("login tool"));
+        assert!(
+            text.contains(expected),
+            "prompt {name} missing {expected:?}, got: {text}"
+        );
+    }
+
+    #[test]
+    fn resolve_login_prompt_succeeds() {
+        assert_prompt_text_contains("login", "login tool");
     }
 
     #[test]
@@ -369,14 +376,7 @@ mod tests {
 
     #[test]
     fn resolve_logout_prompt_succeeds() {
-        let result = resolve_prompt("logout", false);
-        assert!(result.is_ok());
-        let prompt = result.unwrap();
-        let text = match &prompt.messages[0].content {
-            rmcp::model::PromptMessageContent::Text { text } => text.as_str(),
-            _ => panic!("expected text content"),
-        };
-        assert!(text.contains("logout tool"));
+        assert_prompt_text_contains("logout", "logout tool");
     }
 
     #[test]
