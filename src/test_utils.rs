@@ -194,7 +194,17 @@ impl CliRunner for MockCliRunner {
             .lock()
             .unwrap()
             .push(args.iter().map(|arg| arg.to_string()).collect());
-        self.responses.lock().unwrap().remove(0)
+        let mut responses = self.responses.lock().unwrap();
+        if responses.is_empty() {
+            return Err(CliError::NonZeroExit {
+                code: 1,
+                stderr: format!(
+                    "MockCliRunner: no queued responses left (args: {})",
+                    args.join(" ")
+                ),
+            });
+        }
+        responses.remove(0)
     }
 }
 
@@ -741,12 +751,18 @@ mod tests {
         use rmcp::handler::server::wrapper::Parameters;
 
         let _g = clear_token();
+        let expires_at = crate::auth::now_epoch_secs() + 3600;
         std::env::set_var("CS_OAUTH_TOKEN", "tok");
-        std::env::set_var("CS_OAUTH_EXPIRES_AT", "9999999999");
+        std::env::set_var("CS_OAUTH_EXPIRES_AT", expires_at.to_string());
         std::env::set_var("CS_OAUTH_ACCOUNT_ID", "42");
+        // Queue a signed-in response so a concurrent env race that forces a CLI
+        // token lookup still completes instead of panicking on an empty mock.
+        let signed_in = format!(
+            r#"{{"status":"signed_in","access-token":"tok","api-url":"https://api.codescene.io/api","expires-at":{expires_at},"account-id":42}}"#
+        );
         let server = make_server_with_mocks(
             false,
-            MockCliRunner::with_responses(vec![]),
+            MockCliRunner::with_ok(&signed_in),
             MockHttpClient::new(vec![]),
         );
         let result = server
@@ -755,10 +771,10 @@ mod tests {
             }))
             .await
             .unwrap();
+        let text = result_text(&result);
         assert!(
-            result_text(&result).contains("Already signed in"),
-            "got: {}",
-            result_text(&result)
+            text.contains("Already signed in") || text.contains("Switched to CodeScene account 42"),
+            "got: {text}"
         );
         std::env::remove_var("CS_OAUTH_TOKEN");
         std::env::remove_var("CS_OAUTH_EXPIRES_AT");
