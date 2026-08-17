@@ -12,6 +12,9 @@ use std::process::Command;
 const TOOL_NAME: &str = "analyze_change_set";
 const BASE_REF: &str = "master";
 const TIMEOUT: Duration = Duration::from_secs(60);
+const CALCULATOR_PATH: &str = "src/utils/calculator.py";
+const VALIDATOR_PATH: &str = "src/validation/validator.py";
+const STATISTICS_PATH: &str = "src/stats/statistics.py";
 
 const CLEAN_ADDITION: &str = r#"
 
@@ -95,6 +98,99 @@ def calculate_mode(items: list[float]) -> float:
     return max(counts, key=counts.get)
 "#;
 
+enum ExistingFileChange {
+    CleanCalculator,
+    DegradingCalculator,
+}
+
+impl ExistingFileChange {
+    fn file_path(&self) -> &'static str {
+        CALCULATOR_PATH
+    }
+
+    fn additional_code(&self) -> &'static str {
+        match self {
+            Self::CleanCalculator => CLEAN_ADDITION,
+            Self::DegradingCalculator => DEGRADING_ADDITION,
+        }
+    }
+}
+
+enum NewFileScenario {
+    DegradingValidation,
+    CleanStatistics,
+}
+
+impl NewFileScenario {
+    fn file_path(&self) -> &'static str {
+        match self {
+            Self::DegradingValidation => VALIDATOR_PATH,
+            Self::CleanStatistics => STATISTICS_PATH,
+        }
+    }
+
+    fn content(&self) -> &'static str {
+        match self {
+            Self::DegradingValidation => DEGRADING_NEW_FILE,
+            Self::CleanStatistics => CLEAN_NEW_FILE,
+        }
+    }
+}
+
+enum ExpectedFile {
+    Calculator,
+    Validator,
+}
+
+impl ExpectedFile {
+    fn file_name(&self) -> &'static str {
+        match self {
+            Self::Calculator => "calculator.py",
+            Self::Validator => "validator.py",
+        }
+    }
+}
+
+enum MetadataStatus {
+    NoIssuesFound,
+    NoFilesModified,
+}
+
+impl MetadataStatus {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::NoIssuesFound => "no-issues-found",
+            Self::NoFilesModified => "no-files-modified",
+        }
+    }
+}
+
+struct TestContext {
+    command: Vec<String>,
+    env: Vec<(String, String)>,
+    repo_dir: std::path::PathBuf,
+    _temp_dir: tempfile::TempDir,
+}
+
+struct AnalysisOutput {
+    result_text: String,
+    data: serde_json::Value,
+}
+
+impl AnalysisOutput {
+    fn quality_gates(&self) -> Option<&str> {
+        self.data.get("quality_gates")?.as_str()
+    }
+
+    fn metadata_status(&self) -> Option<&str> {
+        self.data.get("metadata")?.get("status")?.as_str()
+    }
+
+    fn result_count(&self) -> Option<usize> {
+        self.data.get("results")?.as_array().map(Vec::len)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Git helpers
 // ---------------------------------------------------------------------------
@@ -113,26 +209,26 @@ fn git(repo_dir: &Path, args: &[&str]) {
     );
 }
 
-fn create_feature_branch_with_file_change(repo_dir: &Path, file_path: &str, additional_code: &str) {
+fn create_feature_branch_with_file_change(repo_dir: &Path, change: ExistingFileChange) {
     git(repo_dir, &["checkout", "-b", "feature"]);
 
-    let full_path = repo_dir.join(file_path);
+    let full_path = repo_dir.join(change.file_path());
     let original = std::fs::read_to_string(&full_path).expect("Read original file");
-    std::fs::write(&full_path, format!("{original}{additional_code}"))
+    std::fs::write(&full_path, format!("{original}{}", change.additional_code()))
         .expect("Write modified file");
 
     git(repo_dir, &["add", "."]);
     git(repo_dir, &["commit", "-m", "Feature branch change"]);
 }
 
-fn create_feature_branch_with_new_file(repo_dir: &Path, file_path: &str, content: &str) {
+fn create_feature_branch_with_new_file(repo_dir: &Path, scenario: NewFileScenario) {
     git(repo_dir, &["checkout", "-b", "feature"]);
 
-    let full_path = repo_dir.join(file_path);
+    let full_path = repo_dir.join(scenario.file_path());
     if let Some(parent) = full_path.parent() {
         std::fs::create_dir_all(parent).expect("Create parent directories");
     }
-    std::fs::write(&full_path, content).expect("Write new file");
+    std::fs::write(&full_path, scenario.content()).expect("Write new file");
 
     git(repo_dir, &["add", "."]);
     git(
@@ -141,21 +237,16 @@ fn create_feature_branch_with_new_file(repo_dir: &Path, file_path: &str, content
     );
 }
 
+fn create_feature_branch_without_changes(repo_dir: &Path) {
+    git(repo_dir, &["checkout", "-b", "feature"]);
+}
+
 // ---------------------------------------------------------------------------
 // Analysis helpers
 // ---------------------------------------------------------------------------
 
-fn parse_quality_gates(result_text: &str) -> Option<String> {
-    let data: serde_json::Value = serde_json::from_str(result_text).ok()?;
-    data.get("quality_gates")?.as_str().map(String::from)
-}
-
-fn run_change_set_analysis(
-    command: &[String],
-    env: &[(String, String)],
-    repo_dir: &Path,
-) -> (String, Option<String>) {
-    let mut client = make_client(command, env, repo_dir);
+fn run_change_set_analysis(context: &TestContext) -> AnalysisOutput {
+    let mut client = make_client(&context.command, &context.env, &context.repo_dir);
     assert!(client.start(), "Server should start");
     client.initialize().expect("Initialize should succeed");
 
@@ -164,27 +255,22 @@ fn run_change_set_analysis(
             TOOL_NAME,
             json!({
                 "base_ref": BASE_REF,
-                "git_repository_path": repo_dir.to_string_lossy()
+                "git_repository_path": context.repo_dir.to_string_lossy()
             }),
             TIMEOUT,
         )
         .expect("analyze_change_set tool call should succeed");
 
     let result_text = extract_result_text(&response);
-    let quality_gates = parse_quality_gates(&result_text);
-    (result_text, quality_gates)
+    let data = serde_json::from_str(&result_text).expect("Result should be valid JSON");
+    AnalysisOutput { result_text, data }
 }
 
 // ---------------------------------------------------------------------------
 // Local setup — each test gets its own temp dir and git repo
 // ---------------------------------------------------------------------------
 
-fn local_setup() -> (
-    Vec<String>,
-    Vec<(String, String)>,
-    std::path::PathBuf,
-    tempfile::TempDir,
-) {
+fn local_setup() -> TestContext {
     let executable = find_or_build_executable();
     let backend = create_backend(executable);
 
@@ -198,40 +284,58 @@ fn local_setup() -> (
     let env_vec: Vec<(String, String)> = env_map.into_iter().collect();
     let command = backend.get_command(&repo_dir);
 
-    (command, env_vec, repo_dir, temp_dir)
+    TestContext {
+        command,
+        env: env_vec,
+        repo_dir,
+        _temp_dir: temp_dir,
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Assertion helpers
 // ---------------------------------------------------------------------------
 
-fn assert_quality_gates_passed(command: &[String], env: &[(String, String)], repo_dir: &Path) {
-    let (result_text, quality_gates) = run_change_set_analysis(command, env, repo_dir);
+fn assert_quality_gates_passed(context: &TestContext) {
+    let output = run_change_set_analysis(context);
 
-    assert!(!result_text.is_empty(), "Tool should return content");
+    assert!(!output.result_text.is_empty(), "Tool should return content");
     assert_eq!(
-        quality_gates.as_deref(),
+        output.quality_gates(),
         Some("passed"),
-        "Quality gates should pass, got: {quality_gates:?}"
+        "Quality gates should pass, got: {:?}",
+        output.quality_gates()
     );
 }
 
-fn assert_quality_gates_failed(
-    command: &[String],
-    env: &[(String, String)],
-    repo_dir: &Path,
-    expected_file: &str,
-) {
-    let (result_text, quality_gates) = run_change_set_analysis(command, env, repo_dir);
+fn assert_quality_gates_failed(context: &TestContext, expected_file: ExpectedFile) {
+    let output = run_change_set_analysis(context);
 
     assert_eq!(
-        quality_gates.as_deref(),
+        output.quality_gates(),
         Some("failed"),
-        "Quality gates should fail, got: {quality_gates:?}"
+        "Quality gates should fail, got: {:?}",
+        output.quality_gates()
     );
     assert!(
-        result_text.contains(expected_file),
-        "Findings should reference {expected_file}"
+        output.result_text.contains(expected_file.file_name()),
+        "Findings should reference {}",
+        expected_file.file_name()
+    );
+}
+
+fn assert_empty_results_passed_with_status(context: &TestContext, expected_status: MetadataStatus) {
+    let output = run_change_set_analysis(context);
+
+    assert!(!output.result_text.is_empty(), "Tool should return content");
+    assert_eq!(output.quality_gates(), Some("passed"));
+    assert_eq!(output.result_count(), Some(0));
+    assert_eq!(
+        output.metadata_status(),
+        Some(expected_status.as_str()),
+        "Expected empty results to expose metadata.status={}: {}",
+        expected_status.as_str(),
+        output.result_text
     );
 }
 
@@ -240,33 +344,40 @@ fn assert_quality_gates_failed(
 // ---------------------------------------------------------------------------
 
 pub fn test_passes_on_clean_branch() {
-    let (command, env, repo_dir, _tmp) = local_setup();
-    create_feature_branch_with_file_change(&repo_dir, "src/utils/calculator.py", CLEAN_ADDITION);
-    assert_quality_gates_passed(&command, &env, &repo_dir);
+    let context = local_setup();
+    create_feature_branch_with_file_change(&context.repo_dir, ExistingFileChange::CleanCalculator);
+    assert_quality_gates_passed(&context);
 }
 
 pub fn test_fails_on_degraded_branch() {
-    let (command, env, repo_dir, _tmp) = local_setup();
+    let context = local_setup();
     create_feature_branch_with_file_change(
-        &repo_dir,
-        "src/utils/calculator.py",
-        DEGRADING_ADDITION,
+        &context.repo_dir,
+        ExistingFileChange::DegradingCalculator,
     );
-    assert_quality_gates_failed(&command, &env, &repo_dir, "calculator.py");
+    assert_quality_gates_failed(&context, ExpectedFile::Calculator);
 }
 
 pub fn test_fails_on_new_file_with_degraded_health() {
-    let (command, env, repo_dir, _tmp) = local_setup();
-    create_feature_branch_with_new_file(
-        &repo_dir,
-        "src/validation/validator.py",
-        DEGRADING_NEW_FILE,
-    );
-    assert_quality_gates_failed(&command, &env, &repo_dir, "validator.py");
+    let context = local_setup();
+    create_feature_branch_with_new_file(&context.repo_dir, NewFileScenario::DegradingValidation);
+    assert_quality_gates_failed(&context, ExpectedFile::Validator);
 }
 
 pub fn test_passes_on_new_file_with_clean_health() {
-    let (command, env, repo_dir, _tmp) = local_setup();
-    create_feature_branch_with_new_file(&repo_dir, "src/stats/statistics.py", CLEAN_NEW_FILE);
-    assert_quality_gates_passed(&command, &env, &repo_dir);
+    let context = local_setup();
+    create_feature_branch_with_new_file(&context.repo_dir, NewFileScenario::CleanStatistics);
+    assert_quality_gates_passed(&context);
+}
+
+pub fn test_reports_no_issues_found_for_clean_change_set() {
+    let context = local_setup();
+    create_feature_branch_with_file_change(&context.repo_dir, ExistingFileChange::CleanCalculator);
+    assert_empty_results_passed_with_status(&context, MetadataStatus::NoIssuesFound);
+}
+
+pub fn test_reports_no_files_modified_for_empty_change_set() {
+    let context = local_setup();
+    create_feature_branch_without_changes(&context.repo_dir);
+    assert_empty_results_passed_with_status(&context, MetadataStatus::NoFilesModified);
 }

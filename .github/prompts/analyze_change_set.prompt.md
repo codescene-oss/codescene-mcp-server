@@ -8,12 +8,13 @@ Run a branch-level Code Health analysis using **CodeScene MCP Server** with **an
 
 After running the tool:
 
-1. Summarize the JSON output in clear, actionable language. Focus on the overall result indicated in the `quality_gates` field.
+1. Summarize the JSON output in clear, actionable language. Use `quality_gates` for the pass/fail outcome, but also inspect the top-level `metadata` object so you do not over-interpret an empty `results` array.
 2. Highlight any code smells or degradation introduced across the branch.
 3. Prioritize findings by severity and likelihood of increasing long-term maintenance cost.
 4. If regressions are reported, identify which files need follow-up `code_health_review` work before opening a PR.
 5. Provide practical recommendations for improvements before opening a PR.
 6. If no regressions are found, state that explicitly and mention any residual risks or testing gaps.
+7. When `results` is empty, explain whether `metadata.status` indicates checked files with no degradations (`no-issues-found`) or no applicable branch changes (`no-files-modified`).
 
 Treat Code Health 10.0 as the ideal long-term target, but use this prompt to prevent regressions and encourage measurable improvement rather than requiring a perfect score on every branch.
 

@@ -47,6 +47,7 @@ pub mod git_worktree;
 pub mod oauth_login;
 pub mod oauth_login_flow;
 pub mod platform_specific;
+pub mod pre_commit_code_health_safeguard;
 pub mod relative_paths;
 pub mod require_access_token;
 pub mod rules_config;

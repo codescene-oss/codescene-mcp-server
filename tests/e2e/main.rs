@@ -233,6 +233,16 @@ fn test_pre_commit_safeguard() {
 }
 
 #[test]
+fn test_pre_commit_reports_no_issues_found_for_clean_staged_changes() {
+    tests::pre_commit_code_health_safeguard::test_reports_no_issues_found_for_clean_staged_changes();
+}
+
+#[test]
+fn test_pre_commit_reports_no_files_modified_for_empty_staging_area() {
+    tests::pre_commit_code_health_safeguard::test_reports_no_files_modified_for_empty_staging_area();
+}
+
+#[test]
 fn test_outside_git_repo() {
     let (command, env, _, _tmp) = setup();
     let standalone_dir = create_temp_dir("cs_mcp_standalone_").expect("temp dir");
@@ -652,6 +662,16 @@ fn test_change_set_fails_on_new_file_degraded() {
 #[test]
 fn test_change_set_passes_on_new_file_clean() {
     tests::analyze_change_set::test_passes_on_new_file_with_clean_health();
+}
+
+#[test]
+fn test_change_set_reports_no_issues_found_for_clean_change_set() {
+    tests::analyze_change_set::test_reports_no_issues_found_for_clean_change_set();
+}
+
+#[test]
+fn test_change_set_reports_no_files_modified_for_empty_change_set() {
+    tests::analyze_change_set::test_reports_no_files_modified_for_empty_change_set();
 }
 
 // --- Bundled Docs ---

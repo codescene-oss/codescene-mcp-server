@@ -8,12 +8,13 @@ Run a pre-commit Code Health safeguard on the current Git repository path using 
 
 After running the tool:
 
-1. Summarize the JSON output in clear, actionable language. Focus on the overall result indicated in the `quality_gates` field of the JSON result.
+1. Summarize the JSON output in clear, actionable language. Use `quality_gates` for the pass/fail outcome, but also inspect the top-level `metadata` object so you do not over-interpret an empty `results` array.
 2. Highlight any code smells or degradation that would reduce Code Health if committed.
 3. Prioritize the findings by severity and likelihood of increasing long-term maintenance cost.
 4. If regressions are reported, identify which files need follow-up `code_health_review` work before committing.
 5. Provide practical recommendations for improvements prior to committing.
 6. If no regressions are found, state that explicitly.
+7. When `results` is empty, explain whether `metadata.status` indicates clean checked staged changes (`no-issues-found`) or no applicable staged changes (`no-files-modified`).
 
 Treat Code Health 10.0 as the ideal long-term target, but use this prompt to block regressions and encourage measurable improvement rather than requiring a perfect score on every commit.
 

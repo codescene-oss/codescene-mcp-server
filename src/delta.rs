@@ -5,6 +5,8 @@ use serde_json::Value;
 pub struct DeltaResult {
     pub results: Vec<FileResult>,
     pub quality_gates: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -16,21 +18,24 @@ pub struct FileResult {
 
 pub fn analyze_delta_output(output: &str) -> DeltaResult {
     if output.trim().is_empty() {
-        return DeltaResult {
-            results: vec![],
-            quality_gates: "passed".to_string(),
-        };
+        return empty_delta_result();
     }
 
-    let files: Vec<Value> = match serde_json::from_str(output) {
+    let parsed: Value = match serde_json::from_str(output) {
         Ok(v) => v,
-        Err(_) => {
-            return DeltaResult {
-                results: vec![],
-                quality_gates: "passed".to_string(),
-            };
-        }
+        Err(_) => return empty_delta_result(),
     };
+
+    let Value::Object(map) = parsed else {
+        return empty_delta_result();
+    };
+
+    let metadata = map.get("metadata").cloned();
+    let files = map
+        .get("results")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
 
     let results: Vec<FileResult> = files.iter().map(build_file_result).collect();
     let has_degraded = results.iter().any(|r| r.verdict == "degraded");
@@ -39,6 +44,15 @@ pub fn analyze_delta_output(output: &str) -> DeltaResult {
     DeltaResult {
         results,
         quality_gates: quality_gates.to_string(),
+        metadata,
+    }
+}
+
+fn empty_delta_result() -> DeltaResult {
+    DeltaResult {
+        results: vec![],
+        quality_gates: "passed".to_string(),
+        metadata: None,
     }
 }
 
@@ -95,8 +109,27 @@ mod tests {
 
     /// Helper: build a single-file delta input and return the analyzed result.
     fn analyze_single_file(file_json: serde_json::Value) -> DeltaResult {
-        let input = serde_json::Value::Array(vec![file_json]);
+        let input = json!({"results": [file_json]});
         analyze_delta_output(&input.to_string())
+    }
+
+    fn assert_empty_passed_without_metadata(result: &DeltaResult) {
+        assert!(result.results.is_empty());
+        assert_eq!(result.quality_gates, "passed");
+        assert!(result.metadata.is_none());
+    }
+
+    fn assert_empty_passed_with_metadata_status(result: &DeltaResult, expected_status: &str) {
+        assert!(result.results.is_empty());
+        assert_eq!(result.quality_gates, "passed");
+        assert_eq!(
+            result
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get("status"))
+                .and_then(|status| status.as_str()),
+            Some(expected_status)
+        );
     }
 
     // ---- analyze_delta_output ----
@@ -104,8 +137,7 @@ mod tests {
     #[test]
     fn empty_input_returns_passed() {
         let r = analyze_delta_output("");
-        assert!(r.results.is_empty());
-        assert_eq!(r.quality_gates, "passed");
+        assert_empty_passed_without_metadata(&r);
     }
 
     #[test]
@@ -118,25 +150,62 @@ mod tests {
     #[test]
     fn invalid_json_returns_passed() {
         let r = analyze_delta_output("not json at all");
-        assert!(r.results.is_empty());
-        assert_eq!(r.quality_gates, "passed");
+        assert_empty_passed_without_metadata(&r);
     }
 
     #[test]
-    fn empty_array_returns_passed() {
+    fn non_object_json_returns_passed() {
         let r = analyze_delta_output("[]");
-        assert!(r.results.is_empty());
-        assert_eq!(r.quality_gates, "passed");
+        assert_empty_passed_without_metadata(&r);
+    }
+
+    #[test]
+    fn metadata_is_preserved_for_clean_empty_results() {
+        let input = json!({
+            "metadata": {
+                "status": "no-issues-found",
+                "total-modified-file-count": 2,
+                "code-health-eligible-file-count": 1,
+                "checked-file-count": 1
+            },
+            "results": []
+        });
+        let r = analyze_delta_output(&input.to_string());
+        assert_empty_passed_with_metadata_status(&r, "no-issues-found");
+    }
+
+    #[test]
+    fn metadata_is_preserved_for_no_modified_files() {
+        let input = json!({
+            "metadata": {
+                "status": "no-files-modified",
+                "total-modified-file-count": 0,
+                "code-health-eligible-file-count": 0,
+                "checked-file-count": 0
+            },
+            "results": []
+        });
+        let r = analyze_delta_output(&input.to_string());
+        assert_empty_passed_with_metadata_status(&r, "no-files-modified");
+    }
+
+    #[test]
+    fn object_without_results_defaults_to_empty_results() {
+        let input = json!({"metadata": {"status": "no-files-modified"}});
+        let r = analyze_delta_output(&input.to_string());
+        assert_empty_passed_with_metadata_status(&r, "no-files-modified");
     }
 
     #[test]
     fn single_stable_file() {
-        let input = json!([{
-            "name": "foo.rs",
-            "old-score": 8.0,
-            "new-score": 8.0,
-            "findings": [{"category": "Complex Method"}]
-        }]);
+        let input = json!({
+            "results": [{
+                "name": "foo.rs",
+                "old-score": 8.0,
+                "new-score": 8.0,
+                "findings": [{"category": "Complex Method"}]
+            }]
+        });
         let r = analyze_delta_output(&input.to_string());
         assert_eq!(r.results.len(), 1);
         assert_eq!(r.results[0].name, "foo.rs");
@@ -191,10 +260,12 @@ mod tests {
 
     #[test]
     fn mixed_verdicts_one_degraded_fails() {
-        let input = json!([
-            {"name": "a.rs", "old-score": 8.0, "new-score": 9.0, "findings": []},
-            {"name": "b.rs", "old-score": 9.0, "new-score": 7.0, "findings": []},
-        ]);
+        let input = json!({
+            "results": [
+                {"name": "a.rs", "old-score": 8.0, "new-score": 9.0, "findings": []},
+                {"name": "b.rs", "old-score": 9.0, "new-score": 7.0, "findings": []}
+            ]
+        });
         let r = analyze_delta_output(&input.to_string());
         assert_eq!(r.results.len(), 2);
         assert_eq!(r.results[0].verdict, "improved");
@@ -204,21 +275,21 @@ mod tests {
 
     #[test]
     fn missing_name_defaults_to_unknown() {
-        let input = json!([{"old-score": 5.0, "new-score": 5.0}]);
+        let input = json!({"results": [{"old-score": 5.0, "new-score": 5.0}]});
         let r = analyze_delta_output(&input.to_string());
         assert_eq!(r.results[0].name, "unknown");
     }
 
     #[test]
     fn missing_findings_defaults_to_empty() {
-        let input = json!([{"name": "x.rs", "old-score": 5.0, "new-score": 5.0}]);
+        let input = json!({"results": [{"name": "x.rs", "old-score": 5.0, "new-score": 5.0}]});
         let r = analyze_delta_output(&input.to_string());
         assert!(r.results[0].findings.is_empty());
     }
 
     #[test]
     fn integer_scores_work() {
-        let input = json!([{"name": "int.rs", "old-score": 5, "new-score": 8, "findings": []}]);
+        let input = json!({"results": [{"name": "int.rs", "old-score": 5, "new-score": 8, "findings": []}]});
         let r = analyze_delta_output(&input.to_string());
         assert_eq!(r.results[0].verdict, "improved");
     }
@@ -234,9 +305,11 @@ mod tests {
                 findings: vec![json!({"cat": "a"})],
             }],
             quality_gates: "passed".into(),
+            metadata: Some(json!({"status": "no-issues-found"})),
         };
         let json = serde_json::to_string(&r).unwrap();
         assert!(json.contains("\"quality_gates\":\"passed\""));
         assert!(json.contains("\"verdict\":\"stable\""));
+        assert!(json.contains("\"metadata\":{\"status\":\"no-issues-found\"}"));
     }
 }
