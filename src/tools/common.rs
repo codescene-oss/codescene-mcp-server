@@ -78,7 +78,7 @@ pub(crate) async fn run_delta(
         refresh_git_index(repo_path).await;
     }
 
-    let mut args = vec!["delta", "--output-format=json"];
+    let mut args = vec!["delta", "--output-format=json", "--include-metadata"];
     if let Some(br) = base_ref {
         reject_flag_like(br, "base_ref")?;
         args.push(br);
@@ -247,7 +247,10 @@ mod tests {
         };
         let _ = run_delta(Path::new("/tmp"), Some("main"), &cli).await;
         let args = captured.lock().unwrap();
-        assert_eq!(args.as_slice(), &["delta", "--output-format=json", "main"]);
+        assert_eq!(
+            args.as_slice(),
+            &["delta", "--output-format=json", "--include-metadata", "main"]
+        );
     }
 
     #[tokio::test]

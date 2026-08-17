@@ -493,4 +493,14 @@ mod tests {
         assert_eq!(props["verdicts"], json!({"degraded": 1}));
         assert_eq!(props["categories"], json!(["Bumpy Road"]));
     }
+
+    #[test]
+    fn merge_delta_properties_ignores_metadata_and_keeps_existing_fields() {
+        let mut props = json!({});
+        let data = r#"{"quality_gates":"passed","metadata":{"status":"no-issues-found","checked-file-count":1},"results":[]}"#;
+        merge_delta_properties(&mut props, data);
+        assert_eq!(props["quality-gates"], json!("passed"));
+        assert_eq!(props["file-count"], json!(0));
+        assert!(props.get("metadata").is_none());
+    }
 }

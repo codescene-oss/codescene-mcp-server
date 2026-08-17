@@ -28,11 +28,15 @@ Review the Code Health of a single source file and return a detailed review outp
 
 Review all modified and staged files in a repository and report Code Health degradations before commit. Use as a pre-commit safeguard on local changes to catch regressions and code smells before creating a commit. Returns quality gates summarizing whether the commit passes or fails Code Health thresholds, along with per-file findings.
 
+The JSON result also includes a top-level `metadata` object with scope and coverage details from the CLI, such as `status`, `total-modified-file-count`, `code-health-eligible-file-count`, and `checked-file-count`. Use `metadata.status` to distinguish an empty `results` array caused by clean checked changes (`no-issues-found`) from one caused by no applicable staged changes (`no-files-modified`).
+
 ### `analyze_change_set`
 
 **Availability:** All Users
 
 Run a branch-level Code Health review for all files that differ between the current HEAD and a base ref. Use as a local PR pre-flight check before opening a pull request, so regressions are caught across the full change set. Returns quality gates (passed/failed) and per-file verdicts (improved, degraded, or stable).
+
+The JSON result also includes a top-level `metadata` object with scope and coverage details from the CLI, such as `status`, `total-modified-file-count`, `code-health-eligible-file-count`, and `checked-file-count`. Use `metadata.status` to distinguish an empty `results` array caused by checked files with no degradations (`no-issues-found`) from one caused by no applicable branch changes (`no-files-modified`).
 
 ### `code_health_refactoring_business_case`
 
