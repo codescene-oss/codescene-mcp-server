@@ -5,7 +5,11 @@
 //!
 //! 1. MCP `login` → `cs auth login --client mcp`
 //! 2. CLI discovers OAuth via empty `POST /oauth2/token` on `CS_ONPREM_URL`
-//! 3. CLI opens a browser (our helper via `BROWSER`) to `/oauth2/auth`
+//! 3. CLI opens a browser to `/oauth2/auth` — but the CLI uses the OS-native
+//!    opener (`open` on macOS, `xdg-open` on Linux, `cmd /c start` on Windows),
+//!    which ignores `$BROWSER`. To stay headless we prepend a shim directory to
+//!    `PATH` containing fake `open`/`xdg-open` executables that forward the URL
+//!    to a tiny in-process HTTP helper instead of launching the real browser.
 //! 4. Mock redirects to `http://127.0.0.1:19876/callback` with `code` + `state`
 //! 5. CLI exchanges the code (PKCE) and returns signed-in JSON
 //! 6. MCP persists `CS_OAUTH_*` into an isolated `CS_CONFIG_DIR`
@@ -20,8 +24,16 @@ use std::process::Command;
 
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(120);
 
-/// Tiny HTTP client used as `BROWSER` so the CLI's authorize URL is fetched
-/// headlessly. Follows a single 302 to the localhost callback.
+/// Platform-specific `PATH` entry separator.
+#[cfg(windows)]
+const PATH_SEPARATOR: &str = ";";
+#[cfg(not(windows))]
+const PATH_SEPARATOR: &str = ":";
+
+/// Tiny HTTP client that stands in for the browser: it fetches the CLI's
+/// authorize URL headlessly and follows a single 302 to the localhost
+/// callback. Installed on `PATH` as `open`/`xdg-open` so the CLI's native
+/// browser launcher invokes it instead of a real browser.
 const BROWSER_HELPER_RS: &str = r##"use std::env;
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -92,7 +104,19 @@ struct OAuthFlowEnv {
     _cli_home: tempfile::TempDir,
 }
 
-fn compile_browser_helper(dir: &Path) -> PathBuf {
+/// Result of building the headless browser helper: the helper binary itself
+/// (usable as `$BROWSER`) and a directory to prepend to `PATH` that shadows the
+/// OS-native browser openers so the CLI never launches a real browser.
+struct BrowserShim {
+    /// The compiled helper binary. Suitable for `$BROWSER` on platforms that
+    /// honor it.
+    helper: PathBuf,
+    /// Directory containing `open`/`xdg-open` (Unix) or `open.cmd` (Windows)
+    /// shims that forward to `helper`. Prepend this to `PATH`.
+    path_dir: PathBuf,
+}
+
+fn compile_browser_helper(dir: &Path) -> BrowserShim {
     let source = dir.join("oauth_browser_helper.rs");
     std::fs::write(&source, BROWSER_HELPER_RS).expect("write browser helper source");
 
@@ -101,14 +125,14 @@ fn compile_browser_helper(dir: &Path) -> PathBuf {
     } else {
         "oauth_browser_helper"
     };
-    let output_path = dir.join(binary_name);
+    let helper = dir.join(binary_name);
 
     let result = Command::new("rustc")
         .args([
             source.to_str().expect("source path"),
             "-O",
             "-o",
-            output_path.to_str().expect("output path"),
+            helper.to_str().expect("output path"),
         ])
         .output()
         .expect("rustc should execute");
@@ -119,19 +143,52 @@ fn compile_browser_helper(dir: &Path) -> PathBuf {
         String::from_utf8_lossy(&result.stderr)
     );
 
-    #[cfg(windows)]
-    {
-        // The CLI launches BROWSER via the Windows shell; a .cmd wrapper is
-        // more reliable than pointing BROWSER at a raw .exe path with spaces.
-        let cmd_path = dir.join("oauth_browser_helper.cmd");
-        let script = format!("@echo off\r\n\"{}\" %*\r\n", output_path.display());
-        std::fs::write(&cmd_path, script).expect("write browser helper cmd");
-        return cmd_path;
-    }
+    let path_dir = dir.join("browser_shim_bin");
+    std::fs::create_dir_all(&path_dir).expect("create browser shim dir");
+    install_browser_shims(&path_dir, &helper);
 
-    #[cfg(not(windows))]
-    {
-        output_path
+    BrowserShim { helper, path_dir }
+}
+
+/// Install fake browser openers into `path_dir` that forward their URL argument
+/// to `helper`. The CLI resolves `open`/`xdg-open`/`cmd` via `PATH`, so placing
+/// these shims first keeps the OAuth flow headless.
+#[cfg(not(windows))]
+fn install_browser_shims(path_dir: &Path, helper: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    // macOS uses `open <url>`, Linux uses `xdg-open <url>`. Both receive the URL
+    // as the first argument, exactly like the helper expects.
+    let script = format!("#!/bin/sh\nexec \"{}\" \"$@\"\n", helper.display());
+    for name in ["open", "xdg-open"] {
+        let shim = path_dir.join(name);
+        std::fs::write(&shim, &script).expect("write browser shim");
+        let mut perms = std::fs::metadata(&shim)
+            .expect("stat browser shim")
+            .permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&shim, perms).expect("chmod browser shim");
+    }
+}
+
+/// On Windows the CLI launches the browser via `cmd /c start "" "<url>"`, so
+/// shadowing a single opener executable is not reliable. Install an `open.cmd`
+/// shim (harmless if unused) and rely on the `$BROWSER` fallback instead.
+#[cfg(windows)]
+fn install_browser_shims(path_dir: &Path, helper: &Path) {
+    let cmd_path = path_dir.join("open.cmd");
+    let script = format!("@echo off\r\n\"{}\" %*\r\n", helper.display());
+    std::fs::write(&cmd_path, script).expect("write browser shim cmd");
+}
+
+/// Build a `PATH` value with `dir` prepended to `existing`, using the
+/// platform-specific separator. Falls back to just `dir` when there is no
+/// existing `PATH`.
+fn prepend_to_path(dir: &Path, existing: Option<&String>) -> String {
+    let dir = dir.to_string_lossy();
+    match existing.filter(|p| !p.is_empty()) {
+        Some(path) => format!("{dir}{PATH_SEPARATOR}{path}"),
+        None => dir.into_owned(),
     }
 }
 
@@ -161,6 +218,13 @@ fn oauth_flow_setup(oauth_enabled: bool) -> OAuthFlowEnv {
 
     let base = base_env();
     let env_map = backend.get_env(&base, &repo_dir);
+
+    // Prepend the shim directory to PATH so the CLI's native browser opener
+    // (`open`/`xdg-open`) resolves to our headless helper instead of the real
+    // browser. `$BROWSER` alone is insufficient because the CLI uses the OS
+    // opener, which ignores it.
+    let shadowed_path = prepend_to_path(&browser.path_dir, env_map.get("PATH"));
+
     let env: Vec<(String, String)> = env_map
         .into_iter()
         .filter(|(k, _)| {
@@ -171,6 +235,7 @@ fn oauth_flow_setup(oauth_enabled: bool) -> OAuthFlowEnv {
                 && k != "BROWSER"
                 && k != "HOME"
                 && k != "APPDATA"
+                && k != "PATH"
         })
         .chain(
             [
@@ -181,7 +246,8 @@ fn oauth_flow_setup(oauth_enabled: bool) -> OAuthFlowEnv {
                 ("CS_ONPREM_URL", server.url()),
                 ("CS_DISABLE_VERSION_CHECK", "1".to_string()),
                 ("CS_DISABLE_TRACKING", "1".to_string()),
-                ("BROWSER", browser.to_string_lossy().into_owned()),
+                ("BROWSER", browser.helper.to_string_lossy().into_owned()),
+                ("PATH", shadowed_path),
                 ("HOME", cli_home.path().to_string_lossy().into_owned()),
                 ("APPDATA", app_data.to_string_lossy().into_owned()),
             ]
