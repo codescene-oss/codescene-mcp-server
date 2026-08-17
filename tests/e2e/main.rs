@@ -654,6 +654,16 @@ fn test_change_set_passes_on_new_file_clean() {
     tests::analyze_change_set::test_passes_on_new_file_with_clean_health();
 }
 
+#[test]
+fn test_change_set_reports_no_issues_found_for_clean_change_set() {
+    tests::analyze_change_set::test_reports_no_issues_found_for_clean_change_set();
+}
+
+#[test]
+fn test_change_set_reports_no_files_modified_for_empty_change_set() {
+    tests::analyze_change_set::test_reports_no_files_modified_for_empty_change_set();
+}
+
 // --- Bundled Docs ---
 #[test]
 fn test_bundled_explain_code_health() {

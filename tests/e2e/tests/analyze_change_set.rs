@@ -141,6 +141,10 @@ fn create_feature_branch_with_new_file(repo_dir: &Path, file_path: &str, content
     );
 }
 
+fn create_feature_branch_without_changes(repo_dir: &Path) {
+    git(repo_dir, &["checkout", "-b", "feature"]);
+}
+
 // ---------------------------------------------------------------------------
 // Analysis helpers
 // ---------------------------------------------------------------------------
@@ -148,6 +152,19 @@ fn create_feature_branch_with_new_file(repo_dir: &Path, file_path: &str, content
 fn parse_quality_gates(result_text: &str) -> Option<String> {
     let data: serde_json::Value = serde_json::from_str(result_text).ok()?;
     data.get("quality_gates")?.as_str().map(String::from)
+}
+
+fn parse_metadata_status(result_text: &str) -> Option<String> {
+    let data: serde_json::Value = serde_json::from_str(result_text).ok()?;
+    data.get("metadata")?
+        .get("status")?
+        .as_str()
+        .map(String::from)
+}
+
+fn parse_result_count(result_text: &str) -> Option<usize> {
+    let data: serde_json::Value = serde_json::from_str(result_text).ok()?;
+    data.get("results")?.as_array().map(Vec::len)
 }
 
 fn run_change_set_analysis(
@@ -235,6 +252,24 @@ fn assert_quality_gates_failed(
     );
 }
 
+fn assert_empty_results_passed_with_status(
+    command: &[String],
+    env: &[(String, String)],
+    repo_dir: &Path,
+    expected_status: &str,
+) {
+    let (result_text, quality_gates) = run_change_set_analysis(command, env, repo_dir);
+
+    assert!(!result_text.is_empty(), "Tool should return content");
+    assert_eq!(quality_gates.as_deref(), Some("passed"));
+    assert_eq!(parse_result_count(&result_text), Some(0));
+    assert_eq!(
+        parse_metadata_status(&result_text).as_deref(),
+        Some(expected_status),
+        "Expected empty results to expose metadata.status={expected_status}: {result_text}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -269,4 +304,16 @@ pub fn test_passes_on_new_file_with_clean_health() {
     let (command, env, repo_dir, _tmp) = local_setup();
     create_feature_branch_with_new_file(&repo_dir, "src/stats/statistics.py", CLEAN_NEW_FILE);
     assert_quality_gates_passed(&command, &env, &repo_dir);
+}
+
+pub fn test_reports_no_issues_found_for_clean_change_set() {
+    let (command, env, repo_dir, _tmp) = local_setup();
+    create_feature_branch_with_file_change(&repo_dir, "src/utils/calculator.py", CLEAN_ADDITION);
+    assert_empty_results_passed_with_status(&command, &env, &repo_dir, "no-issues-found");
+}
+
+pub fn test_reports_no_files_modified_for_empty_change_set() {
+    let (command, env, repo_dir, _tmp) = local_setup();
+    create_feature_branch_without_changes(&repo_dir);
+    assert_empty_results_passed_with_status(&command, &env, &repo_dir, "no-files-modified");
 }
