@@ -629,6 +629,13 @@ describe('codescene.signOut command', () => {
 });
 
 describe('codescene.switchAccount command', () => {
+    const LIST_JSON = JSON.stringify({
+        accounts: [
+            { id: 139802, name: 'Martin Säfsten', type: 'individual', role: 'owner', authenticated: true, current: false },
+            { id: 99, name: 'CodeScene Showcase', type: 'org', role: 'member', slug: 'codescene-showcase', authenticated: true, current: true },
+        ],
+    });
+
     beforeEach(() => { reset(); });
     afterEach(() => {
         if (existsSync(FAKE_EXT_PATH)) {
@@ -645,9 +652,15 @@ describe('codescene.switchAccount command', () => {
         writeFileSync(join(binDir, binaryName), '#!/bin/sh\necho {}');
     }
 
-    async function invokeSwitchAccount({ execResult, inputBox, configOverrides } = {}) {
-        if (inputBox !== undefined) state.inputBoxResult = inputBox;
+    async function invokeSwitchAccount({
+        execResults,
+        execResult,
+        quickPickIndex,
+        configOverrides,
+    } = {}) {
+        if (execResults) state.execFileResults = [...execResults];
         if (execResult) state.execFileResult = execResult;
+        if (quickPickIndex !== undefined) state.quickPickIndex = quickPickIndex;
         if (configOverrides) Object.assign(state.configValues, configOverrides);
         const ctx = makeContext();
         setupBinary(ctx);
@@ -656,76 +669,151 @@ describe('codescene.switchAccount command', () => {
         await handler();
     }
 
-    it('does nothing when user cancels account ID prompt', async () => {
-        state.inputBoxResult = undefined;
-        const ctx = makeContext();
+    it('shows error when binary is not available', async () => {
+        const ctx = makeContext({ extensionPath: '/nonexistent' });
         extension.activate(ctx);
         const handler = findCommand('codescene.switchAccount');
         await handler();
 
+        const errorMsg = state.shownErrors.find(m => m.message.includes('Binary not available'));
+        assert.ok(errorMsg, 'expected binary not available error');
         assert.equal(state.execFileCalls.length, 0);
+    });
+
+    it('does nothing when user cancels account picker', async () => {
+        state.quickPickResult = undefined;
+        await invokeSwitchAccount({
+            execResult: { error: null, stdout: LIST_JSON, stderr: '' },
+        });
+
+        assert.equal(state.shownQuickPicks.length, 1);
+        assert.equal(state.execFileCalls.length, 1);
+        assert.deepEqual(state.execFileCalls[0].args, ['auth', 'list-accounts']);
         assert.equal(state.configUpdates.length, 0);
     });
 
-    it('saves account ID and runs auth switch', async () => {
+    it('lists accounts, saves selected ID, and runs auth switch', async () => {
         await invokeSwitchAccount({
-            inputBox: '99',
-            execResult: {
-                error: null,
-                stdout: '{"status":"reused_session","account_id":99}',
-                stderr: '',
-            },
+            execResults: [
+                { error: null, stdout: LIST_JSON, stderr: '' },
+                {
+                    error: null,
+                    stdout: '{"status":"reused_session","account_id":99}',
+                    stderr: '',
+                },
+            ],
+            quickPickIndex: 1,
         });
 
         const update = state.configUpdates.find(u => u.key === 'accountId');
         assert.ok(update, 'expected accountId config update');
         assert.equal(update.value, '99');
-        assert.equal(state.execFileCalls.length, 1);
-        assert.deepEqual(state.execFileCalls[0].args, ['auth', 'switch', '99']);
-        assert.equal(state.execFileCalls[0].options.env['CS_ACCOUNT_ID'], '99');
+        assert.equal(state.execFileCalls.length, 2);
+        assert.deepEqual(state.execFileCalls[0].args, ['auth', 'list-accounts']);
+        assert.equal(state.execFileCalls[0].options.encoding, 'buffer');
+        assert.equal(state.execFileCalls[0].options.windowsHide, true);
+        assert.deepEqual(state.execFileCalls[1].args, ['auth', 'switch', '99']);
+        assert.equal(state.execFileCalls[1].options.env['CS_ACCOUNT_ID'], '99');
 
         const msg = state.shownInfoMessages.find(m =>
             m.message.includes('Switched to account 99')
         );
         assert.ok(msg, 'expected switch success message');
+        const pick = state.shownQuickPicks[0];
+        assert.equal(pick.items[1].label, 'CodeScene Showcase');
+        assert.ok(pick.items[1].detail.includes('current'));
     });
 
-    it('prompts for account ID', async () => {
+    it('decodes Windows-1252 Swedish account names in the picker', async () => {
+        const json = JSON.stringify({
+            accounts: [
+                { id: 1, name: 'Martin Säfsten', type: 'individual', role: 'owner', authenticated: true },
+            ],
+        });
+        state.quickPickResult = undefined;
         await invokeSwitchAccount({
-            inputBox: '42',
+            execResult: { error: null, stdout: Buffer.from(json, 'latin1'), stderr: '' },
+        });
+
+        const pick = state.shownQuickPicks[0];
+        assert.ok(pick, 'expected account picker');
+        assert.equal(pick.items[0].label, 'Martin Säfsten');
+    });
+
+    it('shows an error when listing accounts fails', async () => {
+        const cases = [
+            {
+                execResult: {
+                    error: new Error('exit 1'),
+                    stdout: '{"status":"error","error":"not signed in"}',
+                    stderr: 'Auth list-accounts failed: HTTP 401',
+                },
+                needle: 'Could not list accounts',
+            },
+            {
+                execResult: {
+                    error: null,
+                    stdout: '{"status":"error","error":"not signed in"}',
+                    stderr: '',
+                },
+                needle: 'not signed in',
+            },
+            {
+                execResult: { error: null, stdout: '{"status":"error"}', stderr: '' },
+                needle: 'unknown error',
+            },
+            {
+                execResult: { error: null, stdout: 'not json', stderr: '' },
+                needle: 'unexpected response',
+            },
+            {
+                execResult: { error: null, stdout: null, stderr: null },
+                needle: 'unexpected response',
+            },
+        ];
+
+        for (const { execResult, needle } of cases) {
+            reset();
+            await invokeSwitchAccount({ execResult });
+            const err = state.shownErrors.find(e => e.message.includes(needle));
+            assert.ok(err, `expected error containing ${needle}`);
+            assert.equal(state.shownQuickPicks.length, 0);
+            assert.equal(state.configUpdates.length, 0);
+        }
+    });
+
+    it('marks unauthenticated accounts as requiring sign-in', async () => {
+        state.quickPickResult = undefined;
+        await invokeSwitchAccount({
             execResult: {
                 error: null,
-                stdout: '{"status":"already_on_account","account_id":42}',
+                stdout: JSON.stringify({
+                    accounts: [
+                        { id: 1, name: 'Pending org', type: 'org', role: 'member', authenticated: false },
+                    ],
+                }),
                 stderr: '',
             },
         });
 
-        const inputBox = state.shownInputBoxes.find(i =>
-            i.options.prompt?.includes('account ID')
-        );
-        assert.ok(inputBox, 'expected account ID prompt');
+        const pick = state.shownQuickPicks[0];
+        assert.ok(pick, 'expected account picker');
+        assert.ok(pick.items[0].detail.includes('sign-in required'));
     });
 
-    it('validates account ID input', async () => {
+    it('warns when no accounts are returned', async () => {
         await invokeSwitchAccount({
-            inputBox: '7',
             execResult: {
                 error: null,
-                stdout: '{"status":"signed_in","account_id":7}',
+                stdout: '{"accounts":[]}',
                 stderr: '',
             },
         });
 
-        const inputBox = state.shownInputBoxes.find(i =>
-            i.options.prompt?.includes('account ID')
+        const warn = state.shownWarnings.find(w =>
+            w.message.includes('No Cloud accounts')
         );
-        assert.ok(inputBox?.options.validateInput, 'expected validateInput');
-        const validate = inputBox.options.validateInput;
-        assert.equal(validate(''), 'Account ID is required');
-        assert.equal(validate('   '), 'Account ID is required');
-        assert.equal(validate('abc'), 'Account ID must be a positive integer');
-        assert.equal(validate('0'), 'Account ID must be a positive integer');
-        assert.equal(validate('-1'), 'Account ID must be a positive integer');
-        assert.equal(validate('42'), undefined);
+        assert.ok(warn, 'expected empty-list warning');
+        assert.equal(state.shownQuickPicks.length, 0);
     });
 });

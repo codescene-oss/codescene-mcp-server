@@ -300,7 +300,8 @@ mod tests {
     use crate::server_handler::build_instructions;
     use crate::version_checker::VersionChecker;
     use crate::{
-        display_version, fetch_cli_version, help_text, parse_cli_args, remove_docker_unsupported_tools,
+        display_version, dispatch_cli_action_with, fetch_cli_version, help_text, parse_cli_args,
+        remove_docker_unsupported_tools, run_auth_flow_with, run_list_accounts_flow_with,
         run_logout_flow_with, run_switch_account_flow_with, token_missing_msg, CliAction,
         API_ONLY_TOOLS,
     };
@@ -485,6 +486,30 @@ mod tests {
         let args = vec!["--help".to_string(), "--version".to_string()];
         let err = parse_cli_args(&args, "MCP-1.2.3").unwrap_err();
         assert!(err.contains("Unexpected arguments"));
+        assert!(err.contains("--help"));
+        assert!(err.contains("--version"));
+    }
+
+    fn assert_unexpected_cli_args(args: &[&str], expected: &str) {
+        let owned: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
+        let err = parse_cli_args(&owned, "MCP-1.2.3").unwrap_err();
+        assert!(
+            err.contains("Unexpected arguments") && err.contains(expected),
+            "args={args:?} got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_cli_args_renders_cli_version_and_auth_tokens() {
+        assert_unexpected_cli_args(&["--cli-version", "extra"], "--cli-version");
+        assert_unexpected_cli_args(&["auth", "mystery"], "auth mystery");
+    }
+
+    #[test]
+    fn parse_cli_args_renders_logout_switch_and_list_tokens() {
+        assert_unexpected_cli_args(&["logout", "now"], "logout now");
+        assert_unexpected_cli_args(&["switch", "1"], "switch 1");
+        assert_unexpected_cli_args(&["list-accounts", "all"], "list-accounts all");
     }
 
     #[test]
@@ -520,6 +545,13 @@ mod tests {
         let args = vec!["auth".to_string(), "switch".to_string(), "42".to_string()];
         let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
         assert!(matches!(action, CliAction::SwitchAccount(42)));
+    }
+
+    #[test]
+    fn parse_cli_args_supports_auth_list_accounts() {
+        let args = vec!["auth".to_string(), "list-accounts".to_string()];
+        let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
+        assert!(matches!(action, CliAction::ListAccounts));
     }
 
     #[test]
@@ -767,7 +799,8 @@ mod tests {
         );
         let result = server
             .switch_account(Parameters(crate::tools::SwitchAccountParam {
-                account_id: 42,
+                account_id: Some(42),
+                name: None,
             }))
             .await
             .unwrap();
@@ -897,6 +930,205 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn run_list_accounts_flow_with_ok_and_error_paths() {
+        let env = LogoutFlowEnv::new();
+        run_list_accounts_flow_with(&MockCliRunner::with_ok(
+            r#"{"accounts":[{"id":11,"name":"CodeScene Showcase","type":"org","role":"member","authenticated":true}]}"#,
+        ))
+        .await
+        .expect("list-accounts success path");
+        let err = run_list_accounts_flow_with(&MockCliRunner::with_err(
+            1,
+            "Failed to list accounts (HTTP 401).",
+        ))
+        .await
+        .expect_err("list-accounts error path");
+        assert!(
+            err.to_string().contains("List accounts failed"),
+            "got: {err}"
+        );
+        drop(env);
+    }
+
+    #[tokio::test]
+    async fn dispatch_cli_action_with_run_server_and_help() {
+        let env = LogoutFlowEnv::new();
+        assert!(
+            !dispatch_cli_action_with(CliAction::RunServer, &MockCliRunner::with_ok(""))
+                .await
+                .unwrap()
+        );
+        assert!(
+            dispatch_cli_action_with(CliAction::PrintHelp, &MockCliRunner::with_ok(""))
+                .await
+                .unwrap()
+        );
+        drop(env);
+    }
+
+    #[tokio::test]
+    async fn dispatch_cli_action_with_version_actions() {
+        let env = LogoutFlowEnv::new();
+        assert!(
+            dispatch_cli_action_with(
+                CliAction::PrintVersion("1.2.3".to_string()),
+                &MockCliRunner::with_ok(""),
+            )
+            .await
+            .unwrap()
+        );
+        assert!(
+            dispatch_cli_action_with(
+                CliAction::PrintCliVersion,
+                &MockCliRunner::with_ok("cs version 1.0.39\n"),
+            )
+            .await
+            .unwrap()
+        );
+        drop(env);
+    }
+
+    #[tokio::test]
+    async fn dispatch_cli_action_with_auth_and_logout() {
+        let signed_out = r#"{"status":"signed_out","access-token":null,"api-url":null}"#;
+        let signed_in = r#"{"status":"signed_in","access-token":"oau_test","api-url":"https://api.codescene.io/api"}"#;
+
+        let env = LogoutFlowEnv::new();
+        assert!(
+            dispatch_cli_action_with(
+                CliAction::Auth,
+                &MockCliRunner::with_responses(vec![
+                    Ok(signed_out.to_string()),
+                    Ok(signed_in.to_string()),
+                ]),
+            )
+            .await
+            .unwrap()
+        );
+        drop(env);
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+
+        let env = LogoutFlowEnv::new();
+        assert!(
+            dispatch_cli_action_with(CliAction::Logout, &MockCliRunner::with_ok(signed_out),)
+                .await
+                .unwrap()
+        );
+        drop(env);
+    }
+
+    #[tokio::test]
+    async fn dispatch_cli_action_with_list_and_switch() {
+        let env = LogoutFlowEnv::new();
+        assert!(
+            dispatch_cli_action_with(
+                CliAction::ListAccounts,
+                &MockCliRunner::with_ok(
+                    r#"{"accounts":[{"id":11,"name":"CodeScene Showcase","type":"org","role":"member","authenticated":true}]}"#,
+                ),
+            )
+            .await
+            .unwrap()
+        );
+        drop(env);
+
+        let env = LogoutFlowEnv::new();
+        let config_path = std::path::PathBuf::from(std::env::var("CS_CONFIG_DIR").unwrap())
+            .join("config.json");
+        std::fs::write(
+            &config_path,
+            serde_json::json!({
+                "instance_id": "test-dispatch-switch",
+                "oauth_token": "tok",
+                "oauth_expires_at": "9999999999",
+                "oauth_account_id": "42",
+            })
+            .to_string(),
+        )
+        .unwrap();
+        assert!(
+            dispatch_cli_action_with(
+                CliAction::SwitchAccount(42),
+                &MockCliRunner::with_responses(vec![]),
+            )
+            .await
+            .unwrap()
+        );
+        drop(env);
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+        std::env::remove_var("CS_ACCOUNT_ID");
+    }
+
+    #[tokio::test]
+    async fn run_auth_flow_with_already_signed_in_signed_in_incomplete_and_error() {
+        let signed_out = r#"{"status":"signed_out","access-token":null,"api-url":null}"#;
+        let signed_in = r#"{"status":"signed_in","access-token":"oau_test","api-url":"https://api.codescene.io/api"}"#;
+
+        let env = LogoutFlowEnv::new();
+        let config_path = std::path::PathBuf::from(std::env::var("CS_CONFIG_DIR").unwrap())
+            .join("config.json");
+        std::fs::write(
+            &config_path,
+            serde_json::json!({
+                "instance_id": "test-auth-already",
+                "oauth_token": "tok",
+                "oauth_expires_at": "9999999999",
+                "oauth_account_id": "1",
+            })
+            .to_string(),
+        )
+        .unwrap();
+        run_auth_flow_with(&MockCliRunner::with_responses(vec![]))
+            .await
+            .unwrap();
+        drop(env);
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+        std::env::remove_var("CS_ACCOUNT_ID");
+
+        let env = LogoutFlowEnv::new();
+        run_auth_flow_with(&MockCliRunner::with_responses(vec![
+            Ok(signed_out.to_string()),
+            Ok(signed_in.to_string()),
+        ]))
+        .await
+        .unwrap();
+        drop(env);
+        std::env::remove_var("CS_OAUTH_TOKEN");
+        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
+        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
+
+        let env = LogoutFlowEnv::new();
+        let err = run_auth_flow_with(&MockCliRunner::with_responses(vec![
+            Ok(signed_out.to_string()),
+            Ok(signed_out.to_string()),
+        ]))
+        .await
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("Login did not complete"),
+            "got: {err}"
+        );
+        drop(env);
+
+        let env = LogoutFlowEnv::new();
+        let err = run_auth_flow_with(&MockCliRunner::with_responses(vec![
+            Ok(signed_out.to_string()),
+            Err(crate::errors::CliError::NonZeroExit {
+                code: 1,
+                stderr: "timeout".into(),
+            }),
+        ]))
+        .await
+        .unwrap_err();
+        assert!(err.to_string().contains("Login failed"), "got: {err}");
+        drop(env);
+    }
+
+    #[tokio::test]
     async fn run_logout_flow_with_reports_cli_error() {
         let env = LogoutFlowEnv::new();
         let runner = MockCliRunner::with_err(1, "connection refused");
@@ -956,6 +1188,7 @@ mod tests {
         assert!(text.contains("auth"));
         assert!(text.contains("auth logout"));
         assert!(text.contains("auth switch"));
+        assert!(text.contains("auth list-accounts"));
     }
 
     #[test]

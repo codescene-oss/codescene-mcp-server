@@ -92,10 +92,10 @@ fn build_prompts_list(is_docker: bool) -> ListPromptsResult {
         prompts_list.push(Prompt::new(
             "switch_account",
             Some(
-                "Switch CodeScene Cloud OAuth account. Invokes the switch_account tool with a numeric account ID.",
+                "Switch CodeScene Cloud OAuth account. Lists accounts when called without arguments, then switches by name or account ID.",
             ),
             Some(vec![PromptArgument::new("context")
-                .with_description("Optional context string (include the account ID when known).")
+                .with_description("Optional context string (include the account name or ID when known).")
                 .with_required(false)]),
         ));
     }

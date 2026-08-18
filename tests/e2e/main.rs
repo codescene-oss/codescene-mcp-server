@@ -1128,6 +1128,16 @@ fn test_switch_account_reuses_cli_slot() {
     tests::oauth_login::test_switch_account_reuses_cli_slot();
 }
 
+#[test]
+fn test_switch_account_lists_without_args() {
+    tests::oauth_login::test_switch_account_lists_without_args();
+}
+
+#[test]
+fn test_switch_account_switches_by_name() {
+    tests::oauth_login::test_switch_account_switches_by_name();
+}
+
 // --- OAuth Login Flow (real CLI + mock IdP, host-only) ---
 #[test]
 fn test_oauth_authorization_code_flow_persists_token() {

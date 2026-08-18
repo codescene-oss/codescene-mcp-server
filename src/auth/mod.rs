@@ -1,6 +1,11 @@
+mod accounts;
 mod manager;
 mod state;
 
+pub(crate) use accounts::{
+    accounts_list_json, list_accounts_payload, resolve_named_account, AccountNameMatch,
+    CloudAccount,
+};
 pub(crate) use manager::{AuthManager, SwitchAccountResult, SwitchAccountStatus};
 
 use serde::Deserialize;
@@ -187,7 +192,7 @@ pub(crate) fn now_epoch_secs() -> i64 {
         .unwrap_or(0)
 }
 
-fn sanitized_output_preview(output: &str) -> String {
+pub(super) fn sanitized_output_preview(output: &str) -> String {
     let compact = output.split_whitespace().collect::<Vec<_>>().join(" ");
     let preview = ["access-token", "refresh-token"]
         .into_iter()
@@ -258,7 +263,10 @@ async fn run_and_parse_auth(
     })
 }
 
-async fn run_auth_command(cli_runner: &dyn CliRunner, command: &str) -> Result<String, String> {
+pub(super) async fn run_auth_command(
+    cli_runner: &dyn CliRunner,
+    command: &str,
+) -> Result<String, String> {
     cli_runner
         .run(
             &[
@@ -280,6 +288,14 @@ async fn run_auth_command(cli_runner: &dyn CliRunner, command: &str) -> Result<S
                 }
                 crate::errors::CliError::Io(_) => {
                     format!("Failed to run auth {command}: I/O error")
+                }
+                crate::errors::CliError::NonZeroExit { stderr, .. } => {
+                    let detail = stderr.trim();
+                    if detail.is_empty() {
+                        format!("Auth {command} failed (CLI exited with an error)")
+                    } else {
+                        format!("Auth {command} failed: {detail}")
+                    }
                 }
                 _ => format!("Auth {command} failed (CLI exited with an error)"),
             }

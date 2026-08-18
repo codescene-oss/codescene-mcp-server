@@ -312,26 +312,28 @@ async function runAuthFlow(
             title: progressTitle,
             cancellable: false,
         },
-        () => new Promise<void>((resolve) => {
-            execFile(binaryPath, options.args, { env }, (error, stdout, stderr) => {
-                if (error) {
-                    vscode.window.showErrorMessage(
-                        `CodeScene: ${label} failed — ${stderr?.trim() || stdout?.trim() || error.message}`,
-                    );
-                    if (options.alwaysRefresh) {
-                        didChangeEmitter.fire();
-                    }
-                } else {
-                    try {
-                        handleAuthSubprocessResult(stdout, didChangeEmitter, options);
-                    } catch {
-                        vscode.window.showInformationMessage(completedMessage);
-                        didChangeEmitter.fire();
-                    }
+        async () => {
+            const { error, stdout, stderr } = await execFileAsync(
+                binaryPath,
+                options.args,
+                env,
+            );
+            if (error) {
+                vscode.window.showErrorMessage(
+                    `CodeScene: ${label} failed — ${stderr?.trim() || stdout?.trim() || error.message}`,
+                );
+                if (options.alwaysRefresh) {
+                    didChangeEmitter.fire();
                 }
-                resolve();
-            });
-        }),
+            } else {
+                try {
+                    handleAuthSubprocessResult(stdout, didChangeEmitter, options);
+                } catch {
+                    vscode.window.showInformationMessage(completedMessage);
+                    didChangeEmitter.fire();
+                }
+            }
+        },
     );
 }
 
@@ -364,35 +366,34 @@ async function runAuthCommand(
 }
 
 /**
- * Prompts for a Cloud account ID, saves `codescene.accountId`, then runs
- * `cs-mcp auth switch <id>`.
+ * Prompts for a Cloud account from `cs-mcp auth list-accounts`, saves
+ * `codescene.accountId`, then runs `cs-mcp auth switch <id>`.
  */
 async function runSwitchAccountCommand(
     context: vscode.ExtensionContext,
     didChangeEmitter: vscode.EventEmitter<void>,
 ): Promise<void> {
-    const config = vscode.workspace.getConfiguration('codescene');
-    const existing = optionalIdString(config.get<string>('accountId', ''));
-    const input = await vscode.window.showInputBox({
-        prompt: 'CodeScene Cloud account ID to switch to',
-        placeHolder: 'e.g. 12345',
-        value: existing,
-        ignoreFocusOut: true,
-        validateInput: (value) => {
-            const trimmed = value.trim();
-            if (!trimmed) {
-                return 'Account ID is required';
-            }
-            if (!/^\d+$/.test(trimmed) || Number(trimmed) <= 0) {
-                return 'Account ID must be a positive integer';
-            }
-            return undefined;
-        },
-    });
-    if (input === undefined) {
+    const binaryPath = getBinaryPath(context);
+    if (!binaryPath) {
+        vscode.window.showErrorMessage('CodeScene: Binary not available for this platform.');
         return;
     }
-    const accountId = input.trim();
+
+    const config = vscode.workspace.getConfiguration('codescene');
+    const onpremUrl = (config.get<string>('onpremUrl', '') || '').trim();
+    const existing = optionalIdString(config.get<string>('accountId', ''));
+    const env = buildAuthEnv(onpremUrl, existing);
+
+    const accounts = await listCloudAccounts(binaryPath, env);
+    if (!accounts) {
+        return;
+    }
+    const selected = await pickCloudAccount(accounts);
+    if (!selected) {
+        return;
+    }
+
+    const accountId = String(selected.id);
     await config.update('accountId', accountId, vscode.ConfigurationTarget.Global);
     updateStatusBar(config.get<boolean>('enabled', true), accountId);
 
@@ -404,6 +405,129 @@ async function runSwitchAccountCommand(
         successStatuses: ['already_on_account', 'reused_session', 'signed_in'],
         accountIdOverride: accountId,
     });
+}
+
+interface CloudAccount {
+    id: number;
+    name: string;
+    type: string;
+    role: string;
+    slug?: string;
+    authenticated: boolean;
+    current?: boolean;
+}
+
+function decodeCliBytes(data: string | Buffer | null | undefined): string {
+    if (data == null) {
+        return '';
+    }
+    if (typeof data === 'string') {
+        return data;
+    }
+    try {
+        return new TextDecoder('utf-8', { fatal: true }).decode(data);
+    } catch {
+        return new TextDecoder('windows-1252').decode(data);
+    }
+}
+
+function execFileAsync(
+    binaryPath: string,
+    args: string[],
+    env: Record<string, string>,
+): Promise<{ error: Error | null; stdout: string; stderr: string }> {
+    return new Promise((resolve) => {
+        execFile(
+            binaryPath,
+            args,
+            { env, encoding: 'buffer', windowsHide: true },
+            (error, stdout, stderr) => {
+                resolve({
+                    error,
+                    stdout: decodeCliBytes(stdout),
+                    stderr: decodeCliBytes(stderr),
+                });
+            },
+        );
+    });
+}
+
+async function listCloudAccounts(
+    binaryPath: string,
+    env: Record<string, string>,
+): Promise<CloudAccount[] | undefined> {
+    const result = await vscode.window.withProgress(
+        {
+            location: vscode.ProgressLocation.Notification,
+            title: 'CodeScene: Loading accounts...',
+            cancellable: false,
+        },
+        () => execFileAsync(binaryPath, ['auth', 'list-accounts'], env),
+    );
+    if (result.error) {
+        vscode.window.showErrorMessage(
+            `CodeScene: Could not list accounts — ${result.stderr?.trim() || result.stdout?.trim() || result.error.message}`,
+        );
+        return undefined;
+    }
+    try {
+        const payload = JSON.parse(result.stdout.trim());
+        if (payload.status === 'error') {
+            vscode.window.showErrorMessage(
+                `CodeScene: Could not list accounts — ${payload.error || 'unknown error'}`,
+            );
+            return undefined;
+        }
+        const accounts = Array.isArray(payload.accounts) ? payload.accounts : [];
+        if (accounts.length === 0) {
+            vscode.window.showWarningMessage(
+                'CodeScene: No Cloud accounts are available. Sign in first.',
+            );
+            return undefined;
+        }
+        return accounts;
+    } catch {
+        vscode.window.showErrorMessage(
+            'CodeScene: Could not list accounts — unexpected response from the MCP binary.',
+        );
+        return undefined;
+    }
+}
+
+async function pickCloudAccount(accounts: CloudAccount[]): Promise<CloudAccount | undefined> {
+    const items = accounts.map((account) => ({
+        label: account.name,
+        description: accountPickDescription(account),
+        detail: accountPickDetail(account),
+        account,
+    }));
+    const picked = await vscode.window.showQuickPick(items, {
+        title: 'Switch CodeScene account',
+        placeHolder: 'Select a Cloud account',
+        ignoreFocusOut: true,
+        matchOnDescription: true,
+        matchOnDetail: true,
+    });
+    return picked?.account;
+}
+
+function accountPickDescription(account: CloudAccount): string {
+    const parts = [account.type, account.role];
+    if (account.slug) {
+        parts.push(account.slug);
+    }
+    return parts.join(' · ');
+}
+
+function accountPickDetail(account: CloudAccount): string {
+    const parts = [`ID ${account.id}`];
+    if (account.current) {
+        parts.push('current');
+    }
+    if (!account.authenticated) {
+        parts.push('sign-in required');
+    }
+    return parts.join(' · ');
 }
 
 /**

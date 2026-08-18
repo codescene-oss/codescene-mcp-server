@@ -29,7 +29,9 @@ To sign out, use the `logout` prompt/tool, or ask Claude to log you out.
 
 **Multi-account Cloud:** If you belong to multiple CodeScene Cloud accounts, switch with:
 
-> Switch my CodeScene account to 123
+> Switch my CodeScene account to CodeScene OSS
+
+> Switch my CodeScene account to 123 
 
 That calls `switch_account` (do not rely on `set_config(account_id=…)` alone while signed in).
 

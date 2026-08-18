@@ -28,16 +28,16 @@ Use this when you belong to **more than one** CodeScene Cloud account and need t
 
 Start a switch in any of these ways:
 
-1. **MCP `switch_account` prompt (slash command)** — Instructs the assistant to call the `switch_account` tool (provide the numeric account ID in the prompt context when you know it).
+1. **MCP `switch_account` prompt (slash command)** — Instructs the assistant to list your accounts and switch to the one you pick. You can name the account in the prompt when you know it.
 2. **Ask the assistant** — for example:
 
-   > "Switch my CodeScene account to 123"
+   > "Switch my CodeScene account to CodeScene OSS"
 
-3. **VS Code command** — Run **CodeScene: Switch Account** from the Command Palette, enter the account ID, and confirm.
+   If you do not name an account, the assistant lists them (name, ID, type, and whether you are already signed in locally) so you can pick one.
 
-The account ID must be a **positive integer** (`account_id` / `CS_ACCOUNT_ID`). You can find it in the CodeScene Cloud UI for the account you want to use.
+3. **VS Code command** — Run **CodeScene: Switch Account** from the Command Palette and pick an account from the list.
 
-> **Note:** You can find the Account ID to enter [here](https://codescene.io/users/me) under **Set Current Account**
+You do not need to know the numeric account ID. The `switch_account` tool lists accounts via the CLI and can switch by **name**, **org slug**, or **account_id**.
 
 #### What `switch_account` does
 
@@ -57,7 +57,7 @@ Switching does **not** log you out of other accounts’ stored CLI sessions. Aft
 #### First login vs switch
 
 - **First login (optional pin):** You may set `account_id` **before** `login` if you want the initial browser flow pinned to a specific account. Keep it set afterward so refresh uses the matching credential slot.
-- **Already signed in:** Prefer `switch_account` with the target account ID. You do not need to logout first.
+- **Already signed in:** Prefer `switch_account` with the target account name, slug, or ID. You do not need to logout first.
 
 #### Legacy sessions (no `account_id` pin)
 
