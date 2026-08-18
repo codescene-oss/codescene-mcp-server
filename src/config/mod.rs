@@ -31,10 +31,16 @@ static TEST_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[cfg(test)]
 pub(crate) fn lock_test_env() -> std::sync::MutexGuard<'static, ()> {
-    TEST_ENV_LOCK
+    let guard = TEST_ENV_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .unwrap_or_else(|e| e.into_inner());
+    // Snapshots accumulate across tests; clear so a prior `prepare_auth_cli_env`
+    // cannot permanently mark vars like CS_OAUTH_CLIENT as client-owned.
+    if let Some(store) = CLIENT_ENV_VARS.get() {
+        store.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+    guard
 }
 
 // ---------------------------------------------------------------------------
@@ -691,6 +697,19 @@ mod tests {
         assert_eq!(source, "environment");
 
         std::env::remove_var("CS_DISABLE_TRACKING");
+    }
+
+    #[test]
+    fn lock_test_env_clears_client_env_snapshot() {
+        {
+            let _lock = lock_test_env();
+            std::env::set_var("CS_OAUTH_CLIENT", "mcp");
+            snapshot_client_env_vars();
+            assert!(is_client_env_var("CS_OAUTH_CLIENT"));
+        }
+        let _lock = lock_test_env();
+        assert!(!is_client_env_var("CS_OAUTH_CLIENT"));
+        std::env::remove_var("CS_OAUTH_CLIENT");
     }
 
     // ---- enabled_tools ----
