@@ -77,7 +77,7 @@ See [Authentication](authentication.md) for the recommended login flow and instr
 
 Optional CodeScene Cloud account/tenant ID for OAuth. Use this only if you belong to **multiple** Cloud accounts and need to pin login to a specific one.
 
-> **Note:** You can find the Account ID to enter [here](https://codescene.io/users/me) under **Set Current Account**
+> **Note:** Prefer the `switch_account` tool (or **CodeScene: Switch Account**) to pick an account by name. You do not need to look up the numeric ID unless you are pinning `account_id` before a first login.
 
 - Must be a **positive integer**.
 - To change accounts while signed in, use the `switch_account` tool (or **CodeScene: Switch Account**), not `set_config` alone.
@@ -87,7 +87,7 @@ Optional CodeScene Cloud account/tenant ID for OAuth. Use this only if you belon
 
 **Example — switch while signed in:**
 
-> "Switch my CodeScene account to 123"
+> "Switch my CodeScene account to CodeScene OSS"
 
 **Example — pin before first login:**
 

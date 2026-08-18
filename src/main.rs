@@ -1,7 +1,8 @@
-mod api_client;
+﻿mod api_client;
 mod auth;
 mod business_case;
 mod cli;
+mod cli_commands;
 mod config;
 mod configure;
 mod delta;
@@ -26,6 +27,16 @@ mod version_checker;
 
 #[cfg(test)]
 pub(crate) use test_utils as tests;
+
+pub(crate) use cli_commands::{
+    dispatch_cli_action, ensure_oauth_client_configured, parse_cli_args,
+};
+
+#[cfg(test)]
+pub(crate) use cli_commands::{
+    display_version, fetch_cli_version, help_text, run_list_accounts_flow_with,
+    run_logout_flow_with, run_switch_account_flow_with, CliAction,
+};
 
 use std::sync::Arc;
 
@@ -96,200 +107,6 @@ pub(crate) const API_ONLY_TOOLS: &[&str] = &[
 pub(crate) const ALWAYS_ENABLED_TOOLS: &[&str] =
     &["get_config", "set_config", "login", "logout", "switch_account"];
 
-#[derive(Debug)]
-pub(crate) enum CliAction {
-    RunServer,
-    PrintHelp,
-    PrintVersion(String),
-    PrintCliVersion,
-    Auth,
-    Logout,
-    SwitchAccount(i64),
-}
-
-pub(crate) fn display_version(raw_version: &str) -> &str {
-    raw_version.strip_prefix("MCP-").unwrap_or(raw_version)
-}
-
-pub(crate) fn help_text() -> &'static str {
-    "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help              Show this help message and exit\n  -v, --version           Show version and exit\n  --cli-version           Show embedded CLI version and exit\n  auth                    Sign in to CodeScene via OAuth (opens browser)\n  auth logout             Sign out of CodeScene OAuth and clear the stored session\n  auth switch <account>   Switch Cloud OAuth account (reuses stored session when possible)\n\nEnvironment:\n  CS_ONPREM_URL    Base URL of self-hosted CodeScene instance (for auth subcommand)\n  CS_ACCOUNT_ID    Optional Cloud account/tenant ID for OAuth credential slot selection"
-}
-
-async fn ensure_oauth_client_configured() {
-    if crate::config::try_read_env("CS_OAUTH_CLIENT").is_some() {
-        return;
-    }
-
-    if let Err(e) = crate::config::write_env("oauth_client", "mcp").await {
-        tracing::warn!(error = %e, "failed to persist default OAuth client");
-    }
-}
-
-pub(crate) fn parse_cli_args(args: &[String], raw_version: &str) -> Result<CliAction, String> {
-    if args.is_empty() {
-        return Ok(CliAction::RunServer);
-    }
-
-    if args.len() == 1 {
-        return match args[0].as_str() {
-            "-h" | "--help" => Ok(CliAction::PrintHelp),
-            "-v" | "--version" => Ok(CliAction::PrintVersion(
-                display_version(raw_version).to_string(),
-            )),
-            "--cli-version" => Ok(CliAction::PrintCliVersion),
-            "auth" => Ok(CliAction::Auth),
-            "logout" => Ok(CliAction::Logout),
-            other => Err(format!("Unknown argument: {other}")),
-        };
-    }
-
-    if is_auth_logout_args(args) {
-        return Ok(CliAction::Logout);
-    }
-
-    if let Some(account_id) = parse_auth_switch_args(args)? {
-        return Ok(CliAction::SwitchAccount(account_id));
-    }
-
-    Err(format!("Unexpected arguments: {}", args.join(" ")))
-}
-
-fn is_auth_logout_args(args: &[String]) -> bool {
-    matches!(
-        args,
-        [cmd, sub] if cmd == "auth" && sub == "logout"
-    )
-}
-
-fn parse_auth_switch_args(args: &[String]) -> Result<Option<i64>, String> {
-    match args {
-        [cmd, sub, id] if cmd == "auth" && sub == "switch" => {
-            let account_id: i64 = id
-                .parse()
-                .map_err(|_| format!("Invalid account id for auth switch: {id}"))?;
-            if account_id <= 0 {
-                return Err("account id for auth switch must be a positive integer".to_string());
-            }
-            Ok(Some(account_id))
-        }
-        [cmd, sub] if cmd == "auth" && sub == "switch" => Err(
-            "auth switch requires an account id, e.g. cs-mcp auth switch 123".to_string(),
-        ),
-        _ => Ok(None),
-    }
-}
-
-pub(crate) async fn fetch_cli_version(cli_runner: &dyn cli::CliRunner) -> anyhow::Result<String> {
-    Ok(cli_runner.run(&["version"], None).await?)
-}
-
-/// Run the OAuth login flow as a standalone CLI command.
-/// Reads CS_ONPREM_URL from environment if set, then delegates to the CLI auth login.
-/// Outputs JSON with the result to stdout for consumption by the VS Code extension.
-async fn run_auth_flow() -> anyhow::Result<()> {
-    config::snapshot_client_env_vars();
-    ensure_oauth_client_configured().await;
-    let config_data = config::load().unwrap_or_default();
-    config::apply_to_env(&config_data);
-
-    let cli_runner = cli::ProductionCliRunner;
-    let auth_manager = AuthManager::new();
-
-    // Check if already signed in
-    if let Ok(Some(_)) = auth_manager.current_token(&cli_runner).await {
-        let result = serde_json::json!({"status": "already_signed_in"});
-        println!("{}", result);
-        return Ok(());
-    }
-
-    // Run interactive login
-    match auth_manager.login(&cli_runner).await {
-        Ok(resp) if resp.is_signed_in() => {
-            let result = serde_json::json!({"status": "signed_in"});
-            println!("{}", result);
-            Ok(())
-        }
-        Ok(resp) => {
-            let result = serde_json::json!({"status": resp.status, "error": "Login did not complete"});
-            println!("{}", result);
-            anyhow::bail!("Login did not complete");
-        }
-        Err(e) => {
-            let result = serde_json::json!({"status": "error", "error": e});
-            println!("{}", result);
-            anyhow::bail!("Login failed: {e}");
-        }
-    }
-}
-
-/// Run OAuth logout as a standalone CLI command (`cs-mcp auth logout`).
-/// Delegates to `cs auth logout --client mcp`, then clears MCP OAuth config.
-/// Outputs JSON with the result to stdout for consumption by the VS Code extension.
-async fn run_logout_flow() -> anyhow::Result<()> {
-    run_logout_flow_with(&cli::ProductionCliRunner).await
-}
-
-/// Run Cloud account switch as a standalone CLI command (`cs-mcp auth switch <id>`).
-async fn run_switch_account_flow(account_id: i64) -> anyhow::Result<()> {
-    run_switch_account_flow_with(&cli::ProductionCliRunner, account_id).await
-}
-
-/// Testable account-switch CLI flow using an injected runner.
-pub(crate) async fn run_switch_account_flow_with(
-    cli_runner: &dyn cli::CliRunner,
-    account_id: i64,
-) -> anyhow::Result<()> {
-    config::snapshot_client_env_vars();
-    ensure_oauth_client_configured().await;
-    let config_data = config::load().unwrap_or_default();
-    config::apply_to_env(&config_data);
-
-    let auth_manager = AuthManager::new();
-    match auth_manager.switch_account(cli_runner, account_id).await {
-        Ok(result) => {
-            let payload = serde_json::json!({
-                "status": result.status_str(),
-                "account_id": result.account_id,
-            });
-            println!("{payload}");
-            Ok(())
-        }
-        Err(e) => {
-            let payload = serde_json::json!({
-                "status": "error",
-                "account_id": account_id,
-                "error": e,
-            });
-            println!("{payload}");
-            anyhow::bail!("Account switch failed: {e}");
-        }
-    }
-}
-
-/// Testable logout CLI flow using an injected runner.
-pub(crate) async fn run_logout_flow_with(
-    cli_runner: &dyn cli::CliRunner,
-) -> anyhow::Result<()> {
-    config::snapshot_client_env_vars();
-    ensure_oauth_client_configured().await;
-    let config_data = config::load().unwrap_or_default();
-    config::apply_to_env(&config_data);
-
-    let auth_manager = AuthManager::new();
-    match auth_manager.logout(cli_runner).await {
-        Ok(()) => {
-            let result = serde_json::json!({"status": "signed_out"});
-            println!("{}", result);
-            Ok(())
-        }
-        Err(e) => {
-            // Local OAuth state is already cleared; still report the CLI error.
-            let result = serde_json::json!({"status": "error", "error": e});
-            println!("{}", result);
-            anyhow::bail!("Logout failed: {e}");
-        }
-    }
-}
 
 pub(crate) fn inlined_schema_for<T: JsonSchema + 'static>(
 ) -> Arc<serde_json::Map<String, serde_json::Value>> {
@@ -756,7 +573,7 @@ impl CodeSceneServer {
     }
 
     #[tool(
-        description = "Switch the active CodeScene Cloud OAuth account.\n\nWhen to use:\n    Use this tool when the user belongs to multiple Cloud accounts and needs to\n    change which account the MCP server uses. Prefer this over set_config(account_id)\n    alone — changing the pin without switch_account does not retarget the active\n    OAuth session.\n\nLimitations:\n    - Cloud OAuth only; does not apply to PAT / CS_ACCESS_TOKEN auth or on-prem.\n    - Requires a positive integer account_id.\n    - Reuses a stored CLI credential slot when available; otherwise opens a browser\n      for interactive login into that account.\n    - Not available in Docker (no OAuth browser flow).\n\nReturns:\n    A success message with the active account_id, or an error describing the failure.",
+        description = "Switch the active CodeScene Cloud OAuth account, or list accounts the user can switch to.\n\nWhen to use:\n    Use this tool when the user belongs to multiple Cloud accounts and needs to\n    change which account the MCP server uses. Prefer this over set_config(account_id)\n    alone â€” changing the pin without switch_account does not retarget the active\n    OAuth session. If the user has not named an account, call this tool without\n    arguments first so they can pick from the list.\n\nLimitations:\n    - Cloud OAuth only; does not apply to PAT / CS_ACCESS_TOKEN auth or on-prem.\n    - Reuses a stored CLI credential slot when available; otherwise opens a browser\n      for interactive login into that account (`authenticated` is false).\n    - Not available in Docker (no OAuth browser flow).\n\nReturns:\n    With no arguments: a JSON object with an `accounts` array. Format it as a\n    Markdown table with columns \"Account Name\", \"Account ID\", \"Type\", \"Role\",\n    and \"Signed in on this machine\". Mark the row where `current` is true as the\n    active account. Then ask the user which account to use and call this tool again\n    with `name` or `account_id`.\n    With `name` (display name or org slug) or `account_id`: a success message with\n    the active account_id, or an error. If `name` is ambiguous or not found, the\n    response includes the account list so you can ask the user to pick one.\n\nExample:\n    Call without arguments to list accounts. To switch, pass name=\"CodeScene Showcase\"\n    or account_id=11. If the user already named the account, pass name directly.",
         input_schema = inlined_schema_for::<SwitchAccountParam>()
     )]
     async fn switch_account(
@@ -859,36 +676,16 @@ fn init_tracing(
     None
 }
 
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     let raw_version = env!("CS_MCP_VERSION");
     let args: Vec<String> = std::env::args().skip(1).collect();
     match parse_cli_args(&args, raw_version) {
-        Ok(CliAction::RunServer) => {}
-        Ok(CliAction::PrintHelp) => {
-            println!("{}", help_text());
-            return Ok(());
-        }
-        Ok(CliAction::PrintVersion(version)) => {
-            println!("{version}");
-            return Ok(());
-        }
-        Ok(CliAction::PrintCliVersion) => {
-            let output = fetch_cli_version(&cli::ProductionCliRunner).await?;
-            print!("{output}");
-            return Ok(());
-        }
-        Ok(CliAction::Auth) => {
-            run_auth_flow().await?;
-            return Ok(());
-        }
-        Ok(CliAction::Logout) => {
-            run_logout_flow().await?;
-            return Ok(());
-        }
-        Ok(CliAction::SwitchAccount(account_id)) => {
-            run_switch_account_flow(account_id).await?;
-            return Ok(());
+        Ok(action) => {
+            if dispatch_cli_action(action).await? {
+                return Ok(());
+            }
         }
         Err(message) => {
             eprintln!("{message}");
@@ -958,7 +755,7 @@ where
 /// Convert a `serve()` error into the desired process exit behavior.
 ///
 /// MCP clients (e.g. VS Code, Zed) routinely close the server's stdin
-/// when the user closes the agent — sometimes before the MCP handshake
+/// when the user closes the agent â€” sometimes before the MCP handshake
 /// has completed. That looks like a `ConnectionClosed` error during
 /// initialization, but is a normal shutdown from the client's
 /// perspective. Treat it as a clean exit so the client does not

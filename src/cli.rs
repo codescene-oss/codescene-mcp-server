@@ -75,10 +75,10 @@ async fn run_cli_at_path(
 ) -> Result<String, CliError> {
     let output = run_cli_process(cli_path, args, working_dir, false).await?;
     if output.status.success() {
-        return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+        return Ok(decode_cli_bytes(&output.stdout));
     }
 
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let stderr = decode_cli_bytes(&output.stderr);
     if should_retry_after_telemetry_flush_error(&stderr) {
         let retry_output = run_cli_process(cli_path, args, working_dir, true).await?;
         return parse_cli_output(retry_output);
@@ -89,7 +89,7 @@ async fn run_cli_at_path(
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         let retry_output = run_cli_process(cli_path, args, working_dir, false).await?;
         if retry_output.status.success() {
-            return Ok(String::from_utf8_lossy(&retry_output.stdout).to_string());
+            return Ok(decode_cli_bytes(&retry_output.stdout));
         }
         return parse_cli_output(retry_output);
     }
@@ -124,7 +124,24 @@ async fn run_cli_process(
         cmd.current_dir(dir);
     }
 
+    // Avoid allocating a console when spawned from a GUI host (VS Code). A
+    // console makes some Windows CLIs write ANSI/OEM bytes instead of UTF-8.
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
     cmd.output().await.map_err(CliError::from)
+}
+
+/// Decode CLI stdout/stderr. Prefer UTF-8; Windows CLIs often emit the ANSI
+/// code page (Latin-1 for Swedish å/ä/ö) when UTF-8 is invalid.
+fn decode_cli_bytes(bytes: &[u8]) -> String {
+    match std::str::from_utf8(bytes) {
+        Ok(text) => text.to_owned(),
+        Err(_) => bytes.iter().copied().map(char::from).collect(),
+    }
 }
 
 fn remove_sensitive_env_vars(cmd: &mut tokio::process::Command) {
@@ -407,9 +424,9 @@ fn is_license_check_failure(stderr: &str) -> bool {
 
 fn parse_cli_output(output: Output) -> Result<String, CliError> {
     if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        Ok(decode_cli_bytes(&output.stdout))
     } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let stderr = decode_cli_bytes(&output.stderr);
         if is_license_check_failure(&stderr) {
             return Err(CliError::LicenseCheckFailed { stderr });
         }
@@ -980,6 +997,26 @@ mod tests {
     fn parse_cli_output_success() {
         let output = make_output(0, b"hello\n", b"");
         assert_eq!(parse_cli_output(output).unwrap(), "hello\n");
+    }
+
+    #[test]
+    fn decode_cli_bytes_keeps_utf8_swedish() {
+        assert_eq!(decode_cli_bytes("Martin Säfsten".as_bytes()), "Martin Säfsten");
+    }
+
+    #[test]
+    fn decode_cli_bytes_accepts_windows_1252_swedish() {
+        // ä is 0xE4 in windows-1252 / ISO-8859-1; invalid as UTF-8.
+        assert_eq!(decode_cli_bytes(b"Martin S\xE4fsten"), "Martin Säfsten");
+    }
+
+    #[test]
+    fn parse_cli_output_decodes_windows_1252_stdout() {
+        let output = make_output(0, b"{\"name\":\"Martin S\xE4fsten\"}", b"");
+        assert_eq!(
+            parse_cli_output(output).unwrap(),
+            "{\"name\":\"Martin Säfsten\"}"
+        );
     }
 
     #[test]

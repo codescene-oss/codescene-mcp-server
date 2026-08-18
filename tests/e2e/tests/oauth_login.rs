@@ -58,7 +58,7 @@ fn signed_in_without_access_token(expires_in_secs: i64) -> String {
 // Fake CLI
 // ---------------------------------------------------------------------------
 
-/// Fake `cs` CLI that answers `auth token`, `auth login`, and `review`.
+/// Fake `cs` CLI that answers `auth token`, `auth login`, `auth list-accounts`, and `review`.
 ///
 /// Responses are controlled entirely via env vars so a single compiled
 /// binary can be reused across every test in this file:
@@ -66,6 +66,7 @@ fn signed_in_without_access_token(expires_in_secs: i64) -> String {
 /// - `FAKE_AUTH_TOKEN_RESPONSE_2` — response for subsequent `auth token`
 ///   calls (falls back to `FAKE_AUTH_TOKEN_RESPONSE` if unset)
 /// - `FAKE_AUTH_LOGIN_RESPONSE` — response for `auth login` calls
+/// - `FAKE_AUTH_LIST_ACCOUNTS_RESPONSE` — response for `auth list-accounts`
 /// - `FAKE_CALL_MARKER` — path to a marker file used to distinguish the
 ///   first vs. later `auth token` call
 /// - `FAKE_CALL_LOG` — path to an append-only log of every `auth ...`
@@ -119,6 +120,13 @@ fn main() {
         (Some("auth"), Some("logout")) => {
             let resp = env::var("FAKE_AUTH_LOGOUT_RESPONSE").unwrap_or_else(|_| {
                 r#"{"status":"signed_out","access-token":null,"api-url":null}"#.to_string()
+            });
+            println!("{resp}");
+            process::exit(0);
+        }
+        (Some("auth"), Some("list-accounts")) => {
+            let resp = env::var("FAKE_AUTH_LIST_ACCOUNTS_RESPONSE").unwrap_or_else(|_| {
+                r#"{"accounts":[]}"#.to_string()
             });
             println!("{resp}");
             process::exit(0);
@@ -278,14 +286,19 @@ fn call_logout(client: &mut MCPClient) -> String {
 }
 
 fn call_switch_account(client: &mut MCPClient, account_id: i64) -> String {
+    call_switch_account_params(client, json!({"account_id": account_id}))
+}
+
+fn call_switch_account_params(client: &mut MCPClient, params: serde_json::Value) -> String {
     let response = client
-        .call_tool(
-            "switch_account",
-            json!({"account_id": account_id}),
-            Duration::from_secs(30),
-        )
+        .call_tool("switch_account", params, Duration::from_secs(30))
         .expect("switch_account call should succeed");
-    extract_result_text(&response)
+    let text = extract_result_text(&response);
+    assert!(
+        !text.is_empty(),
+        "switch_account returned empty text, raw response: {response}"
+    );
+    text
 }
 
 fn call_score(client: &mut MCPClient, repo_dir: &Path) -> String {
@@ -652,6 +665,84 @@ pub fn test_switch_account_reuses_cli_slot() {
     assert!(
         !log.contains("auth login"),
         "interactive login should not be needed when slot exists, got log: {log}"
+    );
+}
+
+const SAMPLE_ACCOUNTS_JSON: &str = r#"{"accounts":[{"id":139802,"name":"Martin Säfsten","type":"individual","role":"owner","authenticated":true},{"id":11,"name":"CodeScene Showcase","type":"org","role":"member","slug":"codescene-showcase","authenticated":true}]}"#;
+
+/// `switch_account` with no arguments lists Cloud accounts from the CLI.
+pub fn test_switch_account_lists_without_args() {
+    if is_docker() {
+        return skip_if_docker("fake CLI binary not available in container");
+    }
+    let t = oauth_setup(&[("FAKE_AUTH_LIST_ACCOUNTS_RESPONSE", SAMPLE_ACCOUNTS_JSON)]);
+    seed_config(
+        &t.config_dir,
+        json!({
+            "instance_id": "test-instance-id",
+            "oauth_token": "tok",
+            "oauth_expires_at": (now_epoch() + 3600).to_string(),
+            "oauth_account_id": "11",
+        }),
+    );
+    let mut client = start_client(&t);
+
+    let result = call_switch_account_params(&mut client, json!({}));
+    assert!(
+        result.contains("CodeScene Showcase") && result.contains("\"current\":true"),
+        "got: {result}"
+    );
+
+    let log = std::fs::read_to_string(&t.call_log_path).unwrap_or_default();
+    assert!(
+        log.contains("auth list-accounts"),
+        "CLI list-accounts should be called, got log: {log}"
+    );
+    assert!(
+        !log.contains("auth token"),
+        "listing should not switch, got log: {log}"
+    );
+}
+
+/// `switch_account` with a name/slug resolves the account and reuses a slot.
+pub fn test_switch_account_switches_by_name() {
+    if is_docker() {
+        return skip_if_docker("fake CLI binary not available in container");
+    }
+    let slot_resp = signed_in_json_with_account("switched-token", 3600, 11);
+    let t = oauth_setup(&[
+        ("FAKE_AUTH_LIST_ACCOUNTS_RESPONSE", SAMPLE_ACCOUNTS_JSON),
+        ("FAKE_AUTH_TOKEN_RESPONSE", slot_resp.as_str()),
+    ]);
+    seed_config(
+        &t.config_dir,
+        json!({
+            "instance_id": "test-instance-id",
+            "oauth_token": "old-account-token",
+            "oauth_expires_at": (now_epoch() + 3600).to_string(),
+            "oauth_account_id": "1",
+        }),
+    );
+    let mut client = start_client(&t);
+
+    let result = call_switch_account_params(&mut client, json!({"name": "codescene-showcase"}));
+    assert!(
+        result.contains("Switched to CodeScene account 11"),
+        "got: {result}"
+    );
+
+    let config = read_config(&t.config_dir);
+    assert_eq!(config["account_id"].as_str(), Some("11"));
+    assert_eq!(config["oauth_account_id"].as_str(), Some("11"));
+
+    let log = std::fs::read_to_string(&t.call_log_path).unwrap_or_default();
+    assert!(
+        log.contains("auth list-accounts"),
+        "CLI list-accounts should be called to resolve the name, got log: {log}"
+    );
+    assert!(
+        log.contains("auth token"),
+        "CLI auth token should be called for slot reuse, got log: {log}"
     );
 }
 

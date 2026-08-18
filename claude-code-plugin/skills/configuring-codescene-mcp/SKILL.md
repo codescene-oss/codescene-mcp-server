@@ -57,7 +57,7 @@ Environment variables set by the MCP client always override values in the config
 ## Implementation
 
 1. Run `get_config` to see the current state of all options.
-2. For interactive auth: if `access_token` is set and the user wants OAuth, clear it first (`set_config` with empty value or ask them to remove `CS_ACCESS_TOKEN` from client env). For multi-account Cloud while already signed in, call `switch_account` with the target account ID (do not only `set_config` `account_id`).
+2. For interactive auth: if `access_token` is set and the user wants OAuth, clear it first (`set_config` with empty value or ask them to remove `CS_ACCESS_TOKEN` from client env). For multi-account Cloud while already signed in, call `switch_account` (no arguments lists accounts; then switch by name or `account_id`). Do not only `set_config` `account_id`.
 3. Call `login` for OAuth (or have the user invoke the `login` MCP prompt), or `set_config` for PAT / other options. To change Cloud account, call `switch_account`. To sign out, call `logout` (or the `logout` prompt).
 4. Run `get_config` with the relevant key to confirm the change took effect.
 5. If the user changed `access_token`, inform them that a server restart may be needed for tool registration changes to take effect.

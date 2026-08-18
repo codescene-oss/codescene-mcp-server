@@ -44,8 +44,13 @@ pub struct LogoutParam {}
 /// Parameters for the `switch_account` tool.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct SwitchAccountParam {
-    /// CodeScene Cloud account/tenant ID (positive integer) to switch to.
-    pub account_id: i64,
+    /// Optional Cloud account/tenant ID (positive integer). If omitted together
+    /// with `name`, lists available accounts instead of switching.
+    #[serde(default)]
+    pub account_id: Option<i64>,
+    /// Optional account name or org slug, matched against `cs auth list-accounts`.
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 /// Optional context parameter used by explain tools.
@@ -276,6 +281,31 @@ mod tests {
         let json = r#"{"project_id": 42}"#;
         let p: ProjectParam = serde_json::from_str(json).unwrap();
         assert_eq!(p.project_id, 42);
+    }
+
+    #[test]
+    fn switch_account_param_deserializes_empty_object() {
+        let p: SwitchAccountParam = serde_json::from_str("{}").unwrap();
+        assert!(p.account_id.is_none());
+        assert!(p.name.is_none());
+    }
+
+    #[test]
+    fn switch_account_param_deserializes_name() {
+        let p: SwitchAccountParam =
+            serde_json::from_str(r#"{"name":"CodeScene Showcase"}"#).unwrap();
+        assert!(p.account_id.is_none());
+        assert_eq!(p.name.as_deref(), Some("CodeScene Showcase"));
+    }
+
+    #[test]
+    fn switch_account_param_schema_allows_empty_arguments() {
+        let schema = crate::inlined_schema_for::<SwitchAccountParam>();
+        let required = schema.get("required").and_then(|value| value.as_array());
+        assert!(
+            required.is_none() || required.unwrap().is_empty(),
+            "switch_account arguments must be optional, got schema: {schema:?}"
+        );
     }
 
     #[test]

@@ -301,7 +301,8 @@ mod tests {
     use crate::version_checker::VersionChecker;
     use crate::{
         display_version, fetch_cli_version, help_text, parse_cli_args, remove_docker_unsupported_tools,
-        run_logout_flow_with, run_switch_account_flow_with, token_missing_msg, CliAction,
+        run_list_accounts_flow_with, run_logout_flow_with, run_switch_account_flow_with,
+        token_missing_msg, CliAction,
         API_ONLY_TOOLS,
     };
 
@@ -520,6 +521,13 @@ mod tests {
         let args = vec!["auth".to_string(), "switch".to_string(), "42".to_string()];
         let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
         assert!(matches!(action, CliAction::SwitchAccount(42)));
+    }
+
+    #[test]
+    fn parse_cli_args_supports_auth_list_accounts() {
+        let args = vec!["auth".to_string(), "list-accounts".to_string()];
+        let action = parse_cli_args(&args, "MCP-1.2.3").unwrap();
+        assert!(matches!(action, CliAction::ListAccounts));
     }
 
     #[test]
@@ -767,7 +775,8 @@ mod tests {
         );
         let result = server
             .switch_account(Parameters(crate::tools::SwitchAccountParam {
-                account_id: 42,
+                account_id: Some(42),
+                name: None,
             }))
             .await
             .unwrap();
@@ -897,6 +906,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn run_list_accounts_flow_with_ok_and_error_paths() {
+        let env = LogoutFlowEnv::new();
+        run_list_accounts_flow_with(&MockCliRunner::with_ok(
+            r#"{"accounts":[{"id":11,"name":"CodeScene Showcase","type":"org","role":"member","authenticated":true}]}"#,
+        ))
+        .await
+        .expect("list-accounts success path");
+        let err = run_list_accounts_flow_with(&MockCliRunner::with_err(
+            1,
+            "Failed to list accounts (HTTP 401).",
+        ))
+        .await
+        .expect_err("list-accounts error path");
+        assert!(
+            err.to_string().contains("List accounts failed"),
+            "got: {err}"
+        );
+        drop(env);
+    }
+
+    #[tokio::test]
     async fn run_logout_flow_with_reports_cli_error() {
         let env = LogoutFlowEnv::new();
         let runner = MockCliRunner::with_err(1, "connection refused");
@@ -956,6 +986,7 @@ mod tests {
         assert!(text.contains("auth"));
         assert!(text.contains("auth logout"));
         assert!(text.contains("auth switch"));
+        assert!(text.contains("auth list-accounts"));
     }
 
     #[test]

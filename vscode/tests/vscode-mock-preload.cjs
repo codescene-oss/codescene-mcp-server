@@ -31,6 +31,7 @@ const state = {
     shownInfoMessages: [],            // [{ message }]
     shownErrors: [],                  // [{ message }]
     shownInputBoxes: [],              // [{ options, result }]
+    shownQuickPicks: [],              // [{ items, options }]
     configUpdates: [],                // [{ key, value, target }]
     onDidChangeConfigListeners: [],   // [(e) => void]
     executedCommands: [],             // [{ command, args }]
@@ -39,6 +40,8 @@ const state = {
     warningResult: undefined,         // return value of showWarningMessage
     infoMessageResult: undefined,     // return value of showInformationMessage
     inputBoxResult: undefined,        // return value of showInputBox
+    quickPickResult: undefined,       // return value of showQuickPick, or index into items
+    quickPickIndex: undefined,
 };
 
 function reset() {
@@ -50,13 +53,17 @@ function reset() {
     state.shownInfoMessages = [];
     state.shownErrors = [];
     state.shownInputBoxes = [];
+    state.shownQuickPicks = [];
     state.configUpdates = [];
     state.onDidChangeConfigListeners = [];
     state.executedCommands = [];
     state.warningResult = undefined;
     state.infoMessageResult = undefined;
     state.inputBoxResult = undefined;
+    state.quickPickResult = undefined;
+    state.quickPickIndex = undefined;
     state.execFileResult = null;
+    state.execFileResults = [];
     state.execFileCalls = [];
 }
 
@@ -110,6 +117,13 @@ const vscode = {
         showInputBox(options) {
             state.shownInputBoxes.push({ options });
             return Promise.resolve(state.inputBoxResult);
+        },
+        showQuickPick(items, options) {
+            state.shownQuickPicks.push({ items, options });
+            if (state.quickPickIndex !== undefined) {
+                return Promise.resolve(items[state.quickPickIndex]);
+            }
+            return Promise.resolve(state.quickPickResult);
         },
         withProgress(_options, task) {
             return task({ report() {} });
@@ -182,12 +196,19 @@ const originalExecFile = childProcess.execFile;
 
 // Tests can set state.execFileResult = { error, stdout, stderr }
 state.execFileResult = null;
+state.execFileResults = [];
 state.execFileCalls = [];
 
 childProcess.execFile = function (file, args, options, callback) {
     state.execFileCalls.push({ file, args, options });
-    if (state.execFileResult) {
-        const { error, stdout, stderr } = state.execFileResult;
+    let result = null;
+    if (Array.isArray(state.execFileResults) && state.execFileResults.length > 0) {
+        result = state.execFileResults.shift();
+    } else {
+        result = state.execFileResult;
+    }
+    if (result) {
+        const { error, stdout, stderr } = result;
         if (callback) callback(error || null, stdout || '', stderr || '');
     } else {
         // Default: call original (tests that set a binary will need this)
