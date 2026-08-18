@@ -368,6 +368,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn lists_accounts_reports_cli_error() {
+        let _g = clear_token();
+        let text = result_text(
+            &handle(
+                &server_with_cli(MockCliRunner::with_err(1, "HTTP 401")),
+                list_params(),
+            )
+            .await
+            .unwrap(),
+        )
+        .to_string();
+        assert!(
+            text.contains("Failed to list CodeScene accounts") && text.contains("HTTP 401"),
+            "got: {text}"
+        );
+    }
+
+    #[tokio::test]
+    async fn switch_by_name_reports_list_error() {
+        let _g = clear_token();
+        let text = result_text(
+            &handle(
+                &server_with_cli(MockCliRunner::with_err(1, "HTTP 401")),
+                name_params("codescene-showcase"),
+            )
+            .await
+            .unwrap(),
+        )
+        .to_string();
+        assert!(
+            text.contains("Failed to list CodeScene accounts") && text.contains("HTTP 401"),
+            "got: {text}"
+        );
+    }
+
+    #[tokio::test]
+    async fn ambiguous_name_returns_matches_and_does_not_switch() {
+        let _g = clear_token();
+        let json = r#"{"accounts":[{"id":11,"name":"CodeScene Showcase","type":"org","role":"member","slug":"codescene-showcase","authenticated":true},{"id":12,"name":"CodeScene Showcase","type":"org","role":"member","slug":"codescene-showcase-eu","authenticated":true}]}"#;
+        let cli = MockCliRunner::with_ok(json);
+        let calls = cli.calls();
+        let text = result_text(
+            &handle(&server_with_cli(cli), name_params("CodeScene Showcase"))
+                .await
+                .unwrap(),
+        )
+        .to_string();
+        let payload: Value = serde_json::from_str(&text).unwrap();
+        assert!(
+            payload["error"]
+                .as_str()
+                .unwrap()
+                .contains("Multiple accounts matched"),
+            "got: {text}"
+        );
+        assert_eq!(payload["accounts"].as_array().unwrap().len(), 2);
+        assert_eq!(calls.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
     async fn switches_by_unique_name_and_slug() {
         let _g = clear_token();
         seed_oauth_session("old", 1);

@@ -669,6 +669,17 @@ describe('codescene.switchAccount command', () => {
         await handler();
     }
 
+    it('shows error when binary is not available', async () => {
+        const ctx = makeContext({ extensionPath: '/nonexistent' });
+        extension.activate(ctx);
+        const handler = findCommand('codescene.switchAccount');
+        await handler();
+
+        const errorMsg = state.shownErrors.find(m => m.message.includes('Binary not available'));
+        assert.ok(errorMsg, 'expected binary not available error');
+        assert.equal(state.execFileCalls.length, 0);
+    });
+
     it('does nothing when user cancels account picker', async () => {
         state.quickPickResult = undefined;
         await invokeSwitchAccount({
@@ -730,21 +741,64 @@ describe('codescene.switchAccount command', () => {
     });
 
     it('shows an error when listing accounts fails', async () => {
+        const cases = [
+            {
+                execResult: {
+                    error: new Error('exit 1'),
+                    stdout: '{"status":"error","error":"not signed in"}',
+                    stderr: 'Auth list-accounts failed: HTTP 401',
+                },
+                needle: 'Could not list accounts',
+            },
+            {
+                execResult: {
+                    error: null,
+                    stdout: '{"status":"error","error":"not signed in"}',
+                    stderr: '',
+                },
+                needle: 'not signed in',
+            },
+            {
+                execResult: { error: null, stdout: '{"status":"error"}', stderr: '' },
+                needle: 'unknown error',
+            },
+            {
+                execResult: { error: null, stdout: 'not json', stderr: '' },
+                needle: 'unexpected response',
+            },
+            {
+                execResult: { error: null, stdout: null, stderr: null },
+                needle: 'unexpected response',
+            },
+        ];
+
+        for (const { execResult, needle } of cases) {
+            reset();
+            await invokeSwitchAccount({ execResult });
+            const err = state.shownErrors.find(e => e.message.includes(needle));
+            assert.ok(err, `expected error containing ${needle}`);
+            assert.equal(state.shownQuickPicks.length, 0);
+            assert.equal(state.configUpdates.length, 0);
+        }
+    });
+
+    it('marks unauthenticated accounts as requiring sign-in', async () => {
+        state.quickPickResult = undefined;
         await invokeSwitchAccount({
             execResult: {
-                error: new Error('exit 1'),
-                stdout: '{"status":"error","error":"not signed in"}',
-                stderr: 'Auth list-accounts failed: HTTP 401',
+                error: null,
+                stdout: JSON.stringify({
+                    accounts: [
+                        { id: 1, name: 'Pending org', type: 'org', role: 'member', authenticated: false },
+                    ],
+                }),
+                stderr: '',
             },
         });
 
-        const err = state.shownErrors.find(e =>
-            e.message.includes('Could not list accounts')
-        );
-        assert.ok(err, 'expected list-accounts error');
-        assert.equal(state.shownQuickPicks.length, 0);
-        assert.equal(state.execFileCalls.length, 1);
-        assert.equal(state.configUpdates.length, 0);
+        const pick = state.shownQuickPicks[0];
+        assert.ok(pick, 'expected account picker');
+        assert.ok(pick.items[0].detail.includes('sign-in required'));
     });
 
     it('warns when no accounts are returned', async () => {

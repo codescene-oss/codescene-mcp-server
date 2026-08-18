@@ -5,3 +5,16 @@ one. If I named an account, call the switch_account tool with that name (or acco
 if I gave the numeric ID). Do not only call set_config for account_id — that does not \
 switch the active OAuth session. If switch_account opens a browser, wait for me to \
 finish signing in. After success, confirm which account is active.";
+
+#[cfg(test)]
+mod tests {
+    use super::TEXT;
+
+    #[test]
+    fn prompt_lists_accounts_then_switches_by_name() {
+        assert!(TEXT.contains("switch_account tool"));
+        assert!(TEXT.contains("without arguments"));
+        assert!(TEXT.contains("account_id"));
+        assert!(TEXT.contains("set_config"));
+    }
+}

@@ -131,24 +131,19 @@ async fn prepare_auth_cli_env() {
     config::apply_to_env(&config_data);
 }
 
-/// Run the OAuth login flow as a standalone CLI command.
-/// Reads CS_ONPREM_URL from environment if set, then delegates to the CLI auth login.
-/// Outputs JSON with the result to stdout for consumption by the VS Code extension.
-async fn run_auth_flow() -> anyhow::Result<()> {
+/// Testable login CLI flow using an injected runner.
+pub(crate) async fn run_auth_flow_with(cli_runner: &dyn CliRunner) -> anyhow::Result<()> {
     prepare_auth_cli_env().await;
 
-    let cli_runner = cli::ProductionCliRunner;
     let auth_manager = AuthManager::new();
 
-    // Check if already signed in
-    if let Ok(Some(_)) = auth_manager.current_token(&cli_runner).await {
+    if let Ok(Some(_)) = auth_manager.current_token(cli_runner).await {
         let result = serde_json::json!({"status": "already_signed_in"});
         println!("{}", result);
         return Ok(());
     }
 
-    // Run interactive login
-    match auth_manager.login(&cli_runner).await {
+    match auth_manager.login(cli_runner).await {
         Ok(resp) if resp.is_signed_in() => {
             let result = serde_json::json!({"status": "signed_in"});
             println!("{}", result);
@@ -165,18 +160,6 @@ async fn run_auth_flow() -> anyhow::Result<()> {
             anyhow::bail!("Login failed: {e}");
         }
     }
-}
-
-/// Run OAuth logout as a standalone CLI command (`cs-mcp auth logout`).
-/// Delegates to `cs auth logout --client mcp`, then clears MCP OAuth config.
-/// Outputs JSON with the result to stdout for consumption by the VS Code extension.
-async fn run_logout_flow() -> anyhow::Result<()> {
-    run_logout_flow_with(&cli::ProductionCliRunner).await
-}
-
-/// Run Cloud account switch as a standalone CLI command (`cs-mcp auth switch <id>`).
-async fn run_switch_account_flow(account_id: i64) -> anyhow::Result<()> {
-    run_switch_account_flow_with(&cli::ProductionCliRunner, account_id).await
 }
 
 /// Testable account-switch CLI flow using an injected runner.
@@ -206,11 +189,6 @@ pub(crate) async fn run_switch_account_flow_with(
             anyhow::bail!("Account switch failed: {e}");
         }
     }
-}
-
-/// Run Cloud account listing as a standalone CLI command (`cs-mcp auth list-accounts`).
-async fn run_list_accounts_flow() -> anyhow::Result<()> {
-    run_list_accounts_flow_with(&cli::ProductionCliRunner).await
 }
 
 /// Testable account-list CLI flow using an injected runner.
@@ -253,6 +231,14 @@ pub(crate) async fn run_logout_flow_with(cli_runner: &dyn CliRunner) -> anyhow::
 
 /// Run a parsed CLI subcommand. Returns `true` when the process should exit.
 pub(crate) async fn dispatch_cli_action(action: CliAction) -> anyhow::Result<bool> {
+    dispatch_cli_action_with(action, &cli::ProductionCliRunner).await
+}
+
+/// Testable CLI dispatch using an injected runner.
+pub(crate) async fn dispatch_cli_action_with(
+    action: CliAction,
+    cli_runner: &dyn CliRunner,
+) -> anyhow::Result<bool> {
     match action {
         CliAction::RunServer => Ok(false),
         CliAction::PrintHelp => {
@@ -264,24 +250,24 @@ pub(crate) async fn dispatch_cli_action(action: CliAction) -> anyhow::Result<boo
             Ok(true)
         }
         CliAction::PrintCliVersion => {
-            let output = fetch_cli_version(&cli::ProductionCliRunner).await?;
+            let output = fetch_cli_version(cli_runner).await?;
             print!("{output}");
             Ok(true)
         }
         CliAction::Auth => {
-            run_auth_flow().await?;
+            run_auth_flow_with(cli_runner).await?;
             Ok(true)
         }
         CliAction::Logout => {
-            run_logout_flow().await?;
+            run_logout_flow_with(cli_runner).await?;
             Ok(true)
         }
         CliAction::SwitchAccount(account_id) => {
-            run_switch_account_flow(account_id).await?;
+            run_switch_account_flow_with(cli_runner, account_id).await?;
             Ok(true)
         }
         CliAction::ListAccounts => {
-            run_list_accounts_flow().await?;
+            run_list_accounts_flow_with(cli_runner).await?;
             Ok(true)
         }
     }

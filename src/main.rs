@@ -34,8 +34,8 @@ pub(crate) use cli_commands::{
 
 #[cfg(test)]
 pub(crate) use cli_commands::{
-    display_version, fetch_cli_version, help_text, run_list_accounts_flow_with,
-    run_logout_flow_with, run_switch_account_flow_with, CliAction,
+    dispatch_cli_action_with, display_version, fetch_cli_version, help_text, run_auth_flow_with,
+    run_list_accounts_flow_with, run_logout_flow_with, run_switch_account_flow_with, CliAction,
 };
 
 use std::sync::Arc;

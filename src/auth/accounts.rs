@@ -143,6 +143,42 @@ mod tests {
         assert_eq!(accounts[1].slug.as_deref(), Some("codescene-showcase"));
     }
 
+    #[tokio::test]
+    async fn list_accounts_reports_parse_error() {
+        let err = list_accounts(&MockCliRunner::with_ok("not-json"))
+            .await
+            .unwrap_err();
+        assert!(
+            err.contains("Failed to parse list-accounts response"),
+            "got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn list_accounts_payload_and_resolve_named_account() {
+        let cli = MockCliRunner::with_ok(SAMPLE_ACCOUNTS_JSON);
+        let payload = list_accounts_payload(&cli, Some(11)).await.unwrap();
+        assert_eq!(payload["accounts"][1]["current"], true);
+
+        let cli = MockCliRunner::with_ok(SAMPLE_ACCOUNTS_JSON);
+        let (accounts, matched) = resolve_named_account(&cli, "codescene-showcase")
+            .await
+            .unwrap();
+        assert_eq!(accounts.len(), 2);
+        assert!(matches!(
+            matched,
+            AccountNameMatch::Unique(ref account) if account.id == 11
+        ));
+    }
+
+    #[test]
+    fn match_account_name_treats_blank_query_as_none() {
+        assert!(matches!(
+            match_account_name(&sample_accounts(), "   "),
+            AccountNameMatch::None
+        ));
+    }
+
     #[test]
     fn match_account_name_resolves_unique_name_and_slug() {
         let accounts = sample_accounts();

@@ -209,7 +209,7 @@ childProcess.execFile = function (file, args, options, callback) {
     }
     if (result) {
         const { error, stdout, stderr } = result;
-        if (callback) callback(error || null, stdout || '', stderr || '');
+        if (callback) callback(error || null, stdout, stderr);
     } else {
         // Default: call original (tests that set a binary will need this)
         return originalExecFile.call(childProcess, file, args, options, callback);
