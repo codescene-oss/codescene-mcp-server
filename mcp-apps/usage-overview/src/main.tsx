@@ -66,12 +66,6 @@ function toolUsage(insights: Insights): ToolUsage[] {
   const summary = recordValue(insights.summary);
   const candidate = summary?.most_used_tools;
   if (Array.isArray(candidate)) return toolUsageFromArray(candidate);
-  if (candidate && typeof candidate === "object") {
-    return Object.entries(candidate)
-      .filter((entry): entry is [string, number] => typeof entry[1] === "number")
-      .map(([name, count]) => ({ name, count }))
-      .sort((left, right) => right.count - left.count);
-  }
   return [];
 }
 
@@ -103,7 +97,7 @@ function toolUsageFromArray(items: unknown[]): ToolUsage[] {
   }).sort((left, right) => right.count - left.count);
 }
 
-function dashboardData(result: CallToolResult): DashboardData {
+export function dashboardData(result: CallToolResult): DashboardData {
   const content = result.structuredContent as {
     insights?: Insights;
     recent_outcomes?: { outcomes?: Outcome[] };
@@ -120,7 +114,7 @@ function countedValues(values: string[]): ToolUsage[] {
   return [...counts].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 }
 
-function recentActivity(outcomes: Outcome[]): RecentActivity {
+export function recentActivity(outcomes: Outcome[]): RecentActivity {
   const scored = outcomes.filter((outcome) => typeof outcome.score === "number");
   const gates = outcomes.flatMap((outcome) => outcome.event_properties?.quality_gates ?? []);
   const files = new Set(outcomes.flatMap((outcome) => outcome.event_properties?.file_hash ?? []));
@@ -214,7 +208,7 @@ function RecentSnapshot({ outcomes }: { outcomes: Outcome[] }) {
   );
 }
 
-function Dashboard({ data }: { data: DashboardData }) {
+export function Dashboard({ data }: { data: DashboardData }) {
   const { insights, outcomes } = data;
   const metrics = featuredMetrics(insights);
   return (
@@ -237,7 +231,7 @@ function Dashboard({ data }: { data: DashboardData }) {
   );
 }
 
-function App() {
+export function App() {
   const [data, setData] = useState<DashboardData>({ insights: emptyInsights, outcomes: [] });
   const { app, error } = useApp({
     appInfo: { name: "CodeScene MCP usage", version: "0.2.0" },
@@ -253,4 +247,5 @@ function App() {
   return <Dashboard data={data} />;
 }
 
-createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
+const root = document.getElementById("root");
+if (root) createRoot(root).render(<StrictMode><App /></StrictMode>);

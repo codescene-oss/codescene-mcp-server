@@ -54,6 +54,28 @@ jobs:
           name: vscode-coverage-report
           path: vscode/coverage/cobertura-coverage.xml
 
+  test-mcp-app:
+    runs-on: ubuntu-latest
+    name: MCP App Unit Tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+        working-directory: mcp-apps/usage-overview
+      - name: Run MCP app tests with coverage
+        run: npm run test:ci
+        working-directory: mcp-apps/usage-overview
+      - name: Upload MCP app coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: mcp-app-coverage-report
+          path: mcp-apps/usage-overview/coverage/cobertura-coverage.xml
+
   test-rust:
     runs-on: ubuntu-latest
     name: Rust Unit Tests + Coverage
@@ -74,7 +96,7 @@ jobs:
 
   cs-coverage-check:
     runs-on: ubuntu-24.04
-    needs: [test-npm, test-vscode, test-rust]
+    needs: [test-npm, test-vscode, test-mcp-app, test-rust]
     if: always()
     steps:
       - uses: actions/checkout@v6

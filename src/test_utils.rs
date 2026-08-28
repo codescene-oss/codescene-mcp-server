@@ -893,7 +893,9 @@ mod tests {
             .to_string(),
         )
         .unwrap();
-        let runner = MockCliRunner::with_responses(vec![]);
+        let runner = MockCliRunner::with_ok(
+            r#"{"status":"signed_in","access-token":"tok","api-url":null,"account-id":42}"#,
+        );
         run_switch_account_flow_with(&runner, 42).await.unwrap();
         assert_eq!(std::env::var("CS_ACCOUNT_ID").ok().as_deref(), Some("42"));
         drop(env);

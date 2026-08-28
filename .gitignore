@@ -6,4 +6,7 @@ npm/node_modules/
 npm/coverage/
 npm/.cache/
 target/
+mcp-apps/usage-overview/node_modules/
+mcp-apps/usage-overview/coverage/
 mcp-apps/chart/node_modules/
+mcp-apps/chart/coverage/

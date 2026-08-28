@@ -1,3 +1,5 @@
+/* istanbul ignore file -- declarative build/test configuration */
+/* v8 ignore file */
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
@@ -9,6 +11,15 @@ export default defineConfig({
     emptyOutDir: false,
     rollupOptions: {
       input: "mcp-usage-overview.html",
+    },
+  },
+  test: {
+    environment: "jsdom",
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "cobertura"],
+      reportsDirectory: "coverage",
+      include: ["src/main.tsx"],
     },
   },
 });
