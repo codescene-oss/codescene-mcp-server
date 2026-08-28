@@ -42,7 +42,7 @@ use std::sync::Arc;
 
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, Content};
+use rmcp::model::{CallToolResult, Content, Meta};
 use rmcp::schemars::{self, JsonSchema};
 use rmcp::service::ServerInitializeError;
 use rmcp::{tool, tool_router, ErrorData, ServiceExt};
@@ -94,7 +94,22 @@ Note: If the result contains version update information (indicated by\n\
 \"VERSION UPDATE AVAILABLE\"), please inform the user about this update\n\
 notice and recommend they update their CodeScene MCP Server.";
 
+fn mcp_usage_app_meta() -> Meta {
+    Meta(
+        serde_json::json!({
+            "ui": {
+                "resourceUri": server_handler::MCP_USAGE_APP_URI,
+                "visibility": ["model", "app"]
+            }
+        })
+        .as_object()
+        .expect("MCP Apps metadata must be an object")
+        .clone(),
+    )
+}
+
 pub(crate) const API_ONLY_TOOLS: &[&str] = &[
+    "show_mcp_usage_overview",
     "select_project",
     "list_technical_debt_goals_for_project",
     "list_technical_debt_goals_for_project_file",
@@ -322,6 +337,16 @@ fn apply_enabled_tools_filter(router: &mut ToolRouter<CodeSceneServer>, config_d
 
 #[tool_router]
 impl CodeSceneServer {
+    #[tool(
+        name = "show_mcp_usage_overview",
+        title = "Show MCP Usage Overview",
+        description = "Display an interactive overview of the authenticated user's CodeScene MCP safeguard usage. Shows safeguard checks, files reviewed, Code Health uplifts, prevented degradations, most-used tools, installation details, and recent activity. Clients without MCP Apps support receive a complete Markdown report. Always present that Markdown report directly to the user when the interactive app is not rendered; do not replace it with a tool-execution status or a shorter summary.",
+        meta = mcp_usage_app_meta()
+    )]
+    async fn show_mcp_usage_overview(&self) -> Result<CallToolResult, ErrorData> {
+        tools::mcp_usage_overview::handle(self).await
+    }
+
     fn new(deps: ServerDeps) -> Self {
         let mut router = Self::tool_router();
         if deps.is_standalone {

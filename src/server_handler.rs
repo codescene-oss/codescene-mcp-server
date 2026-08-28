@@ -10,6 +10,9 @@ use rmcp::{tool_handler, ErrorData, RoleServer, ServerHandler};
 
 use crate::{config, environment, prompts, skills, CodeSceneServer};
 
+pub(crate) const MCP_USAGE_APP_URI: &str = "ui://codescene/mcp-usage-overview";
+const MCP_APPS_MIME_TYPE: &str = "text/html;profile=mcp-app";
+
 #[tool_handler(router = "self.tool_router")]
 impl ServerHandler for CodeSceneServer {
     fn get_info(&self) -> ServerInfo {
@@ -152,7 +155,7 @@ fn resolve_prompt(name: &str, is_docker: bool) -> Result<GetPromptResult, ErrorD
 
 fn build_resources_list() -> ListResourcesResult {
     let skill_list = skills::load_skills();
-    let resources = skill_list
+    let mut resources: Vec<_> = skill_list
         .iter()
         .flat_map(|skill| {
             let main_uri = skills::skill_uri(&skill.name, "SKILL.md");
@@ -172,6 +175,13 @@ fn build_resources_list() -> ListResourcesResult {
             ]
         })
         .collect();
+    resources.push(
+        RawResource::new(MCP_USAGE_APP_URI, "MCP usage overview")
+            .with_description("Interactive overview of CodeScene MCP safeguard usage")
+            .with_mime_type(MCP_APPS_MIME_TYPE)
+            .with_size(crate::resources::MCP_USAGE_APP.len() as u32)
+            .no_annotation(),
+    );
     ListResourcesResult {
         resources,
         next_cursor: None,
@@ -180,6 +190,23 @@ fn build_resources_list() -> ListResourcesResult {
 }
 
 fn resolve_resource(uri: &str) -> Result<ReadResourceResult, ErrorData> {
+    if uri == MCP_USAGE_APP_URI {
+        let ui_meta = rmcp::model::Meta(
+            serde_json::json!({
+                "ui": { "prefersBorder": true }
+            })
+            .as_object()
+            .expect("MCP Apps resource metadata must be an object")
+            .clone(),
+        );
+        return Ok(ReadResourceResult::new(vec![ResourceContents::text(
+            crate::resources::MCP_USAGE_APP,
+            uri,
+        )
+        .with_mime_type(MCP_APPS_MIME_TYPE)
+        .with_meta(ui_meta)]));
+    }
+
     let (skill_name, path) = skills::parse_skill_uri(uri)
         .ok_or_else(|| ErrorData::resource_not_found(format!("Invalid skill URI: {uri}"), None))?;
 
@@ -450,7 +477,7 @@ mod tests {
     fn resources_list_contains_all_skills() {
         let result = build_resources_list();
         let skills = skills::load_skills();
-        assert_eq!(result.resources.len(), skills.len() * 2);
+        assert_eq!(result.resources.len(), skills.len() * 2 + 1);
     }
 
     #[test]
@@ -517,5 +544,17 @@ mod tests {
     fn resource_templates_contains_skill_template() {
         let result = build_resource_templates();
         assert_eq!(result.resource_templates.len(), 1);
+    }
+
+    #[test]
+    fn read_mcp_usage_app_resource() {
+        let result = resolve_resource(MCP_USAGE_APP_URI).unwrap();
+        assert_eq!(result.contents.len(), 1);
+        let serialized = serde_json::to_value(result).unwrap();
+        assert_eq!(serialized["contents"][0]["mimeType"], MCP_APPS_MIME_TYPE);
+        assert!(serialized["contents"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("<!doctype html>"));
     }
 }

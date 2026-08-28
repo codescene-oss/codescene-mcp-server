@@ -690,6 +690,11 @@ fn test_bundled_no_doc_file_errors() {
     tests::bundled_docs::test_no_doc_file_errors();
 }
 
+#[test]
+fn test_mcp_usage_overview_tool_and_resource() {
+    tests::mcp_usage_overview::test_usage_tool_and_resource();
+}
+
 // --- Shutdown During Handshake ---
 #[test]
 fn test_stdin_closed_before_any_input() {

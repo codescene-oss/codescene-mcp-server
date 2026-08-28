@@ -374,9 +374,14 @@ mod tests {
 
     #[test]
     fn api_only_tools_has_expected_entries() {
-        assert!(API_ONLY_TOOLS.contains(&"select_project"));
-        assert!(API_ONLY_TOOLS.contains(&"code_ownership_for_path"));
-        assert_eq!(API_ONLY_TOOLS.len(), 6);
+        assert!([
+            "select_project",
+            "code_ownership_for_path",
+            "show_mcp_usage_overview"
+        ]
+        .iter()
+        .all(|tool| API_ONLY_TOOLS.contains(tool)));
+        assert_eq!(API_ONLY_TOOLS.len(), 7);
     }
 
     #[test]
@@ -1286,8 +1291,9 @@ mod tests {
         std::env::remove_var("CS_ENABLED_TOOLS");
         let server = make_server(false);
         let names = tool_names(&server);
-        assert_tool_count_and_config(&names, 27);
+        assert_tool_count_and_config(&names, 28);
         assert!(names.contains(&"code_health_review".to_string()));
+        assert!(names.contains(&"show_mcp_usage_overview".to_string()));
     }
 
     #[test]
