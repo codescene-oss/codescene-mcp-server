@@ -258,6 +258,29 @@ mod tests {
             "user_identity":"private@example.com"
         }]
     }"#;
+    const DETAILED_OUTCOMES: &str = r#"{
+        "page":1,
+        "max_pages":1,
+        "outcomes":[
+            {
+                "score":10.0,
+                "categories":["Complex Method","Complex Method"],
+                "event_properties":{
+                    "file_hash":"abc",
+                    "environment":"binary",
+                    "quality_gates":"passed"
+                }
+            },
+            {
+                "score":8.0,
+                "event_properties":{
+                    "file_hash":"def",
+                    "environment":"cs-agent",
+                    "quality_gates":"failed"
+                }
+            }
+        ]
+    }"#;
 
     #[tokio::test]
     async fn returns_api_insights_as_structured_content() {
@@ -300,34 +323,44 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reports_api_error() {
+    async fn reports_api_errors() {
         let _guard = set_token("tok");
-        let server = make_server_with_mocks(
-            false,
-            MockCliRunner::with_responses(vec![]),
-            MockHttpClient::new(vec![HttpResponse::error(500, "API down")]),
-        );
-
-        let result = server.show_mcp_usage_overview().await.unwrap();
-
-        assert_eq!(result.is_error, Some(true));
+        for responses in [
+            vec![HttpResponse::error(500, "API down")],
+            vec![
+                HttpResponse::ok(RESPONSE),
+                HttpResponse::error(500, "API down"),
+            ],
+        ] {
+            let server = make_server_with_mocks(
+                false,
+                MockCliRunner::with_responses(vec![]),
+                MockHttpClient::new(responses),
+            );
+            let result = server.show_mcp_usage_overview().await.unwrap();
+            assert_eq!(result.is_error, Some(true));
+        }
     }
 
     #[tokio::test]
-    async fn reports_outcomes_api_error() {
+    async fn markdown_summarizes_recent_findings_and_gates() {
         let _guard = set_token("tok");
         let server = make_server_with_mocks(
             false,
             MockCliRunner::with_responses(vec![]),
             MockHttpClient::new(vec![
                 HttpResponse::ok(RESPONSE),
-                HttpResponse::error(500, "API down"),
+                HttpResponse::ok(DETAILED_OUTCOMES),
             ]),
         );
 
         let result = server.show_mcp_usage_overview().await.unwrap();
+        let text = crate::tests::result_text(&result);
 
-        assert_eq!(result.is_error, Some(true));
+        assert!(text.contains("| Files reviewed | 2 |"));
+        assert!(text.contains("| Average Code Health | 9.00 |"));
+        assert!(text.contains("| Gate pass rate | 50% |"));
+        assert!(text.contains("| Complex Method | 2 |"));
     }
 
     #[test]

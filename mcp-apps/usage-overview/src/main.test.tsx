@@ -1,3 +1,5 @@
+/* istanbul ignore file -- test code */
+/* v8 ignore file */
 import { cleanup, render, screen } from "@testing-library/react";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

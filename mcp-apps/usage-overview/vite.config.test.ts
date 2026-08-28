@@ -1,3 +1,5 @@
+/* istanbul ignore file -- test code */
+/* v8 ignore file */
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 

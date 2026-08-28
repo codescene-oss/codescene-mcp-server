@@ -179,7 +179,7 @@ fn build_resources_list() -> ListResourcesResult {
         RawResource::new(MCP_USAGE_APP_URI, "MCP usage overview")
             .with_description("Interactive overview of CodeScene MCP safeguard usage")
             .with_mime_type(MCP_APPS_MIME_TYPE)
-            .with_size(crate::resources::MCP_USAGE_APP.len() as u32)
+            .with_size(crate::resources::mcp_usage_app().len() as u32)
             .no_annotation(),
     );
     ListResourcesResult {
@@ -200,7 +200,7 @@ fn resolve_resource(uri: &str) -> Result<ReadResourceResult, ErrorData> {
             .clone(),
         );
         return Ok(ReadResourceResult::new(vec![ResourceContents::text(
-            crate::resources::MCP_USAGE_APP,
+            crate::resources::mcp_usage_app(),
             uri,
         )
         .with_mime_type(MCP_APPS_MIME_TYPE)
