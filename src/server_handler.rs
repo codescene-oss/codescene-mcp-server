@@ -294,7 +294,8 @@ fn append_api_tools_section(text: &mut String, is_standalone: bool) {
              - list_technical_debt_goals_for_project_file: File-level goals.\n\
              - list_technical_debt_hotspots_for_project: View hotspots.\n\
              - list_technical_debt_hotspots_for_project_file: File-level hotspots.\n\
-             - code_ownership_for_path: Find code owners.\n",
+             - code_ownership_for_path: Find code owners.\n\
+             - show_mcp_usage_overview: View personal MCP safeguard usage and impact.\n",
         );
     }
 }
