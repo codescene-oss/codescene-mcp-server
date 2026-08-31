@@ -84,31 +84,25 @@ fn markdown_fallback(payload: &Value) -> String {
         .unwrap_or_default();
     let recent = recent_summary(outcomes);
     let tools = markdown_count_table(&summary["most_used_tools"], "Tool");
-    let versions = markdown_version_table(&summary["versions"]);
     let findings = markdown_pairs(&recent.categories, "Finding");
     let environments = markdown_pairs(&recent.environments, "Environment");
     format!(
         "# MCP safeguard usage\n\n\
-         ## Lifetime overview\n\n\
+         ## Lifetime impact\n\n\
          | Metric | Value |\n| --- | ---: |\n\
-         | Safeguard checks | {} |\n\
-         | Declines prevented | {} |\n\
          | Code Health uplifts | {} |\n\
-         | Active installations | {} |\n\n\
-         ## Most-used tools\n\n{tools}\n\n\
-         ## Active versions\n\n{versions}\n\n\
-         ## Recent activity (latest 100 events)\n\n\
+         | Declines prevented | {} |\n\n\
+         ## Scope of your recent work (latest 100 events)\n\n\
          | Metric | Value |\n| --- | ---: |\n\
          | Files reviewed | {} |\n\
          | Average Code Health | {} |\n\
          | Perfect scores | {} |\n\
          | Gate pass rate | {} |\n\n\
          ### Common findings\n\n{findings}\n\n\
-         ### Environments\n\n{environments}",
-        number(summary, "number_of_safeguard_checks"),
-        number(summary, "number_of_degradations_prevented"),
+         ### Environments\n\n{environments}\n\n\
+         ## Most-used tools\n\n{tools}",
         number(summary, "number_of_uplifts"),
-        number(summary, "number_of_active_installations"),
+        number(summary, "number_of_degradations_prevented"),
         recent.files,
         formatted_average(recent.score_total, recent.scores),
         formatted_percent(recent.perfect_scores, recent.scores),
@@ -203,18 +197,6 @@ fn markdown_count_table(value: &Value, heading: &str) -> String {
     format!("| {heading} | Runs |\n| --- | ---: |\n{rows}")
 }
 
-fn markdown_version_table(value: &Value) -> String {
-    let rows = value
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|item| number(item, "number_of_active_installs") > 0)
-        .map(|item| format!("| {} | {} |", item["version"].as_str().unwrap_or("-"), number(item, "number_of_active_installs")))
-        .collect::<Vec<_>>()
-        .join("\n");
-    format!("| Version | Active installs |\n| --- | ---: |\n{rows}")
-}
-
 fn markdown_pairs(values: &std::collections::BTreeMap<String, usize>, heading: &str) -> String {
     let mut sorted: Vec<_> = values.iter().collect();
     sorted.sort_by_key(|(_, count)| std::cmp::Reverse(**count));
@@ -303,8 +285,12 @@ mod tests {
             .get("user_identity")
             .is_none());
         let text = crate::tests::result_text(&result);
-        assert!(text.contains("| Safeguard checks | 42 |"));
+        assert!(text.contains("| Code Health uplifts | 7 |\n| Declines prevented | 3 |"));
         assert!(text.contains("| Files reviewed | 1 |"));
+        assert!(text.find("Scope of your recent work").unwrap() < text.find("Most-used tools").unwrap());
+        assert!(!text.contains("Safeguard checks"));
+        assert!(!text.contains("Active installations"));
+        assert!(!text.contains("Active versions"));
         assert!(!text.contains("private@example.com"));
     }
 

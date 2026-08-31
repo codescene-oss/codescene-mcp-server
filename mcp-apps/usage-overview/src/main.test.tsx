@@ -74,11 +74,15 @@ describe("usage data", () => {
 describe("dashboard", () => {
   it("renders lifetime and recent insights", () => {
     render(<Dashboard data={{ insights, outcomes }} />);
-    expect(screen.getByText("120")).toBeTruthy();
+    const cards = screen.getByRole("main").querySelectorAll(".metric span");
+    expect([...cards].map((card) => card.textContent)).toEqual(["Code Health uplifts", "Declines prevented"]);
     expect(screen.getByText("code-health-score")).toBeTruthy();
-    expect(screen.getByText("1.4.7")).toBeTruthy();
+    expect(screen.getByText("Scope of your recent work")).toBeTruthy();
     expect(screen.getByText("Average Code Health")).toBeTruthy();
     expect(screen.getByText("Complex Method")).toBeTruthy();
+    expect(screen.queryByText("Safeguard checks")).toBeNull();
+    expect(screen.queryByText("Active installations")).toBeNull();
+    expect(screen.queryByText("Active versions")).toBeNull();
     expect(screen.queryByText("number_of_installations")).toBeNull();
   });
 

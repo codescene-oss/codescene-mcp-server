@@ -7,7 +7,6 @@ import "./styles.css";
 type Insights = Record<string, unknown>;
 type Metric = { key: string; label: string; value: number };
 type ToolUsage = { name: string; count: number };
-type VersionUsage = { version: string; activeInstalls: number };
 type Outcome = {
   timestamp?: string;
   score?: number;
@@ -32,10 +31,8 @@ type DashboardData = { insights: Insights; outcomes: Outcome[] };
 const emptyInsights: Insights = {};
 const nonMetricKeys = new Set(["user_identity", "number_of_installations"]);
 const metricAliases = [
-  { label: "Safeguard checks", keys: ["number_of_safeguard_checks"] },
-  { label: "Declines prevented", keys: ["number_of_degradations_prevented"] },
   { label: "Code Health uplifts", keys: ["number_of_uplifts"] },
-  { label: "Active installations", keys: ["number_of_active_installations"] },
+  { label: "Declines prevented", keys: ["number_of_degradations_prevented"] },
 ];
 
 function displayLabel(key: string): string {
@@ -59,7 +56,7 @@ function featuredMetrics(insights: Insights): Metric[] {
     const match = all.find(({ key }) => keys.some((alias) => key.endsWith(alias)));
     return match ? [{ ...match, label }] : [];
   });
-  return featured.length > 0 ? featured.slice(0, 6) : all.slice(0, 6);
+  return featured;
 }
 
 function toolUsage(insights: Insights): ToolUsage[] {
@@ -73,18 +70,6 @@ function recordValue(value: unknown): Insights | undefined {
   if (!value || typeof value !== "object") return undefined;
   if (Array.isArray(value)) return undefined;
   return value as Insights;
-}
-
-function versionUsage(insights: Insights): VersionUsage[] {
-  const versions = recordValue(insights.summary)?.versions;
-  if (!Array.isArray(versions)) return [];
-  return versions.flatMap((item) => {
-    const value = recordValue(item);
-    if (!value) return [];
-    return typeof value.version === "string" && typeof value.number_of_active_installs === "number"
-      ? [{ version: value.version, activeInstalls: value.number_of_active_installs }]
-      : [];
-  });
 }
 
 function toolUsageFromArray(items: unknown[]): ToolUsage[] {
@@ -159,25 +144,6 @@ function ToolBars({ tools }: { tools: ToolUsage[] }) {
   );
 }
 
-function Versions({ versions }: { versions: VersionUsage[] }) {
-  const active = versions.filter(({ activeInstalls }) => activeInstalls > 0);
-  const maximum = Math.max(...active.map(({ activeInstalls }) => activeInstalls), 1);
-  return (
-    <section className="panel versions">
-      <div className="panel-heading"><h2>Active versions</h2><span>INSTALLS</span></div>
-      <div className="version-list">
-        {active.slice(0, 9).map(({ version, activeInstalls }) => (
-          <div className="version" key={version}>
-            <code>{version}</code>
-            <div className="track"><i style={{ width: `${(activeInstalls / maximum) * 100}%` }} /></div>
-            <strong>{activeInstalls.toLocaleString()}</strong>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function RecentSnapshot({ outcomes }: { outcomes: Outcome[] }) {
   const activity = recentActivity(outcomes);
   const stats = [
@@ -188,7 +154,7 @@ function RecentSnapshot({ outcomes }: { outcomes: Outcome[] }) {
   ];
   return (
     <section className="panel recent">
-      <div className="panel-heading"><h2>Recent activity</h2><span>LATEST 100 EVENTS</span></div>
+      <div className="panel-heading"><h2>Scope of your recent work</h2><span>LATEST 100 EVENTS</span></div>
       <div className="recent-grid">
         <div className="snapshot-stats">
           {stats.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
@@ -222,11 +188,8 @@ export function Dashboard({ data }: { data: DashboardData }) {
         <div className="status"><i /> API CONNECTED</div>
       </header>
       <MetricCards metrics={metrics} />
-      <section className="lower-grid">
-        <ToolBars tools={toolUsage(insights)} />
-        <Versions versions={versionUsage(insights)} />
-      </section>
       <RecentSnapshot outcomes={outcomes} />
+      <ToolBars tools={toolUsage(insights)} />
     </main>
   );
 }

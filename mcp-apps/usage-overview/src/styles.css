@@ -31,8 +31,8 @@ h2 { margin: 0; font-size: 14px; letter-spacing: -0.01em; }
 .metric-2 { --metric-color: var(--blue); }
 .metric-3 { --metric-color: var(--ice); }
 .metric-4 { --metric-color: var(--aqua); }
-.lower-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 10px; margin-top: 10px; }
 .panel { min-height: 190px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.tools { margin-top: 10px; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .panel-heading span { color: var(--muted); font: 700 9px/1 var(--font-mono, monospace); letter-spacing: 0.12em; }
 .tool-row { margin-top: 12px; }
@@ -41,10 +41,6 @@ h2 { margin: 0; font-size: 14px; letter-spacing: -0.01em; }
 .tool-row strong { font: 700 10px/1 var(--font-mono, monospace); }
 .track { height: 5px; overflow: hidden; border-radius: 9px; background: color-mix(in srgb, var(--line) 60%, transparent); }
 .track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--aqua), var(--blue)); }
-.version-list { display: grid; gap: 10px; }
-.version { display: grid; grid-template-columns: 58px 1fr 35px; align-items: center; gap: 8px; }
-.version code { width: max-content; padding: 3px 6px; border-radius: 4px; background: #fff; color: #0d1529; font-size: 9px; font-weight: 700; }
-.version strong { text-align: right; font: 700 10px/1 var(--font-mono, monospace); }
 .recent { min-height: auto; margin-top: 10px; }
 .recent-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 20px; }
 .snapshot-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -63,11 +59,6 @@ h3:not(:first-child) { margin-top: 14px; }
   main { padding: 14px; }
   header { display: block; }
   .status { width: max-content; margin-top: 14px; }
-  .lower-grid { grid-template-columns: 1fr; }
   .recent-grid { grid-template-columns: 1fr; }
   .snapshot-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
-@media (min-width: 900px) {
-  .metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
