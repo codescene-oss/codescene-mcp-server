@@ -1,4 +1,4 @@
-import { useApp } from "@modelcontextprotocol/ext-apps/react";
+import { useApp, useHostStyles } from "@modelcontextprotocol/ext-apps/react";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -204,6 +204,7 @@ export function App() {
       createdApp.onerror = console.error;
     },
   });
+  useHostStyles(app, app?.getHostContext());
 
   if (error) return <main className="state">Unable to connect: {error.message}</main>;
   if (!app) return <main className="state">Connecting to host...</main>;

@@ -4,8 +4,8 @@ import { cleanup, render, screen } from "@testing-library/react";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useApp } = vi.hoisted(() => ({ useApp: vi.fn() }));
-vi.mock("@modelcontextprotocol/ext-apps/react", () => ({ useApp }));
+const { useApp, useHostStyles } = vi.hoisted(() => ({ useApp: vi.fn(), useHostStyles: vi.fn() }));
+vi.mock("@modelcontextprotocol/ext-apps/react", () => ({ useApp, useHostStyles }));
 
 import { App, Dashboard, dashboardData, recentActivity } from "./main";
 
@@ -108,7 +108,7 @@ describe("app lifecycle", () => {
   it("registers handlers and displays the dashboard", () => {
     let toolResult: unknown;
     useApp.mockImplementation((options) => {
-      const app: Record<string, unknown> = {};
+      const app: Record<string, unknown> = { getHostContext: () => ({ theme: "dark" }) };
       options?.onAppCreated(app);
       toolResult = app.ontoolresult;
       return { app, error: null };
@@ -116,5 +116,6 @@ describe("app lifecycle", () => {
     render(<App />);
     expect(screen.getByText("Your AI coding safety net")).toBeTruthy();
     expect(toolResult).toBeTypeOf("function");
+    expect(useHostStyles).toHaveBeenCalledWith(expect.anything(), { theme: "dark" });
   });
 });
