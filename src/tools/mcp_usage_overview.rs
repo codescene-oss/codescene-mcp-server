@@ -8,7 +8,7 @@ use crate::CodeSceneServer;
 
 const ENDPOINT: &str = "v2/code-health/safeguards/mcp/insights/me";
 const OUTCOMES_ENDPOINT: &str =
-    "v2/code-health/safeguards/mcp/outcomes/me?page=1&page-size=100";
+    "v2/code-health/safeguards/mcp/outcomes/me?page=1&page-size=250";
 
 pub(crate) async fn handle(server: &CodeSceneServer) -> Result<CallToolResult, ErrorData> {
     let credential = match server.resolve_auth_credential().await {
@@ -84,7 +84,7 @@ fn markdown_fallback(payload: &Value) -> String {
         .unwrap_or_default();
     let recent = recent_summary(outcomes);
     let tools = markdown_count_table(&summary["most_used_tools"], "Tool");
-    let findings = markdown_pairs(&recent.categories, "Finding");
+    let findings = markdown_section(&recent.categories, "Common findings", "Finding");
     let environments = markdown_pairs(&recent.environments, "Environment");
     format!(
         "# MCP safeguard usage\n\n\
@@ -92,13 +92,13 @@ fn markdown_fallback(payload: &Value) -> String {
          | Metric | Value |\n| --- | ---: |\n\
          | Code Health uplifts | {} |\n\
          | Declines prevented | {} |\n\n\
-         ## Scope of your recent work (latest 100 events)\n\n\
+         ## Scope of your recent work (latest 250 events)\n\n\
          | Metric | Value |\n| --- | ---: |\n\
          | Files reviewed | {} |\n\
          | Average Code Health | {} |\n\
          | Perfect scores | {} |\n\
          | Gate pass rate | {} |\n\n\
-         ### Common findings\n\n{findings}\n\n\
+         {findings}\
          ### Environments\n\n{environments}\n\n\
          ## Most-used tools\n\n{tools}",
         number(summary, "number_of_uplifts"),
@@ -207,6 +207,18 @@ fn markdown_pairs(values: &std::collections::BTreeMap<String, usize>, heading: &
         .collect::<Vec<_>>()
         .join("\n");
     format!("| {heading} | Count |\n| --- | ---: |\n{rows}")
+}
+
+fn markdown_section(
+    values: &std::collections::BTreeMap<String, usize>,
+    title: &str,
+    heading: &str,
+) -> String {
+    if values.is_empty() {
+        String::new()
+    } else {
+        format!("### {title}\n\n{}\n\n", markdown_pairs(values, heading))
+    }
 }
 
 #[cfg(test)]

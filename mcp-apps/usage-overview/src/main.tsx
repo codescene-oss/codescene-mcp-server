@@ -189,7 +189,7 @@ function RecentSnapshot({ outcomes }: { outcomes: Outcome[] }) {
   ];
   return (
     <section className="panel recent">
-      <div className="panel-heading"><h2>Scope of your recent work</h2><span>LATEST 100 EVENTS</span></div>
+      <div className="panel-heading"><h2>Scope of your recent work</h2><span>LATEST 250 EVENTS</span></div>
       <div className="recent-grid">
         <div className="snapshot-stats">
           {stats.slice(0, 1).map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
@@ -200,10 +200,12 @@ function RecentSnapshot({ outcomes }: { outcomes: Outcome[] }) {
           {stats.slice(1).map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
         </div>
         <div className="signal-list">
-          <h3>Common findings</h3>
-          <div className="chips">
-            {activity.categories.slice(0, 5).map(({ name, count }) => <span key={name}>{name} <b>{count}</b></span>)}
-          </div>
+          {activity.categories.length > 0 && <>
+            <h3>Common findings</h3>
+            <div className="chips">
+              {activity.categories.slice(0, 5).map(({ name, count }) => <span key={name}>{name} <b>{count}</b></span>)}
+            </div>
+          </>}
           <h3>Environments</h3>
           <div className="chips">
             {activity.environments.map(({ name, count }) => <span key={name}>{name} <b>{count}</b></span>)}

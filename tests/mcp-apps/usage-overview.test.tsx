@@ -105,6 +105,7 @@ describe("dashboard", () => {
   it("renders empty tool and activity states", () => {
     render(<Dashboard data={{ insights: {}, outcomes: [] }} />);
     expect(screen.getByText("No tool breakdown reported.")).toBeTruthy();
+    expect(screen.queryByText("Common findings")).toBeNull();
     expect(screen.getAllByText("-")).toHaveLength(3);
   });
 });
