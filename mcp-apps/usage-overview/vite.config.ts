@@ -13,13 +13,4 @@ export default defineConfig({
       input: "mcp-usage-overview.html",
     },
   },
-  test: {
-    environment: "jsdom",
-    coverage: {
-      provider: "v8",
-      reporter: ["text", "cobertura"],
-      reportsDirectory: "coverage",
-      include: ["src/main.tsx"],
-    },
-  },
 });

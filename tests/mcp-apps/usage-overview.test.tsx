@@ -1,5 +1,3 @@
-/* istanbul ignore file -- test code */
-/* v8 ignore file */
 import { cleanup, render, screen } from "@testing-library/react";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { useApp, useHostStyles } = vi.hoisted(() => ({ useApp: vi.fn(), useHostStyles: vi.fn() }));
 vi.mock("@modelcontextprotocol/ext-apps/react", () => ({ useApp, useHostStyles }));
 
-import { App, Dashboard, dashboardData, recentActivity } from "./main";
+import { App, Dashboard, dashboardData, recentActivity } from "../../mcp-apps/usage-overview/src/main";
 
 afterEach(cleanup);
 

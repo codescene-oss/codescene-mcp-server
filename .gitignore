@@ -8,5 +8,7 @@ npm/.cache/
 target/
 mcp-apps/usage-overview/node_modules/
 mcp-apps/usage-overview/coverage/
+mcp-apps/usage-overview/.cache/
 mcp-apps/chart/node_modules/
 mcp-apps/chart/coverage/
+node_modules/

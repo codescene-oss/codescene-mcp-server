@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit && vite build",
-    "test:ci": "vitest run --coverage"
+    "test:ci": "vitest run --config ../../tests/mcp-apps/vitest.config.ts --coverage"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "^1.7.0",
