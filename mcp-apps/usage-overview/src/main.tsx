@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 type Insights = Record<string, unknown>;
-type Metric = { key: string; label: string; value: number };
+type Metric = { key: string; label: string; value: number; description?: string };
 type ToolUsage = { name: string; count: number };
 type Outcome = {
   timestamp?: string;
@@ -21,6 +21,7 @@ type RecentActivity = {
   events: number;
   files: number;
   averageScore?: number;
+  scoreTrend?: "improving" | "declining" | "stable";
   perfectScorePercent?: number;
   gatePassPercent?: number;
   categories: ToolUsage[];
@@ -31,8 +32,16 @@ type DashboardData = { insights: Insights; outcomes: Outcome[] };
 const emptyInsights: Insights = {};
 const nonMetricKeys = new Set(["user_identity", "number_of_installations"]);
 const metricAliases = [
-  { label: "Code Health uplifts", keys: ["number_of_uplifts"] },
-  { label: "Declines prevented", keys: ["number_of_degradations_prevented"] },
+  {
+    label: "Code Health uplifts",
+    keys: ["number_of_uplifts"],
+    description: "Each uplift is a higher Code Health score than the preceding analysis of the same file.",
+  },
+  {
+    label: "Declines prevented",
+    keys: ["number_of_degradations_prevented"],
+    description: "Counts files whose first two recorded scores declined, plus safeguard runs that reported one or more degraded files.",
+  },
 ];
 
 function displayLabel(key: string): string {
@@ -52,9 +61,9 @@ function numericEntries(value: unknown, prefix = ""): Metric[] {
 
 function featuredMetrics(insights: Insights): Metric[] {
   const all = numericEntries(insights);
-  const featured = metricAliases.flatMap(({ label, keys }) => {
+  const featured = metricAliases.flatMap(({ label, keys, description }) => {
     const match = all.find(({ key }) => keys.some((alias) => key.endsWith(alias)));
-    return match ? [{ ...match, label }] : [];
+    return match ? [{ ...match, label, description }] : [];
   });
   return featured;
 }
@@ -99,6 +108,22 @@ function countedValues(values: string[]): ToolUsage[] {
   return [...counts].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 }
 
+function averageScore(outcomes: Outcome[]): number {
+  return outcomes.reduce((total, outcome) => total + (outcome.score ?? 0), 0) / outcomes.length;
+}
+
+function scoreTrend(outcomes: Outcome[]): RecentActivity["scoreTrend"] {
+  const chronological = outcomes
+    .filter(({ score, timestamp }) => typeof score === "number" && timestamp && !Number.isNaN(Date.parse(timestamp)))
+    .sort((left, right) => Date.parse(left.timestamp!) - Date.parse(right.timestamp!));
+  if (chronological.length < 2) return undefined;
+  const midpoint = Math.floor(chronological.length / 2);
+  const change = averageScore(chronological.slice(midpoint)) - averageScore(chronological.slice(0, midpoint));
+  if (change > 0) return "improving";
+  if (change < 0) return "declining";
+  return "stable";
+}
+
 export function recentActivity(outcomes: Outcome[]): RecentActivity {
   const scored = outcomes.filter((outcome) => typeof outcome.score === "number");
   const gates = outcomes.flatMap((outcome) => outcome.event_properties?.quality_gates ?? []);
@@ -108,6 +133,7 @@ export function recentActivity(outcomes: Outcome[]): RecentActivity {
     events: outcomes.length,
     files: files.size,
     averageScore: scored.length ? scoreTotal / scored.length : undefined,
+    scoreTrend: scoreTrend(scored),
     perfectScorePercent: scored.length ? scored.filter(({ score }) => score === 10).length / scored.length * 100 : undefined,
     gatePassPercent: gates.length ? gates.filter((gate) => gate === "passed").length / gates.length * 100 : undefined,
     categories: countedValues(outcomes.flatMap(({ categories }) => categories ?? [])),
@@ -115,12 +141,22 @@ export function recentActivity(outcomes: Outcome[]): RecentActivity {
   };
 }
 
+function TrendIndicator({ trend }: { trend: RecentActivity["scoreTrend"] }) {
+  if (!trend) return null;
+  return (
+    <span className={`score-trend score-trend-${trend}`} aria-label={`Average Code Health is ${trend}`} title={`Compared with the older half of recent scored events: ${trend}`}>{trend}</span>
+  );
+}
+
 function MetricCards({ metrics }: { metrics: Metric[] }) {
   return (
     <section className="metrics">
-      {metrics.map(({ key, label, value }, index) => (
+      {metrics.map(({ key, label, value, description }, index) => (
         <article className={`metric metric-${index + 1}`} key={key}>
-          <span>{label}</span>
+          <div className="metric-label">
+            <span>{label}</span>
+            {description && <button className="info" type="button" aria-label={`About ${label}`} data-tooltip={description}>i</button>}
+          </div>
           <strong>{value.toLocaleString()}</strong>
         </article>
       ))}
@@ -148,7 +184,6 @@ function RecentSnapshot({ outcomes }: { outcomes: Outcome[] }) {
   const activity = recentActivity(outcomes);
   const stats = [
     ["Files reviewed", activity.files.toLocaleString()],
-    ["Average Code Health", activity.averageScore?.toFixed(2) ?? "-"],
     ["Perfect scores", activity.perfectScorePercent === undefined ? "-" : `${activity.perfectScorePercent.toFixed(0)}%`],
     ["Gate pass rate", activity.gatePassPercent === undefined ? "-" : `${activity.gatePassPercent.toFixed(0)}%`],
   ];
@@ -157,7 +192,12 @@ function RecentSnapshot({ outcomes }: { outcomes: Outcome[] }) {
       <div className="panel-heading"><h2>Scope of your recent work</h2><span>LATEST 100 EVENTS</span></div>
       <div className="recent-grid">
         <div className="snapshot-stats">
-          {stats.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
+          {stats.slice(0, 1).map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
+          <div>
+            <span>Average Code Health</span>
+            <div className="score-value"><strong>{activity.averageScore?.toFixed(2) ?? "-"}</strong><TrendIndicator trend={activity.scoreTrend} /></div>
+          </div>
+          {stats.slice(1).map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
         </div>
         <div className="signal-list">
           <h3>Common findings</h3>
@@ -185,7 +225,7 @@ export function Dashboard({ data }: { data: DashboardData }) {
           <h1>Your AI coding safety net</h1>
           <p className="subtitle">Current usage insights for you</p>
         </div>
-        <div className="status"><i /> API CONNECTED</div>
+        <div className="status status-connected"><i /> API CONNECTED</div>
       </header>
       <MetricCards metrics={metrics} />
       <RecentSnapshot outcomes={outcomes} />
@@ -206,7 +246,7 @@ export function App() {
   });
   useHostStyles(app, app?.getHostContext());
 
-  if (error) return <main className="state">Unable to connect: {error.message}</main>;
+  if (error) return <main className="state state-error"><div className="status status-error"><i /> API ERROR</div><p>Unable to connect: {error.message}</p></main>;
   if (!app) return <main className="state">Connecting to host...</main>;
   return <Dashboard data={data} />;
 }

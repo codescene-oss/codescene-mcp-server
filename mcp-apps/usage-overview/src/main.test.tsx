@@ -31,11 +31,13 @@ const insights = {
 
 const outcomes = [
   {
+    timestamp: "2026-08-02T10:00:00Z",
     score: 10,
     categories: ["Complex Method"],
     event_properties: { file_hash: "one", environment: "binary", quality_gates: "passed" },
   },
   {
+    timestamp: "2026-08-01T10:00:00Z",
     score: 8,
     categories: ["Complex Method", "Large Method"],
     event_properties: { file_hash: "two", environment: "cs-agent", quality_gates: "failed" },
@@ -60,6 +62,7 @@ describe("usage data", () => {
       events: 2,
       files: 2,
       averageScore: 9,
+      scoreTrend: "improving",
       perfectScorePercent: 50,
       gatePassPercent: 50,
       categories: [
@@ -68,6 +71,14 @@ describe("usage data", () => {
       ],
     });
     expect(recentActivity([])).toMatchObject({ files: 0 });
+    expect(recentActivity([
+      { timestamp: "2026-08-01T10:00:00Z", score: 9 },
+      { timestamp: "2026-08-02T10:00:00Z", score: 7 },
+    ])).toMatchObject({ scoreTrend: "declining" });
+    expect(recentActivity([
+      { timestamp: "2026-08-01T10:00:00Z", score: 8 },
+      { timestamp: "2026-08-02T10:00:00Z", score: 8 },
+    ])).toMatchObject({ scoreTrend: "stable" });
   });
 });
 
@@ -79,7 +90,14 @@ describe("dashboard", () => {
     expect(screen.getByText("code-health-score")).toBeTruthy();
     expect(screen.getByText("Scope of your recent work")).toBeTruthy();
     expect(screen.getByText("Average Code Health")).toBeTruthy();
+    expect(screen.getByLabelText("Average Code Health is improving")).toBeTruthy();
     expect(screen.getByText("Complex Method")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "About Code Health uplifts" }).getAttribute("data-tooltip")).toBe(
+      "Each uplift is a higher Code Health score than the preceding analysis of the same file.",
+    );
+    expect(screen.getByRole("button", { name: "About Declines prevented" }).getAttribute("data-tooltip")).toBe(
+      "Counts files whose first two recorded scores declined, plus safeguard runs that reported one or more degraded files.",
+    );
     expect(screen.queryByText("Safeguard checks")).toBeNull();
     expect(screen.queryByText("Active installations")).toBeNull();
     expect(screen.queryByText("Active versions")).toBeNull();
@@ -103,6 +121,7 @@ describe("app lifecycle", () => {
     useApp.mockReturnValueOnce({ app: null, error: new Error("broken") });
     rerender(<App />);
     expect(screen.getByText("Unable to connect: broken")).toBeTruthy();
+    expect(screen.getByText("API ERROR")).toBeTruthy();
   });
 
   it("registers handlers and displays the dashboard", () => {
