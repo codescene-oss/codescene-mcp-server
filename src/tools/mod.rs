@@ -20,6 +20,7 @@ pub mod list_technical_debt_hotspots_for_project;
 pub mod list_technical_debt_hotspots_for_project_file;
 pub mod login;
 pub mod logout;
+pub mod mcp_usage_overview;
 pub mod pre_commit_code_health_safeguard;
 pub mod switch_account;
 pub mod rules_config;

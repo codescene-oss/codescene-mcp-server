@@ -71,12 +71,20 @@ pub fn test_list_resources() {
         .as_array()
         .expect("resources should be an array");
 
+    let skill_resources: Vec<_> = resources
+        .iter()
+        .filter(|resource| {
+            resource["uri"]
+                .as_str()
+                .is_some_and(|uri| uri.starts_with("skill://"))
+        })
+        .collect();
     let expected_count = EXPECTED_SKILL_NAMES.len() * 2;
     assert_eq!(
-        resources.len(),
+        skill_resources.len(),
         expected_count,
-        "Expected {expected_count} resources, got {}",
-        resources.len()
+        "Expected {expected_count} skill resources, got {}",
+        skill_resources.len()
     );
 
     let uris: Vec<&str> = resources.iter().filter_map(|r| r["uri"].as_str()).collect();
@@ -91,6 +99,10 @@ pub fn test_list_resources() {
             "Missing {manifest_uri}"
         );
     }
+    assert!(
+        uris.contains(&"ui://codescene/mcp-usage-overview"),
+        "Missing MCP usage app resource"
+    );
 
     // Verify SKILL.md metadata (mimeType, description)
     let sample = resources

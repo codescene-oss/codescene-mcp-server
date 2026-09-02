@@ -1,7 +1,7 @@
 # Tools
 
-The CodeScene MCP Server provides 25 tools organized into four categories:
-**Code Health Analysis**, **Code Health Rules Configuration**, **Technical Debt & Project Insights**, and **Server Management**.
+The CodeScene MCP Server tools are organized into five categories:
+**Code Health Analysis**, **Code Health Rules Configuration**, **Technical Debt & Project Insights**, **MCP Usage & Impact**, and **Server Management**.
 
 Tools marked **All Users** work with any valid license (standalone or API-connected).
 Tools marked **CodeScene Core users (cloud or on-prem)** require a CodeScene API Personal Access Token and a CodeScene Core users (cloud or on-prem) instance — they are not available when running with a standalone license.
@@ -112,6 +112,20 @@ List the technical debt goals for a specific file in a project. Use when you nee
 
 Find the owner or owners of a specific path in a project. Use to identify likely reviewers or domain experts for code reviews and technical questions about a file or directory. Returns a list of owners with their key areas and links to the CodeScene System Map page.
 
+## MCP Usage & Impact
+
+This tool connects to the CodeScene API to summarize the authenticated user's MCP safeguard activity. It does not require a project to be selected.
+
+### `show_mcp_usage_overview`
+
+**Availability:** CodeScene Core users (cloud or on-prem)
+
+Display an overview of your CodeScene MCP usage and its impact on Code Health. Use when you want to review safeguard activity, Code Health uplifts, prevented degradations, or the scope and quality of recent MCP-assisted work.
+
+The overview combines lifetime impact metrics with details derived from the latest 250 MCP events: unique files reviewed, average Code Health, perfect-score percentage, quality-gate pass rate, common findings, environments, and most-used tools. Clients that support MCP Apps render an interactive dashboard; other clients receive the same key metrics as Markdown. Per-event user identities are removed from the tool response.
+
+The tool requires authenticated CodeScene API access and is unavailable with a standalone license. On-prem availability depends on the CodeScene version supporting the MCP safeguard insights and outcomes endpoints.
+
 ## Server Management
 
 These tools manage authentication, server configuration, installation verification, and skills.
@@ -216,6 +230,7 @@ In VS Code Copilot Chat, invoke them from the slash-command / prompt picker (`mc
 | `list_technical_debt_goals_for_project` | CodeScene Core users (cloud or on-prem) |
 | `list_technical_debt_goals_for_project_file` | CodeScene Core users (cloud or on-prem) |
 | `code_ownership_for_path` | CodeScene Core users (cloud or on-prem) |
+| `show_mcp_usage_overview` | CodeScene Core users (cloud or on-prem) |
 | `get_config` | All Users |
 | `set_config` | All Users |
 | `verify_installation` | All Users |

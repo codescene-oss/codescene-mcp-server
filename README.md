@@ -170,6 +170,9 @@ The Code Health tools solve this by giving AI assistants precise insight into de
 ### Understand Existing Code Before Acting
 Use Code Health reviews to inform AI-driven summaries, diagnostics, or code transformations based on **real-world cognitive and design challenges**, not just syntax.
 
+### Review MCP Safeguard Impact
+Ask your AI assistant to show your MCP usage overview to see Code Health uplifts, prevented degradations, and the scope and quality of your latest 250 MCP events. Supported clients display an interactive dashboard; other clients receive a Markdown summary. This API-connected feature requires a CodeScene Core account and is not available with a standalone license. See [`show_mcp_usage_overview`](docs/tools.md#show_mcp_usage_overview) for details.
+
 ## Frequently Asked Questions
 
 <details>
