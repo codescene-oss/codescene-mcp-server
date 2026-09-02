@@ -1246,6 +1246,61 @@ mod tests {
             .collect()
     }
 
+    const READ_ONLY_TOOLS: &[&str] = &[
+        "show_mcp_usage_overview",
+        "explain_code_health",
+        "explain_code_health_productivity",
+        "code_health_review",
+        "code_health_score",
+        "code_health_refactoring_business_case",
+        "rules_config_validate",
+        "rules_config_list_thresholds",
+        "select_project",
+        "list_technical_debt_goals_for_project",
+        "list_technical_debt_goals_for_project_file",
+        "list_technical_debt_hotspots_for_project",
+        "list_technical_debt_hotspots_for_project_file",
+        "code_ownership_for_path",
+        "get_config",
+        "list_skills",
+        "get_skill_manifest",
+        "verify_installation",
+    ];
+
+    const MUTATING_TOOLS: &[&str] = &[
+        "pre_commit_code_health_safeguard",
+        "analyze_change_set",
+        "rules_config_set_rule",
+        "rules_config_set_threshold",
+        "set_config",
+        "login",
+        "logout",
+        "switch_account",
+        "download_skill",
+        "sync_skills",
+    ];
+
+    #[test]
+    fn every_tool_declares_its_read_only_behavior() {
+        let router = CodeSceneServer::tool_router();
+        let tools = router.list_all();
+
+        assert_eq!(tools.len(), READ_ONLY_TOOLS.len() + MUTATING_TOOLS.len());
+        for (names, expected) in [(READ_ONLY_TOOLS, true), (MUTATING_TOOLS, false)] {
+            for name in names {
+                let tool = tools
+                    .iter()
+                    .find(|tool| tool.name == *name)
+                    .unwrap_or_else(|| panic!("missing tool {name}"));
+                let read_only = tool
+                    .annotations
+                    .as_ref()
+                    .and_then(|annotations| annotations.read_only_hint);
+                assert_eq!(read_only, Some(expected), "wrong readOnlyHint for {name}");
+            }
+        }
+    }
+
     fn make_server_with_enabled_tools(is_standalone: bool, enabled_tools: &str) -> CodeSceneServer {
         let mut values = HashMap::new();
         values.insert("enabled_tools".to_string(), enabled_tools.to_string());

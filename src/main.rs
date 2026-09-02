@@ -341,6 +341,7 @@ impl CodeSceneServer {
         name = "show_mcp_usage_overview",
         title = "Show MCP Usage Overview",
         description = "Display an overview of the authenticated user's CodeScene MCP safeguard usage.\n\nWhen to use:\n    Use this tool when a user asks about their MCP usage, safeguard activity,\n    prevented Code Health degradations, or development impact.\n\nLimitations:\n    - Requires authenticated CodeScene API access.\n    - Not available with a standalone license.\n    - Lifetime metrics come from aggregated safeguard insights.\n    - Recent work metrics cover only the latest 250 MCP events.\n    - Availability on-prem depends on the CodeScene version supporting the\n      MCP safeguard insights and outcomes endpoints.\n\nReturns:\n    A usage overview with Code Health uplifts, prevented degradations, the\n    scope of recent work, and most-used tools. The result includes an MCP Apps\n    dashboard and a Markdown representation of the same data.\n\nOn failure:\n    If this tool returns an authentication, connectivity, or API error, run\n    verify_installation and report the failing checks and how to fix them.\n\nExample:\n    Call this tool when the user asks, \"Show me my CodeScene MCP usage.\"",
+        annotations(read_only_hint = true),
         meta = mcp_usage_app_meta()
     )]
     async fn show_mcp_usage_overview(&self) -> Result<CallToolResult, ErrorData> {
@@ -372,7 +373,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Explains CodeScene's Code Health metric for assessing code quality and maintainability for both human devs and AI.\n\nWhen to use:\n    Use this tool when a user asks what Code Health means, how scores are\n    interpreted, or why Code Health matters in day-to-day development.\n\nLimitations:\n    - Returns static documentation text from this MCP server package.\n    - Does not analyze a specific repository or file.\n\nReturns:\n    Markdown content explaining the Code Health model and core concepts.\n\nExample:\n    Call this tool, then summarize the returned Markdown into a short\n    explanation tailored to the user's current question.",
-        input_schema = inlined_schema_for::<OptionalContext>()
+        input_schema = inlined_schema_for::<OptionalContext>(),
+        annotations(read_only_hint = true)
     )]
     async fn explain_code_health(
         &self,
@@ -383,7 +385,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Describes how to build a business case for Code Health improvements.\nCovers empirical data on how healthy code lets you ship faster with\nfewer defects.\n\nWhen to use:\n    Use this tool when a user asks for ROI, productivity impact, or\n    management-facing framing for refactoring investments.\n\nLimitations:\n    - Returns static documentation text from this MCP server package.\n    - Does not compute project-specific forecasts.\n\nReturns:\n    Markdown content describing productivity and defect-risk implications\n    of improving Code Health.\n\nExample:\n    Call this tool and extract 2-3 evidence-based points to support a\n    proposal for incremental refactoring.",
-        input_schema = inlined_schema_for::<OptionalContext>()
+        input_schema = inlined_schema_for::<OptionalContext>(),
+        annotations(read_only_hint = true)
     )]
     async fn explain_code_health_productivity(
         &self,
@@ -394,7 +397,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Review the Code Health of a single source file and return a detailed\nCLI review output that includes the score and code smell findings.\n\nWhen to use:\n    Use this tool when you need actionable maintainability diagnostics\n    for one file (not just the score).\n\nLimitations:\n    - Analyzes one file at a time.\n    - Requires a supported source file.\n    - Returns CLI review text, not a normalized JSON schema.\n\nReturns:\n    A review string from the CodeScene CLI. The output typically\n    includes a Code Health score and code smell details to explain\n    why the score is high or low.\n\n    The Code Health scores are interpreted as:\n      * Optimal Code: a Code Health 10.0 is optimized for both human and AI comprehension\n      * Green Code: high quality with a score of 9.0-9.9\n      * Yellow Code: problematic technical debt with a score of 4.0-8.9\n      * Red Code: severe technical debt, maintainability issues, and expensive onboarding with a score of 1.0-3.9\n\nOn failure:\n    If this tool returns an error (e.g., the CLI cannot run, or Code Health\n    cannot be computed), run the verify_installation tool to diagnose the\n    cause, then report the failing checks and how to fix them.\n\nExample:\n    Call with file_path=\"/repo/src/app.py\" and summarize the returned\n    smells into prioritized refactoring actions.",
-        input_schema = inlined_schema_for::<FilePathParam>()
+        input_schema = inlined_schema_for::<FilePathParam>(),
+        annotations(read_only_hint = true)
     )]
     async fn code_health_review(
         &self,
@@ -405,7 +409,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Calculate the Code Health score for a single source file.\nThe tool returns one numeric score from 10.0 (optimal) to 1.0 (worst).\n\nWhen to use:\n    Use this tool for quick triage, ranking files by maintainability,\n    or checking whether a refactoring improved file-level quality.\n\nLimitations:\n    - Analyzes one file at a time.\n    - Returns only the score summary, not the full smell breakdown.\n    - Requires a supported source file.\n\nReturns:\n    A string in the format \"Code Health score: <score>\".\n\n    The Code Health scores are interpreted as:\n      * Optimal Code: Code Health 10.0 optimized for human and AI comprehension\n      * Green Code: high quality with a score of 9.0-9.9\n      * Yellow Code: problematic technical debt with a score of 4.0-8.9\n      * Red Code: severe technical debt with a score of 1.0-3.9\n\nOn failure:\n    If this tool returns an error (e.g., the CLI cannot run, or the score\n    cannot be computed), run the verify_installation tool to diagnose the\n    cause, then report the failing checks and how to fix them.\n\nExample:\n    Call with file_path=\"/repo/src/module.py\" and compare the score\n    before and after a refactoring.",
-        input_schema = inlined_schema_for::<FilePathParam>()
+        input_schema = inlined_schema_for::<FilePathParam>(),
+        annotations(read_only_hint = true)
     )]
     async fn code_health_score(
         &self,
@@ -416,7 +421,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Review all modified and staged files in a repository and report\nCode Health degradations before commit.\n\nWhen to use:\n    Use this tool as a pre-commit safeguard on local changes to catch\n    regressions and code smells before creating a commit.\n\nLimitations:\n    - Requires a valid git repository path.\n    - Evaluates current local modifications/staged changes only.\n    - Output is JSON text from the CLI command.\n\nReturns:\n    A JSON object containing:\n      - quality_gates: the central outcome, summarizing whether the commit passes or fails Code Health thresholds for the checked files.\n      - metadata: scope and coverage details from the CLI, including `status` plus file counts such as `checked-file-count`. Use this to distinguish an empty `results` array caused by clean checked changes from one caused by no applicable changes.\n      - results: an array of objects for each file with:\n          - name: the name of the file whose Code Health is impacted (positively or negatively).\n          - verdict: `improved`, `degraded`, `stable`, or `unknown`.\n          - findings: an array describing improvements/degradation for each code smell.\n\nOn failure:\n    If this tool returns an error (e.g., the CLI cannot run, or the git\n    repository cannot be analyzed), run the verify_installation tool to\n    diagnose the cause, then report the failing checks and how to fix them.\n\nExample:\n    Run on git_repository_path=\"/repo\" and block commit preparation if\n    any quality gate fails.",
-        input_schema = inlined_schema_for::<GitRepoParam>()
+        input_schema = inlined_schema_for::<GitRepoParam>(),
+        annotations(read_only_hint = false)
     )]
     async fn pre_commit_code_health_safeguard(
         &self,
@@ -427,7 +433,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Run a branch-level Code Health review for all files that differ between\ncurrent HEAD and base_ref.\n\nWhen to use:\n    Use this as a local PR pre-flight check before opening a pull\n    request, so regressions are caught across the full change set.\n\nLimitations:\n    - Requires a valid git repository path.\n    - base_ref must exist and be resolvable by git in that repository.\n    - Reviews only files that differ from base_ref.\n    - Output is JSON text from the CLI command.\n\nThe result can be used to decide whether to refactor before creating\nor updating a pull request.\n\nReturns:\n    A JSON object containing:\n      - quality_gates: the central outcome, summarizing whether the change\n        set passes or fails Code Health thresholds (\"passed\" or \"failed\").\n      - metadata: scope and coverage details from the CLI, including `status` plus file counts such as `checked-file-count`. Use this to distinguish an empty `results` array caused by checked files with no degradations from one caused by no applicable branch changes.\n      - results: an array of objects for each affected file with:\n          - name: the name of the file whose Code Health is impacted.\n          - verdict: \"improved\", \"degraded\", \"stable\", or \"unknown\".\n          - findings: an array describing improvements/degradation for each code smell.\n\nOn failure:\n    If this tool returns an error (e.g., the CLI cannot run, or base_ref\n    cannot be resolved by git), run the verify_installation tool to\n    diagnose the cause, then report the failing checks and how to fix them.\n\nExample:\n    Compare against base_ref=\"main\" for git_repository_path=\"/repo\" and\n    fail the local PR check if any file verdict is \"degraded\".",
-        input_schema = inlined_schema_for::<ChangeSetParam>()
+        input_schema = inlined_schema_for::<ChangeSetParam>(),
+        annotations(read_only_hint = false)
     )]
     async fn analyze_change_set(
         &self,
@@ -438,7 +445,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Generate a data-driven business case for refactoring a source file.\n\nWhen to use:\n    Use this tool to justify refactoring investment with quantified\n    predictions tied to the file's current Code Health.\n\nLimitations:\n    - Estimates are model-based projections, not guarantees.\n    - Evaluates one file at a time.\n    - Requires an analyzable source file.\n\nReturns:\n    A JSON object with:\n        - scenario: Recommended target Code Health level.\n        - optimistic_outcome: Upper bound estimate for improvements\n          in development speed and defect reduction.\n        - pessimistic_outcome: Lower bound estimate for improvements.\n        - confidence_interval: The optimistic to pessimistic range,\n          representing a 90% confidence interval for the expected impact.\n\nOn failure:\n    If this tool returns an error (e.g., the CLI cannot run, or the file\n    cannot be analyzed), run the verify_installation tool to diagnose the\n    cause, then report the failing checks and how to fix them.\n\nExample:\n    Call with file_path=\"/repo/src/service.py\" and use the optimistic\n    and pessimistic outcomes to frame a refactoring proposal.",
-        input_schema = inlined_schema_for::<FilePathParam>()
+        input_schema = inlined_schema_for::<FilePathParam>(),
+        annotations(read_only_hint = true)
     )]
     async fn code_health_refactoring_business_case(
         &self,
@@ -449,7 +457,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Validate a Code Health rules configuration file (code-health-rules.json).\nThis is the file that customizes CodeScene's Code Health analysis by\nadjusting rule weights and thresholds.\n\nWhen to use:\n    Use this tool after creating or editing a Code Health rules file to\n    confirm it is well-formed before relying on it for analysis.\n\nLimitations:\n    - Local, filesystem-only operation. No CodeScene API or access token\n      is required.\n    - config_path, when provided, must be an absolute path.\n    - Without config_path, the CLI looks for\n      .codescene/code-health-rules.json in the current git repository.\n\nReturns:\n    A JSON object with:\n        - status: \"ok\" when the configuration is valid.\n        - summary: A human-readable count of rule sets, rule overrides,\n          and threshold overrides.\n\nOn failure:\n    If the file is missing or malformed, the error message describes the\n    problem and a suggested remedy. Fix the file (or supply a valid\n    config_path) and validate again.\n\nExample:\n    Call with config_path=\"/repo/.codescene/code-health-rules.json\" and\n    report whether the Code Health rules configuration is valid.",
-        input_schema = inlined_schema_for::<RulesConfigValidateParam>()
+        input_schema = inlined_schema_for::<RulesConfigValidateParam>(),
+        annotations(read_only_hint = true)
     )]
     async fn rules_config_validate(
         &self,
@@ -460,7 +469,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "List the default Code Health thresholds for a programming language.\nThresholds define what Code Health issues such as \"Complex Method\" or\n\"Large Method\" mean for a given language, and are the values you can\noverride in a code-health-rules.json file.\n\nWhen to use:\n    Use this tool to discover the built-in threshold names and default\n    values for a language before overriding any of them with\n    rules_config_set_threshold.\n\nLimitations:\n    - Local, filesystem-only operation. No CodeScene API or access token\n      is required.\n    - Requires a supported language name (e.g., Python, JavaScript, Java,\n      C#).\n    - config_path, when provided, must be an absolute path; the returned\n      values then reflect that file's overrides. Without it, built-in\n      defaults are shown.\n\nReturns:\n    A JSON object keyed by rule-set name, each containing a `thresholds`\n    array of `{ name, value }` entries.\n\nOn failure:\n    If the language is not supported, the error message lists supported\n    languages. Retry with a valid language name.\n\nExample:\n    Call with language=\"Python\" and present the threshold names and\n    values the user can customize.",
-        input_schema = inlined_schema_for::<RulesConfigListThresholdsParam>()
+        input_schema = inlined_schema_for::<RulesConfigListThresholdsParam>(),
+        annotations(read_only_hint = true)
     )]
     async fn rules_config_list_thresholds(
         &self,
@@ -471,7 +481,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Enable or disable a Code Health rule in a code-health-rules.json file.\nDisabling a rule removes its impact from CodeScene's Code Health score;\nenabling it restores the default behavior.\n\nWhen to use:\n    Use this tool to turn a specific Code Health rule (e.g., \"Complex\n    Method\") on or off for a repository. This edits the rules file on\n    disk.\n\nLimitations:\n    - Local, filesystem-only operation that WRITES to the rules file. No\n      CodeScene API or access token is required.\n    - rule_name must be a supported Code Health rule name.\n    - config_path, when provided, must be an absolute path. Without it,\n      the CLI edits .codescene/code-health-rules.json in the current git\n      repository.\n    - matching_content_path is required only when the file defines\n      multiple rule sets; it selects which one to edit.\n\nReturns:\n    A confirmation message naming the rule, its new enabled/disabled\n    state, and the rule set that was edited.\n\nOn failure:\n    If the rule name is unknown the error suggests valid names; if\n    multiple rule sets exist without a selector the error lists the\n    available selectors. Retry with the corrected input.\n\nExample:\n    Call with rule_name=\"Complex Method\" and enabled=false to disable the\n    Complex Method rule, then confirm the change to the user.",
-        input_schema = inlined_schema_for::<RulesConfigSetRuleParam>()
+        input_schema = inlined_schema_for::<RulesConfigSetRuleParam>(),
+        annotations(read_only_hint = false)
     )]
     async fn rules_config_set_rule(
         &self,
@@ -482,7 +493,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Set a Code Health threshold value in a code-health-rules.json file.\nThresholds tune the sensitivity of Code Health issues (for example, the\nnumber of lines at which a function is flagged as a \"Large Method\").\n\nWhen to use:\n    Use this tool to override a specific Code Health threshold for a\n    repository. This edits the rules file on disk. Use\n    rules_config_list_thresholds first to find valid threshold names.\n\nLimitations:\n    - Local, filesystem-only operation that WRITES to the rules file. No\n      CodeScene API or access token is required.\n    - threshold_name must be a supported Code Health threshold name.\n    - value must be a positive integer.\n    - config_path, when provided, must be an absolute path. Without it,\n      the CLI edits .codescene/code-health-rules.json in the current git\n      repository.\n    - matching_content_path is required only when the file defines\n      multiple rule sets; it selects which one to edit.\n\nReturns:\n    A confirmation message naming the threshold, its new value, and the\n    rule set that was edited.\n\nOn failure:\n    If the threshold name is unknown or the value is not a positive\n    integer, the error message explains the problem. Retry with corrected\n    input.\n\nExample:\n    Call with threshold_name=\"function_lines_of_code_warning\" and\n    value=120 to raise the Large Method warning threshold, then confirm\n    the change.",
-        input_schema = inlined_schema_for::<RulesConfigSetThresholdParam>()
+        input_schema = inlined_schema_for::<RulesConfigSetThresholdParam>(),
+        annotations(read_only_hint = false)
     )]
     async fn rules_config_set_threshold(
         &self,
@@ -492,7 +504,8 @@ impl CodeSceneServer {
     }
 
     #[tool(
-        description = "Lists all projects for an organization for selection by the user.\nThe user can select the desired project by either its name or ID.\n\nWhen to use:\n    Use this tool before project-scoped API tools so the user can pick\n    the project context explicitly.\n\nLimitations:\n    - If default_project_id is configured, the server returns that\n      project and selection is effectively locked.\n\nReturns:\n    A JSON object with the project name and ID, formatted in a Markdown table\n    with the columns \"Project Name\" and \"Project ID\". If the output contains a\n    `description` field, it indicates that a default project is configured\n    (`default_project_id`), and the user cannot select a different project.\n    Explain this to the user.\n\n    Additionally, a `link` field is provided to guide the user to the\n    Codescene projects page where the user can find more detailed information about each project.\n    Make sure to include this link in the output, and explain its purpose clearly.\n\nOn failure:\n    If this tool returns an error (e.g., the CodeScene API cannot be\n    reached, or the access token is missing/invalid), run the\n    verify_installation tool to diagnose the cause, then report the\n    failing checks and how to fix them.\n\nExample:\n    Call without arguments. If default_project_id is configured,\n    explain that the returned project is fixed unless that config is changed via set_config."
+        description = "Lists all projects for an organization for selection by the user.\nThe user can select the desired project by either its name or ID.\n\nWhen to use:\n    Use this tool before project-scoped API tools so the user can pick\n    the project context explicitly.\n\nLimitations:\n    - If default_project_id is configured, the server returns that\n      project and selection is effectively locked.\n\nReturns:\n    A JSON object with the project name and ID, formatted in a Markdown table\n    with the columns \"Project Name\" and \"Project ID\". If the output contains a\n    `description` field, it indicates that a default project is configured\n    (`default_project_id`), and the user cannot select a different project.\n    Explain this to the user.\n\n    Additionally, a `link` field is provided to guide the user to the\n    Codescene projects page where the user can find more detailed information about each project.\n    Make sure to include this link in the output, and explain its purpose clearly.\n\nOn failure:\n    If this tool returns an error (e.g., the CodeScene API cannot be\n    reached, or the access token is missing/invalid), run the\n    verify_installation tool to diagnose the cause, then report the\n    failing checks and how to fix them.\n\nExample:\n    Call without arguments. If default_project_id is configured,\n    explain that the returned project is fixed unless that config is changed via set_config.",
+        annotations(read_only_hint = true)
     )]
     async fn select_project(&self) -> Result<CallToolResult, ErrorData> {
         tools::select_project::handle(self).await
@@ -500,7 +513,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Lists the technical debt goals for a project.\n\nWhen to use:\n    Use this tool to see all files in a project that currently have\n    explicit technical debt goals in CodeScene.\n\nLimitations:\n    - Requires a valid project_id.\n    - Returns goal data from the latest available analysis.\n    - Includes only files with non-empty goals.\n\nReturns:\n    A JSON object with two fields:\n    - `data`: an array of objects each containing the path of a file and its goals.\n    - `link`: a URL to the CodeScene Code Biomarkers page for the project.\n\n    Show the goals for each file in a structured format that is easy to read and explain\n    the goal description for each file. It also includes a description, please include that in your output.\n    Always include the `link` in the output and explain that more details about the\n    technical debt goals can be found on that page.\n\nOn failure:\n    If this tool returns an error (e.g., the CodeScene API cannot be\n    reached, or the access token is missing/invalid), run the\n    verify_installation tool to diagnose the cause, then report the\n    failing checks and how to fix them.\n\nExample:\n    Call with project_id=42 and summarize each file's goals with the\n    biomarkers link for deeper inspection.",
-        input_schema = inlined_schema_for::<ProjectParam>()
+        input_schema = inlined_schema_for::<ProjectParam>(),
+        annotations(read_only_hint = true)
     )]
     async fn list_technical_debt_goals_for_project(
         &self,
@@ -511,7 +525,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Lists the technical debt goals for a specific file in a project.\n\nWhen to use:\n    Use this tool when you need goal details for one file before\n    planning targeted refactoring work.\n\nLimitations:\n    - Requires a valid project_id.\n    - Returns data from the latest available analysis only.\n    - A file may return zero goals, which is a valid outcome.\n\nReturns:\n    A JSON object with two fields:\n    - `data`: an array containing the goals for the specified file.\n    - `link`: a URL to the CodeScene Code Biomarkers page for the specific file.\n\n    Show the goals in a structured format that is easy to read and explain\n    the goal description. It also includes a description, please include that in your output.\n    Always include the `link` in the output and explain that more details about the\n    technical debt goals can be found on that page.\n\nOn failure:\n    If this tool returns an error (e.g., the CodeScene API cannot be\n    reached, or the access token is missing/invalid), run the\n    verify_installation tool to diagnose the cause, then report the\n    failing checks and how to fix them.\n\nExample:\n    Call with file_path=\"/repo/src/module.py\" and project_id=42, then\n    use the goals and link to propose file-level improvements.",
-        input_schema = inlined_schema_for::<ProjectFileParam>()
+        input_schema = inlined_schema_for::<ProjectFileParam>(),
+        annotations(read_only_hint = true)
     )]
     async fn list_technical_debt_goals_for_project_file(
         &self,
@@ -522,7 +537,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Lists the technical debt hotspots for a project.\n\nWhen to use:\n    Use this tool to identify high-impact technical debt hotspots across\n    a project and prioritize refactoring targets.\n\nLimitations:\n    - Requires a valid project_id.\n    - Returns hotspots from the latest available project analysis.\n    - Uses the API's hotspot filtering and pagination behavior.\n\nReturns:\n    A JSON object with two fields:\n    - `data`: an array of objects each containing the path of a file, code health score, revisions count and lines of code count.\n    - `link`: a URL to the CodeScene technical debt hotspots page for the project.\n\n    Describe the hotspots for each file in a structured format that is easy to read and explain.\n    It also includes a description, please include that in your output.\n    Always include the `link` in the output and explain that the user can find more\n    detailed information about each hotspot on that page.\n\nOn failure:\n    If this tool returns an error (e.g., the CodeScene API cannot be\n    reached, or the access token is missing/invalid), run the\n    verify_installation tool to diagnose the cause, then report the\n    failing checks and how to fix them.\n\nExample:\n    Call with project_id=42 and rank returned hotspots by code health\n    and revision frequency before proposing refactoring work.",
-        input_schema = inlined_schema_for::<ProjectParam>()
+        input_schema = inlined_schema_for::<ProjectParam>(),
+        annotations(read_only_hint = true)
     )]
     async fn list_technical_debt_hotspots_for_project(
         &self,
@@ -533,7 +549,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Lists the technical debt hotspots for a specific file in a project.\n\nWhen to use:\n    Use this tool to inspect hotspot metrics for one file before\n    deciding if it should be a refactoring candidate.\n\nLimitations:\n    - Requires a valid project_id.\n    - Returns at most one hotspot object for the filtered file path.\n    - If no hotspot exists for the file, returns an empty hotspot object.\n\nReturns:\n    A JSON object with two fields:\n    - `data`: an array containing the code health score, revisions count and lines of code count for the specified file.\n    - `link`: a URL to the CodeScene technical debt hotspots page for the project.\n\n    Describe the hotspot in a structured format that is easy to read and explain.\n    It also includes a description, please include that in your output.\n    Always include the `link` in the output and explain that the user can find more\n    detailed information about each hotspot on that page.\n\nOn failure:\n    If this tool returns an error (e.g., the CodeScene API cannot be\n    reached, or the access token is missing/invalid), run the\n    verify_installation tool to diagnose the cause, then report the\n    failing checks and how to fix them.\n\nExample:\n    Call with file_path=\"/repo/src/module.py\" and project_id=42. If\n    hotspot is empty, report that the file is not currently a hotspot.",
-        input_schema = inlined_schema_for::<ProjectFileParam>()
+        input_schema = inlined_schema_for::<ProjectFileParam>(),
+        annotations(read_only_hint = true)
     )]
     async fn list_technical_debt_hotspots_for_project_file(
         &self,
@@ -544,7 +561,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Find the owner or owners of a specific path in a project.\n\nWhen to use:\n    Use this tool to identify likely reviewers or domain experts for\n    code reviews and technical questions about a file or directory.\n\nLimitations:\n    - Requires a valid project_id.\n    - Uses the latest project analysis data available in CodeScene.\n    - If no matching ownership data is found, an empty JSON array is returned.\n\nReturns:\n    A list of owners and their paths that they own. The name of the owner who can be responsible\n    for code reviews or inquiries about the file and a link to the CodeScene System Map page filtered\n    by the owner. Explain that this link can be used to see more details\n    about the owner's contributions and interactions within the project.\n    You MUST always show a link after every owner. Show resulting data in a Markdown\n    table with columns: Owner, Key Areas, Link.\n\nOn failure:\n    If this tool returns an error (e.g., the CodeScene API cannot be\n    reached, or the access token is missing/invalid), run the\n    verify_installation tool to diagnose the cause, then report the\n    failing checks and how to fix them.\n\nExample:\n    Call with project_id=42 and path=\"/repo/src/service.py\", then\n    present each owner row with its corresponding system-map link.",
-        input_schema = inlined_schema_for::<OwnershipParam>()
+        input_schema = inlined_schema_for::<OwnershipParam>(),
+        annotations(read_only_hint = true)
     )]
     async fn code_ownership_for_path(
         &self,
@@ -555,7 +573,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Read current CodeScene MCP Server configuration values.\n\nWhen to use:\n    Use this tool to discover available configuration keys, inspect\n    effective values, and understand where each value comes from.\n\nLimitations:\n    - Returns JSON text only; callers must format it for display.\n    - Sensitive values (tokens) are masked.\n    - Effective values can be overridden by client-provided env vars.\n\nWhen called without a key, lists every available configuration\noption together with its current effective value, the source of\nthat value (environment variable vs. config file), and a short\ndescription.\n\nWhen called with a specific key, returns details for that option\nonly. Sensitive values (tokens) are masked in the output.\n\nReturns:\n    A JSON string. When querying a single key, the object has:\n    key, env_var, value, source, description, aliases, and\n    docs_url. When listing all, the object has: config_dir and\n    options (array of the same shape). Use the aliases array\n    to match user intent to the correct key. Present the data\n    clearly and always include docs_url links.\n\nExample:\n    Call with key=\"access_token\" to inspect one setting, or\n    call without key to list all configurable options.",
-        input_schema = inlined_schema_for::<GetConfigParam>()
+        input_schema = inlined_schema_for::<GetConfigParam>(),
+        annotations(read_only_hint = true)
     )]
     async fn get_config(
         &self,
@@ -566,7 +585,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Write a CodeScene MCP Server configuration value.\n\nWhen to use:\n    Use this tool to persist or remove server configuration values\n    without editing config files manually.\n\nLimitations:\n    - Unknown keys are rejected.\n    - Client-level environment variables may still override runtime\n      behavior even after saving a config value.\n    - Some changes may require an MCP client restart.\n\nPersists the value to the config file and applies it to the\nrunning session immediately. To remove a value, pass an empty\nstring as the value.\n\nIf the same setting is also defined as an environment variable in\nyour MCP client configuration (e.g. VS Code settings or Claude\nDesktop config), the environment variable takes precedence at\nruntime.\n\nCall get_config first (without a key) to discover available keys,\ntheir aliases, and docs_url links.\n\nReturns:\n    A JSON string with status (\"saved\" or \"removed\"), key,\n    config_dir, and optional warning, restart_required, and\n    docs_url fields. Present the data clearly and always\n    include docs_url links.\n\nExample:\n    Call with key=\"access_token\" and value=\"...\" to save,\n    or pass an empty value to remove that key from config.",
-        input_schema = inlined_schema_for::<SetConfigParam>()
+        input_schema = inlined_schema_for::<SetConfigParam>(),
+        annotations(read_only_hint = false)
     )]
     async fn set_config(
         &self,
@@ -577,7 +597,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Sign in to CodeScene using OAuth.\n\nWhen to use:\n    Use this tool when no CS_ACCESS_TOKEN env to authenticate. Can be used during read-only mode. If the browser cannot be opened automatically, the URL\n    is printed so the user can open it manually.\n\nLimitations:\n    - Not needed when CS_ACCESS_TOKEN is already set.\n    - Requires the embedded CLI to be available.\n    - Waits up to 2 minutes for the user to complete the browser flow.\n    - For on-prem instances, configure CS_ONPREM_URL before calling this tool.\n\nReturns:\n    A success message when signed in, or an error describing the failure.",
-        input_schema = inlined_schema_for::<LoginParam>()
+        input_schema = inlined_schema_for::<LoginParam>(),
+        annotations(read_only_hint = false)
     )]
     async fn login(
         &self,
@@ -588,7 +609,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Sign out of CodeScene OAuth.\n\nWhen to use:\n    Use this tool to clear the stored OAuth session (CLI credentials and MCP OAuth config).\n\nLimitations:\n    - Does not remove CS_ACCESS_TOKEN / a Personal Access Token; clear that separately via set_config or your MCP client environment.\n    - Requires the embedded CLI to be available for a full CLI logout; local OAuth config is still cleared if the CLI call fails.\n\nReturns:\n    A success message when signed out, noting if a PAT remains configured.",
-        input_schema = inlined_schema_for::<LogoutParam>()
+        input_schema = inlined_schema_for::<LogoutParam>(),
+        annotations(read_only_hint = false)
     )]
     async fn logout(
         &self,
@@ -599,7 +621,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Switch the active CodeScene Cloud OAuth account, or list accounts the user can switch to.\n\nWhen to use:\n    Use this tool when the user belongs to multiple Cloud accounts and needs to\n    change which account the MCP server uses. Prefer this over set_config(account_id)\n    alone â€” changing the pin without switch_account does not retarget the active\n    OAuth session. If the user has not named an account, call this tool without\n    arguments first so they can pick from the list.\n\nLimitations:\n    - Cloud OAuth only; does not apply to PAT / CS_ACCESS_TOKEN auth or on-prem.\n    - Reuses a stored CLI credential slot when available; otherwise opens a browser\n      for interactive login into that account (`authenticated` is false).\n    - Not available in Docker (no OAuth browser flow).\n\nReturns:\n    With no arguments: a JSON object with an `accounts` array. Format it as a\n    Markdown table with columns \"Account Name\", \"Account ID\", \"Type\", \"Role\",\n    and \"Signed in on this machine\". Mark the row where `current` is true as the\n    active account. Then ask the user which account to use and call this tool again\n    with `name` or `account_id`.\n    With `name` (display name or org slug) or `account_id`: a success message with\n    the active account_id, or an error. If `name` is ambiguous or not found, the\n    response includes the account list so you can ask the user to pick one.\n\nExample:\n    Call without arguments to list accounts. To switch, pass name=\"CodeScene Showcase\"\n    or account_id=11. If the user already named the account, pass name directly.",
-        input_schema = inlined_schema_for::<SwitchAccountParam>()
+        input_schema = inlined_schema_for::<SwitchAccountParam>(),
+        annotations(read_only_hint = false)
     )]
     async fn switch_account(
         &self,
@@ -609,7 +632,8 @@ impl CodeSceneServer {
     }
 
     #[tool(
-        description = "List all available skills embedded in this MCP server.\n\nWhen to use:\n    Use this tool to discover what skills are available for\n    download or inspection.\n\nLimitations:\n    - Returns only skills embedded at compile time.\n    - Does not scan external skill directories.\n\nReturns:\n    A formatted list of skill names with their descriptions.\n\nExample:\n    Call this tool to see all available skills, then use\n    download_skill or sync_skills to install them locally."
+        description = "List all available skills embedded in this MCP server.\n\nWhen to use:\n    Use this tool to discover what skills are available for\n    download or inspection.\n\nLimitations:\n    - Returns only skills embedded at compile time.\n    - Does not scan external skill directories.\n\nReturns:\n    A formatted list of skill names with their descriptions.\n\nExample:\n    Call this tool to see all available skills, then use\n    download_skill or sync_skills to install them locally.",
+        annotations(read_only_hint = true)
     )]
     async fn list_skills(&self) -> Result<CallToolResult, ErrorData> {
         tools::list_skills::handle(self).await
@@ -617,7 +641,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Get the file manifest for a specific skill.\n\nWhen to use:\n    Use this tool to inspect what files a skill contains,\n    their sizes, and SHA256 hashes before downloading.\n\nLimitations:\n    - Requires a valid skill name from list_skills.\n\nReturns:\n    A JSON manifest with the skill name and an array of files,\n    each with path, size in bytes, and sha256 hash.\n\nExample:\n    Call with skill_name=\"safeguarding-ai-generated-code\" to\n    see the manifest, then use download_skill to install it.",
-        input_schema = inlined_schema_for::<SkillNameParam>()
+        input_schema = inlined_schema_for::<SkillNameParam>(),
+        annotations(read_only_hint = true)
     )]
     async fn get_skill_manifest(
         &self,
@@ -628,7 +653,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Download a single skill to a local directory.\n\nWhen to use:\n    Use this tool to install a specific skill into your local\n    skills directory (e.g., ~/.claude/skills/).\n\nLimitations:\n    - By default, refuses to overwrite existing skills.\n    - Set overwrite=true to replace an existing skill.\n    - Creates the destination directory if it does not exist.\n\nReturns:\n    A confirmation message with the path where the skill was written.\n\nExample:\n    Call with skill_name=\"safeguarding-ai-generated-code\" and\n    destination_dir=\"~/.claude/skills\" to install the skill.",
-        input_schema = inlined_schema_for::<DownloadSkillParam>()
+        input_schema = inlined_schema_for::<DownloadSkillParam>(),
+        annotations(read_only_hint = false)
     )]
     async fn download_skill(
         &self,
@@ -639,7 +665,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Download all available skills to a local directory.\n\nWhen to use:\n    Use this tool to install every embedded skill into your\n    local skills directory at once.\n\nLimitations:\n    - By default, skips skills that already exist locally.\n    - Set overwrite=true to replace all existing skills.\n    - Creates the destination directory if it does not exist.\n\nReturns:\n    A summary showing how many skills were downloaded and how\n    many were skipped (if any already existed).\n\nExample:\n    Call with destination_dir=\"~/.claude/skills\" to install\n    all skills. Use overwrite=true to force-update them.",
-        input_schema = inlined_schema_for::<SyncSkillsParam>()
+        input_schema = inlined_schema_for::<SyncSkillsParam>(),
+        annotations(read_only_hint = false)
     )]
     async fn sync_skills(
         &self,
@@ -650,7 +677,8 @@ impl CodeSceneServer {
 
     #[tool(
         description = "Check if the CodeScene MCP Server is correctly installed and configured.\n\nWhen to use:\n    Use this tool to diagnose setup issues such as missing authentication,\n    unavailable git, or environment misconfigurations.\n\nLimitations:\n    - Does not modify any configuration.\n    - Auth validation requires a git repository path.\n\nReturns:\n    A summary of verification checks with PASS/FAIL status for each:\n      - Git: whether git is installed and accessible.\n      - Git Repository: whether the given path is inside a git repository.\n      - Authentication: whether signed in via OAuth (`login`) or a valid PAT/CS_ACCESS_TOKEN.\n      - API Connectivity: whether the MCP server can reach the CodeScene API (cloud or on-prem). Catches TLS/CA certificate misconfiguration. Skipped for standalone licenses.\n      - CLI Connectivity: whether the CLI can reach CodeScene. Catches TLS/CA certificate misconfiguration on the CLI path.\n      - Runtime Environment: whether running as binary or Docker.\n\nExample:\n    Call this tool when a user reports issues or after initial setup\n    to confirm everything is working. Pass the project root directory\n    as git_repository_path.",
-        input_schema = inlined_schema_for::<GitRepoParam>()
+        input_schema = inlined_schema_for::<GitRepoParam>(),
+        annotations(read_only_hint = true)
     )]
     async fn verify_installation(
         &self,
