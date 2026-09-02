@@ -510,6 +510,12 @@ fn test_get_enabled_tools_shows_available() {
     tests::enabled_tools::test_get_enabled_tools_shows_available();
 }
 
+// --- Tool Annotations ---
+#[test]
+fn test_tool_read_only_annotations() {
+    tests::tool_annotations::test_tool_read_only_annotations();
+}
+
 // --- Configure ---
 #[test]
 fn test_config_tools_visible() {

@@ -60,4 +60,5 @@ pub mod ssl_cli_ca_bundle;
 pub mod ssl_cli_truststore;
 pub mod standalone_license;
 pub mod stress_code_health_review;
+pub mod tool_annotations;
 pub mod version_check;
