@@ -67,7 +67,15 @@ jobs:
           npm install -g @vscode/vsce
           for file in ./vsix-artifacts/*.vsix; do
             echo "Publishing ${file} to VS Code Marketplace"
-            vsce publish --skip-duplicate --pat "$VSCODE_MARKETPLACE_PUBLISHING_TOKEN" --packagePath "${file}"
+            if output=$(vsce publish --pat "$VSCODE_MARKETPLACE_PUBLISHING_TOKEN" --packagePath "${file}" 2>&1); then
+              echo "$output"
+            elif [[ "$output" == *"already exists"* ]]; then
+              echo "$output"
+              echo "Package already exists; continuing with remaining platforms."
+            else
+              echo "$output" >&2
+              exit 1
+            fi
           done
 
       - name: Publish to Open VSX
