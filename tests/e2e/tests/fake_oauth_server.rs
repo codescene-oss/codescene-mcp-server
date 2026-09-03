@@ -107,7 +107,14 @@ impl Drop for FakeOAuthServer {
 fn accept_loop(listener: TcpListener, ctx: ServerCtx) {
     while !*ctx.shutdown.lock().unwrap() {
         match listener.accept() {
-            Ok((mut stream, _)) => serve_connection(&mut stream, &ctx),
+            Ok((mut stream, _)) => {
+                // Accepted sockets inherit the listener's nonblocking mode on Windows.
+                // Reads must block so a request arriving just after accept is not discarded.
+                stream
+                    .set_nonblocking(false)
+                    .expect("set OAuth connection blocking");
+                serve_connection(&mut stream, &ctx);
+            }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 thread::sleep(Duration::from_millis(20));
             }
