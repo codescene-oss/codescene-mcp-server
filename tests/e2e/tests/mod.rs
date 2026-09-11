@@ -39,6 +39,7 @@ pub mod bundled_docs;
 pub mod business_case;
 pub mod cloudfront_headers;
 pub mod configure;
+pub mod discovery_fallback;
 pub mod docker_path_translation;
 pub mod enabled_tools;
 pub mod error_logging;

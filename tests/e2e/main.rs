@@ -701,6 +701,12 @@ fn test_mcp_usage_overview_tool_and_resource() {
     tests::mcp_usage_overview::test_usage_tool_and_resource();
 }
 
+// --- Discovery Fallback ---
+#[test]
+fn test_server_discover_falls_back_without_exiting() {
+    tests::discovery_fallback::test_server_discover_falls_back_without_exiting();
+}
+
 // --- Shutdown During Handshake ---
 #[test]
 fn test_stdin_closed_before_any_input() {
