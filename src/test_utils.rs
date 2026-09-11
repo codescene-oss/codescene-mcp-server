@@ -364,6 +364,16 @@ mod tests {
         .unwrap()
     }
 
+    fn server_discover_request_message() -> ClientJsonRpcMessage {
+        serde_json::from_value(json!({
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "server/discover",
+            "params": {}
+        }))
+        .unwrap()
+    }
+
     fn initialized_notification_message() -> ClientJsonRpcMessage {
         serde_json::from_value(json!({
             "jsonrpc": "2.0",
@@ -1452,6 +1462,42 @@ mod tests {
 
         let close_result = service.close().await;
         assert!(close_result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn server_discover_falls_back_to_initialize_on_same_connection() {
+        let transport = ScriptedTransport::from_messages(vec![
+            server_discover_request_message(),
+            initialize_request_message(),
+            initialized_notification_message(),
+        ]);
+        let sent = transport.sent.clone();
+        let server = make_server(false);
+
+        let mut service = crate::serve_or_handle_disconnect(
+            server,
+            crate::transport::DiscoveryFallbackTransport::new(transport),
+        )
+        .await
+        .unwrap()
+        .expect("expected initialized service");
+
+        let messages: Vec<serde_json::Value> = sent
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|message| serde_json::to_value(message).unwrap())
+            .collect();
+        assert_eq!(
+            (
+                &messages[0]["id"],
+                &messages[0]["error"]["code"],
+                messages.iter().any(|message| message.get("result").is_some()),
+            ),
+            (&json!(0), &json!(-32601), true)
+        );
+
+        service.close().await.unwrap();
     }
 
     #[test]

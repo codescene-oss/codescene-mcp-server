@@ -23,6 +23,7 @@ mod startup;
 mod test_utils;
 mod tools;
 mod tracking;
+mod transport;
 mod version_checker;
 
 #[cfg(test)]
@@ -45,6 +46,7 @@ use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content, Meta};
 use rmcp::schemars::{self, JsonSchema};
 use rmcp::service::ServerInitializeError;
+use rmcp::transport::IntoTransport;
 use rmcp::{tool, tool_router, ErrorData, ServiceExt};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -778,7 +780,9 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // Covered by e2e test: test_shutdown_during_handshake.py
-    let Some(service) = serve_or_handle_disconnect(server, rmcp::transport::stdio()).await? else {
+    let stdio = rmcp::transport::stdio().into_transport();
+    let transport = transport::DiscoveryFallbackTransport::new(stdio);
+    let Some(service) = serve_or_handle_disconnect(server, transport).await? else {
         return Ok(());
     };
 
