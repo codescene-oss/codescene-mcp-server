@@ -45,7 +45,7 @@ where
             let error = ErrorData::new(ErrorCode::METHOD_NOT_FOUND, "Method not found", None);
             if self
                 .inner
-                .send(ServerJsonRpcMessage::error(error, request.id.clone()))
+                .send(ServerJsonRpcMessage::error(error, Some(request.id.clone())))
                 .await
                 .is_err()
             {
