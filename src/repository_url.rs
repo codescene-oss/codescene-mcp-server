@@ -141,7 +141,7 @@ impl Provider {
 
 pub(crate) fn canonical_repository_id(remote: &str) -> Option<String> {
     let remote = remote.trim();
-    if remote.is_empty() {
+    if remote.is_empty() || is_filesystem_remote(remote.as_bytes()) {
         return None;
     }
 
@@ -151,6 +151,24 @@ pub(crate) fn canonical_repository_id(remote: &str) -> Option<String> {
         parse_scp_like(remote)?
     };
     parts.repository_identity()?.canonical_id()
+}
+
+fn is_filesystem_remote(remote: &[u8]) -> bool {
+    let is_file_url = remote
+        .get(..7)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(b"file://"));
+    let has_windows_drive =
+        remote.len() >= 2 && remote[0].is_ascii_alphabetic() && remote[1] == b':';
+    let is_slash_delimited_scp = remote
+        .iter()
+        .position(|byte| *byte == b'/')
+        .is_some_and(|slash| remote[..slash].contains(&b'@') && remote.get(slash + 1).is_some());
+
+    is_file_url
+        || has_windows_drive
+        || remote.starts_with(b"/")
+        || remote.starts_with(b"\\")
+        || (!remote.contains(&b':') && !is_slash_delimited_scp)
 }
 
 fn parse_url(remote: &str) -> Option<RemoteParts> {
@@ -359,5 +377,34 @@ mod tests {
         assert_eq!(canonical_repository_id("  "), None);
         assert_eq!(canonical_repository_id("not a repository URL"), None);
         assert_eq!(canonical_repository_id("file:///tmp/repository.git"), None);
+    }
+
+    #[test]
+    fn rejects_filesystem_remotes() {
+        for remote in [
+            "repository.git",
+            "nested/repository.git",
+            "./repository.git",
+            "../repository.git",
+            "/tmp/repository.git",
+            r"C:\work\repository.git",
+            "C:/work/repository.git",
+            r"\\server\share\repository.git",
+            "//server/share/repository.git",
+            "file:///tmp/repository.git",
+            "FILE://server/share/repository.git",
+        ] {
+            assert_eq!(canonical_repository_id(remote), None);
+        }
+    }
+
+    #[test]
+    fn retains_network_loopback_remotes() {
+        assert_canonical("http://localhost/Owner/Repo.git", "localhost/owner/repo");
+        assert_canonical(
+            "ssh://git@127.0.0.1:2222/Owner/Repo.git",
+            "127.0.0.1/owner/repo",
+        );
+        assert_canonical("git@localhost:Owner/Repo.git", "localhost/owner/repo");
     }
 }
