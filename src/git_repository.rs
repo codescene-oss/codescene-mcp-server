@@ -192,7 +192,7 @@ fn repository_root_reason(error: RepositoryRootError) -> RepositoryDiscoveryReas
     }
 }
 
-fn repository_action_path_with(
+pub(crate) fn repository_action_path_with(
     action_path: Option<&Path>,
     current_dir: impl FnOnce() -> std::io::Result<PathBuf>,
 ) -> Result<PathBuf, RepositoryDiscoveryReason> {
