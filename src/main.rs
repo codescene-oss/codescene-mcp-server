@@ -10,6 +10,7 @@ mod docker;
 mod environment;
 mod errors;
 mod event_properties;
+mod git_repository;
 mod hashing;
 mod http;
 mod license;
