@@ -15,6 +15,7 @@ mod http;
 mod license;
 mod platform;
 mod prompts;
+mod repository_url;
 mod resources;
 mod server_handler;
 mod skills;
