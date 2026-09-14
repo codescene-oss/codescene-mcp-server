@@ -149,8 +149,20 @@ impl RepositoryIdentity {
 }
 
 fn canonical_path_segment(value: &str) -> Option<String> {
+    if contains_invalid_percent_escape(value.as_bytes()) {
+        return None;
+    }
     let decoded = percent_decode_str(value).decode_utf8().ok()?;
     Some(utf8_percent_encode(&decoded, PATH_SEGMENT_ENCODE_SET).to_string())
+}
+
+fn contains_invalid_percent_escape(value: &[u8]) -> bool {
+    value.iter().enumerate().any(|(index, byte)| {
+        *byte == b'%'
+            && value
+                .get(index + 1..index + 3)
+                .is_none_or(|escape| !escape.iter().all(u8::is_ascii_hexdigit))
+    })
 }
 
 impl Provider {
@@ -269,6 +281,88 @@ mod tests {
 
     fn assert_canonical(remote: &str, expected: &str) {
         assert_eq!(canonical_repository_id(remote).as_deref(), Some(expected));
+    }
+
+    #[test]
+    fn matches_shared_repository_identity_contract_vectors() {
+        let vectors = [
+            (
+                "git@GitHub.com:Acme/Platform/Web.GIT",
+                "github.com/acme/platform/web",
+            ),
+            (
+                "https://github.com/Acme/Platform/Web.git",
+                "github.com/acme/platform/web",
+            ),
+            (
+                "git@gitlab.com:Acme/Core%20Platform/Web%20App.git",
+                "gitlab.com/acme/core%20platform/web%20app",
+            ),
+            (
+                "https://gitlab.com/Acme/Core Platform/Web App",
+                "gitlab.com/acme/core%20platform/web%20app",
+            ),
+            (
+                "https://gitlab.com/Owner%2FUnit/Nested/Repo.git",
+                "gitlab.com/owner%2funit/nested/repo",
+            ),
+            (
+                "https://token@example.com/Team/Service.GiT",
+                "example.com/team/service",
+            ),
+            (
+                "git@ssh.dev.azure.com:v3/Acme/Core%20Platform/Web%20App.GIT",
+                "dev.azure.com/acme/core%20platform/web%20app",
+            ),
+            (
+                "https://dev.azure.com/Acme/Core Platform/_git/Web App.git",
+                "dev.azure.com/acme/core%20platform/web%20app",
+            ),
+            (
+                "https://Acme.visualstudio.com/Core%20Platform/_git/Web%20App",
+                "dev.azure.com/acme/core%20platform/web%20app",
+            ),
+            (
+                "https://git.example.com/scm/PLATFORM/Web.GIT",
+                "git.example.com/platform/web",
+            ),
+            (
+                "ssh://git@git.example.com:7999/PLATFORM/Web.git",
+                "git.example.com/platform/web",
+            ),
+            (
+                "https://review.example.com/a/Team/Service.gIt",
+                "review.example.com/team/service",
+            ),
+        ];
+
+        for (remote, expected) in vectors {
+            assert_eq!(
+                canonical_repository_id(remote).as_deref(),
+                Some(expected),
+                "contract vector failed for {remote}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_malformed_contract_vectors() {
+        for remote in [
+            "",
+            "   ",
+            "not a repository URL",
+            "https://",
+            "https://github.com/Owner/Repo%",
+            "https://github.com/Owner/Repo%2",
+            "https://github.com/Owner/Repo%GG",
+            "https://github.com/Owner/Repo%FF",
+        ] {
+            assert_eq!(
+                canonical_repository_id(remote),
+                None,
+                "malformed contract vector was accepted: {remote}"
+            );
+        }
     }
 
     #[test]
