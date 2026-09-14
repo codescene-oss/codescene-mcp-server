@@ -1,5 +1,9 @@
 use serde::Deserialize;
-use std::collections::BTreeSet;
+use sha2::{Digest, Sha256};
+use std::collections::{BTreeSet, HashMap};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::Mutex;
 
 use crate::api_client;
 use crate::auth::AuthCredential;
@@ -7,6 +11,7 @@ use crate::errors::ApiError;
 use crate::http::HttpClient;
 
 const ENDPOINT: &str = "mcp/repository-projects";
+const SUCCESS_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct RepositoryProjects {
@@ -36,6 +41,88 @@ struct RepositoryProjectsResponse {
 struct RepositoryProjectResponse {
     repository_id: String,
     project_ids: Vec<i64>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct CacheKey {
+    api_root: String,
+    token_fingerprint: [u8; 32],
+}
+
+struct CacheEntry {
+    mappings: RepositoryProjects,
+    fetched_at: Instant,
+}
+
+type SharedCacheEntry = Arc<Mutex<Option<CacheEntry>>>;
+
+pub(crate) struct RepositoryProjectsCache {
+    entries: Mutex<HashMap<CacheKey, SharedCacheEntry>>,
+    success_ttl: Duration,
+}
+
+impl Default for RepositoryProjectsCache {
+    fn default() -> Self {
+        Self {
+            entries: Mutex::new(HashMap::new()),
+            success_ttl: SUCCESS_CACHE_TTL,
+        }
+    }
+}
+
+impl RepositoryProjectsCache {
+    pub(crate) async fn get_or_fetch(
+        &self,
+        client: &dyn HttpClient,
+        credential: &AuthCredential,
+    ) -> Result<RepositoryProjects, RepositoryProjectsError> {
+        let key = cache_key(credential)?;
+        let shared_entry = {
+            let mut entries = self.entries.lock().await;
+            entries
+                .entry(key)
+                .or_insert_with(|| Arc::new(Mutex::new(None)))
+                .clone()
+        };
+        let mut entry = shared_entry.lock().await;
+        if let Some(cached) = entry
+            .as_ref()
+            .filter(|cached| cached.fetched_at.elapsed() < self.success_ttl)
+        {
+            return Ok(cached.mappings.clone());
+        }
+
+        let mappings = fetch_repository_projects(client, credential).await?;
+        *entry = Some(CacheEntry {
+            mappings: mappings.clone(),
+            fetched_at: Instant::now(),
+        });
+        Ok(mappings)
+    }
+
+    #[cfg(test)]
+    fn with_success_ttl(success_ttl: Duration) -> Self {
+        Self {
+            entries: Mutex::new(HashMap::new()),
+            success_ttl,
+        }
+    }
+}
+
+fn cache_key(credential: &AuthCredential) -> Result<CacheKey, RepositoryProjectsError> {
+    let api_root = credential
+        .api_root()
+        .map_err(|_| RepositoryProjectsError::RequestFailed)?;
+    let api_root = reqwest::Url::parse(&api_root)
+        .map_err(|_| RepositoryProjectsError::RequestFailed)?
+        .to_string()
+        .trim_end_matches('/')
+        .to_string();
+    let token_fingerprint = Sha256::digest(credential.access_token().as_bytes()).into();
+    Ok(CacheKey {
+        api_root,
+        token_fingerprint,
+    })
 }
 
 pub(crate) async fn fetch_repository_projects(
@@ -97,12 +184,19 @@ mod tests {
     use super::*;
     use crate::http::tests::MockHttpClient;
     use crate::http::{HttpResponse, Method};
+    use std::sync::Arc;
 
     fn credential(onprem_url: Option<&str>) -> AuthCredential {
         AuthCredential::Configured {
             access_token: "secret-token".to_string(),
             onprem_url: onprem_url.map(str::to_string),
         }
+    }
+
+    async fn fetch_twice(cache: &RepositoryProjectsCache, client: &MockHttpClient) {
+        let credential = credential(None);
+        cache.get_or_fetch(client, &credential).await.unwrap();
+        cache.get_or_fetch(client, &credential).await.unwrap();
     }
 
     #[tokio::test]
@@ -270,5 +364,74 @@ mod tests {
 
         assert!(matching_project_ids(&["github.com/acme/web".to_string()], &mappings).is_empty());
         assert!(matching_project_ids(&[], &mappings).is_empty());
+    }
+
+    #[tokio::test]
+    async fn reuses_successful_mapping_within_five_minute_ttl() {
+        let cache = RepositoryProjectsCache::default();
+        let client = MockHttpClient::new(vec![HttpResponse::ok(r#"{"repositories":[]}"#)]);
+
+        fetch_twice(&cache, &client).await;
+
+        assert_eq!(client.captured_requests.lock().unwrap().len(), 1);
+        assert_eq!(cache.success_ttl, Duration::from_secs(300));
+    }
+
+    #[tokio::test]
+    async fn isolates_cached_mappings_by_api_root_and_token_fingerprint() {
+        let cache = RepositoryProjectsCache::default();
+        let client = MockHttpClient::new(vec![
+            HttpResponse::ok(r#"{"repositories":[]}"#),
+            HttpResponse::ok(r#"{"repositories":[]}"#),
+            HttpResponse::ok(r#"{"repositories":[]}"#),
+        ]);
+        let cloud = credential(None);
+        let other_token = AuthCredential::Configured {
+            access_token: "other-token".to_string(),
+            onprem_url: None,
+        };
+        let onprem = credential(Some("https://codescene.example/"));
+
+        cache.get_or_fetch(&client, &cloud).await.unwrap();
+        cache.get_or_fetch(&client, &other_token).await.unwrap();
+        cache.get_or_fetch(&client, &onprem).await.unwrap();
+
+        assert_eq!(client.captured_requests.lock().unwrap().len(), 3);
+        let entries = cache.entries.lock().await;
+        assert_eq!(entries.len(), 3);
+        assert!(entries
+            .keys()
+            .all(|key| { !key.api_root.ends_with('/') && key.token_fingerprint.len() == 32 }));
+    }
+
+    #[tokio::test]
+    async fn coalesces_concurrent_misses_for_the_same_authentication_context() {
+        let cache = Arc::new(RepositoryProjectsCache::default());
+        let client = Arc::new(MockHttpClient::new(vec![HttpResponse::ok(
+            r#"{"repositories":[{"repository_id":"github.com/acme/web","project_ids":[42]}]}"#,
+        )]));
+        let credential = Arc::new(credential(None));
+        let first = cache.get_or_fetch(&*client, &credential);
+        let second = cache.get_or_fetch(&*client, &credential);
+        let third = cache.get_or_fetch(&*client, &credential);
+
+        let (first, second, third) = tokio::join!(first, second, third);
+
+        assert_eq!(first.as_ref().unwrap(), second.as_ref().unwrap());
+        assert_eq!(second.as_ref().unwrap(), third.as_ref().unwrap());
+        assert_eq!(client.captured_requests.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn refreshes_successful_mapping_after_ttl() {
+        let cache = RepositoryProjectsCache::with_success_ttl(Duration::ZERO);
+        let client = MockHttpClient::new(vec![
+            HttpResponse::ok(r#"{"repositories":[]}"#),
+            HttpResponse::ok(r#"{"repositories":[]}"#),
+        ]);
+
+        fetch_twice(&cache, &client).await;
+
+        assert_eq!(client.captured_requests.lock().unwrap().len(), 2);
     }
 }
