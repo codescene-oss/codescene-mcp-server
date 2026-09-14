@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::collections::BTreeSet;
 
 use crate::api_client;
 use crate::auth::AuthCredential;
@@ -60,6 +61,24 @@ pub(crate) async fn fetch_repository_projects(
         })
         .collect::<Result<_, _>>()?;
     Ok(RepositoryProjects { repositories })
+}
+
+pub(crate) fn matching_project_ids(
+    repository_ids: &[String],
+    mappings: &RepositoryProjects,
+) -> Vec<i64> {
+    let repository_ids = repository_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    mappings
+        .repositories
+        .iter()
+        .filter(|mapping| repository_ids.contains(mapping.repository_id.as_str()))
+        .flat_map(|mapping| mapping.project_ids.iter().copied())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 fn classify_api_error(error: ApiError) -> RepositoryProjectsError {
@@ -188,5 +207,68 @@ mod tests {
             fetch_repository_projects(&status_failure, &credential(None)).await,
             Err(RepositoryProjectsError::RequestFailed)
         );
+    }
+
+    #[test]
+    fn matches_exact_repository_ids_and_unions_sorted_project_ids() {
+        let mappings = RepositoryProjects {
+            repositories: vec![
+                RepositoryProject {
+                    repository_id: "github.com/acme/web".to_string(),
+                    project_ids: vec![456, 123, 456],
+                },
+                RepositoryProject {
+                    repository_id: "gitlab.com/acme/web".to_string(),
+                    project_ids: vec![789, 123],
+                },
+                RepositoryProject {
+                    repository_id: "github.com/acme/web-extra".to_string(),
+                    project_ids: vec![999],
+                },
+            ],
+        };
+        let repository_ids = vec![
+            "gitlab.com/acme/web".to_string(),
+            "github.com/acme/web".to_string(),
+            "github.com/acme/web".to_string(),
+        ];
+
+        assert_eq!(
+            matching_project_ids(&repository_ids, &mappings),
+            [123, 456, 789]
+        );
+    }
+
+    #[test]
+    fn matching_is_case_sensitive_and_does_not_use_prefixes() {
+        let mappings = RepositoryProjects {
+            repositories: vec![RepositoryProject {
+                repository_id: "github.com/acme/web".to_string(),
+                project_ids: vec![42],
+            }],
+        };
+
+        assert!(matching_project_ids(
+            &[
+                "GitHub.com/acme/web".to_string(),
+                "github.com/acme".to_string(),
+                "github.com/acme/web-extra".to_string(),
+            ],
+            &mappings,
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn successful_non_match_returns_empty_project_ids() {
+        let mappings = RepositoryProjects {
+            repositories: vec![RepositoryProject {
+                repository_id: "github.com/other/service".to_string(),
+                project_ids: vec![42],
+            }],
+        };
+
+        assert!(matching_project_ids(&["github.com/acme/web".to_string()], &mappings).is_empty());
+        assert!(matching_project_ids(&[], &mappings).is_empty());
     }
 }
