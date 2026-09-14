@@ -41,17 +41,21 @@ impl RemoteParts {
             return None;
         }
 
-        if self.is_azure_ssh() {
-            return self.canonicalize_azure(AzurePath::Ssh);
+        match self.provider_identity() {
+            Some(identity) => Some(identity),
+            None => self.generic_identity(host),
         }
-        if host.eq_ignore_ascii_case("dev.azure.com") {
-            return self.canonicalize_azure(AzurePath::Http);
-        }
-        if let Some(organization) = self.visual_studio_organization() {
-            return self.canonicalize_visual_studio(organization);
-        }
+    }
 
-        self.generic_identity(host)
+    fn provider_identity(&self) -> Option<RepositoryIdentity> {
+        self.is_azure_ssh()
+            .then(|| self.canonicalize_azure(AzurePath::Ssh))
+            .flatten()
+            .or_else(|| {
+                self.visual_studio_organization()
+                    .and_then(|organization| self.canonicalize_visual_studio(organization))
+            })
+            .or_else(|| self.canonicalize_azure(AzurePath::Http))
     }
 
     fn is_azure_ssh(&self) -> bool {
@@ -60,14 +64,24 @@ impl RemoteParts {
     }
 
     fn canonicalize_azure(&self, format: AzurePath) -> Option<RepositoryIdentity> {
-        let (marker_index, marker, identity_indices) = match format {
-            AzurePath::Ssh => (0, "v3", [1, 2, 3]),
-            AzurePath::Http => (2, "_git", [0, 1, 3]),
-        };
-        if self.path.len() != 4 || !self.path[marker_index].eq_ignore_ascii_case(marker) {
-            return None;
+        match (format, self.path.as_slice()) {
+            (AzurePath::Ssh, [marker, organization, project, repository])
+                if marker.eq_ignore_ascii_case("v3") =>
+            {
+                azure_identity("dev.azure.com", [organization, project, repository])
+            }
+            (AzurePath::Http, [organization, project, marker, repository])
+                if marker.eq_ignore_ascii_case("_git") =>
+            {
+                azure_identity(&self.host, [organization, project, repository])
+            }
+            (AzurePath::Http, [tfs, organization, project, marker, repository])
+                if tfs.eq_ignore_ascii_case("tfs") && marker.eq_ignore_ascii_case("_git") =>
+            {
+                azure_identity(&self.host, [organization, project, repository])
+            }
+            _ => None,
         }
-        azure_identity(identity_indices.map(|index| self.path[index].as_str()))
     }
 
     fn visual_studio_organization(&self) -> Option<&str> {
@@ -81,28 +95,38 @@ impl RemoteParts {
     }
 
     fn canonicalize_visual_studio(&self, organization: &str) -> Option<RepositoryIdentity> {
-        let path = if self.path.first()?.eq_ignore_ascii_case("DefaultCollection") {
-            &self.path[1..]
-        } else {
-            &self.path
-        };
-        if path.len() != 3 || !path[1].eq_ignore_ascii_case("_git") {
+        let marker_index = self.path.len().checked_sub(2)?;
+        if marker_index == 0 || !self.path[marker_index].eq_ignore_ascii_case("_git") {
             return None;
         }
-        azure_identity([organization, path[0].as_str(), path[2].as_str()])
+        let mut owner = vec![organization.to_string()];
+        owner.extend(self.path[..marker_index].iter().cloned());
+        Some(RepositoryIdentity {
+            host: "dev.azure.com".to_string(),
+            owner,
+            repository: self.path[marker_index + 1].clone(),
+            provider: Provider::Azure,
+        })
     }
 
     fn generic_identity(mut self, host: String) -> Option<RepositoryIdentity> {
-        if self
-            .path
-            .first()
-            .is_some_and(|part| part.eq_ignore_ascii_case("scm") || part.eq_ignore_ascii_case("a"))
-        {
+        let provider = provider_for_host(&host);
+        let bitbucket_scm = self.path.len() >= 3
+            && self
+                .path
+                .first()
+                .is_some_and(|part| part.eq_ignore_ascii_case("scm"));
+        let gerrit_auth = matches!(provider, Provider::Other)
+            && self
+                .path
+                .first()
+                .is_some_and(|part| part.eq_ignore_ascii_case("a"));
+        if bitbucket_scm || gerrit_auth {
             self.path.remove(0);
         }
         let repository = self.path.pop()?;
         Some(RepositoryIdentity {
-            provider: provider_for_host(&host),
+            provider,
             host,
             owner: self.path,
             repository,
@@ -188,7 +212,7 @@ fn parse_url(remote: &str) -> Option<RemoteParts> {
 }
 
 fn parse_scp_like(remote: &str) -> Option<RemoteParts> {
-    let (authority, path) = remote.rsplit_once(':')?;
+    let (authority, path) = remote.rsplit_once(':').or_else(|| remote.split_once('/'))?;
     let host = authority
         .rsplit_once('@')
         .map_or(authority, |(_, host)| host);
@@ -227,24 +251,14 @@ fn provider_for_host(host: &str) -> Provider {
     }
 }
 
-fn azure_identity(path: [&str; 3]) -> Option<RepositoryIdentity> {
-    let path = path
-        .into_iter()
-        .map(|part| {
-            percent_decode_str(part)
-                .decode_utf8()
-                .ok()
-                .map(|value| value.into_owned())
-        })
-        .collect::<Option<Vec<_>>>()?;
-    if path.iter().any(String::is_empty) {
+fn azure_identity(host: &str, path: [&String; 3]) -> Option<RepositoryIdentity> {
+    if path.iter().any(|part| part.is_empty()) {
         return None;
     }
-    let [organization, project, repository]: [String; 3] = path.try_into().ok()?;
     Some(RepositoryIdentity {
-        host: "dev.azure.com".to_string(),
-        owner: vec![organization, project],
-        repository,
+        host: host.to_string(),
+        owner: path[..2].iter().map(|part| (*part).clone()).collect(),
+        repository: path[2].clone(),
         provider: Provider::Azure,
     })
 }
@@ -265,7 +279,7 @@ mod tests {
         );
         assert_eq!(
             canonical_repository_id("ssh://git@github.com:2222/Acme/Platform/Web.GIT"),
-            Some("github.com/acme/platform/web.git".to_string())
+            Some("github.com/acme/platform/web".to_string())
         );
     }
 
@@ -297,7 +311,7 @@ mod tests {
     fn canonicalizes_azure_and_visual_studio_remotes() {
         assert_eq!(
             canonical_repository_id("git@ssh.dev.azure.com:v3/Acme/Core%20Platform/Web%20App.git"),
-            Some("dev.azure.com/acme/core%20platform/web%20app.git".to_string())
+            Some("dev.azure.com/acme/core%20platform/web%20app".to_string())
         );
         assert_eq!(
             canonical_repository_id("https://dev.azure.com/Acme/Core%20Platform/_git/Web%20App"),
