@@ -34,6 +34,21 @@ pub(crate) enum RemoteUrlError {
     GitCommandFailed,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum RepositoryDiscoveryReason {
+    NotInGitRepository,
+    NoGitRemotes,
+    NoSupportedGitRemotes,
+    WorkingDirectoryUnavailable,
+    GitCommandFailed,
+}
+
+#[derive(Debug, PartialEq)]
+enum EffectiveRemoteUrls {
+    NoRemotes,
+    Found(Vec<String>),
+}
+
 #[async_trait::async_trait]
 pub(crate) trait GitRunner: Send + Sync {
     async fn run(
@@ -104,14 +119,21 @@ pub(crate) async fn resolve_repository_root(
     Ok(PathBuf::from(root))
 }
 
-pub(crate) async fn effective_remote_urls(
+async fn effective_remote_urls(
     runner: &dyn GitRunner,
     repository_root: &Path,
-) -> Result<Vec<String>, RemoteUrlError> {
+) -> Result<EffectiveRemoteUrls, RemoteUrlError> {
     let remotes = successful_git_output(runner, &["remote"], repository_root).await?;
     let mut urls = BTreeSet::new();
+    let mut remote_names = remotes
+        .lines()
+        .filter(|remote| !remote.is_empty())
+        .peekable();
+    if remote_names.peek().is_none() {
+        return Ok(EffectiveRemoteUrls::NoRemotes);
+    }
 
-    for remote in remotes.lines().filter(|remote| !remote.is_empty()) {
+    for remote in remote_names {
         let fetch_urls = successful_git_output(
             runner,
             &["remote", "get-url", "--all", "--", remote],
@@ -133,7 +155,54 @@ pub(crate) async fn effective_remote_urls(
         );
     }
 
-    Ok(urls.into_iter().collect())
+    Ok(EffectiveRemoteUrls::Found(urls.into_iter().collect()))
+}
+
+pub(crate) async fn discover_repository_ids(
+    runner: &dyn GitRunner,
+    action_path: Option<&Path>,
+) -> Result<Vec<String>, RepositoryDiscoveryReason> {
+    let action_path = repository_action_path_with(action_path, std::env::current_dir)?;
+    let repository_root = resolve_repository_root(runner, &action_path)
+        .await
+        .map_err(repository_root_reason)?;
+    let remotes = effective_remote_urls(runner, &repository_root)
+        .await
+        .map_err(|_| RepositoryDiscoveryReason::GitCommandFailed)?;
+    let remote_urls = match remotes {
+        EffectiveRemoteUrls::NoRemotes => return Err(RepositoryDiscoveryReason::NoGitRemotes),
+        EffectiveRemoteUrls::Found(urls) => urls,
+    };
+    let repository_ids = remote_urls
+        .iter()
+        .filter_map(|remote| crate::repository_url::canonical_repository_id(remote))
+        .collect::<BTreeSet<_>>();
+    if repository_ids.is_empty() {
+        return Err(RepositoryDiscoveryReason::NoSupportedGitRemotes);
+    }
+    Ok(repository_ids.into_iter().collect())
+}
+
+fn repository_root_reason(error: RepositoryRootError) -> RepositoryDiscoveryReason {
+    match error {
+        RepositoryRootError::NotInRepository => RepositoryDiscoveryReason::NotInGitRepository,
+        RepositoryRootError::NoExistingDirectory
+        | RepositoryRootError::GitCommandFailed
+        | RepositoryRootError::InvalidRepositoryRoot => RepositoryDiscoveryReason::GitCommandFailed,
+    }
+}
+
+fn repository_action_path_with(
+    action_path: Option<&Path>,
+    current_dir: impl FnOnce() -> std::io::Result<PathBuf>,
+) -> Result<PathBuf, RepositoryDiscoveryReason> {
+    if let Some(path) = action_path {
+        return Ok(path.to_path_buf());
+    }
+    if let Some(path) = crate::docker::container_workspace_dir() {
+        return Ok(path);
+    }
+    current_dir().map_err(|_| RepositoryDiscoveryReason::WorkingDirectoryUnavailable)
 }
 
 async fn successful_git_output(
@@ -338,12 +407,12 @@ mod tests {
             effective_remote_urls(&runner, Path::new("/repository"))
                 .await
                 .unwrap(),
-            [
-                "https://example.com/acme/web.git",
-                "https://example.org/acme/web.git",
-                "ssh://git@example.com/acme/web.git",
-                "ssh://git@example.org/acme/web.git",
-            ]
+            EffectiveRemoteUrls::Found(vec![
+                "https://example.com/acme/web.git".to_string(),
+                "https://example.org/acme/web.git".to_string(),
+                "ssh://git@example.com/acme/web.git".to_string(),
+                "ssh://git@example.org/acme/web.git".to_string(),
+            ])
         );
         assert_eq!(
             *runner.calls.lock().unwrap(),
@@ -361,10 +430,12 @@ mod tests {
     async fn returns_no_urls_when_repository_has_no_remotes() {
         let runner = MockGitRunner::new([successful_output("")]);
 
-        assert!(effective_remote_urls(&runner, Path::new("/repository"))
-            .await
-            .unwrap()
-            .is_empty());
+        assert_eq!(
+            effective_remote_urls(&runner, Path::new("/repository"))
+                .await
+                .unwrap(),
+            EffectiveRemoteUrls::NoRemotes
+        );
         assert_eq!(*runner.calls.lock().unwrap(), [vec!["remote"]]);
     }
 
@@ -382,6 +453,86 @@ mod tests {
         assert_eq!(
             effective_remote_urls(&runner, Path::new("/repository")).await,
             Err(RemoteUrlError::GitCommandFailed)
+        );
+    }
+
+    #[tokio::test]
+    async fn discovers_sorted_canonical_repository_ids() {
+        let directory = tempfile::tempdir().unwrap();
+        let runner = MockGitRunner::new([
+            successful_output("/repository\n"),
+            successful_output("origin\n"),
+            successful_output(
+                "https://example.org/Team/Service.git\ngit@example.com:Acme/Web.git\n",
+            ),
+            successful_output("https://example.org/team/service\n"),
+        ]);
+
+        assert_eq!(
+            discover_repository_ids(&runner, Some(directory.path()))
+                .await
+                .unwrap(),
+            ["example.com/acme/web", "example.org/team/service"]
+        );
+    }
+
+    #[tokio::test]
+    async fn maps_repository_discovery_failures_to_stable_reasons() {
+        let directory = tempfile::tempdir().unwrap();
+        let cases = [
+            (
+                vec![GitCommandOutput {
+                    success: false,
+                    stdout: String::new(),
+                    stderr: "fatal: not a git repository".to_string(),
+                }],
+                RepositoryDiscoveryReason::NotInGitRepository,
+            ),
+            (
+                vec![successful_output("/repository\n"), successful_output("")],
+                RepositoryDiscoveryReason::NoGitRemotes,
+            ),
+            (
+                vec![
+                    successful_output("/repository\n"),
+                    successful_output("origin\n"),
+                    successful_output("../local/repository.git\n"),
+                    successful_output("file:///tmp/repository.git\n"),
+                ],
+                RepositoryDiscoveryReason::NoSupportedGitRemotes,
+            ),
+            (
+                vec![GitCommandOutput {
+                    success: false,
+                    stdout: String::new(),
+                    stderr: "fatal: configuration failed".to_string(),
+                }],
+                RepositoryDiscoveryReason::GitCommandFailed,
+            ),
+        ];
+
+        for (responses, expected) in cases {
+            let runner = MockGitRunner::new(responses);
+            assert_eq!(
+                discover_repository_ids(&runner, Some(directory.path())).await,
+                Err(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn reports_unavailable_current_workspace() {
+        let _docker = crate::environment::force_docker(false);
+        let result = repository_action_path_with(None, || {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "working directory unavailable",
+            ))
+        });
+
+        assert_eq!(
+            result,
+            Err(RepositoryDiscoveryReason::WorkingDirectoryUnavailable)
         );
     }
 
