@@ -1,4 +1,12 @@
-use percent_encoding::percent_decode_str;
+use percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
+
+// CodeScene's repository IDs preserve the same characters as ring.util.codec/url-encode.
+const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~')
+    .remove(b'+');
 
 struct RemoteParts {
     host: String,
@@ -7,7 +15,7 @@ struct RemoteParts {
 
 struct RepositoryIdentity {
     host: String,
-    owner: String,
+    owner: Vec<String>,
     repository: String,
     provider: Provider,
 }
@@ -96,22 +104,29 @@ impl RemoteParts {
         Some(RepositoryIdentity {
             provider: provider_for_host(&host),
             host,
-            owner: self.path.join("/"),
+            owner: self.path,
             repository,
         })
     }
 }
 
 impl RepositoryIdentity {
-    fn canonical_id(self) -> String {
-        let path = if self.owner.is_empty() {
-            self.repository
-        } else {
-            format!("{}/{}", self.owner, self.repository)
-        };
+    fn canonical_id(self) -> Option<String> {
+        let path = self
+            .owner
+            .iter()
+            .chain(std::iter::once(&self.repository))
+            .map(|part| canonical_path_segment(part))
+            .collect::<Option<Vec<_>>>()?
+            .join("/");
         let id = format!("{}/{path}", self.host).to_lowercase();
-        self.provider.normalize_id(&id).to_string()
+        Some(self.provider.normalize_id(&id).to_string())
     }
+}
+
+fn canonical_path_segment(value: &str) -> Option<String> {
+    let decoded = percent_decode_str(value).decode_utf8().ok()?;
+    Some(utf8_percent_encode(&decoded, PATH_SEGMENT_ENCODE_SET).to_string())
 }
 
 impl Provider {
@@ -135,7 +150,7 @@ pub(crate) fn canonical_repository_id(remote: &str) -> Option<String> {
     } else {
         parse_scp_like(remote)?
     };
-    Some(parts.repository_identity()?.canonical_id())
+    parts.repository_identity()?.canonical_id()
 }
 
 fn parse_url(remote: &str) -> Option<RemoteParts> {
@@ -210,7 +225,7 @@ fn azure_identity(path: [&str; 3]) -> Option<RepositoryIdentity> {
     let [organization, project, repository]: [String; 3] = path.try_into().ok()?;
     Some(RepositoryIdentity {
         host: "dev.azure.com".to_string(),
-        owner: format!("{organization}/{project}"),
+        owner: vec![organization, project],
         repository,
         provider: Provider::Azure,
     })
@@ -228,11 +243,11 @@ mod tests {
     fn canonicalizes_generic_protocol_and_scp_remotes() {
         assert_eq!(
             canonical_repository_id("git@GitHub.com:Acme/Platform/Web.git"),
-            Some("github.com/acme%2fplatform/web".to_string())
+            Some("github.com/acme/platform/web".to_string())
         );
         assert_eq!(
             canonical_repository_id("ssh://git@github.com:2222/Acme/Platform/Web.GIT"),
-            Some("github.com/acme%2fplatform/web.git".to_string())
+            Some("github.com/acme/platform/web.git".to_string())
         );
     }
 
@@ -240,7 +255,11 @@ mod tests {
     fn encodes_owner_and_repository_as_separate_path_values() {
         assert_eq!(
             canonical_repository_id("https://gitlab.com/Acme/Core Platform/Web App.git"),
-            Some("gitlab.com/acme%2fcore%20platform/web%20app".to_string())
+            Some("gitlab.com/acme/core%20platform/web%20app".to_string())
+        );
+        assert_canonical(
+            "git@example.com:Team+Tools/Repo@Home.git",
+            "example.com/team+tools/repo%40home",
         );
     }
 
@@ -260,15 +279,15 @@ mod tests {
     fn canonicalizes_azure_and_visual_studio_remotes() {
         assert_eq!(
             canonical_repository_id("git@ssh.dev.azure.com:v3/Acme/Core%20Platform/Web%20App.git"),
-            Some("dev.azure.com/acme%2fcore%20platform/web%20app.git".to_string())
+            Some("dev.azure.com/acme/core%20platform/web%20app.git".to_string())
         );
         assert_eq!(
             canonical_repository_id("https://dev.azure.com/Acme/Core%20Platform/_git/Web%20App"),
-            Some("dev.azure.com/acme%2fcore%20platform/web%20app".to_string())
+            Some("dev.azure.com/acme/core%20platform/web%20app".to_string())
         );
         assert_eq!(
             canonical_repository_id("https://Acme.visualstudio.com/Core%20Platform/_git/Web%20App"),
-            Some("dev.azure.com/acme%2fcore%20platform/web%20app".to_string())
+            Some("dev.azure.com/acme/core%20platform/web%20app".to_string())
         );
     }
 
@@ -278,13 +297,13 @@ mod tests {
             canonical_repository_id(
                 "ssh://server.local:22/tfs/DefaultCollection/Project/_git/Repo"
             ),
-            Some("server.local/defaultcollection%2fproject/repo".to_string())
+            Some("server.local/defaultcollection/project/repo".to_string())
         );
         assert_eq!(
             canonical_repository_id(
                 "https://Org.visualstudio.com/DefaultCollection/Project/_git/Repo"
             ),
-            Some("dev.azure.com/org%2fdefaultcollection%2fproject/repo".to_string())
+            Some("dev.azure.com/org/defaultcollection/project/repo".to_string())
         );
     }
 

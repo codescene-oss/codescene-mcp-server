@@ -436,6 +436,7 @@ dependencies = [
  "hex",
  "libc",
  "p12-keystore",
+ "percent-encoding",
  "rcgen",
  "regex",
  "reqwest",
