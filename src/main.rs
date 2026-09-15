@@ -63,7 +63,7 @@ use crate::cli::CliRunner;
 use crate::config::ConfigData;
 use crate::http::HttpClient;
 use crate::repository_projects::RepositoryProjectsCache;
-use crate::tools::validation::{ValidationError, Validator};
+use crate::tools::validation::Validator;
 use crate::tools::{
     ChangeSetParam, DownloadSkillParam, FilePathParam, GetConfigParam, GitRepoParam, LoginParam,
     LogoutParam, OptionalContext, OwnershipParam, ProjectFileParam, ProjectParam,
@@ -289,16 +289,6 @@ impl CodeSceneServer {
         });
     }
 
-    pub(crate) fn track_err(&self, tool: &str, err: &errors::CliError) {
-        tracing::warn!(tool, error = %err, "tool error");
-        self.track_error_with_context(ContextualErrorEvent {
-            error_kind: err.kind(),
-            tool,
-            detail: None,
-            context: analytics_attribution::AnalyticsContext::CurrentWorkspace,
-        });
-    }
-
     pub(crate) fn track_api_err(&self, tool: &str, err: &errors::ApiError) {
         tracing::warn!(tool, error = %err, "API error");
         self.track_error_with_context(ContextualErrorEvent {
@@ -309,24 +299,25 @@ impl CodeSceneServer {
         });
     }
 
-    pub(crate) fn track_validation_err(&self, tool: &str, err: &ValidationError) {
-        tracing::warn!(tool, error = %err, "tool error");
-        self.track_error_with_context(ContextualErrorEvent {
-            error_kind: err.kind,
-            tool,
-            detail: err.detail.as_deref(),
-            context: analytics_attribution::AnalyticsContext::CurrentWorkspace,
-        });
+    pub(crate) fn track_err_msg(&self, tool: &str, error_kind: &str, err: &str) {
+        self.track_contextual_err(
+            ContextualErrorEvent {
+                error_kind,
+                tool,
+                detail: None,
+                context: analytics_attribution::AnalyticsContext::CurrentWorkspace,
+            },
+            &err,
+        );
     }
 
-    pub(crate) fn track_err_msg(&self, tool: &str, error_kind: &str, err: &str) {
-        tracing::warn!(tool, error = err, "tool error");
-        self.track_error_with_context(ContextualErrorEvent {
-            error_kind,
-            tool,
-            detail: None,
-            context: analytics_attribution::AnalyticsContext::CurrentWorkspace,
-        });
+    pub(crate) fn track_contextual_err(
+        &self,
+        event: ContextualErrorEvent<'_>,
+        error: &dyn std::fmt::Display,
+    ) {
+        tracing::warn!(tool = event.tool, error = %error, "tool error");
+        self.track_error_with_context(event);
     }
 
     pub(crate) fn track_error_with_context(&self, event: ContextualErrorEvent<'_>) {

@@ -7,9 +7,9 @@ use rmcp::ErrorData;
 
 use crate::event_properties;
 use crate::tools::common::tool_error;
-use crate::tools::rules_config::{Invocation, Subcommand};
+use crate::tools::rules_config::{analytics_context, Invocation, Subcommand};
 use crate::tools::RulesConfigValidateParam;
-use crate::CodeSceneServer;
+use crate::{CodeSceneServer, ContextualErrorEvent};
 
 const TOOL: &str = "rules-config-validate";
 
@@ -18,11 +18,20 @@ pub(crate) async fn handle(
     params: RulesConfigValidateParam,
 ) -> Result<CallToolResult, ErrorData> {
     server.version_checker.check_in_background();
+    let analytics_context = analytics_context(params.config_path.as_deref());
 
     let invocation = match build_invocation(&params) {
         Ok(inv) => inv,
         Err(msg) => {
-            server.track_err_msg(TOOL, "invalid_input", &msg);
+            server.track_contextual_err(
+                ContextualErrorEvent {
+                    error_kind: "invalid_input",
+                    tool: TOOL,
+                    detail: None,
+                    context: analytics_context,
+                },
+                &msg,
+            );
             return Ok(tool_error(&msg));
         }
     };
@@ -33,12 +42,20 @@ pub(crate) async fn handle(
                 "validate",
                 params.config_path.as_deref().map(Path::new),
             );
-            server.track(TOOL, props);
+            server.track_with_context(TOOL, props, analytics_context);
             let text = server.maybe_version_warning(&output).await;
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
         Err(e) => {
-            server.track_err(TOOL, &e);
+            server.track_contextual_err(
+                ContextualErrorEvent {
+                    error_kind: e.kind(),
+                    tool: TOOL,
+                    detail: None,
+                    context: analytics_context,
+                },
+                &e,
+            );
             Ok(tool_error(format!("Error: {e}")))
         }
     }

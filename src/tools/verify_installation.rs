@@ -4,6 +4,7 @@ use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 use serde_json::json;
 
+use crate::analytics_attribution::AnalyticsContext;
 use crate::api_client;
 use crate::auth::AuthCredential;
 use crate::cli;
@@ -37,7 +38,11 @@ pub(crate) async fn handle(
     };
     let checks = run_all_checks(&project_root, &ctx).await;
     let text = format_results(&checks);
-    server.track("verify-installation", json!({}));
+    server.track_with_context(
+        "verify-installation",
+        json!({}),
+        AnalyticsContext::Path(params.git_repository_path.into()),
+    );
     let text = server.maybe_version_warning(&text).await;
     Ok(CallToolResult::success(vec![Content::text(text)]))
 }

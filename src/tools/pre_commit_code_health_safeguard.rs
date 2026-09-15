@@ -3,13 +3,14 @@ use std::path::Path;
 use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 
+use crate::analytics_attribution::AnalyticsContext;
 use crate::delta;
 use crate::docker;
 use crate::event_properties;
 use crate::tools::common::{run_delta, tool_error};
 use crate::tools::validation::CliCheck;
 use crate::tools::GitRepoParam;
-use crate::CodeSceneServer;
+use crate::{CodeSceneServer, ContextualErrorEvent};
 
 pub(crate) async fn handle(
     server: &CodeSceneServer,
@@ -19,10 +20,19 @@ pub(crate) async fn handle(
         return Ok(r);
     }
     server.version_checker.check_in_background();
+    let analytics_context = AnalyticsContext::Path(params.git_repository_path.clone().into());
     let repo_path = docker::adapt_path_for_docker(Path::new(&params.git_repository_path));
     let rp = Path::new(&repo_path);
     if let Err(e) = server.validator.run_checks(&[CliCheck::InsideGitRepo(rp)]) {
-        server.track_validation_err("pre-commit-code-health-safeguard", &e);
+        server.track_contextual_err(
+            ContextualErrorEvent {
+                error_kind: e.kind,
+                tool: "pre-commit-code-health-safeguard",
+                detail: e.detail.as_deref(),
+                context: analytics_context.clone(),
+            },
+            &e,
+        );
         return Ok(tool_error(&e.message));
     }
     let result = run_delta(rp, None, &*server.cli_runner).await;
@@ -34,12 +44,20 @@ pub(crate) async fn handle(
                 Path::new(&params.git_repository_path),
                 &result_str,
             );
-            server.track("pre-commit-code-health-safeguard", props);
+            server.track_with_context("pre-commit-code-health-safeguard", props, analytics_context);
             let text = server.maybe_version_warning(&result_str).await;
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
         Err(e) => {
-            server.track_err("pre-commit-code-health-safeguard", &e);
+            server.track_contextual_err(
+                ContextualErrorEvent {
+                    error_kind: e.kind(),
+                    tool: "pre-commit-code-health-safeguard",
+                    detail: None,
+                    context: analytics_context,
+                },
+                &e,
+            );
             Ok(tool_error(&format!("Error: {e}")))
         }
     }

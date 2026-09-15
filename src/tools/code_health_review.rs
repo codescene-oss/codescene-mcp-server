@@ -3,12 +3,13 @@ use std::path::Path;
 use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 
+use crate::analytics_attribution::AnalyticsContext;
 use crate::docker;
 use crate::event_properties;
 use crate::tools::common::{run_review, tool_error};
 use crate::tools::validation::CliCheck;
 use crate::tools::FilePathParam;
-use crate::CodeSceneServer;
+use crate::{CodeSceneServer, ContextualErrorEvent};
 
 pub(crate) async fn handle(
     server: &CodeSceneServer,
@@ -18,6 +19,7 @@ pub(crate) async fn handle(
         return Ok(r);
     }
     server.version_checker.check_in_background();
+    let analytics_context = AnalyticsContext::Path(params.file_path.clone().into());
     let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
     let fp = Path::new(&file_path);
     if let Err(e) = server.validator.run_checks(&[
@@ -25,19 +27,36 @@ pub(crate) async fn handle(
         CliCheck::SupportedFileType(fp),
         CliCheck::InsideGitRepo(fp),
     ]) {
-        server.track_validation_err("code-health-review", &e);
+        server.track_contextual_err(
+            ContextualErrorEvent {
+                error_kind: e.kind,
+                tool: "code-health-review",
+                detail: e.detail.as_deref(),
+                context: analytics_context.clone(),
+            },
+            &e,
+        );
         return Ok(tool_error(&e.message));
     }
     let result = run_review(fp, &*server.cli_runner).await;
-    match &result {
+    match result {
         Ok(output) => {
-            let props = event_properties::review_properties(Path::new(&params.file_path), output);
-            server.track("code-health-review", props);
-            let text = server.maybe_version_warning(output).await;
+            let props =
+                event_properties::review_properties(Path::new(&params.file_path), &output);
+            server.track_with_context("code-health-review", props, analytics_context);
+            let text = server.maybe_version_warning(&output).await;
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
         Err(e) => {
-            server.track_err("code-health-review", &e);
+            server.track_contextual_err(
+                ContextualErrorEvent {
+                    error_kind: e.kind(),
+                    tool: "code-health-review",
+                    detail: None,
+                    context: analytics_context,
+                },
+                &e,
+            );
             Ok(tool_error(&format!("Error: {e}")))
         }
     }
