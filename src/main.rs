@@ -171,6 +171,13 @@ pub(crate) struct CodeSceneServer {
     pub(crate) repository_projects_cache: Arc<RepositoryProjectsCache>,
 }
 
+pub(crate) struct ContextualErrorEvent<'a> {
+    pub(crate) error_kind: &'a str,
+    pub(crate) tool: &'a str,
+    pub(crate) detail: Option<&'a str>,
+    pub(crate) context: analytics_attribution::AnalyticsContext,
+}
+
 impl CodeSceneServer {
     pub(crate) async fn require_token(&self) -> Option<CallToolResult> {
         match self
@@ -256,6 +263,19 @@ impl CodeSceneServer {
     }
 
     pub(crate) fn track(&self, event: &str, props: serde_json::Value) {
+        self.track_with_context(
+            event,
+            props,
+            analytics_attribution::AnalyticsContext::CurrentWorkspace,
+        );
+    }
+
+    pub(crate) fn track_with_context(
+        &self,
+        event: &str,
+        props: serde_json::Value,
+        context: analytics_attribution::AnalyticsContext,
+    ) {
         if tracking::is_disabled() {
             return;
         }
@@ -265,44 +285,64 @@ impl CodeSceneServer {
             properties: props,
             instance_id: &self.instance_id,
             auth: &auth,
-            attribution: self.tracking_attribution(credential),
+            attribution: self.tracking_attribution(context, credential),
         });
     }
 
     pub(crate) fn track_err(&self, tool: &str, err: &errors::CliError) {
         tracing::warn!(tool, error = %err, "tool error");
-        self.track_error_event(err.kind(), tool, None);
+        self.track_error_with_context(ContextualErrorEvent {
+            error_kind: err.kind(),
+            tool,
+            detail: None,
+            context: analytics_attribution::AnalyticsContext::CurrentWorkspace,
+        });
     }
 
     pub(crate) fn track_api_err(&self, tool: &str, err: &errors::ApiError) {
         tracing::warn!(tool, error = %err, "API error");
-        self.track_error_event(err.kind(), tool, None);
+        self.track_error_with_context(ContextualErrorEvent {
+            error_kind: err.kind(),
+            tool,
+            detail: None,
+            context: analytics_attribution::AnalyticsContext::CurrentWorkspace,
+        });
     }
 
     pub(crate) fn track_validation_err(&self, tool: &str, err: &ValidationError) {
         tracing::warn!(tool, error = %err, "tool error");
-        self.track_error_event(err.kind, tool, err.detail.as_deref());
+        self.track_error_with_context(ContextualErrorEvent {
+            error_kind: err.kind,
+            tool,
+            detail: err.detail.as_deref(),
+            context: analytics_attribution::AnalyticsContext::CurrentWorkspace,
+        });
     }
 
     pub(crate) fn track_err_msg(&self, tool: &str, error_kind: &str, err: &str) {
         tracing::warn!(tool, error = err, "tool error");
-        self.track_error_event(error_kind, tool, None);
+        self.track_error_with_context(ContextualErrorEvent {
+            error_kind,
+            tool,
+            detail: None,
+            context: analytics_attribution::AnalyticsContext::CurrentWorkspace,
+        });
     }
 
-    fn track_error_event(&self, error_kind: &str, tool: &str, detail: Option<&str>) {
+    pub(crate) fn track_error_with_context(&self, event: ContextualErrorEvent<'_>) {
         if tracking::is_disabled() {
             return;
         }
         let (auth, credential) = self.tracking_auth();
         tracking::track_error_with_attribution(
             &tracking::ErrorEvent {
-                error_kind,
-                tool_name: tool,
+                error_kind: event.error_kind,
+                tool_name: event.tool,
                 instance_id: &self.instance_id,
-                detail,
+                detail: event.detail,
                 auth: &auth,
             },
-            self.tracking_attribution(credential),
+            self.tracking_attribution(event.context, credential),
         );
     }
 
@@ -325,10 +365,11 @@ impl CodeSceneServer {
 
     fn tracking_attribution(
         &self,
+        context: analytics_attribution::AnalyticsContext,
         credential: Option<AuthCredential>,
     ) -> tracking::TrackingAttribution {
         tracking::TrackingAttribution {
-            context: analytics_attribution::AnalyticsContext::CurrentWorkspace,
+            context,
             credential,
             http_client: self.http_client.clone(),
             cache: self.repository_projects_cache.clone(),
