@@ -78,18 +78,17 @@ pub struct ErrorEvent<'a> {
 }
 
 pub(crate) fn track_error_with_attribution(evt: &ErrorEvent<'_>, attribution: TrackingAttribution) {
-    track_error_properties(evt, |properties| {
-        track_event_with_attribution(AttributedEvent {
-            event: "error",
-            properties,
-            instance_id: evt.instance_id,
-            auth: evt.auth,
-            attribution,
-        })
+    let properties = build_error_properties(evt);
+    track_event_with_attribution(AttributedEvent {
+        event: "error",
+        properties,
+        instance_id: evt.instance_id,
+        auth: evt.auth,
+        attribution,
     });
 }
 
-fn track_error_properties(evt: &ErrorEvent<'_>, track: impl FnOnce(Value)) {
+fn build_error_properties(evt: &ErrorEvent<'_>) -> Value {
     let mut properties = json!({
         "error": evt.error_kind,
         "tool": evt.tool_name,
@@ -97,7 +96,7 @@ fn track_error_properties(evt: &ErrorEvent<'_>, track: impl FnOnce(Value)) {
     if let Some(d) = evt.detail {
         properties["detail"] = json!(d);
     }
-    track(properties);
+    properties
 }
 
 fn create_tracking_event(
@@ -647,14 +646,10 @@ mod tests {
             detail: None,
             auth: &auth,
         };
-        let mut properties = None;
-        track_error_properties(&error, |value| properties = Some(value));
+        let properties = build_error_properties(&error);
 
-        let body = process_failed_enrichment(
-            tracking_event("mcp-error", properties.unwrap()),
-            attribution,
-        )
-        .await;
+        let body =
+            process_failed_enrichment(tracking_event("mcp-error", properties), attribution).await;
 
         assert_eq!(body["event-properties"]["error"], "safe-error-kind");
         assert_eq!(body["event-properties"]["tool"], "safe-tool-name");

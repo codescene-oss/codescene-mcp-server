@@ -322,7 +322,12 @@ impl CodeSceneServer {
             properties: props,
             instance_id: &self.instance_id,
             auth: &auth,
-            attribution: self.tracking_attribution(context, credential),
+            attribution: tracking::TrackingAttribution {
+                context,
+                credential,
+                http_client: self.http_client.clone(),
+                cache: self.repository_projects_cache.clone(),
+            },
         });
     }
 
@@ -370,7 +375,12 @@ impl CodeSceneServer {
                 detail: event.detail,
                 auth: &auth,
             },
-            self.tracking_attribution(event.context, credential),
+            tracking::TrackingAttribution {
+                context: event.context,
+                credential,
+                http_client: self.http_client.clone(),
+                cache: self.repository_projects_cache.clone(),
+            },
         );
     }
 
@@ -391,18 +401,6 @@ impl CodeSceneServer {
         (auth, credential)
     }
 
-    fn tracking_attribution(
-        &self,
-        context: analytics_attribution::AnalyticsContext,
-        credential: Option<AuthCredential>,
-    ) -> tracking::TrackingAttribution {
-        tracking::TrackingAttribution {
-            context,
-            credential,
-            http_client: self.http_client.clone(),
-            cache: self.repository_projects_cache.clone(),
-        }
-    }
 }
 
 fn credential_source(credential: &AuthCredential) -> &'static str {
