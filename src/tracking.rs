@@ -51,16 +51,21 @@ pub(crate) fn track_event_with_attribution(event: AttributedEvent<'_>) {
     spawn_tracking_event(tracking_event, Some(event.attribution));
 }
 
-fn spawn_tracking_event(
+fn spawn_tracking_event(tracking_event: TrackingEvent, attribution: Option<TrackingAttribution>) {
+    tokio::spawn(async move {
+        let _ = process_tracking_event(tracking_event, attribution, &ReqwestClient).await;
+    });
+}
+
+async fn process_tracking_event(
     mut tracking_event: TrackingEvent,
     attribution: Option<TrackingAttribution>,
-) {
-    tokio::spawn(async move {
-        if let Some(attribution) = attribution {
-            enrich_tracking_event(&mut tracking_event, attribution).await;
-        }
-        let _ = send_event(tracking_event, &ReqwestClient).await;
-    });
+    client: &dyn HttpClient,
+) -> Result<(), String> {
+    if let Some(attribution) = attribution {
+        enrich_tracking_event(&mut tracking_event, attribution).await;
+    }
+    send_event(tracking_event, client).await
 }
 
 /// Data needed to track a tool error event.
@@ -219,7 +224,42 @@ mod tests {
     use crate::config;
     use crate::http::tests::MockHttpClient;
     use crate::http::HttpResponse;
-    use tokio::time::Duration;
+    use sha2::{Digest, Sha256};
+    use std::path::Path;
+    use std::process::Command;
+    use tokio::sync::Notify;
+    use tokio::time::{timeout, Duration};
+
+    const ACCESS_TOKEN: &str = "sensitive-access-token";
+    const REMOTE_NAME: &str = "sensitive-remote-name";
+    const REMOTE_URL: &str =
+        "https://sensitive-user:sensitive-password@example.test/private/repository.git";
+    const CANONICAL_REPOSITORY_ID: &str = "example.test/private/repository";
+
+    struct FailingHttpClient {
+        error: &'static str,
+    }
+
+    #[async_trait::async_trait]
+    impl HttpClient for FailingHttpClient {
+        async fn send(&self, _request: HttpRequest) -> Result<HttpResponse, String> {
+            Err(self.error.to_string())
+        }
+    }
+
+    struct BlockingHttpClient {
+        started: Arc<Notify>,
+        release: Arc<Notify>,
+    }
+
+    #[async_trait::async_trait]
+    impl HttpClient for BlockingHttpClient {
+        async fn send(&self, _request: HttpRequest) -> Result<HttpResponse, String> {
+            self.started.notify_one();
+            self.release.notified().await;
+            Err("released mapping request".to_string())
+        }
+    }
 
     fn test_attribution(client: Arc<dyn HttpClient>) -> TrackingAttribution {
         TrackingAttribution {
@@ -227,6 +267,91 @@ mod tests {
             credential: None,
             http_client: client,
             cache: Arc::new(RepositoryProjectsCache::default()),
+        }
+    }
+
+    fn git(working_dir: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(working_dir)
+            .output()
+            .expect("Git should execute");
+        assert!(
+            output.status.success(),
+            "Git failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn repository_with_sensitive_remote() -> tempfile::TempDir {
+        let repository = tempfile::tempdir().unwrap();
+        git(repository.path(), &["init", "--quiet"]);
+        git(
+            repository.path(),
+            &["remote", "add", REMOTE_NAME, REMOTE_URL],
+        );
+        repository
+    }
+
+    fn path_attribution(path: &Path, client: Arc<dyn HttpClient>) -> TrackingAttribution {
+        TrackingAttribution {
+            context: AnalyticsContext::Path(path.to_path_buf()),
+            credential: Some(AuthCredential::Configured {
+                access_token: ACCESS_TOKEN.to_string(),
+                onprem_url: None,
+            }),
+            http_client: client,
+            cache: Arc::new(RepositoryProjectsCache::default()),
+        }
+    }
+
+    fn tracking_event(event: &str, properties: Value) -> TrackingEvent {
+        TrackingEvent {
+            url: "http://tracking.test/v2/analytics/track".to_string(),
+            event: event.to_string(),
+            instance_id: "test-instance".to_string(),
+            environment: "test-environment".to_string(),
+            version: "1.0.0",
+            properties,
+            access_token: ACCESS_TOKEN.to_string(),
+        }
+    }
+
+    async fn process_failed_enrichment(
+        event: TrackingEvent,
+        attribution: TrackingAttribution,
+    ) -> Value {
+        let delivery_client = MockHttpClient::always(HttpResponse::ok(""));
+        let requests = delivery_client.captured_requests.clone();
+
+        process_tracking_event(event, Some(attribution), &delivery_client)
+            .await
+            .unwrap();
+
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        serde_json::from_str(requests[0].body.as_deref().unwrap()).unwrap()
+    }
+
+    fn assert_private_attribution_data_absent(body: &Value, action_path: &Path, raw_error: &str) {
+        let body = serde_json::to_string(body).unwrap();
+        let action_path = action_path.to_string_lossy();
+        let token_fingerprint = hex::encode(Sha256::digest(ACCESS_TOKEN.as_bytes()));
+        for sensitive_value in [
+            action_path.as_ref(),
+            REMOTE_NAME,
+            REMOTE_URL,
+            "sensitive-user",
+            "sensitive-password",
+            CANONICAL_REPOSITORY_ID,
+            ACCESS_TOKEN,
+            token_fingerprint.as_str(),
+            raw_error,
+        ] {
+            assert!(
+                !body.contains(sensitive_value),
+                "tracking properties exposed {sensitive_value:?}: {body}"
+            );
         }
     }
 
@@ -475,6 +600,102 @@ mod tests {
         assert_eq!(event.properties["tool"], "review");
         assert_eq!(event.properties["project-ids"], json!([7, 42]));
         assert!(event.properties.get("no-project-matching-reason").is_none());
+    }
+
+    #[tokio::test]
+    async fn enrichment_request_failure_still_delivers_privacy_safe_event() {
+        const RAW_ERROR: &str = "raw mapping failure with private infrastructure details";
+        let repository = repository_with_sensitive_remote();
+        let action_path = repository.path().join("private-action-path.rs");
+        let attribution = path_attribution(
+            &action_path,
+            Arc::new(FailingHttpClient { error: RAW_ERROR }),
+        );
+
+        let body = process_failed_enrichment(
+            tracking_event("mcp-test", json!({"tool": "review"})),
+            attribution,
+        )
+        .await;
+
+        assert_eq!(body["event-properties"]["tool"], "review");
+        assert_eq!(
+            body["event-properties"]["no-project-matching-reason"],
+            "repository-projects-request-failed"
+        );
+        assert!(body["event-properties"].get("project-ids").is_none());
+        assert_private_attribution_data_absent(&body, &action_path, RAW_ERROR);
+    }
+
+    #[tokio::test]
+    async fn invalid_enrichment_response_still_delivers_privacy_safe_error_event() {
+        const RAW_RESPONSE: &str = "raw invalid response with private infrastructure details";
+        let repository = repository_with_sensitive_remote();
+        let action_path = repository.path().join("private-error-path.rs");
+        let attribution = path_attribution(
+            &action_path,
+            Arc::new(MockHttpClient::always(HttpResponse::ok(RAW_RESPONSE))),
+        );
+        let auth = TrackingAuth {
+            access_token: ACCESS_TOKEN.to_string(),
+            api_root: None,
+        };
+        let error = ErrorEvent {
+            error_kind: "safe-error-kind",
+            tool_name: "safe-tool-name",
+            instance_id: "test-instance",
+            detail: None,
+            auth: &auth,
+        };
+        let mut properties = None;
+        track_error_properties(&error, |value| properties = Some(value));
+
+        let body = process_failed_enrichment(
+            tracking_event("mcp-error", properties.unwrap()),
+            attribution,
+        )
+        .await;
+
+        assert_eq!(body["event-properties"]["error"], "safe-error-kind");
+        assert_eq!(body["event-properties"]["tool"], "safe-tool-name");
+        assert_eq!(
+            body["event-properties"]["no-project-matching-reason"],
+            "invalid-repository-projects-response"
+        );
+        assert!(body["event-properties"].get("project-ids").is_none());
+        assert_private_attribution_data_absent(&body, &action_path, RAW_RESPONSE);
+    }
+
+    #[tokio::test]
+    async fn slow_enrichment_does_not_block_tracking_caller() {
+        let _lock = config::lock_test_env();
+        std::env::remove_var("CS_DISABLE_TRACKING");
+        std::env::set_var("CS_TRACKING_URL", "http://127.0.0.1:1");
+        let repository = repository_with_sensitive_remote();
+        let started = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+        let client = Arc::new(BlockingHttpClient {
+            started: started.clone(),
+            release: release.clone(),
+        });
+        let auth = TrackingAuth {
+            access_token: ACCESS_TOKEN.to_string(),
+            api_root: None,
+        };
+
+        track_event_with_attribution(AttributedEvent {
+            event: "test-event",
+            properties: json!({"tool": "review"}),
+            instance_id: "test-instance",
+            auth: &auth,
+            attribution: path_attribution(repository.path(), client),
+        });
+
+        timeout(Duration::from_secs(2), started.notified())
+            .await
+            .expect("detached attribution should start after the tracking call returns");
+        release.notify_one();
+        std::env::remove_var("CS_TRACKING_URL");
     }
 
     async fn send_event_and_capture_request(
