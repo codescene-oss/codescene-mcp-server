@@ -89,6 +89,7 @@ mod tests {
         make_server_with_mocks, set_token, MockCliRunner,
     };
     use crate::tools::ProjectParam;
+    use crate::{RecordedTrackingCall, TrackingProbe};
 
     fn make_api_mock(analysis_resp: HttpResponse, data_resp: HttpResponse) -> MockHttpClient {
         MockHttpClient::new(vec![analysis_resp, data_resp, HttpResponse::ok("[]")])
@@ -134,37 +135,71 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn project_api_error() {
+    async fn project_api_errors() {
         let _g = set_token("tok");
-        let server = make_server_with_mocks(
+        let responses = [
+            vec![HttpResponse::error(500, "Server Error")],
+            vec![
+                HttpResponse::ok(r#"{"id":5000}"#),
+                HttpResponse::error(500, "Server Error"),
+            ],
+        ];
+
+        for responses in responses {
+            let server = make_server_with_mocks(
+                false,
+                MockCliRunner::with_responses(vec![]),
+                MockHttpClient::new(responses),
+            );
+            let result = server
+                .list_technical_debt_goals_for_project(Parameters(ProjectParam {
+                    project_id: 42,
+                }))
+                .await
+                .unwrap();
+            assert_eq!(result.is_error, Some(true));
+        }
+    }
+
+    #[tokio::test]
+    async fn analytics_keeps_explicit_project_context_on_success_and_error() {
+        let _g = set_token("tok");
+        let mut server = make_server_with_mocks(
+            false,
+            MockCliRunner::with_responses(vec![]),
+            make_api_mock(
+                HttpResponse::ok(r#"{"id":5000}"#),
+                HttpResponse::ok(r#"{"files":[],"page":1,"max_pages":1}"#),
+            ),
+        );
+        let probe = TrackingProbe::install(&mut server);
+
+        server
+            .list_technical_debt_goals_for_project(Parameters(ProjectParam { project_id: 42 }))
+            .await
+            .unwrap();
+
+        probe.assert_single(RecordedTrackingCall::Event {
+            name: "list-technical-debt-goals".to_string(),
+            context: crate::analytics_attribution::AnalyticsContext::ExplicitProjectIds(vec![42]),
+        });
+
+        let mut server = make_server_with_mocks(
             false,
             MockCliRunner::with_responses(vec![]),
             MockHttpClient::new(vec![HttpResponse::error(500, "Server Error")]),
         );
-        let params = ProjectParam { project_id: 42 };
-        let result = server
-            .list_technical_debt_goals_for_project(Parameters(params))
-            .await
-            .unwrap();
-        assert_eq!(result.is_error, Some(true));
-    }
+        let probe = TrackingProbe::install(&mut server);
 
-    #[tokio::test]
-    async fn project_data_api_error() {
-        let _g = set_token("tok");
-        let server = make_server_with_mocks(
-            false,
-            MockCliRunner::with_responses(vec![]),
-            MockHttpClient::new(vec![
-                HttpResponse::ok(r#"{"id":5000}"#),
-                HttpResponse::error(500, "Server Error"),
-            ]),
-        );
-        let params = ProjectParam { project_id: 42 };
-        let result = server
-            .list_technical_debt_goals_for_project(Parameters(params))
+        server
+            .list_technical_debt_goals_for_project(Parameters(ProjectParam { project_id: 42 }))
             .await
             .unwrap();
-        assert_eq!(result.is_error, Some(true));
+
+        probe.assert_single(RecordedTrackingCall::Error {
+            tool: "list-technical-debt-goals".to_string(),
+            error_kind: "api_error".to_string(),
+            context: crate::analytics_attribution::AnalyticsContext::ExplicitProjectIds(vec![42]),
+        });
     }
 }

@@ -15,11 +15,14 @@ pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: FilePathParam,
 ) -> Result<CallToolResult, ErrorData> {
-    if let Some(r) = server.require_token().await {
+    let analytics_context = AnalyticsContext::Path(params.file_path.clone().into());
+    if let Some(r) = server
+        .require_token_with_context("code-health-score", analytics_context.clone())
+        .await
+    {
         return Ok(r);
     }
     server.version_checker.check_in_background();
-    let analytics_context = AnalyticsContext::Path(params.file_path.clone().into());
     let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
     let fp = Path::new(&file_path);
     if let Err(e) = server.validator.run_checks(&[

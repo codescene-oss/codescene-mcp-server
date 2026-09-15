@@ -27,16 +27,24 @@ pub(crate) async fn handle(
 mod tests {
     use rmcp::handler::server::wrapper::Parameters;
 
+    use crate::analytics_attribution::AnalyticsContext;
     use crate::tests::{make_server, result_text};
     use crate::tools::GetConfigParam;
+    use crate::{RecordedTrackingCall, TrackingProbe};
 
     #[tokio::test]
     async fn lists_all_options() {
-        let result = make_server(false)
+        let mut server = make_server(false);
+        let probe = TrackingProbe::install(&mut server);
+        let result = server
             .get_config(Parameters(GetConfigParam { key: None }))
             .await
             .unwrap();
         assert!(result_text(&result).contains("config_dir"));
+        probe.assert_single(RecordedTrackingCall::Event {
+                name: "get-config".to_string(),
+                context: AnalyticsContext::CurrentWorkspace,
+            });
     }
 
     #[tokio::test]

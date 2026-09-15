@@ -169,6 +169,47 @@ pub(crate) struct CodeSceneServer {
     pub(crate) http_client: Arc<dyn HttpClient>,
     pub(crate) validator: Arc<dyn Validator>,
     pub(crate) repository_projects_cache: Arc<RepositoryProjectsCache>,
+    #[cfg(test)]
+    pub(crate) tracking_probe: Option<TrackingProbe>,
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum RecordedTrackingCall {
+    Event {
+        name: String,
+        context: analytics_attribution::AnalyticsContext,
+    },
+    Error {
+        tool: String,
+        error_kind: String,
+        context: analytics_attribution::AnalyticsContext,
+    },
+}
+
+#[cfg(test)]
+#[derive(Clone, Default)]
+pub(crate) struct TrackingProbe(Arc<std::sync::Mutex<Vec<RecordedTrackingCall>>>);
+
+#[cfg(test)]
+impl TrackingProbe {
+    pub(crate) fn calls(&self) -> Vec<RecordedTrackingCall> {
+        self.0.lock().unwrap().clone()
+    }
+
+    fn record(&self, call: RecordedTrackingCall) {
+        self.0.lock().unwrap().push(call);
+    }
+
+    pub(crate) fn install(server: &mut CodeSceneServer) -> Self {
+        let probe = Self::default();
+        server.tracking_probe = Some(probe.clone());
+        probe
+    }
+
+    pub(crate) fn assert_single(&self, expected: RecordedTrackingCall) {
+        assert_eq!(self.calls(), [expected]);
+    }
 }
 
 pub(crate) struct ContextualErrorEvent<'a> {
@@ -213,6 +254,21 @@ impl CodeSceneServer {
                 )]))
             }
         }
+    }
+
+    pub(crate) async fn require_token_with_context(
+        &self,
+        tool: &str,
+        context: analytics_attribution::AnalyticsContext,
+    ) -> Option<CallToolResult> {
+        let result = self.require_token().await?;
+        self.track_error_with_context(ContextualErrorEvent {
+            error_kind: "authentication_unavailable",
+            tool,
+            detail: None,
+            context,
+        });
+        Some(result)
     }
 
     pub(crate) async fn resolve_auth_credential(&self) -> Result<AuthCredential, CallToolResult> {
@@ -316,6 +372,14 @@ impl CodeSceneServer {
         if tracking::is_disabled() {
             return;
         }
+        #[cfg(test)]
+        if let Some(probe) = &self.tracking_probe {
+            probe.record(RecordedTrackingCall::Event {
+                name: event.to_string(),
+                context,
+            });
+            return;
+        }
         let (auth, credential) = self.tracking_auth();
         tracking::track_event_with_attribution(tracking::AttributedEvent {
             event,
@@ -364,6 +428,15 @@ impl CodeSceneServer {
 
     pub(crate) fn track_error_with_context(&self, event: ContextualErrorEvent<'_>) {
         if tracking::is_disabled() {
+            return;
+        }
+        #[cfg(test)]
+        if let Some(probe) = &self.tracking_probe {
+            probe.record(RecordedTrackingCall::Error {
+                tool: event.tool.to_string(),
+                error_kind: event.error_kind.to_string(),
+                context: event.context,
+            });
             return;
         }
         let (auth, credential) = self.tracking_auth();
@@ -473,6 +546,8 @@ impl CodeSceneServer {
             http_client: deps.http_client,
             validator: deps.validator,
             repository_projects_cache: Arc::new(RepositoryProjectsCache::default()),
+            #[cfg(test)]
+            tracking_probe: None,
         }
     }
 

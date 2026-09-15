@@ -16,11 +16,17 @@ pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: FilePathParam,
 ) -> Result<CallToolResult, ErrorData> {
-    if let Some(r) = server.require_token().await {
+    let analytics_context = AnalyticsContext::Path(params.file_path.clone().into());
+    if let Some(r) = server
+        .require_token_with_context(
+            "code-health-refactoring-business-case",
+            analytics_context.clone(),
+        )
+        .await
+    {
         return Ok(r);
     }
     server.version_checker.check_in_background();
-    let analytics_context = AnalyticsContext::Path(params.file_path.clone().into());
     let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
     let fp = Path::new(&file_path);
     if let Err(e) = server.validator.run_checks(&[
@@ -42,14 +48,7 @@ pub(crate) async fn handle(
     let review_result = run_review(fp, &*server.cli_runner).await;
     match review_result {
         Ok(output) => {
-            let score = extract_score(&output);
-            let result_text = match score {
-                Some(s) => match business_case::make_business_case(s) {
-                    Some(bc) => serde_json::to_string_pretty(&bc).unwrap_or_default(),
-                    None => "Code Health is already optimal. No business case needed.".into(),
-                },
-                None => "Could not determine Code Health score.".into(),
-            };
+            let result_text = business_case_text(&output);
             let props = event_properties::business_case_properties(
                 Path::new(&params.file_path),
                 &result_text,
@@ -74,6 +73,16 @@ pub(crate) async fn handle(
             );
             Ok(tool_error(&format!("Error: {e}")))
         }
+    }
+}
+
+fn business_case_text(review_output: &str) -> String {
+    match extract_score(review_output).and_then(business_case::make_business_case) {
+        Some(case) => serde_json::to_string_pretty(&case).unwrap_or_default(),
+        None if extract_score(review_output).is_some() => {
+            "Code Health is already optimal. No business case needed.".into()
+        }
+        None => "Could not determine Code Health score.".into(),
     }
 }
 

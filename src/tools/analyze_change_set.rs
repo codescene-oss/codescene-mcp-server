@@ -16,11 +16,14 @@ pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: ChangeSetParam,
 ) -> Result<CallToolResult, ErrorData> {
-    if let Some(r) = server.require_token().await {
+    let analytics_context = AnalyticsContext::Path(params.git_repository_path.clone().into());
+    if let Some(r) = server
+        .require_token_with_context("analyze-change-set", analytics_context.clone())
+        .await
+    {
         return Ok(r);
     }
     server.version_checker.check_in_background();
-    let analytics_context = AnalyticsContext::Path(params.git_repository_path.clone().into());
     let repo_path = docker::adapt_path_for_docker(Path::new(&params.git_repository_path));
     let rp = Path::new(&repo_path);
     if let Err(e) = server.validator.run_checks(&[CliCheck::InsideGitRepo(rp)]) {
