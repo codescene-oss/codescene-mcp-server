@@ -218,7 +218,8 @@ fn classify_api_error(error: ApiError) -> RepositoryProjectsError {
 mod tests {
     use super::*;
     use crate::http::tests::MockHttpClient;
-    use crate::http::{HttpResponse, Method};
+    use crate::http::{HttpRequest, HttpResponse, Method};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
     fn credential(onprem_url: Option<&str>) -> AuthCredential {
@@ -248,6 +249,21 @@ mod tests {
             Err(expected)
         );
         assert_eq!(client.captured_requests.lock().unwrap().len(), 1);
+    }
+
+    struct DelayedHttpClient {
+        requests: AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl HttpClient for DelayedHttpClient {
+        async fn send(&self, _request: HttpRequest) -> Result<HttpResponse, String> {
+            self.requests.fetch_add(1, Ordering::SeqCst);
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            Ok(HttpResponse::ok(
+                r#"{"repositories":[{"repository_id":"github.com/acme/web","project_ids":[42]}]}"#,
+            ))
+        }
     }
 
     #[tokio::test]
@@ -456,11 +472,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn normalized_api_roots_share_the_same_cache_entry() {
+        let cache = RepositoryProjectsCache::default();
+        let client = MockHttpClient::new(vec![HttpResponse::ok(r#"{"repositories":[]}"#)]);
+        let without_slash = credential(Some("https://codescene.example"));
+        let with_slash = credential(Some("https://codescene.example/"));
+
+        cache.get_or_fetch(&client, &without_slash).await.unwrap();
+        cache.get_or_fetch(&client, &with_slash).await.unwrap();
+
+        assert_eq!(client.captured_requests.lock().unwrap().len(), 1);
+        assert_eq!(cache.entries.lock().await.len(), 1);
+    }
+
+    #[tokio::test]
     async fn coalesces_concurrent_misses_for_the_same_authentication_context() {
         let cache = Arc::new(RepositoryProjectsCache::default());
-        let client = Arc::new(MockHttpClient::new(vec![HttpResponse::ok(
-            r#"{"repositories":[{"repository_id":"github.com/acme/web","project_ids":[42]}]}"#,
-        )]));
+        let client = Arc::new(DelayedHttpClient {
+            requests: AtomicUsize::new(0),
+        });
         let credential = Arc::new(credential(None));
         let first = cache.get_or_fetch(&*client, &credential);
         let second = cache.get_or_fetch(&*client, &credential);
@@ -470,7 +500,7 @@ mod tests {
 
         assert_eq!(first.as_ref().unwrap(), second.as_ref().unwrap());
         assert_eq!(second.as_ref().unwrap(), third.as_ref().unwrap());
-        assert_eq!(client.captured_requests.lock().unwrap().len(), 1);
+        assert_eq!(client.requests.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
