@@ -178,6 +178,17 @@ pub(crate) struct ContextualErrorEvent<'a> {
     pub(crate) context: analytics_attribution::AnalyticsContext,
 }
 
+impl<'a> ContextualErrorEvent<'a> {
+    pub(crate) fn for_project(error_kind: &'a str, tool: &'a str, project_id: i64) -> Self {
+        Self {
+            error_kind,
+            tool,
+            detail: None,
+            context: analytics_attribution::AnalyticsContext::ExplicitProjectIds(vec![project_id]),
+        }
+    }
+}
+
 impl CodeSceneServer {
     pub(crate) async fn require_token(&self) -> Option<CallToolResult> {
         match self
@@ -227,6 +238,32 @@ impl CodeSceneServer {
                 )]))
             }
         }
+    }
+
+    pub(crate) async fn require_project_api(
+        &self,
+        tool: &str,
+        project_id: i64,
+    ) -> Result<AuthCredential, CallToolResult> {
+        let credential = self.resolve_auth_credential().await.map_err(|result| {
+            self.track_error_with_context(ContextualErrorEvent::for_project(
+                "authentication_unavailable",
+                tool,
+                project_id,
+            ));
+            result
+        })?;
+        if self.is_standalone {
+            self.track_error_with_context(ContextualErrorEvent::for_project(
+                "standalone_license",
+                tool,
+                project_id,
+            ));
+            return Err(tools::common::tool_error(
+                "This tool requires a CodeScene API token (not a standalone license).",
+            ));
+        }
+        Ok(credential)
     }
 
     fn log_credential_resolved(&self, credential: &AuthCredential, message: &'static str) {

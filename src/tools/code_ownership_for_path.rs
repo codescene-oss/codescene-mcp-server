@@ -3,26 +3,26 @@ use std::path::Path;
 use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 
+use crate::analytics_attribution::AnalyticsContext;
 use crate::api_client;
 use crate::docker;
 use crate::event_properties;
 use crate::tools::common::{make_relative_for_api, tool_error};
 use crate::tools::OwnershipParam;
-use crate::CodeSceneServer;
+use crate::{CodeSceneServer, ContextualErrorEvent};
 
 pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: OwnershipParam,
 ) -> Result<CallToolResult, ErrorData> {
-    let credential = match server.resolve_auth_credential().await {
+    let analytics_context = AnalyticsContext::ExplicitProjectIds(vec![params.project_id]);
+    let credential = match server
+        .require_project_api("code-ownership", params.project_id)
+        .await
+    {
         Ok(credential) => credential,
-        Err(r) => return Ok(r),
+        Err(result) => return Ok(result),
     };
-    if server.is_standalone {
-        return Ok(tool_error(
-            "This tool requires a CodeScene API token (not a standalone license).",
-        ));
-    }
     server.version_checker.check_in_background();
     let path = docker::adapt_path_for_docker(Path::new(&params.path));
     let relative = make_relative_for_api(Path::new(&path));
@@ -43,13 +43,16 @@ pub(crate) async fn handle(
         Ok(data) => {
             let props =
                 event_properties::ownership_properties(params.project_id, Path::new(&params.path));
-            server.track("code-ownership", props);
+            server.track_with_context("code-ownership", props, analytics_context);
             let text = serde_json::to_string(&data).unwrap_or_default();
             let text = server.maybe_version_warning(&text).await;
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
         Err(e) => {
-            server.track_api_err("code-ownership", &e);
+            server.track_contextual_err(
+                ContextualErrorEvent::for_project(e.kind(), "code-ownership", params.project_id),
+                &e,
+            );
             Ok(tool_error(&format!("Error: {e}")))
         }
     }
