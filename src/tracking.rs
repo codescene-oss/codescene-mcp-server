@@ -1,8 +1,12 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use serde_json::{json, Value};
 
+use crate::analytics_attribution::{merge_attribution, resolve_attribution, AnalyticsContext};
+use crate::auth::AuthCredential;
 use crate::http::{HttpClient, HttpRequest, Method, ReqwestClient};
+use crate::repository_projects::RepositoryProjectsCache;
 
 struct TrackingEvent {
     url: String,
@@ -20,27 +24,42 @@ pub(crate) struct TrackingAuth {
     pub(crate) api_root: Option<String>,
 }
 
-/// Send a tracking event in the background (fire-and-forget).
-pub fn track_event(event: &str, properties: Value, instance_id: &str, auth: &TrackingAuth) {
+pub(crate) struct TrackingAttribution {
+    pub(crate) context: AnalyticsContext,
+    pub(crate) credential: Option<AuthCredential>,
+    pub(crate) http_client: Arc<dyn HttpClient>,
+    pub(crate) cache: Arc<RepositoryProjectsCache>,
+}
+
+pub(crate) struct AttributedEvent<'a> {
+    pub(crate) event: &'a str,
+    pub(crate) properties: Value,
+    pub(crate) instance_id: &'a str,
+    pub(crate) auth: &'a TrackingAuth,
+    pub(crate) attribution: TrackingAttribution,
+}
+
+pub(crate) fn track_event_with_attribution(event: AttributedEvent<'_>) {
     if is_disabled() {
         return;
     }
-
-    let te = TrackingEvent {
-        url: match resolve_tracking_url(auth.api_root.as_deref()) {
-            Some(url) => url,
-            None => return,
-        },
-        event: format!("mcp-{event}"),
-        instance_id: instance_id.to_string(),
-        environment: tracking_environment(),
-        version: env!("CS_MCP_VERSION"),
-        properties,
-        access_token: auth.access_token.clone(),
+    let Some(tracking_event) =
+        create_tracking_event(event.event, event.properties, event.instance_id, event.auth)
+    else {
+        return;
     };
+    spawn_tracking_event(tracking_event, Some(event.attribution));
+}
 
+fn spawn_tracking_event(
+    mut tracking_event: TrackingEvent,
+    attribution: Option<TrackingAttribution>,
+) {
     tokio::spawn(async move {
-        let _ = send_event(te, &ReqwestClient).await;
+        if let Some(attribution) = attribution {
+            enrich_tracking_event(&mut tracking_event, attribution).await;
+        }
+        let _ = send_event(tracking_event, &ReqwestClient).await;
     });
 }
 
@@ -53,7 +72,19 @@ pub struct ErrorEvent<'a> {
     pub auth: &'a TrackingAuth,
 }
 
-pub fn track_error(evt: &ErrorEvent<'_>) {
+pub(crate) fn track_error_with_attribution(evt: &ErrorEvent<'_>, attribution: TrackingAttribution) {
+    track_error_properties(evt, |properties| {
+        track_event_with_attribution(AttributedEvent {
+            event: "error",
+            properties,
+            instance_id: evt.instance_id,
+            auth: evt.auth,
+            attribution,
+        })
+    });
+}
+
+fn track_error_properties(evt: &ErrorEvent<'_>, track: impl FnOnce(Value)) {
     let mut properties = json!({
         "error": evt.error_kind,
         "tool": evt.tool_name,
@@ -61,7 +92,35 @@ pub fn track_error(evt: &ErrorEvent<'_>) {
     if let Some(d) = evt.detail {
         properties["detail"] = json!(d);
     }
-    track_event("error", properties, evt.instance_id, evt.auth);
+    track(properties);
+}
+
+fn create_tracking_event(
+    event: &str,
+    properties: Value,
+    instance_id: &str,
+    auth: &TrackingAuth,
+) -> Option<TrackingEvent> {
+    Some(TrackingEvent {
+        url: resolve_tracking_url(auth.api_root.as_deref())?,
+        event: format!("mcp-{event}"),
+        instance_id: instance_id.to_string(),
+        environment: tracking_environment(),
+        version: env!("CS_MCP_VERSION"),
+        properties,
+        access_token: auth.access_token.clone(),
+    })
+}
+
+async fn enrich_tracking_event(event: &mut TrackingEvent, attribution: TrackingAttribution) {
+    let outcome = resolve_attribution(
+        attribution.context,
+        attribution.credential,
+        attribution.http_client,
+        attribution.cache,
+    )
+    .await;
+    merge_attribution(&mut event.properties, outcome);
 }
 
 fn build_tracking_body(te: &mut TrackingEvent) -> Value {
@@ -161,6 +220,47 @@ mod tests {
     use crate::http::tests::MockHttpClient;
     use crate::http::HttpResponse;
     use tokio::time::Duration;
+
+    fn test_attribution(client: Arc<dyn HttpClient>) -> TrackingAttribution {
+        TrackingAttribution {
+            context: AnalyticsContext::ExplicitProjectIds(vec![42]),
+            credential: None,
+            http_client: client,
+            cache: Arc::new(RepositoryProjectsCache::default()),
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    enum TestTrackingCall {
+        Event,
+        Error,
+    }
+
+    fn run_test_tracking_call(call: TestTrackingCall, client: Arc<dyn HttpClient>) {
+        let auth = TrackingAuth {
+            access_token: String::new(),
+            api_root: None,
+        };
+        match call {
+            TestTrackingCall::Event => track_event_with_attribution(AttributedEvent {
+                event: "test-event",
+                properties: json!({"key": "value"}),
+                instance_id: "test-instance",
+                auth: &auth,
+                attribution: test_attribution(client),
+            }),
+            TestTrackingCall::Error => track_error_with_attribution(
+                &ErrorEvent {
+                    error_kind: "some-error",
+                    tool_name: "some-tool",
+                    instance_id: "test-instance",
+                    detail: None,
+                    auth: &auth,
+                },
+                test_attribution(client),
+            ),
+        }
+    }
 
     #[test]
     fn is_disabled_returns_false_when_not_set() {
@@ -351,6 +451,32 @@ mod tests {
         assert_eq!(body["event-properties"], "not-an-object");
     }
 
+    #[tokio::test]
+    async fn detached_enrichment_merges_attribution_before_delivery() {
+        let mut event = TrackingEvent {
+            url: "http://test/track".to_string(),
+            event: "mcp-test".to_string(),
+            instance_id: "inst-123".to_string(),
+            environment: "test-env".to_string(),
+            version: "1.0.0",
+            properties: json!({"tool": "review"}),
+            access_token: String::new(),
+        };
+        let client = crate::http::tests::MockHttpClient::new(Vec::new());
+        let attribution = TrackingAttribution {
+            context: AnalyticsContext::ExplicitProjectIds(vec![42, 7, 42]),
+            credential: None,
+            http_client: Arc::new(client),
+            cache: Arc::new(RepositoryProjectsCache::default()),
+        };
+
+        enrich_tracking_event(&mut event, attribution).await;
+
+        assert_eq!(event.properties["tool"], "review");
+        assert_eq!(event.properties["project-ids"], json!([7, 42]));
+        assert!(event.properties.get("no-project-matching-reason").is_none());
+    }
+
     async fn send_event_and_capture_request(
         _token: Option<&str>,
         te: TrackingEvent,
@@ -458,37 +584,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn track_event_disabled_does_not_panic() {
+    async fn attributed_tracking_disabled_skips_all_attribution() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_TRACKING", "1");
-        let auth = TrackingAuth {
-            access_token: String::new(),
-            api_root: None,
-        };
-        track_event(
-            "test-event",
-            json!({"key": "value"}),
-            "test-instance",
-            &auth,
-        );
-        std::env::remove_var("CS_DISABLE_TRACKING");
-    }
-
-    #[tokio::test]
-    async fn track_error_disabled_does_not_panic() {
-        let _lock = config::lock_test_env();
-        std::env::set_var("CS_DISABLE_TRACKING", "1");
-        let auth = TrackingAuth {
-            access_token: String::new(),
-            api_root: None,
-        };
-        track_error(&ErrorEvent {
-            error_kind: "some error",
-            tool_name: "some-tool",
-            instance_id: "test-instance",
-            detail: None,
-            auth: &auth,
-        });
+        for call in [TestTrackingCall::Event, TestTrackingCall::Error] {
+            let client = MockHttpClient::new(Vec::new());
+            let requests = client.captured_requests.clone();
+            run_test_tracking_call(call, Arc::new(client));
+            assert!(requests.lock().unwrap().is_empty());
+        }
         std::env::remove_var("CS_DISABLE_TRACKING");
     }
 
@@ -502,31 +606,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn track_event_enabled_spawns_without_panic() {
+    async fn attributed_tracking_enabled_spawns_without_panic() {
         run_with_tracking_enabled(|| {
-            let auth = TrackingAuth {
-                access_token: String::new(),
-                api_root: None,
-            };
-            track_event("test-enabled", json!({"key": "val"}), "test-id", &auth);
-        })
-        .await;
-    }
-
-    #[tokio::test]
-    async fn track_error_enabled_spawns_without_panic() {
-        run_with_tracking_enabled(|| {
-            let auth = TrackingAuth {
-                access_token: String::new(),
-                api_root: None,
-            };
-            track_error(&ErrorEvent {
-                error_kind: "err msg",
-                tool_name: "tool-name",
-                instance_id: "test-id",
-                detail: Some(".txt"),
-                auth: &auth,
-            });
+            for call in [TestTrackingCall::Event, TestTrackingCall::Error] {
+                run_test_tracking_call(call, Arc::new(MockHttpClient::new(Vec::new())));
+            }
         })
         .await;
     }

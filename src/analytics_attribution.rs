@@ -1,4 +1,12 @@
 use std::path::PathBuf;
+use std::sync::Arc;
+
+use serde_json::{json, Value};
+
+use crate::auth::AuthCredential;
+use crate::git_repository::{discover_repository_ids, ProductionGitRunner};
+use crate::http::HttpClient;
+use crate::repository_projects::{matching_project_ids, RepositoryProjectsCache};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) enum AnalyticsContext {
@@ -18,6 +26,62 @@ pub(crate) enum NoProjectMatchingReason {
     AuthenticationUnavailable,
     RepositoryProjectsRequestFailed,
     InvalidRepositoryProjectsResponse,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum AttributionOutcome {
+    ProjectIds(Vec<i64>),
+    Failure(NoProjectMatchingReason),
+}
+
+pub(crate) async fn resolve_attribution(
+    context: AnalyticsContext,
+    credential: Option<AuthCredential>,
+    client: Arc<dyn HttpClient>,
+    cache: Arc<RepositoryProjectsCache>,
+) -> AttributionOutcome {
+    let action_path = match context {
+        AnalyticsContext::ExplicitProjectIds(mut ids) => {
+            ids.sort_unstable();
+            ids.dedup();
+            return AttributionOutcome::ProjectIds(ids);
+        }
+        AnalyticsContext::Path(path) => Some(path),
+        AnalyticsContext::CurrentWorkspace => None,
+    };
+    let repository_ids =
+        match discover_repository_ids(&ProductionGitRunner, action_path.as_deref()).await {
+            Ok(ids) => ids,
+            Err(reason) => return AttributionOutcome::Failure(reason.into()),
+        };
+    let Some(credential) = credential.as_ref() else {
+        return AttributionOutcome::Failure(NoProjectMatchingReason::AuthenticationUnavailable);
+    };
+    match cache.get_or_fetch(&*client, credential).await {
+        Ok(mappings) => {
+            AttributionOutcome::ProjectIds(matching_project_ids(&repository_ids, &mappings))
+        }
+        Err(error) => AttributionOutcome::Failure(error.into()),
+    }
+}
+
+pub(crate) fn merge_attribution(properties: &mut Value, outcome: AttributionOutcome) {
+    let Some(properties) = properties.as_object_mut() else {
+        return;
+    };
+    properties.remove("project-ids");
+    properties.remove("no-project-matching-reason");
+    match outcome {
+        AttributionOutcome::ProjectIds(ids) => {
+            properties.insert("project-ids".to_string(), json!(ids));
+        }
+        AttributionOutcome::Failure(reason) => {
+            properties.insert(
+                "no-project-matching-reason".to_string(),
+                json!(reason.as_str()),
+            );
+        }
+    }
 }
 
 impl NoProjectMatchingReason {
@@ -63,6 +127,7 @@ impl From<crate::repository_projects::RepositoryProjectsError> for NoProjectMatc
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::http::tests::MockHttpClient;
 
     #[test]
     fn models_all_attribution_sources() {
@@ -157,5 +222,60 @@ mod tests {
             NoProjectMatchingReason::from(RepositoryProjectsError::InvalidResponse),
             NoProjectMatchingReason::InvalidRepositoryProjectsResponse
         );
+    }
+
+    #[tokio::test]
+    async fn explicit_project_ids_are_sorted_without_repository_lookup() {
+        let client = MockHttpClient::new(Vec::new());
+        let requests = client.captured_requests.clone();
+        let cache = RepositoryProjectsCache::default();
+
+        let result = resolve_attribution(
+            AnalyticsContext::ExplicitProjectIds(vec![42, 7, 42]),
+            None,
+            Arc::new(client),
+            Arc::new(cache),
+        )
+        .await;
+
+        assert_eq!(result, AttributionOutcome::ProjectIds(vec![7, 42]));
+        assert!(requests.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn merge_preserves_properties_and_keeps_outcomes_mutually_exclusive() {
+        let cases = [
+            (
+                AttributionOutcome::ProjectIds(vec![7, 42]),
+                json!({"tool": "review", "no-project-matching-reason": "old"}),
+                "project-ids",
+                json!([7, 42]),
+                "no-project-matching-reason",
+            ),
+            (
+                AttributionOutcome::Failure(NoProjectMatchingReason::GitCommandFailed),
+                json!({"tool": "review", "project-ids": [99]}),
+                "no-project-matching-reason",
+                json!("git-command-failed"),
+                "project-ids",
+            ),
+        ];
+
+        for (outcome, mut properties, expected_key, expected_value, absent_key) in cases {
+            merge_attribution(&mut properties, outcome);
+            assert_eq!(properties["tool"], "review");
+            assert_eq!(properties[expected_key], expected_value);
+            assert!(properties.get(absent_key).is_none());
+        }
+    }
+
+    #[test]
+    fn merge_leaves_non_object_properties_unchanged() {
+        let mut properties = json!("not-an-object");
+        merge_attribution(
+            &mut properties,
+            AttributionOutcome::Failure(NoProjectMatchingReason::GitCommandFailed),
+        );
+        assert_eq!(properties, "not-an-object");
     }
 }

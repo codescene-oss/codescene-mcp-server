@@ -62,6 +62,7 @@ use crate::auth::{AuthCredential, AuthManager};
 use crate::cli::CliRunner;
 use crate::config::ConfigData;
 use crate::http::HttpClient;
+use crate::repository_projects::RepositoryProjectsCache;
 use crate::tools::validation::{ValidationError, Validator};
 use crate::tools::{
     ChangeSetParam, DownloadSkillParam, FilePathParam, GetConfigParam, GitRepoParam, LoginParam,
@@ -167,6 +168,7 @@ pub(crate) struct CodeSceneServer {
     pub(crate) cli_runner: Arc<dyn CliRunner>,
     pub(crate) http_client: Arc<dyn HttpClient>,
     pub(crate) validator: Arc<dyn Validator>,
+    pub(crate) repository_projects_cache: Arc<RepositoryProjectsCache>,
 }
 
 impl CodeSceneServer {
@@ -254,7 +256,14 @@ impl CodeSceneServer {
     }
 
     pub(crate) fn track(&self, event: &str, props: serde_json::Value) {
-        tracking::track_event(event, props, &self.instance_id, &self.tracking_auth());
+        let (auth, credential) = self.tracking_auth();
+        tracking::track_event_with_attribution(tracking::AttributedEvent {
+            event,
+            properties: props,
+            instance_id: &self.instance_id,
+            auth: &auth,
+            attribution: self.tracking_attribution(credential),
+        });
     }
 
     pub(crate) fn track_err(&self, tool: &str, err: &errors::CliError) {
@@ -278,31 +287,45 @@ impl CodeSceneServer {
     }
 
     fn track_error_event(&self, error_kind: &str, tool: &str, detail: Option<&str>) {
-        let auth = self.tracking_auth();
-        tracking::track_error(&tracking::ErrorEvent {
-            error_kind,
-            tool_name: tool,
-            instance_id: &self.instance_id,
-            detail,
-            auth: &auth,
-        });
+        let (auth, credential) = self.tracking_auth();
+        tracking::track_error_with_attribution(
+            &tracking::ErrorEvent {
+                error_kind,
+                tool_name: tool,
+                instance_id: &self.instance_id,
+                detail,
+                auth: &auth,
+            },
+            self.tracking_attribution(credential),
+        );
     }
 
     /// Resolve the best available token and API root for tracking.
     /// Prefers configured PAT, falls back to cached OAuth token.
-    fn tracking_auth(&self) -> tracking::TrackingAuth {
-        if let Some(cred) = auth::configured_credential() {
-            return tracking::TrackingAuth {
-                access_token: cred.access_token().to_string(),
-                api_root: cred.api_root().ok(),
-            };
-        }
-        tracking::TrackingAuth {
-            access_token: self
-                .auth_manager
-                .try_cached_access_token()
+    fn tracking_auth(&self) -> (tracking::TrackingAuth, Option<AuthCredential>) {
+        let credential =
+            auth::configured_credential().or_else(|| self.auth_manager.try_cached_credential());
+        let auth = tracking::TrackingAuth {
+            access_token: credential
+                .as_ref()
+                .map(|credential| credential.access_token().to_string())
                 .unwrap_or_default(),
-            api_root: self.auth_manager.try_cached_api_root(),
+            api_root: credential
+                .as_ref()
+                .and_then(|credential| credential.api_root().ok()),
+        };
+        (auth, credential)
+    }
+
+    fn tracking_attribution(
+        &self,
+        credential: Option<AuthCredential>,
+    ) -> tracking::TrackingAttribution {
+        tracking::TrackingAttribution {
+            context: analytics_attribution::AnalyticsContext::CurrentWorkspace,
+            credential,
+            http_client: self.http_client.clone(),
+            cache: self.repository_projects_cache.clone(),
         }
     }
 }
@@ -376,6 +399,7 @@ impl CodeSceneServer {
             cli_runner: deps.cli_runner,
             http_client: deps.http_client,
             validator: deps.validator,
+            repository_projects_cache: Arc::new(RepositoryProjectsCache::default()),
         }
     }
 

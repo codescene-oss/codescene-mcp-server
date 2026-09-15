@@ -125,24 +125,25 @@ async fn effective_remote_urls(
 ) -> Result<EffectiveRemoteUrls, RemoteUrlError> {
     let remotes = successful_git_output(runner, &["remote"], repository_root).await?;
     let mut urls = BTreeSet::new();
-    let mut remote_names = remotes
+    let remote_names = remotes
         .lines()
         .filter(|remote| !remote.is_empty())
-        .peekable();
-    if remote_names.peek().is_none() {
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    if remote_names.is_empty() {
         return Ok(EffectiveRemoteUrls::NoRemotes);
     }
 
     for remote in remote_names {
         let fetch_urls = successful_git_output(
             runner,
-            &["remote", "get-url", "--all", "--", remote],
+            &["remote", "get-url", "--all", "--", &remote],
             repository_root,
         )
         .await?;
         let push_urls = successful_git_output(
             runner,
-            &["remote", "get-url", "--push", "--all", "--", remote],
+            &["remote", "get-url", "--push", "--all", "--", &remote],
             repository_root,
         )
         .await?;

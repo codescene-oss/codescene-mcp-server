@@ -301,9 +301,9 @@ impl AuthManager {
         crate::config::try_read_env("CS_OAUTH_TOKEN")
     }
 
-    /// Synchronously try to read the OAuth API root for tracking purposes.
-    pub(crate) fn try_cached_api_root(&self) -> Option<String> {
-        state::fresh_credential().and_then(|cred| cred.api_root().ok())
+    /// Synchronously read a fresh OAuth credential for detached analytics.
+    pub(crate) fn try_cached_credential(&self) -> Option<AuthCredential> {
+        state::fresh_credential()
     }
 
     /// Account ID for the cached OAuth session, if known.
