@@ -12,6 +12,7 @@ use crate::http::HttpClient;
 
 const ENDPOINT: &str = "mcp/repository-projects";
 const SUCCESS_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+const FAILURE_CACHE_TTL: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct RepositoryProjects {
@@ -24,7 +25,7 @@ pub(crate) struct RepositoryProject {
     pub(crate) project_ids: Vec<i64>,
 }
 
-#[derive(Debug, PartialEq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
 pub(crate) enum RepositoryProjectsError {
     #[error("repository-project mapping request failed")]
     RequestFailed,
@@ -50,8 +51,23 @@ struct CacheKey {
 }
 
 struct CacheEntry {
-    mappings: RepositoryProjects,
+    value: CachedValue,
     fetched_at: Instant,
+}
+
+#[derive(Clone)]
+enum CachedValue {
+    Success(RepositoryProjects),
+    Failure(RepositoryProjectsError),
+}
+
+impl CachedValue {
+    fn result(&self) -> Result<RepositoryProjects, RepositoryProjectsError> {
+        match self {
+            Self::Success(mappings) => Ok(mappings.clone()),
+            Self::Failure(error) => Err(*error),
+        }
+    }
 }
 
 type SharedCacheEntry = Arc<Mutex<Option<CacheEntry>>>;
@@ -59,6 +75,7 @@ type SharedCacheEntry = Arc<Mutex<Option<CacheEntry>>>;
 pub(crate) struct RepositoryProjectsCache {
     entries: Mutex<HashMap<CacheKey, SharedCacheEntry>>,
     success_ttl: Duration,
+    failure_ttl: Duration,
 }
 
 impl Default for RepositoryProjectsCache {
@@ -66,6 +83,7 @@ impl Default for RepositoryProjectsCache {
         Self {
             entries: Mutex::new(HashMap::new()),
             success_ttl: SUCCESS_CACHE_TTL,
+            failure_ttl: FAILURE_CACHE_TTL,
         }
     }
 }
@@ -85,19 +103,26 @@ impl RepositoryProjectsCache {
                 .clone()
         };
         let mut entry = shared_entry.lock().await;
-        if let Some(cached) = entry
-            .as_ref()
-            .filter(|cached| cached.fetched_at.elapsed() < self.success_ttl)
-        {
-            return Ok(cached.mappings.clone());
+        if let Some(cached) = entry.as_ref().filter(|cached| {
+            let ttl = match cached.value {
+                CachedValue::Success(_) => self.success_ttl,
+                CachedValue::Failure(_) => self.failure_ttl,
+            };
+            cached.fetched_at.elapsed() < ttl
+        }) {
+            return cached.value.result();
         }
 
-        let mappings = fetch_repository_projects(client, credential).await?;
+        let result = fetch_repository_projects(client, credential).await;
+        let value = match &result {
+            Ok(mappings) => CachedValue::Success(mappings.clone()),
+            Err(error) => CachedValue::Failure(*error),
+        };
         *entry = Some(CacheEntry {
-            mappings: mappings.clone(),
+            value,
             fetched_at: Instant::now(),
         });
-        Ok(mappings)
+        result
     }
 
     #[cfg(test)]
@@ -105,6 +130,16 @@ impl RepositoryProjectsCache {
         Self {
             entries: Mutex::new(HashMap::new()),
             success_ttl,
+            failure_ttl: FAILURE_CACHE_TTL,
+        }
+    }
+
+    #[cfg(test)]
+    fn with_failure_ttl(failure_ttl: Duration) -> Self {
+        Self {
+            entries: Mutex::new(HashMap::new()),
+            success_ttl: SUCCESS_CACHE_TTL,
+            failure_ttl,
         }
     }
 }
@@ -197,6 +232,22 @@ mod tests {
         let credential = credential(None);
         cache.get_or_fetch(client, &credential).await.unwrap();
         cache.get_or_fetch(client, &credential).await.unwrap();
+    }
+
+    async fn assert_cached_failure(response: HttpResponse, expected: RepositoryProjectsError) {
+        let cache = RepositoryProjectsCache::default();
+        let client = MockHttpClient::new(vec![response]);
+        let credential = credential(None);
+
+        assert_eq!(
+            cache.get_or_fetch(&client, &credential).await,
+            Err(expected)
+        );
+        assert_eq!(
+            cache.get_or_fetch(&client, &credential).await,
+            Err(expected)
+        );
+        assert_eq!(client.captured_requests.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]
@@ -432,6 +483,47 @@ mod tests {
 
         fetch_twice(&cache, &client).await;
 
+        assert_eq!(client.captured_requests.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn reuses_request_failure_during_thirty_second_cooldown() {
+        assert_cached_failure(
+            HttpResponse::error(503, "unavailable"),
+            RepositoryProjectsError::RequestFailed,
+        )
+        .await;
+        assert_eq!(FAILURE_CACHE_TTL, Duration::from_secs(30));
+    }
+
+    #[tokio::test]
+    async fn reuses_invalid_response_failure_without_returning_empty_mappings() {
+        assert_cached_failure(
+            HttpResponse::ok(r#"{"repositories":null}"#),
+            RepositoryProjectsError::InvalidResponse,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn retries_mapping_request_after_failure_cooldown() {
+        let cache = RepositoryProjectsCache::with_failure_ttl(Duration::ZERO);
+        let client = MockHttpClient::new(vec![
+            HttpResponse::error(503, "unavailable"),
+            HttpResponse::ok(r#"{"repositories":[]}"#),
+        ]);
+        let credential = credential(None);
+
+        assert_eq!(
+            cache.get_or_fetch(&client, &credential).await,
+            Err(RepositoryProjectsError::RequestFailed)
+        );
+        assert_eq!(
+            cache.get_or_fetch(&client, &credential).await,
+            Ok(RepositoryProjects {
+                repositories: Vec::new()
+            })
+        );
         assert_eq!(client.captured_requests.lock().unwrap().len(), 2);
     }
 }
