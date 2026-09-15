@@ -256,6 +256,9 @@ impl CodeSceneServer {
     }
 
     pub(crate) fn track(&self, event: &str, props: serde_json::Value) {
+        if tracking::is_disabled() {
+            return;
+        }
         let (auth, credential) = self.tracking_auth();
         tracking::track_event_with_attribution(tracking::AttributedEvent {
             event,
@@ -287,6 +290,9 @@ impl CodeSceneServer {
     }
 
     fn track_error_event(&self, error_kind: &str, tool: &str, detail: Option<&str>) {
+        if tracking::is_disabled() {
+            return;
+        }
         let (auth, credential) = self.tracking_auth();
         tracking::track_error_with_attribution(
             &tracking::ErrorEvent {

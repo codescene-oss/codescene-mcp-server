@@ -203,7 +203,7 @@ fn normalize_tracking_override(url: &str) -> String {
     }
 }
 
-fn is_disabled() -> bool {
+pub(crate) fn is_disabled() -> bool {
     flag_enabled("CS_DISABLE_TRACKING")
 }
 
