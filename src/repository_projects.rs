@@ -11,7 +11,7 @@ use crate::errors::ApiError;
 use crate::http::HttpClient;
 
 const ENDPOINT: &str = "mcp/repository-projects";
-const SUCCESS_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+const SUCCESS_CACHE_TTL: Duration = Duration::from_secs(15 * 60);
 const FAILURE_CACHE_TTL: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Debug, PartialEq)]
@@ -434,14 +434,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reuses_successful_mapping_within_five_minute_ttl() {
+    async fn reuses_successful_mapping_within_fifteen_minute_ttl() {
         let cache = RepositoryProjectsCache::default();
         let client = MockHttpClient::new(vec![HttpResponse::ok(r#"{"repositories":[]}"#)]);
 
         fetch_twice(&cache, &client).await;
 
         assert_eq!(client.captured_requests.lock().unwrap().len(), 1);
-        assert_eq!(cache.success_ttl, Duration::from_secs(300));
+        assert_eq!(cache.success_ttl, Duration::from_secs(900));
     }
 
     #[tokio::test]
