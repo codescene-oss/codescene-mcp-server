@@ -18,7 +18,7 @@ use tempfile::TempDir;
 const TOOL_NAME: &str = "code_health_score";
 const TIMEOUT: Duration = Duration::from_secs(60);
 const UNREACHABLE_ANALYTICS_URL: &str = "https://192.0.2.1:1";
-const REPOSITORY_PROJECTS_PATH: &str = "/api/mcp/repository-projects";
+const REPOSITORY_PROJECTS_PATH: &str = "/api/v2/mcp/repository-projects";
 
 // From analyze_change_set — triggers delta-analysis findings
 const CLEAN_ADDITION: &str = r#"

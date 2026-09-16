@@ -10,7 +10,7 @@ use crate::auth::AuthCredential;
 use crate::errors::ApiError;
 use crate::http::HttpClient;
 
-const ENDPOINT: &str = "mcp/repository-projects";
+const ENDPOINT: &str = "v2/mcp/repository-projects";
 const SUCCESS_CACHE_TTL: Duration = Duration::from_secs(15 * 60);
 const FAILURE_CACHE_TTL: Duration = Duration::from_secs(30);
 
@@ -287,7 +287,7 @@ mod tests {
         assert_eq!(requests[0].method, Method::Get);
         assert_eq!(
             requests[0].url,
-            "https://api.codescene.io/mcp/repository-projects"
+            "https://api.codescene.io/v2/mcp/repository-projects"
         );
         assert_eq!(
             requests[0].headers.get("Authorization").map(String::as_str),
@@ -305,7 +305,7 @@ mod tests {
 
         assert_eq!(
             client.captured_requests.lock().unwrap()[0].url,
-            "https://codescene.example/api/mcp/repository-projects"
+            "https://codescene.example/api/v2/mcp/repository-projects"
         );
     }
 
