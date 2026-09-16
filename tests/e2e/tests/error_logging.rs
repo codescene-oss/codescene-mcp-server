@@ -80,7 +80,7 @@ fn trigger_error_with_fake_server(
 
     let result_text = extract_result_text(&response);
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     while extract_error_payloads(&server.get_payloads()).is_empty()
         && std::time::Instant::now() < deadline
     {

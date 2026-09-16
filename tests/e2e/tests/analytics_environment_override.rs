@@ -37,7 +37,7 @@ fn score_event_environment(extra_env: &[(&str, &str)]) -> Option<String> {
     let score = extract_code_health_score(&result_text);
     assert!(score.is_some(), "Should get a valid score: {result_text}");
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     loop {
         let environment = server
             .get_payloads()

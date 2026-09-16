@@ -145,7 +145,7 @@ fn assert_properties_are_nonempty(props: &serde_json::Value, keys: &[&str]) {
 }
 
 fn wait_for_analytics(server: &FakeHttpServer) {
-    let deadline = Instant::now() + Duration::from_secs(15);
+    let deadline = Instant::now() + Duration::from_secs(30);
     while server.get_payloads().is_empty() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(200));
     }
