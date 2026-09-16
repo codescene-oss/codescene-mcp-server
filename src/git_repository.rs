@@ -61,6 +61,11 @@ pub(crate) trait GitRunner: Send + Sync {
         &self,
         repository_root: &Path,
     ) -> Result<EffectiveRemoteUrls, RemoteUrlError>;
+
+    async fn repository_root(
+        &self,
+        action_path: &Path,
+    ) -> Result<PathBuf, RepositoryRootError>;
 }
 
 pub(crate) struct ProductionGitRunner;
@@ -88,6 +93,13 @@ impl GitRunner for ProductionGitRunner {
         repository_root: &Path,
     ) -> Result<EffectiveRemoteUrls, RemoteUrlError> {
         read_remote_urls(repository_root)
+    }
+
+    async fn repository_root(
+        &self,
+        action_path: &Path,
+    ) -> Result<PathBuf, RepositoryRootError> {
+        find_repository_root(action_path)
     }
 }
 
@@ -129,6 +141,17 @@ pub(crate) async fn resolve_repository_root(
         return Err(RepositoryRootError::InvalidRepositoryRoot);
     }
     Ok(PathBuf::from(root))
+}
+
+fn find_repository_root(action_path: &Path) -> Result<PathBuf, RepositoryRootError> {
+    let adapted_path = action_path_for_git(action_path);
+    let directory = nearest_existing_directory(&adapted_path)
+        .ok_or(RepositoryRootError::NoExistingDirectory)?;
+    directory
+        .ancestors()
+        .find(|candidate| candidate.join(".git").exists())
+        .map(Path::to_path_buf)
+        .ok_or(RepositoryRootError::NotInRepository)
 }
 
 #[cfg(test)]
@@ -217,7 +240,8 @@ pub(crate) async fn discover_repository_ids(
     action_path: Option<&Path>,
 ) -> Result<Vec<String>, RepositoryDiscoveryReason> {
     let action_path = repository_action_path_with(action_path, std::env::current_dir)?;
-    let repository_root = resolve_repository_root(runner, &action_path)
+    let repository_root = runner
+        .repository_root(&action_path)
         .await
         .map_err(repository_root_reason)?;
     let remotes = runner
@@ -369,6 +393,13 @@ mod tests {
             repository_root: &Path,
         ) -> Result<EffectiveRemoteUrls, RemoteUrlError> {
             effective_remote_urls(self, repository_root).await
+        }
+
+        async fn repository_root(
+            &self,
+            action_path: &Path,
+        ) -> Result<PathBuf, RepositoryRootError> {
+            resolve_repository_root(self, action_path).await
         }
     }
 
@@ -667,6 +698,13 @@ mod tests {
                 _repository_root: &Path,
             ) -> Result<EffectiveRemoteUrls, RemoteUrlError> {
                 Err(RemoteUrlError::GitCommandFailed)
+            }
+
+            async fn repository_root(
+                &self,
+                _action_path: &Path,
+            ) -> Result<PathBuf, RepositoryRootError> {
+                Err(RepositoryRootError::GitCommandFailed)
             }
         }
 
