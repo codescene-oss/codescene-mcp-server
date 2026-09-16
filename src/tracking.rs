@@ -11,7 +11,7 @@ use crate::auth::AuthCredential;
 use crate::http::{HttpClient, HttpRequest, Method, ReqwestClient};
 use crate::repository_projects::RepositoryProjectsCache;
 
-const ATTRIBUTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+const ATTRIBUTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 struct TrackingEvent {
     url: String,

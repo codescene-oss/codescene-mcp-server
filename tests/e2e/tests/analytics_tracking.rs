@@ -152,7 +152,7 @@ fn wait_for_analytics(server: &FakeHttpServer) {
 }
 
 fn wait_for_project_ids(server: &FakeHttpServer) {
-    let deadline = Instant::now() + Duration::from_secs(30);
+    let deadline = Instant::now() + Duration::from_secs(60);
     while !server.get_payloads().iter().any(|payload| {
         payload
             .get("event-properties")
