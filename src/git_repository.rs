@@ -123,42 +123,24 @@ async fn effective_remote_urls(
     runner: &dyn GitRunner,
     repository_root: &Path,
 ) -> Result<EffectiveRemoteUrls, RemoteUrlError> {
-    let remotes = successful_git_output(runner, &["remote"], repository_root).await?;
-    let mut urls = BTreeSet::new();
-    let remote_names = remotes
+    let remotes = successful_git_output(runner, &["remote", "-v"], repository_root).await?;
+    let urls = remotes
         .lines()
-        .map(str::trim)
-        .filter(|remote| !remote.is_empty())
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    if remote_names.is_empty() {
-        return Ok(EffectiveRemoteUrls::NoRemotes);
+        .filter_map(parse_remote_verbose_line)
+        .collect::<BTreeSet<_>>();
+    if urls.is_empty() {
+        Ok(EffectiveRemoteUrls::NoRemotes)
+    } else {
+        Ok(EffectiveRemoteUrls::Found(urls.into_iter().collect()))
     }
+}
 
-    for remote in remote_names {
-        let fetch_urls = successful_git_output(
-            runner,
-            &["remote", "get-url", "--all", "--", &remote],
-            repository_root,
-        )
-        .await?;
-        let push_urls = successful_git_output(
-            runner,
-            &["remote", "get-url", "--push", "--all", "--", &remote],
-            repository_root,
-        )
-        .await?;
-        urls.extend(
-            fetch_urls
-                .lines()
-                .chain(push_urls.lines())
-                .map(str::trim)
-                .filter(|url| !url.is_empty())
-                .map(str::to_string),
-        );
-    }
-
-    Ok(EffectiveRemoteUrls::Found(urls.into_iter().collect()))
+fn parse_remote_verbose_line(line: &str) -> Option<String> {
+    let mut fields = line.split_whitespace();
+    let _remote = fields.next()?;
+    let url = fields.next()?;
+    let kind = fields.next()?;
+    (kind == "(fetch)" || kind == "(push)").then(|| url.to_string())
 }
 
 pub(crate) async fn discover_repository_ids(
@@ -395,14 +377,11 @@ mod tests {
     #[tokio::test]
     async fn enumerates_and_deduplicates_every_fetch_and_push_url() {
         let runner = MockGitRunner::new([
-            successful_output("origin\nupstream\n"),
             successful_output(
-                "https://example.com/acme/web.git\nssh://git@example.com/acme/web.git\n",
-            ),
-            successful_output("ssh://git@example.com/acme/web.git\n"),
-            successful_output("https://example.org/acme/web.git\n"),
-            successful_output(
-                "ssh://git@example.org/acme/web.git\nhttps://example.com/acme/web.git\n",
+                "origin\thttps://example.com/acme/web.git (fetch)\n\
+                 origin\tssh://git@example.com/acme/web.git (push)\n\
+                 upstream\thttps://example.org/acme/web.git (fetch)\n\
+                 upstream\tssh://git@example.org/acme/web.git (push)\n",
             ),
         ]);
 
@@ -419,22 +398,17 @@ mod tests {
         );
         assert_eq!(
             *runner.calls.lock().unwrap(),
-            [
-                vec!["remote"],
-                vec!["remote", "get-url", "--all", "--", "origin"],
-                vec!["remote", "get-url", "--push", "--all", "--", "origin"],
-                vec!["remote", "get-url", "--all", "--", "upstream"],
-                vec!["remote", "get-url", "--push", "--all", "--", "upstream"],
-            ]
+            [vec!["remote", "-v"]]
         );
     }
 
     #[tokio::test]
     async fn trims_windows_line_endings_from_remote_names_and_urls() {
         let runner = MockGitRunner::new([
-            successful_output("origin\r\n"),
-            successful_output("https://example.com/acme/web.git\r\n"),
-            successful_output("https://example.com/acme/web.git\r\n"),
+            successful_output(
+                "origin\thttps://example.com/acme/web.git (fetch)\r\n\
+                 origin\thttps://example.com/acme/web.git (push)\r\n",
+            ),
         ]);
 
         assert_eq!(
@@ -445,11 +419,7 @@ mod tests {
         );
         assert_eq!(
             *runner.calls.lock().unwrap(),
-            [
-                vec!["remote"],
-                vec!["remote", "get-url", "--all", "--", "origin"],
-                vec!["remote", "get-url", "--push", "--all", "--", "origin"],
-            ]
+            [vec!["remote", "-v"]]
         );
     }
 
@@ -463,13 +433,12 @@ mod tests {
                 .unwrap(),
             EffectiveRemoteUrls::NoRemotes
         );
-        assert_eq!(*runner.calls.lock().unwrap(), [vec!["remote"]]);
+        assert_eq!(*runner.calls.lock().unwrap(), [vec!["remote", "-v"]]);
     }
 
     #[tokio::test]
     async fn fails_when_any_remote_url_cannot_be_resolved() {
         let runner = MockGitRunner::new([
-            successful_output("origin\n"),
             GitCommandOutput {
                 success: false,
                 stdout: String::new(),
@@ -488,11 +457,11 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let runner = MockGitRunner::new([
             successful_output("/repository\n"),
-            successful_output("origin\n"),
             successful_output(
-                "https://example.org/Team/Service.git\ngit@example.com:Acme/Web.git\n",
+                "origin\thttps://example.org/Team/Service.git (fetch)\n\
+                 origin\tgit@example.com:Acme/Web.git (push)\n\
+                 origin\thttps://example.org/team/service (push)\n",
             ),
-            successful_output("https://example.org/team/service\n"),
         ]);
 
         assert_eq!(
@@ -522,9 +491,10 @@ mod tests {
             (
                 vec![
                     successful_output("/repository\n"),
-                    successful_output("origin\n"),
-                    successful_output("../local/repository.git\n"),
-                    successful_output("file:///tmp/repository.git\n"),
+                    successful_output(
+                        "origin\t../local/repository.git (fetch)\n\
+                         origin\tfile:///tmp/repository.git (push)\n",
+                    ),
                 ],
                 RepositoryDiscoveryReason::NoSupportedGitRemotes,
             ),
