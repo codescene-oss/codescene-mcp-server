@@ -3,10 +3,15 @@ use std::sync::Arc;
 
 use serde_json::{json, Value};
 
-use crate::analytics_attribution::{merge_attribution, resolve_attribution, AnalyticsContext};
+use crate::analytics_attribution::{
+    merge_attribution, resolve_attribution, AnalyticsContext, AttributionOutcome,
+    NoProjectMatchingReason,
+};
 use crate::auth::AuthCredential;
 use crate::http::{HttpClient, HttpRequest, Method, ReqwestClient};
 use crate::repository_projects::RepositoryProjectsCache;
+
+const ATTRIBUTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 struct TrackingEvent {
     url: String,
@@ -117,13 +122,19 @@ fn create_tracking_event(
 }
 
 async fn enrich_tracking_event(event: &mut TrackingEvent, attribution: TrackingAttribution) {
-    let outcome = resolve_attribution(
-        attribution.context,
-        attribution.credential,
-        attribution.http_client,
-        attribution.cache,
+    let outcome = tokio::time::timeout(
+        ATTRIBUTION_TIMEOUT,
+        resolve_attribution(
+            attribution.context,
+            attribution.credential,
+            attribution.http_client,
+            attribution.cache,
+        ),
     )
-    .await;
+    .await
+    .unwrap_or(AttributionOutcome::Failure(
+        NoProjectMatchingReason::GitCommandFailed,
+    ));
     merge_attribution(&mut event.properties, outcome);
 }
 
