@@ -44,7 +44,7 @@ pub(crate) enum RepositoryDiscoveryReason {
 }
 
 #[derive(Debug, PartialEq)]
-enum EffectiveRemoteUrls {
+pub(crate) enum EffectiveRemoteUrls {
     NoRemotes,
     Found(Vec<String>),
 }
@@ -131,6 +131,7 @@ pub(crate) async fn resolve_repository_root(
     Ok(PathBuf::from(root))
 }
 
+#[cfg(test)]
 async fn effective_remote_urls<R: GitRunner>(
     runner: &R,
     repository_root: &Path,
@@ -147,6 +148,7 @@ async fn effective_remote_urls<R: GitRunner>(
     }
 }
 
+#[cfg(test)]
 fn parse_remote_verbose_line(line: &str) -> Option<String> {
     let mut fields = line.split_whitespace();
     let _remote = fields.next()?;
@@ -258,6 +260,7 @@ pub(crate) fn repository_action_path_with(
     current_dir().map_err(|_| RepositoryDiscoveryReason::WorkingDirectoryUnavailable)
 }
 
+#[cfg(test)]
 async fn successful_git_output(
     runner: &dyn GitRunner,
     args: &[&str],

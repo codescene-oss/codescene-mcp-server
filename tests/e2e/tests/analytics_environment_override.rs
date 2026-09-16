@@ -9,7 +9,7 @@ use super::*;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 
-fn score_event_environment(extra_env: &[(&str, &str)]) -> Option<String> {
+fn score_event_environment(extra_env: &[(&str, &str)]) -> (Option<String>, MCPClient) {
     let server = FakeHttpServer::always_ok();
     let (command, mut env, repo_dir, _tmp) = setup();
 
@@ -48,14 +48,15 @@ fn score_event_environment(extra_env: &[(&str, &str)]) -> Option<String> {
             .and_then(|v| v.as_str())
             .map(String::from);
         if environment.is_some() || std::time::Instant::now() >= deadline {
-            return environment;
+            return (environment, client);
         }
         std::thread::sleep(Duration::from_millis(200));
     }
 }
 
 pub fn test_default_environment_is_sent() {
-    let value = score_event_environment(&[]).expect("Should find environment property");
+    let (value, _client) = score_event_environment(&[]);
+    let value = value.expect("Should find environment property");
 
     assert!(
         value == "binary" || value == "docker",
@@ -65,8 +66,8 @@ pub fn test_default_environment_is_sent() {
 
 pub fn test_overridden_environment_is_sent() {
     let override_value = "my-agent-name";
-    let value = score_event_environment(&[("CS_ENVIRONMENT", override_value)])
-        .expect("Should find environment property");
+    let (value, _client) = score_event_environment(&[("CS_ENVIRONMENT", override_value)]);
+    let value = value.expect("Should find environment property");
 
     assert_eq!(
         value, override_value,

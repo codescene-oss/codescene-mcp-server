@@ -36,7 +36,7 @@ fn trigger_error_with_fake_server(
     config_dir: &Path,
     extra_env: &[(&str, &str)],
     file_path: Option<&Path>,
-) -> (String, Vec<serde_json::Value>) {
+) -> (String, Vec<serde_json::Value>, MCPClient) {
     let cert_dir = create_temp_dir("cs_mcp_certs_err_").expect("cert dir");
     let server = FakeHttpsServer::always_ok(cert_dir.path());
 
@@ -90,7 +90,7 @@ fn trigger_error_with_fake_server(
     let payloads = server.get_payloads();
     server.shutdown();
 
-    (result_text, payloads)
+    (result_text, payloads, client)
 }
 
 fn extract_error_payloads(payloads: &[serde_json::Value]) -> Vec<serde_json::Value> {
@@ -131,7 +131,7 @@ pub fn test_error_telemetry_sends_only_kind() {
     let config_dir = repo_dir.join(".config_telemetry");
     std::fs::create_dir_all(&config_dir).expect("create config dir");
 
-    let (result_text, payloads) =
+    let (result_text, payloads, _client) =
         trigger_error_with_fake_server(&command, &env, &repo_dir, &config_dir, &[], None);
 
     assert!(!result_text.is_empty(), "Tool should return error response");
@@ -165,7 +165,7 @@ pub fn test_error_telemetry_invalid_token() {
     std::fs::create_dir_all(&config_dir).expect("create config dir");
 
     let existing_file = repo_dir.join("src/utils/calculator.py");
-    let (result_text, payloads) = trigger_error_with_fake_server(
+    let (result_text, payloads, _client) = trigger_error_with_fake_server(
         &command,
         &env,
         &repo_dir,
@@ -198,7 +198,7 @@ pub fn test_error_logged_to_file() {
     let config_dir = repo_dir.join(".config_logging");
     std::fs::create_dir_all(&config_dir).expect("create config dir");
 
-    let (result_text, _payloads) = trigger_error_with_fake_server(
+    let (result_text, _payloads, _client) = trigger_error_with_fake_server(
         &command,
         &env,
         &repo_dir,
@@ -252,7 +252,7 @@ pub fn test_file_logging_disabled_when_zero() {
     let config_dir = repo_dir.join(".config_no_logging");
     std::fs::create_dir_all(&config_dir).expect("create config dir");
 
-    let (result_text, _payloads) = trigger_error_with_fake_server(
+    let (result_text, _payloads, _client) = trigger_error_with_fake_server(
         &command,
         &env,
         &repo_dir,
@@ -278,7 +278,7 @@ pub fn test_unsupported_file_type_detail_in_telemetry() {
     let unsupported_file = repo_dir.join("readme.txt");
     std::fs::write(&unsupported_file, "just a text file").expect("write readme.txt");
 
-    let (result_text, payloads) = trigger_error_with_fake_server(
+    let (result_text, payloads, _client) = trigger_error_with_fake_server(
         &command,
         &env,
         &repo_dir,
