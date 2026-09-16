@@ -56,6 +56,11 @@ pub(crate) trait GitRunner: Send + Sync {
         args: &[&str],
         working_dir: &Path,
     ) -> Result<GitCommandOutput, GitCommandError>;
+
+    async fn remote_urls(
+        &self,
+        repository_root: &Path,
+    ) -> Result<EffectiveRemoteUrls, RemoteUrlError>;
 }
 
 pub(crate) struct ProductionGitRunner;
@@ -76,6 +81,13 @@ impl GitRunner for ProductionGitRunner {
             stdout: String::from_utf8(output.stdout).map_err(|_| GitCommandError::InvalidOutput)?,
             stderr: String::from_utf8(output.stderr).map_err(|_| GitCommandError::InvalidOutput)?,
         })
+    }
+
+    async fn remote_urls(
+        &self,
+        repository_root: &Path,
+    ) -> Result<EffectiveRemoteUrls, RemoteUrlError> {
+        read_remote_urls(repository_root)
     }
 }
 
@@ -119,8 +131,8 @@ pub(crate) async fn resolve_repository_root(
     Ok(PathBuf::from(root))
 }
 
-async fn effective_remote_urls(
-    runner: &dyn GitRunner,
+async fn effective_remote_urls<R: GitRunner>(
+    runner: &R,
     repository_root: &Path,
 ) -> Result<EffectiveRemoteUrls, RemoteUrlError> {
     let remotes = successful_git_output(runner, &["remote", "-v"], repository_root).await?;
@@ -143,6 +155,61 @@ fn parse_remote_verbose_line(line: &str) -> Option<String> {
     (kind == "(fetch)" || kind == "(push)").then(|| url.to_string())
 }
 
+fn read_remote_urls(repository_root: &Path) -> Result<EffectiveRemoteUrls, RemoteUrlError> {
+    let config_path = git_config_path(repository_root).ok_or(RemoteUrlError::GitCommandFailed)?;
+    let config =
+        std::fs::read_to_string(config_path).map_err(|_| RemoteUrlError::GitCommandFailed)?;
+    let urls = parse_remote_config(&config);
+    if urls.is_empty() {
+        Ok(EffectiveRemoteUrls::NoRemotes)
+    } else {
+        Ok(EffectiveRemoteUrls::Found(urls))
+    }
+}
+
+fn git_config_path(repository_root: &Path) -> Option<PathBuf> {
+    let git_path = repository_root.join(".git");
+    if git_path.is_dir() {
+        return Some(git_path.join("config"));
+    }
+    let gitdir_file = std::fs::read_to_string(git_path).ok()?;
+    let gitdir = gitdir_file
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("gitdir: "))?;
+    let gitdir = PathBuf::from(gitdir);
+    let gitdir = if gitdir.is_absolute() {
+        gitdir
+    } else {
+        repository_root.join(gitdir)
+    };
+    gitdir.parent()?.parent().map(|path| path.join("config"))
+}
+
+fn parse_remote_config(config: &str) -> Vec<String> {
+    let mut in_remote_section = false;
+    let mut urls = BTreeSet::new();
+    for line in config.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            in_remote_section = line.starts_with("[remote \"");
+            continue;
+        }
+        if let Some(url) = parse_remote_config_line(line, in_remote_section) {
+            urls.insert(url);
+        }
+    }
+    urls.into_iter().collect()
+}
+
+fn parse_remote_config_line(line: &str, in_remote_section: bool) -> Option<String> {
+    let (key, value) = line.split_once('=')?;
+    if !in_remote_section || !matches!(key.trim(), "url" | "pushurl") {
+        return None;
+    }
+    let value = value.trim();
+    (!value.is_empty()).then(|| value.to_string())
+}
+
 pub(crate) async fn discover_repository_ids(
     runner: &dyn GitRunner,
     action_path: Option<&Path>,
@@ -151,7 +218,8 @@ pub(crate) async fn discover_repository_ids(
     let repository_root = resolve_repository_root(runner, &action_path)
         .await
         .map_err(repository_root_reason)?;
-    let remotes = effective_remote_urls(runner, &repository_root)
+    let remotes = runner
+        .remote_urls(&repository_root)
         .await
         .map_err(|_| RepositoryDiscoveryReason::GitCommandFailed)?;
     let remote_urls = match remotes {
@@ -291,6 +359,13 @@ mod tests {
                 .unwrap()
                 .push(args.iter().map(|arg| arg.to_string()).collect());
             Ok(self.responses.lock().unwrap().pop_front().unwrap())
+        }
+
+        async fn remote_urls(
+            &self,
+            repository_root: &Path,
+        ) -> Result<EffectiveRemoteUrls, RemoteUrlError> {
+            effective_remote_urls(self, repository_root).await
         }
     }
 
@@ -582,6 +657,13 @@ mod tests {
                     stdout: String::new(),
                     stderr: "fatal: configuration failure".to_string(),
                 })
+            }
+
+            async fn remote_urls(
+                &self,
+                _repository_root: &Path,
+            ) -> Result<EffectiveRemoteUrls, RemoteUrlError> {
+                Err(RemoteUrlError::GitCommandFailed)
             }
         }
 
