@@ -18,6 +18,7 @@ use tempfile::TempDir;
 const TOOL_NAME: &str = "code_health_score";
 const TIMEOUT: Duration = Duration::from_secs(60);
 const UNREACHABLE_ANALYTICS_URL: &str = "https://192.0.2.1:1";
+const REPOSITORY_PROJECTS_PATH: &str = "/api/mcp/repository-projects";
 
 // From analyze_change_set — triggers delta-analysis findings
 const CLEAN_ADDITION: &str = r#"
@@ -167,6 +168,44 @@ pub fn test_analytics_events_are_sent() {
         server.request_count() > 0,
         "Analytics server should have received at least one request"
     );
+}
+
+pub fn test_analytics_event_contains_project_ids() {
+    let api_server = FakeHttpServer::start(|request| {
+        if request.method == "GET" && request.path == REPOSITORY_PROJECTS_PATH {
+            return (
+                200,
+                r#"{"repositories":[{"repository_id":"github.com/acme/web","project_ids":[42]}]}"#
+                    .to_string(),
+            );
+        }
+        (404, r#"{"error":"not_found"}"#.to_string())
+    });
+    let (command, mut env, repo_dir, tracking_server, _tmp) =
+        analytics_setup_with_tracking_server(&[]);
+    env.push(("CS_ONPREM_URL".to_string(), api_server.url()));
+    env.push(("CS_DISABLE_VERSION_CHECK".to_string(), "1".to_string()));
+    git_in(
+        &repo_dir,
+        &["remote", "add", "origin", "https://github.com/acme/web.git"],
+    );
+
+    let mut client = make_client(&command, &env, &repo_dir);
+    assert!(client.start(), "Server should start");
+    client.initialize().expect("Initialize should succeed");
+    let response = client
+        .call_tool("get_config", json!({}), TIMEOUT)
+        .expect("get_config should succeed");
+    assert!(!extract_result_text(&response).is_empty());
+    wait_for_analytics(&tracking_server);
+
+    let properties = find_event_properties(&tracking_server.get_payloads(), "mcp-get-config");
+    assert_eq!(properties.get("project-ids"), Some(&json!([42])));
+    assert!(properties.get("no-project-matching-reason").is_none());
+    assert!(api_server
+        .get_requests()
+        .iter()
+        .any(|request| request.method == "GET" && request.path == REPOSITORY_PROJECTS_PATH));
 }
 
 pub fn test_disabled_tracking_sends_no_events() {
