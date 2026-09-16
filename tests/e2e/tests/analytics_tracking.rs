@@ -146,16 +146,29 @@ fn assert_properties_are_nonempty(props: &serde_json::Value, keys: &[&str]) {
 
 fn wait_for_analytics(server: &FakeHttpServer) {
     let deadline = Instant::now() + Duration::from_secs(15);
-    while server.request_count() == 0 && Instant::now() < deadline {
+    while server.get_payloads().is_empty() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(200));
     }
 }
 
-fn score_with_tracking_server(extra: &[(&str, &str)]) -> (String, FakeHttpServer, TempDir) {
+fn score_with_tracking_server(
+    extra: &[(&str, &str)],
+) -> (String, FakeHttpServer, TempDir, MCPClient) {
     let (command, env, repo_dir, server, tmp) = analytics_setup_with_tracking_server(extra);
-    let (result, _client) = start_client_and_score(&command, &env, &repo_dir);
-    wait_for_analytics(&server);
-    (result, server, tmp)
+    let (result, client) = start_client_and_score(&command, &env, &repo_dir);
+    if !tracking_disabled(extra) {
+        wait_for_analytics(&server);
+    }
+    (result, server, tmp, client)
+}
+
+fn tracking_disabled(extra: &[(&str, &str)]) -> bool {
+    extra.iter().any(|(key, value)| {
+        *key == "CS_DISABLE_TRACKING"
+            && !value.is_empty()
+            && *value != "0"
+            && value.to_lowercase() != "false"
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +176,7 @@ fn score_with_tracking_server(extra: &[(&str, &str)]) -> (String, FakeHttpServer
 // ---------------------------------------------------------------------------
 
 pub fn test_analytics_events_are_sent() {
-    let (_result, server, _tmp) = score_with_tracking_server(&[]);
+    let (_result, server, _tmp, _client) = score_with_tracking_server(&[]);
     assert!(
         server.request_count() > 0,
         "Analytics server should have received at least one request"
@@ -209,7 +222,8 @@ pub fn test_analytics_event_contains_project_ids() {
 }
 
 pub fn test_disabled_tracking_sends_no_events() {
-    let (_result, server, _tmp) = score_with_tracking_server(&[("CS_DISABLE_TRACKING", "1")]);
+    let (_result, server, _tmp, _client) =
+        score_with_tracking_server(&[("CS_DISABLE_TRACKING", "1")]);
     assert_eq!(
         server.request_count(),
         0,
@@ -245,7 +259,7 @@ pub fn test_disabled_tracking_returns_valid_results() {
 }
 
 pub fn test_enriched_event_contains_common_properties() {
-    let (_result, server, _tmp) = score_with_tracking_server(&[]);
+    let (_result, server, _tmp, _client) = score_with_tracking_server(&[]);
 
     let payloads = server.get_payloads();
     let props = find_event_properties(&payloads, "mcp-code-health-score");
@@ -264,7 +278,7 @@ pub fn test_enriched_event_contains_common_properties() {
 }
 
 pub fn test_enriched_event_contains_tool_specific_properties() {
-    let (result, server, _tmp) = score_with_tracking_server(&[]);
+    let (result, server, _tmp, _client) = score_with_tracking_server(&[]);
 
     let payloads = server.get_payloads();
     let props = find_event_properties(&payloads, "mcp-code-health-score");
@@ -333,7 +347,7 @@ fn run_tool_with_fake_server<F>(
     repo_dir: &Path,
     tool_caller: F,
     extra_env: &[(&str, &str)],
-) -> (String, Vec<serde_json::Value>)
+) -> (String, Vec<serde_json::Value>, MCPClient)
 where
     F: FnOnce(&mut MCPClient, &Path) -> String,
 {
@@ -359,7 +373,7 @@ where
     wait_for_analytics(&server);
 
     let payloads = server.get_payloads();
-    (result_text, payloads)
+    (result_text, payloads, client)
 }
 
 fn assert_common_properties(props: &serde_json::Value) {
@@ -396,7 +410,7 @@ pub fn test_enriched_review_event() {
     let temp = create_temp_dir("cs_mcp_review_event_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
 
-    let (result, payloads) = run_tool_with_fake_server(
+    let (result, payloads, _client) = run_tool_with_fake_server(
         &repo_dir,
         |client, rd| {
             let file = rd.join("src/services/order_processor.py");
@@ -451,7 +465,7 @@ pub fn test_enriched_pre_commit_event() {
     let temp = create_temp_dir("cs_mcp_precommit_event_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
 
-    let (result, payloads) = run_tool_with_fake_server(
+    let (result, payloads, _client) = run_tool_with_fake_server(
         &repo_dir,
         |client, rd| {
             let file = rd.join("src/utils/calculator.py");
@@ -512,7 +526,7 @@ fn create_feature_branch(addition: &str) -> (PathBuf, TempDir) {
     (repo_dir, temp)
 }
 
-fn run_analyze_change_set(repo_dir: &Path) -> (String, Vec<serde_json::Value>) {
+fn run_analyze_change_set(repo_dir: &Path) -> (String, Vec<serde_json::Value>, MCPClient) {
     run_tool_with_fake_server(
         repo_dir,
         |client, rd| {
@@ -535,7 +549,7 @@ fn run_analyze_change_set(repo_dir: &Path) -> (String, Vec<serde_json::Value>) {
 
 pub fn test_enriched_analyze_change_set_event() {
     let (repo_dir, _temp) = create_feature_branch(CLEAN_ADDITION);
-    let (result, payloads) = run_analyze_change_set(&repo_dir);
+    let (result, payloads, _client) = run_analyze_change_set(&repo_dir);
 
     assert!(!result.is_empty(), "Should return content");
 
@@ -579,7 +593,7 @@ pub fn test_enriched_pre_commit_event_with_findings() {
     let temp = create_temp_dir("cs_mcp_precommit_findings_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
 
-    let (result, payloads) = run_tool_with_fake_server(
+    let (result, payloads, _client) = run_tool_with_fake_server(
         &repo_dir,
         |client, rd| {
             let file = rd.join("src/utils/calculator.py");
@@ -635,7 +649,7 @@ pub fn test_enriched_pre_commit_event_with_findings() {
 
 pub fn test_enriched_analyze_change_set_event_with_findings() {
     let (repo_dir, _temp) = create_feature_branch(DEGRADING_ADDITION);
-    let (result, payloads) = run_analyze_change_set(&repo_dir);
+    let (result, payloads, _client) = run_analyze_change_set(&repo_dir);
 
     assert!(!result.is_empty(), "Should return content");
 

@@ -80,9 +80,12 @@ fn trigger_error_with_fake_server(
 
     let result_text = extract_result_text(&response);
 
-    // Docker containers may need extra time for telemetry delivery
-    let wait = if super::is_docker() { 5 } else { 2 };
-    std::thread::sleep(Duration::from_secs(wait));
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    while extract_error_payloads(&server.get_payloads()).is_empty()
+        && std::time::Instant::now() < deadline
+    {
+        std::thread::sleep(Duration::from_millis(200));
+    }
 
     let payloads = server.get_payloads();
     server.shutdown();

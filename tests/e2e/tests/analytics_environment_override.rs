@@ -37,18 +37,21 @@ fn score_event_environment(extra_env: &[(&str, &str)]) -> Option<String> {
     let score = extract_code_health_score(&result_text);
     assert!(score.is_some(), "Should get a valid score: {result_text}");
 
-    std::thread::sleep(Duration::from_secs(2));
-
-    let payloads = server.get_payloads();
-    let props = payloads
-        .iter()
-        .find(|p| p.get("event-type").and_then(|v| v.as_str()) == Some("mcp-code-health-score"))
-        .and_then(|p| p.get("event-properties"));
-
-    props
-        .and_then(|p| p.get("environment"))
-        .and_then(|v| v.as_str())
-        .map(String::from)
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        let environment = server
+            .get_payloads()
+            .iter()
+            .find(|p| p.get("event-type").and_then(|v| v.as_str()) == Some("mcp-code-health-score"))
+            .and_then(|p| p.get("event-properties"))
+            .and_then(|p| p.get("environment"))
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        if environment.is_some() || std::time::Instant::now() >= deadline {
+            return environment;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
 }
 
 pub fn test_default_environment_is_sent() {
