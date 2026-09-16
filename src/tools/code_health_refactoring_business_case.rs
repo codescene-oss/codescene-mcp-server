@@ -3,19 +3,27 @@ use std::path::Path;
 use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 
+use crate::analytics_attribution::AnalyticsContext;
 use crate::business_case;
 use crate::docker;
 use crate::event_properties;
 use crate::tools::common::{extract_score, run_review, tool_error};
 use crate::tools::validation::CliCheck;
 use crate::tools::FilePathParam;
-use crate::CodeSceneServer;
+use crate::{CodeSceneServer, ContextualErrorEvent};
 
 pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: FilePathParam,
 ) -> Result<CallToolResult, ErrorData> {
-    if let Some(r) = server.require_token().await {
+    let analytics_context = AnalyticsContext::Path(params.file_path.clone().into());
+    if let Some(r) = server
+        .require_token_with_context(
+            "code-health-refactoring-business-case",
+            analytics_context.clone(),
+        )
+        .await
+    {
         return Ok(r);
     }
     server.version_checker.check_in_background();
@@ -26,32 +34,55 @@ pub(crate) async fn handle(
         CliCheck::SupportedFileType(fp),
         CliCheck::InsideGitRepo(fp),
     ]) {
-        server.track_validation_err("code-health-refactoring-business-case", &e);
+        server.track_contextual_err(
+            ContextualErrorEvent {
+                error_kind: e.kind,
+                tool: "code-health-refactoring-business-case",
+                detail: e.detail.as_deref(),
+                context: analytics_context.clone(),
+            },
+            &e,
+        );
         return Ok(tool_error(&e.message));
     }
     let review_result = run_review(fp, &*server.cli_runner).await;
     match review_result {
         Ok(output) => {
-            let score = extract_score(&output);
-            let result_text = match score {
-                Some(s) => match business_case::make_business_case(s) {
-                    Some(bc) => serde_json::to_string_pretty(&bc).unwrap_or_default(),
-                    None => "Code Health is already optimal. No business case needed.".into(),
-                },
-                None => "Could not determine Code Health score.".into(),
-            };
+            let result_text = business_case_text(&output);
             let props = event_properties::business_case_properties(
                 Path::new(&params.file_path),
                 &result_text,
             );
-            server.track("code-health-refactoring-business-case", props);
+            server.track_with_context(
+                "code-health-refactoring-business-case",
+                props,
+                analytics_context,
+            );
             let text = server.maybe_version_warning(&result_text).await;
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
         Err(e) => {
-            server.track_err("code-health-refactoring-business-case", &e);
+            server.track_contextual_err(
+                ContextualErrorEvent {
+                    error_kind: e.kind(),
+                    tool: "code-health-refactoring-business-case",
+                    detail: None,
+                    context: analytics_context,
+                },
+                &e,
+            );
             Ok(tool_error(&format!("Error: {e}")))
         }
+    }
+}
+
+fn business_case_text(review_output: &str) -> String {
+    match extract_score(review_output).and_then(business_case::make_business_case) {
+        Some(case) => serde_json::to_string_pretty(&case).unwrap_or_default(),
+        None if extract_score(review_output).is_some() => {
+            "Code Health is already optimal. No business case needed.".into()
+        }
+        None => "Could not determine Code Health score.".into(),
     }
 }
 

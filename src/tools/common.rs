@@ -4,9 +4,11 @@ use rmcp::model::{CallToolResult, Content};
 
 use crate::cli;
 use crate::cli::CliRunner;
+use crate::auth::AuthCredential;
 use crate::docker;
 use crate::environment;
 use crate::errors;
+use crate::{CodeSceneServer, ContextualErrorEvent};
 
 /// Reject any user-supplied argument that looks like a CLI flag.
 /// This prevents option-injection when untrusted strings are passed
@@ -101,6 +103,28 @@ pub(crate) fn make_relative_for_api(file_path: &Path) -> String {
 
 pub(crate) fn tool_error(msg: impl Into<String>) -> CallToolResult {
     CallToolResult::error(vec![Content::text(msg.into())])
+}
+
+pub(crate) async fn latest_analysis_id(
+    server: &CodeSceneServer,
+    credential: &AuthCredential,
+    project_id: i64,
+    tool: &str,
+) -> Result<i64, CallToolResult> {
+    crate::api_client::get_latest_analysis_id_with_auth(
+        project_id,
+        &*server.http_client,
+        Some(credential),
+    )
+    .await
+    .map_err(|error| {
+        let message = format!("Error fetching latest analysis: {error}");
+        server.track_contextual_err(
+            ContextualErrorEvent::for_project("api_error", tool, project_id),
+            &message,
+        );
+        tool_error(message)
+    })
 }
 
 fn make_cli_path(file_path: &str, git_root: Option<&Path>) -> String {

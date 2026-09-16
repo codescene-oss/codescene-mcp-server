@@ -4,42 +4,39 @@ use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 use serde_json::json;
 
+use crate::analytics_attribution::AnalyticsContext;
 use crate::api_client;
 use crate::docker;
 use crate::event_properties;
 use crate::tools::codescene_links;
-use crate::tools::common::{make_relative_for_api, tool_error};
+use crate::tools::common::{latest_analysis_id, make_relative_for_api, tool_error};
 use crate::tools::ProjectFileParam;
-use crate::CodeSceneServer;
+use crate::{CodeSceneServer, ContextualErrorEvent};
 
 pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: ProjectFileParam,
 ) -> Result<CallToolResult, ErrorData> {
-    let credential = match server.resolve_auth_credential().await {
+    let analytics_context = AnalyticsContext::ExplicitProjectIds(vec![params.project_id]);
+    let credential = match server
+        .require_project_api("list-technical-debt-goals-file", params.project_id)
+        .await
+    {
         Ok(credential) => credential,
-        Err(r) => return Ok(r),
+        Err(result) => return Ok(result),
     };
-    if server.is_standalone {
-        return Ok(tool_error(
-            "This tool requires a CodeScene API token (not a standalone license).",
-        ));
-    }
     server.version_checker.check_in_background();
 
-    let analysis_id = api_client::get_latest_analysis_id_with_auth(
+    let analysis_id = match latest_analysis_id(
+        server,
+        &credential,
         params.project_id,
-        &*server.http_client,
-        Some(&credential),
+        "list-technical-debt-goals-file",
     )
     .await
-    .map_err(|e| format!("Error fetching latest analysis: {e}"));
-    let analysis_id = match analysis_id {
+    {
         Ok(id) => id,
-        Err(e) => {
-            server.track_err_msg("list-technical-debt-goals-file", "api_error", &e);
-            return Ok(tool_error(&e));
-        }
+        Err(result) => return Ok(result),
     };
 
     let file_path = docker::adapt_path_for_docker(Path::new(&params.file_path));
@@ -60,7 +57,7 @@ pub(crate) async fn handle(
     match result {
         Ok(data) => {
             let props = event_properties::goals_file_properties(Path::new(&params.file_path));
-            server.track("list-technical-debt-goals-file", props);
+            server.track_with_context("list-technical-debt-goals-file", props, analytics_context);
             let link = codescene_links::biomarkers_link(
                 params.project_id,
                 analysis_id,
@@ -73,7 +70,14 @@ pub(crate) async fn handle(
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
         Err(e) => {
-            server.track_api_err("list-technical-debt-goals-file", &e);
+            server.track_contextual_err(
+                ContextualErrorEvent::for_project(
+                    e.kind(),
+                    "list-technical-debt-goals-file",
+                    params.project_id,
+                ),
+                &e,
+            );
             Ok(tool_error(&format!("Error: {e}")))
         }
     }

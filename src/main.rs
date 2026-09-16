@@ -1,4 +1,5 @@
 ﻿mod api_client;
+mod analytics_attribution;
 mod auth;
 mod business_case;
 mod cli;
@@ -10,11 +11,16 @@ mod docker;
 mod environment;
 mod errors;
 mod event_properties;
+mod git_repository;
+#[cfg(test)]
+mod git_repository_integration_tests;
 mod hashing;
 mod http;
 mod license;
 mod platform;
 mod prompts;
+mod repository_url;
+mod repository_projects;
 mod resources;
 mod server_handler;
 mod skills;
@@ -56,7 +62,8 @@ use crate::auth::{AuthCredential, AuthManager};
 use crate::cli::CliRunner;
 use crate::config::ConfigData;
 use crate::http::HttpClient;
-use crate::tools::validation::{ValidationError, Validator};
+use crate::repository_projects::RepositoryProjectsCache;
+use crate::tools::validation::Validator;
 use crate::tools::{
     ChangeSetParam, DownloadSkillParam, FilePathParam, GetConfigParam, GitRepoParam, LoginParam,
     LogoutParam, OptionalContext, OwnershipParam, ProjectFileParam, ProjectParam,
@@ -161,6 +168,66 @@ pub(crate) struct CodeSceneServer {
     pub(crate) cli_runner: Arc<dyn CliRunner>,
     pub(crate) http_client: Arc<dyn HttpClient>,
     pub(crate) validator: Arc<dyn Validator>,
+    pub(crate) repository_projects_cache: Arc<RepositoryProjectsCache>,
+    #[cfg(test)]
+    pub(crate) tracking_probe: Option<TrackingProbe>,
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum RecordedTrackingCall {
+    Event {
+        name: String,
+        context: analytics_attribution::AnalyticsContext,
+    },
+    Error {
+        tool: String,
+        error_kind: String,
+        context: analytics_attribution::AnalyticsContext,
+    },
+}
+
+#[cfg(test)]
+#[derive(Clone, Default)]
+pub(crate) struct TrackingProbe(Arc<std::sync::Mutex<Vec<RecordedTrackingCall>>>);
+
+#[cfg(test)]
+impl TrackingProbe {
+    pub(crate) fn calls(&self) -> Vec<RecordedTrackingCall> {
+        self.0.lock().unwrap().clone()
+    }
+
+    fn record(&self, call: RecordedTrackingCall) {
+        self.0.lock().unwrap().push(call);
+    }
+
+    pub(crate) fn install(server: &mut CodeSceneServer) -> Self {
+        let probe = Self::default();
+        server.tracking_probe = Some(probe.clone());
+        probe
+    }
+
+    pub(crate) fn assert_single(&self, expected: RecordedTrackingCall) {
+        assert_eq!(self.calls(), [expected]);
+    }
+}
+
+pub(crate) struct ContextualErrorEvent<'a> {
+    pub(crate) error_kind: &'a str,
+    pub(crate) tool: &'a str,
+    pub(crate) detail: Option<&'a str>,
+    pub(crate) context: analytics_attribution::AnalyticsContext,
+}
+
+impl<'a> ContextualErrorEvent<'a> {
+    pub(crate) fn for_project(error_kind: &'a str, tool: &'a str, project_id: i64) -> Self {
+        Self {
+            error_kind,
+            tool,
+            detail: None,
+            context: analytics_attribution::AnalyticsContext::ExplicitProjectIds(vec![project_id]),
+        }
+    }
 }
 
 impl CodeSceneServer {
@@ -189,6 +256,21 @@ impl CodeSceneServer {
         }
     }
 
+    pub(crate) async fn require_token_with_context(
+        &self,
+        tool: &str,
+        context: analytics_attribution::AnalyticsContext,
+    ) -> Option<CallToolResult> {
+        let result = self.require_token().await?;
+        self.track_error_with_context(ContextualErrorEvent {
+            error_kind: "authentication_unavailable",
+            tool,
+            detail: None,
+            context,
+        });
+        Some(result)
+    }
+
     pub(crate) async fn resolve_auth_credential(&self) -> Result<AuthCredential, CallToolResult> {
         match self
             .auth_manager
@@ -212,6 +294,32 @@ impl CodeSceneServer {
                 )]))
             }
         }
+    }
+
+    pub(crate) async fn require_project_api(
+        &self,
+        tool: &str,
+        project_id: i64,
+    ) -> Result<AuthCredential, CallToolResult> {
+        let credential = self.resolve_auth_credential().await.map_err(|result| {
+            self.track_error_with_context(ContextualErrorEvent::for_project(
+                "authentication_unavailable",
+                tool,
+                project_id,
+            ));
+            result
+        })?;
+        if self.is_standalone {
+            self.track_error_with_context(ContextualErrorEvent::for_project(
+                "standalone_license",
+                tool,
+                project_id,
+            ));
+            return Err(tools::common::tool_error(
+                "This tool requires a CodeScene API token (not a standalone license).",
+            ));
+        }
+        Ok(credential)
     }
 
     fn log_credential_resolved(&self, credential: &AuthCredential, message: &'static str) {
@@ -248,57 +356,124 @@ impl CodeSceneServer {
     }
 
     pub(crate) fn track(&self, event: &str, props: serde_json::Value) {
-        tracking::track_event(event, props, &self.instance_id, &self.tracking_auth());
+        self.track_with_context(
+            event,
+            props,
+            analytics_attribution::AnalyticsContext::CurrentWorkspace,
+        );
     }
 
-    pub(crate) fn track_err(&self, tool: &str, err: &errors::CliError) {
-        tracing::warn!(tool, error = %err, "tool error");
-        self.track_error_event(err.kind(), tool, None);
+    pub(crate) fn track_with_context(
+        &self,
+        event: &str,
+        props: serde_json::Value,
+        context: analytics_attribution::AnalyticsContext,
+    ) {
+        if tracking::is_disabled() {
+            return;
+        }
+        #[cfg(test)]
+        if let Some(probe) = &self.tracking_probe {
+            probe.record(RecordedTrackingCall::Event {
+                name: event.to_string(),
+                context,
+            });
+            return;
+        }
+        let (auth, credential) = self.tracking_auth();
+        tracking::track_event_with_attribution(tracking::AttributedEvent {
+            event,
+            properties: props,
+            instance_id: &self.instance_id,
+            auth: &auth,
+            attribution: tracking::TrackingAttribution {
+                context,
+                credential,
+                http_client: self.http_client.clone(),
+                cache: self.repository_projects_cache.clone(),
+            },
+        });
     }
 
     pub(crate) fn track_api_err(&self, tool: &str, err: &errors::ApiError) {
         tracing::warn!(tool, error = %err, "API error");
-        self.track_error_event(err.kind(), tool, None);
-    }
-
-    pub(crate) fn track_validation_err(&self, tool: &str, err: &ValidationError) {
-        tracing::warn!(tool, error = %err, "tool error");
-        self.track_error_event(err.kind, tool, err.detail.as_deref());
+        self.track_error_with_context(ContextualErrorEvent {
+            error_kind: err.kind(),
+            tool,
+            detail: None,
+            context: analytics_attribution::AnalyticsContext::CurrentWorkspace,
+        });
     }
 
     pub(crate) fn track_err_msg(&self, tool: &str, error_kind: &str, err: &str) {
-        tracing::warn!(tool, error = err, "tool error");
-        self.track_error_event(error_kind, tool, None);
+        self.track_contextual_err(
+            ContextualErrorEvent {
+                error_kind,
+                tool,
+                detail: None,
+                context: analytics_attribution::AnalyticsContext::CurrentWorkspace,
+            },
+            &err,
+        );
     }
 
-    fn track_error_event(&self, error_kind: &str, tool: &str, detail: Option<&str>) {
-        let auth = self.tracking_auth();
-        tracking::track_error(&tracking::ErrorEvent {
-            error_kind,
-            tool_name: tool,
-            instance_id: &self.instance_id,
-            detail,
-            auth: &auth,
-        });
+    pub(crate) fn track_contextual_err(
+        &self,
+        event: ContextualErrorEvent<'_>,
+        error: &dyn std::fmt::Display,
+    ) {
+        tracing::warn!(tool = event.tool, error = %error, "tool error");
+        self.track_error_with_context(event);
+    }
+
+    pub(crate) fn track_error_with_context(&self, event: ContextualErrorEvent<'_>) {
+        if tracking::is_disabled() {
+            return;
+        }
+        #[cfg(test)]
+        if let Some(probe) = &self.tracking_probe {
+            probe.record(RecordedTrackingCall::Error {
+                tool: event.tool.to_string(),
+                error_kind: event.error_kind.to_string(),
+                context: event.context,
+            });
+            return;
+        }
+        let (auth, credential) = self.tracking_auth();
+        tracking::track_error_with_attribution(
+            &tracking::ErrorEvent {
+                error_kind: event.error_kind,
+                tool_name: event.tool,
+                instance_id: &self.instance_id,
+                detail: event.detail,
+                auth: &auth,
+            },
+            tracking::TrackingAttribution {
+                context: event.context,
+                credential,
+                http_client: self.http_client.clone(),
+                cache: self.repository_projects_cache.clone(),
+            },
+        );
     }
 
     /// Resolve the best available token and API root for tracking.
     /// Prefers configured PAT, falls back to cached OAuth token.
-    fn tracking_auth(&self) -> tracking::TrackingAuth {
-        if let Some(cred) = auth::configured_credential() {
-            return tracking::TrackingAuth {
-                access_token: cred.access_token().to_string(),
-                api_root: cred.api_root().ok(),
-            };
-        }
-        tracking::TrackingAuth {
-            access_token: self
-                .auth_manager
-                .try_cached_access_token()
+    fn tracking_auth(&self) -> (tracking::TrackingAuth, Option<AuthCredential>) {
+        let credential =
+            auth::configured_credential().or_else(|| self.auth_manager.try_cached_credential());
+        let auth = tracking::TrackingAuth {
+            access_token: credential
+                .as_ref()
+                .map(|credential| credential.access_token().to_string())
                 .unwrap_or_default(),
-            api_root: self.auth_manager.try_cached_api_root(),
-        }
+            api_root: credential
+                .as_ref()
+                .and_then(|credential| credential.api_root().ok()),
+        };
+        (auth, credential)
     }
+
 }
 
 fn credential_source(credential: &AuthCredential) -> &'static str {
@@ -370,6 +545,9 @@ impl CodeSceneServer {
             cli_runner: deps.cli_runner,
             http_client: deps.http_client,
             validator: deps.validator,
+            repository_projects_cache: Arc::new(RepositoryProjectsCache::default()),
+            #[cfg(test)]
+            tracking_probe: None,
         }
     }
 

@@ -37,6 +37,7 @@ base64 = "0.22"
 
 # HTTP client (API calls, version checks, analytics)
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+percent-encoding = "2"
 
 # Cryptography (SHA-256 hashing)
 sha2 = "0.10"

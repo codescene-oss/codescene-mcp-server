@@ -3,18 +3,23 @@ use std::path::Path;
 use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 
+use crate::analytics_attribution::AnalyticsContext;
 use crate::docker;
 use crate::event_properties;
 use crate::tools::common::{extract_score, run_review, tool_error};
 use crate::tools::validation::CliCheck;
 use crate::tools::FilePathParam;
-use crate::CodeSceneServer;
+use crate::{CodeSceneServer, ContextualErrorEvent};
 
 pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: FilePathParam,
 ) -> Result<CallToolResult, ErrorData> {
-    if let Some(r) = server.require_token().await {
+    let analytics_context = AnalyticsContext::Path(params.file_path.clone().into());
+    if let Some(r) = server
+        .require_token_with_context("code-health-score", analytics_context.clone())
+        .await
+    {
         return Ok(r);
     }
     server.version_checker.check_in_background();
@@ -25,7 +30,15 @@ pub(crate) async fn handle(
         CliCheck::SupportedFileType(fp),
         CliCheck::InsideGitRepo(fp),
     ]) {
-        server.track_validation_err("code-health-score", &e);
+        server.track_contextual_err(
+            ContextualErrorEvent {
+                error_kind: e.kind,
+                tool: "code-health-score",
+                detail: e.detail.as_deref(),
+                context: analytics_context.clone(),
+            },
+            &e,
+        );
         return Ok(tool_error(&e.message));
     }
     let result = run_review(fp, &*server.cli_runner).await;
@@ -33,7 +46,7 @@ pub(crate) async fn handle(
         Ok(output) => {
             let score = extract_score(&output);
             let props = event_properties::score_properties(Path::new(&params.file_path), score);
-            server.track("code-health-score", props);
+            server.track_with_context("code-health-score", props, analytics_context);
             let msg = score
                 .map(|s| format!("Code Health score: {s}"))
                 .unwrap_or_else(|| "Could not determine Code Health score.".to_string());
@@ -41,7 +54,15 @@ pub(crate) async fn handle(
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
         Err(e) => {
-            server.track_err("code-health-score", &e);
+            server.track_contextual_err(
+                ContextualErrorEvent {
+                    error_kind: e.kind(),
+                    tool: "code-health-score",
+                    detail: None,
+                    context: analytics_context,
+                },
+                &e,
+            );
             Ok(tool_error(&format!("Error: {e}")))
         }
     }
