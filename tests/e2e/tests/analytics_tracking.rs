@@ -151,6 +151,19 @@ fn wait_for_analytics(server: &FakeHttpServer) {
     }
 }
 
+fn wait_for_project_ids(server: &FakeHttpServer) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !server.get_payloads().iter().any(|payload| {
+        payload
+            .get("event-properties")
+            .and_then(|properties| properties.get("project-ids"))
+            == Some(&json!([42]))
+    }) && Instant::now() < deadline
+    {
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
 fn score_with_tracking_server(
     extra: &[(&str, &str)],
 ) -> (String, FakeHttpServer, TempDir, MCPClient) {
@@ -210,7 +223,7 @@ pub fn test_analytics_event_contains_project_ids() {
         .call_tool("get_config", json!({}), TIMEOUT)
         .expect("get_config should succeed");
     assert!(!extract_result_text(&response).is_empty());
-    wait_for_analytics(&tracking_server);
+    wait_for_project_ids(&tracking_server);
 
     let properties = find_event_properties(&tracking_server.get_payloads(), "mcp-get-config");
     assert_eq!(properties.get("project-ids"), Some(&json!([42])));

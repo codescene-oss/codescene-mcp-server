@@ -127,6 +127,7 @@ async fn effective_remote_urls(
     let mut urls = BTreeSet::new();
     let remote_names = remotes
         .lines()
+        .map(str::trim)
         .filter(|remote| !remote.is_empty())
         .map(str::to_string)
         .collect::<Vec<_>>();
@@ -151,6 +152,7 @@ async fn effective_remote_urls(
             fetch_urls
                 .lines()
                 .chain(push_urls.lines())
+                .map(str::trim)
                 .filter(|url| !url.is_empty())
                 .map(str::to_string),
         );
@@ -423,6 +425,30 @@ mod tests {
                 vec!["remote", "get-url", "--push", "--all", "--", "origin"],
                 vec!["remote", "get-url", "--all", "--", "upstream"],
                 vec!["remote", "get-url", "--push", "--all", "--", "upstream"],
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn trims_windows_line_endings_from_remote_names_and_urls() {
+        let runner = MockGitRunner::new([
+            successful_output("origin\r\n"),
+            successful_output("https://example.com/acme/web.git\r\n"),
+            successful_output("https://example.com/acme/web.git\r\n"),
+        ]);
+
+        assert_eq!(
+            effective_remote_urls(&runner, Path::new("/repository"))
+                .await
+                .unwrap(),
+            EffectiveRemoteUrls::Found(vec!["https://example.com/acme/web.git".to_string()])
+        );
+        assert_eq!(
+            *runner.calls.lock().unwrap(),
+            [
+                vec!["remote"],
+                vec!["remote", "get-url", "--all", "--", "origin"],
+                vec!["remote", "get-url", "--push", "--all", "--", "origin"],
             ]
         );
     }
