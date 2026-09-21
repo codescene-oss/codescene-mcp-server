@@ -62,10 +62,7 @@ pub(crate) trait GitRunner: Send + Sync {
         repository_root: &Path,
     ) -> Result<EffectiveRemoteUrls, RemoteUrlError>;
 
-    async fn repository_root(
-        &self,
-        action_path: &Path,
-    ) -> Result<PathBuf, RepositoryRootError>;
+    async fn repository_root(&self, action_path: &Path) -> Result<PathBuf, RepositoryRootError>;
 }
 
 pub(crate) struct ProductionGitRunner;
@@ -95,10 +92,7 @@ impl GitRunner for ProductionGitRunner {
         read_remote_urls(repository_root)
     }
 
-    async fn repository_root(
-        &self,
-        action_path: &Path,
-    ) -> Result<PathBuf, RepositoryRootError> {
+    async fn repository_root(&self, action_path: &Path) -> Result<PathBuf, RepositoryRootError> {
         find_repository_root(action_path)
     }
 }
@@ -211,28 +205,139 @@ fn git_config_path(repository_root: &Path) -> Option<PathBuf> {
 }
 
 fn parse_remote_config(config: &str) -> Vec<String> {
-    let mut in_remote_section = false;
-    let mut urls = BTreeSet::new();
+    let mut section = ConfigSection::Other;
+    let mut remotes = std::collections::BTreeMap::<String, RemoteConfig>::new();
+    let mut rewrites = Vec::new();
+    let mut push_rewrites = Vec::new();
+
     for line in config.lines() {
-        let line = line.trim();
-        if line.starts_with('[') {
-            in_remote_section = line.starts_with("[remote \"");
-            continue;
+        parse_config_line(
+            line,
+            &mut section,
+            &mut remotes,
+            &mut rewrites,
+            &mut push_rewrites,
+        );
+    }
+
+    expanded_remote_urls(remotes.values(), &rewrites, &push_rewrites)
+}
+
+fn expanded_remote_urls<'a>(
+    remotes: impl Iterator<Item = &'a RemoteConfig>,
+    rewrites: &[(String, String)],
+    push_rewrites: &[(String, String)],
+) -> Vec<String> {
+    let mut urls = BTreeSet::new();
+    for remote in remotes {
+        for url in &remote.urls {
+            urls.insert(apply_rewrite(url, &rewrites));
         }
-        if let Some(url) = parse_remote_config_line(line, in_remote_section) {
-            urls.insert(url);
+        if remote.push_urls.is_empty() {
+            for url in &remote.urls {
+                urls.insert(apply_rewrite(url, &push_rewrites));
+            }
+        } else {
+            for url in &remote.push_urls {
+                urls.insert(apply_rewrite(url, &rewrites));
+            }
         }
     }
     urls.into_iter().collect()
 }
 
-fn parse_remote_config_line(line: &str, in_remote_section: bool) -> Option<String> {
-    let (key, value) = line.split_once('=')?;
-    if !in_remote_section || !matches!(key.trim(), "url" | "pushurl") {
-        return None;
+fn parse_config_line(
+    line: &str,
+    section: &mut ConfigSection,
+    remotes: &mut std::collections::BTreeMap<String, RemoteConfig>,
+    rewrites: &mut Vec<(String, String)>,
+    push_rewrites: &mut Vec<(String, String)>,
+) {
+    let line = line.trim();
+    if line.starts_with('[') {
+        *section = parse_config_section(line);
+        return;
     }
+    let Some((key, value)) = line.split_once('=') else {
+        return;
+    };
     let value = value.trim();
-    (!value.is_empty()).then(|| value.to_string())
+    if value.is_empty() {
+        return;
+    }
+    match section {
+        ConfigSection::Remote(name) => add_remote_value(remotes, name, key.trim(), value),
+        ConfigSection::Url(base) => add_rewrite(rewrites, push_rewrites, base, key, value),
+        ConfigSection::Other => {}
+    }
+}
+
+fn add_remote_value(
+    remotes: &mut std::collections::BTreeMap<String, RemoteConfig>,
+    name: &str,
+    key: &str,
+    value: &str,
+) {
+    let remote = remotes.entry(name.to_string()).or_default();
+    match key {
+        "url" => remote.urls.push(value.to_string()),
+        "pushurl" => remote.push_urls.push(value.to_string()),
+        _ => {}
+    }
+}
+
+fn add_rewrite(
+    rewrites: &mut Vec<(String, String)>,
+    push_rewrites: &mut Vec<(String, String)>,
+    base: &str,
+    key: &str,
+    value: &str,
+) {
+    let rewrite = (value.to_string(), base.to_string());
+    match key.trim().to_ascii_lowercase().as_str() {
+        "insteadof" => rewrites.push(rewrite),
+        "pushinsteadof" => push_rewrites.push(rewrite),
+        _ => {}
+    }
+}
+
+#[derive(Default)]
+struct RemoteConfig {
+    urls: Vec<String>,
+    push_urls: Vec<String>,
+}
+
+enum ConfigSection {
+    Remote(String),
+    Url(String),
+    Other,
+}
+
+fn parse_config_section(line: &str) -> ConfigSection {
+    let Some((kind, value)) = line
+        .strip_prefix('[')
+        .and_then(|line| line.strip_suffix(']'))
+        .and_then(|line| line.split_once(' '))
+    else {
+        return ConfigSection::Other;
+    };
+    let value = value.trim().trim_matches('"').to_string();
+    match kind.to_ascii_lowercase().as_str() {
+        "remote" => ConfigSection::Remote(value),
+        "url" => ConfigSection::Url(value),
+        _ => ConfigSection::Other,
+    }
+}
+
+fn apply_rewrite(url: &str, rewrites: &[(String, String)]) -> String {
+    rewrites
+        .iter()
+        .filter(|(prefix, _)| url.starts_with(prefix))
+        .max_by_key(|(prefix, _)| prefix.len())
+        .map_or_else(
+            || url.to_string(),
+            |(prefix, replacement)| format!("{}{}", replacement, &url[prefix.len()..]),
+        )
 }
 
 pub(crate) async fn discover_repository_ids(
@@ -485,14 +590,12 @@ mod tests {
 
     #[tokio::test]
     async fn enumerates_and_deduplicates_every_fetch_and_push_url() {
-        let runner = MockGitRunner::new([
-            successful_output(
-                "origin\thttps://example.com/acme/web.git (fetch)\n\
+        let runner = MockGitRunner::new([successful_output(
+            "origin\thttps://example.com/acme/web.git (fetch)\n\
                  origin\tssh://git@example.com/acme/web.git (push)\n\
                  upstream\thttps://example.org/acme/web.git (fetch)\n\
                  upstream\tssh://git@example.org/acme/web.git (push)\n",
-            ),
-        ]);
+        )]);
 
         assert_eq!(
             effective_remote_urls(&runner, Path::new("/repository"))
@@ -505,20 +608,15 @@ mod tests {
                 "ssh://git@example.org/acme/web.git".to_string(),
             ])
         );
-        assert_eq!(
-            *runner.calls.lock().unwrap(),
-            [vec!["remote", "-v"]]
-        );
+        assert_eq!(*runner.calls.lock().unwrap(), [vec!["remote", "-v"]]);
     }
 
     #[tokio::test]
     async fn trims_windows_line_endings_from_remote_names_and_urls() {
-        let runner = MockGitRunner::new([
-            successful_output(
-                "origin\thttps://example.com/acme/web.git (fetch)\r\n\
+        let runner = MockGitRunner::new([successful_output(
+            "origin\thttps://example.com/acme/web.git (fetch)\r\n\
                  origin\thttps://example.com/acme/web.git (push)\r\n",
-            ),
-        ]);
+        )]);
 
         assert_eq!(
             effective_remote_urls(&runner, Path::new("/repository"))
@@ -526,10 +624,7 @@ mod tests {
                 .unwrap(),
             EffectiveRemoteUrls::Found(vec!["https://example.com/acme/web.git".to_string()])
         );
-        assert_eq!(
-            *runner.calls.lock().unwrap(),
-            [vec!["remote", "-v"]]
-        );
+        assert_eq!(*runner.calls.lock().unwrap(), [vec!["remote", "-v"]]);
     }
 
     #[tokio::test]
@@ -547,13 +642,11 @@ mod tests {
 
     #[tokio::test]
     async fn fails_when_any_remote_url_cannot_be_resolved() {
-        let runner = MockGitRunner::new([
-            GitCommandOutput {
-                success: false,
-                stdout: String::new(),
-                stderr: "failure containing a sensitive remote URL".to_string(),
-            },
-        ]);
+        let runner = MockGitRunner::new([GitCommandOutput {
+            success: false,
+            stdout: String::new(),
+            stderr: "failure containing a sensitive remote URL".to_string(),
+        }]);
 
         assert_eq!(
             effective_remote_urls(&runner, Path::new("/repository")).await,
