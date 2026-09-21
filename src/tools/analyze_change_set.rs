@@ -3,26 +3,39 @@ use std::path::Path;
 use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 
+use crate::analytics_attribution::AnalyticsContext;
 use crate::delta;
 use crate::docker;
 use crate::event_properties;
 use crate::tools::common::{run_delta, tool_error};
 use crate::tools::validation::CliCheck;
 use crate::tools::ChangeSetParam;
-use crate::CodeSceneServer;
+use crate::{CodeSceneServer, ContextualErrorEvent};
 
 pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: ChangeSetParam,
 ) -> Result<CallToolResult, ErrorData> {
-    if let Some(r) = server.require_token().await {
+    let analytics_context = AnalyticsContext::Path(params.git_repository_path.clone().into());
+    if let Some(r) = server
+        .require_token_with_context("analyze-change-set", analytics_context.clone())
+        .await
+    {
         return Ok(r);
     }
     server.version_checker.check_in_background();
     let repo_path = docker::adapt_path_for_docker(Path::new(&params.git_repository_path));
     let rp = Path::new(&repo_path);
     if let Err(e) = server.validator.run_checks(&[CliCheck::InsideGitRepo(rp)]) {
-        server.track_validation_err("analyze-change-set", &e);
+        server.track_contextual_err(
+            ContextualErrorEvent {
+                error_kind: e.kind,
+                tool: "analyze-change-set",
+                detail: e.detail.as_deref(),
+                context: analytics_context.clone(),
+            },
+            &e,
+        );
         return Ok(tool_error(&e.message));
     }
     let result = run_delta(rp, Some(&params.base_ref), &*server.cli_runner).await;
@@ -35,12 +48,20 @@ pub(crate) async fn handle(
                 Path::new(&params.base_ref),
                 &result_str,
             );
-            server.track("analyze-change-set", props);
+            server.track_with_context("analyze-change-set", props, analytics_context);
             let text = server.maybe_version_warning(&result_str).await;
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
         Err(e) => {
-            server.track_err("analyze-change-set", &e);
+            server.track_contextual_err(
+                ContextualErrorEvent {
+                    error_kind: e.kind(),
+                    tool: "analyze-change-set",
+                    detail: None,
+                    context: analytics_context,
+                },
+                &e,
+            );
             Ok(tool_error(&format!("Error: {e}")))
         }
     }

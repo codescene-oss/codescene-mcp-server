@@ -875,6 +875,11 @@ fn test_analytics_events_are_sent() {
 }
 
 #[test]
+fn test_analytics_event_contains_project_ids() {
+    tests::analytics_tracking::test_analytics_event_contains_project_ids();
+}
+
+#[test]
 fn test_analytics_disabled_tracking_sends_no_events() {
     tests::analytics_tracking::test_disabled_tracking_sends_no_events();
 }

@@ -3,18 +3,23 @@ use std::path::Path;
 use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 
+use crate::analytics_attribution::AnalyticsContext;
 use crate::docker;
 use crate::event_properties;
 use crate::tools::common::{run_review, tool_error};
 use crate::tools::validation::CliCheck;
 use crate::tools::FilePathParam;
-use crate::CodeSceneServer;
+use crate::{CodeSceneServer, ContextualErrorEvent};
 
 pub(crate) async fn handle(
     server: &CodeSceneServer,
     params: FilePathParam,
 ) -> Result<CallToolResult, ErrorData> {
-    if let Some(r) = server.require_token().await {
+    let analytics_context = AnalyticsContext::Path(params.file_path.clone().into());
+    if let Some(r) = server
+        .require_token_with_context("code-health-review", analytics_context.clone())
+        .await
+    {
         return Ok(r);
     }
     server.version_checker.check_in_background();
@@ -25,19 +30,36 @@ pub(crate) async fn handle(
         CliCheck::SupportedFileType(fp),
         CliCheck::InsideGitRepo(fp),
     ]) {
-        server.track_validation_err("code-health-review", &e);
+        server.track_contextual_err(
+            ContextualErrorEvent {
+                error_kind: e.kind,
+                tool: "code-health-review",
+                detail: e.detail.as_deref(),
+                context: analytics_context.clone(),
+            },
+            &e,
+        );
         return Ok(tool_error(&e.message));
     }
     let result = run_review(fp, &*server.cli_runner).await;
-    match &result {
+    match result {
         Ok(output) => {
-            let props = event_properties::review_properties(Path::new(&params.file_path), output);
-            server.track("code-health-review", props);
-            let text = server.maybe_version_warning(output).await;
+            let props =
+                event_properties::review_properties(Path::new(&params.file_path), &output);
+            server.track_with_context("code-health-review", props, analytics_context);
+            let text = server.maybe_version_warning(&output).await;
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
         Err(e) => {
-            server.track_err("code-health-review", &e);
+            server.track_contextual_err(
+                ContextualErrorEvent {
+                    error_kind: e.kind(),
+                    tool: "code-health-review",
+                    detail: None,
+                    context: analytics_context,
+                },
+                &e,
+            );
             Ok(tool_error(&format!("Error: {e}")))
         }
     }
@@ -45,13 +67,21 @@ pub(crate) async fn handle(
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use rmcp::handler::server::wrapper::Parameters;
 
+    use crate::analytics_attribution::AnalyticsContext;
     use crate::tests::{
         assert_error_contains, assert_success_contains, assert_token_error, clear_token,
         make_cli_mock_server, make_failing_validator_server, make_server, set_token, MockCliRunner,
     };
     use crate::tools::FilePathParam;
+    use crate::{RecordedTrackingCall, TrackingProbe};
+
+    fn path_context(path: &str) -> AnalyticsContext {
+        AnalyticsContext::Path(PathBuf::from(path))
+    }
 
     #[tokio::test]
     async fn rejects_missing_token() {
@@ -59,34 +89,56 @@ mod tests {
         let params = FilePathParam {
             file_path: "/tmp/f.rs".to_string(),
         };
-        let result = make_server(false)
+        let mut server = make_server(false);
+        let probe = TrackingProbe::install(&mut server);
+        let result = server
             .code_health_review(Parameters(params))
             .await
             .unwrap();
         assert_token_error(&result);
+        probe.assert_single(RecordedTrackingCall::Error {
+                tool: "code-health-review".to_string(),
+                error_kind: "authentication_unavailable".to_string(),
+                context: path_context("/tmp/f.rs"),
+            });
     }
 
     #[tokio::test]
     async fn validation_failure_returns_error() {
         let _g = set_token("tok");
-        let server =
-            make_failing_validator_server("unsupported_file_type", "File type not supported: .xyz");
+        let mut server = make_failing_validator_server(
+            "unsupported_file_type",
+            "File type not supported: .xyz",
+        );
+        let probe = TrackingProbe::install(&mut server);
         let params = FilePathParam {
             file_path: "/tmp/test.xyz".to_string(),
         };
         let result = server.code_health_review(Parameters(params)).await.unwrap();
         assert_error_contains(&result, "File type not supported");
+        probe.assert_single(RecordedTrackingCall::Error {
+                tool: "code-health-review".to_string(),
+                error_kind: "unsupported_file_type".to_string(),
+                context: path_context("/tmp/test.xyz"),
+            });
     }
 
     #[tokio::test]
     async fn success_returns_cli_output() {
         let _g = set_token("tok");
-        let server = make_cli_mock_server(MockCliRunner::with_ok(r#"{"score":9.5,"review":[]}"#));
+        let mut server = make_cli_mock_server(MockCliRunner::with_ok(
+            r#"{"score":9.5,"review":[]}"#,
+        ));
+        let probe = TrackingProbe::install(&mut server);
         let params = FilePathParam {
             file_path: "/tmp/test.rs".to_string(),
         };
         let result = server.code_health_review(Parameters(params)).await.unwrap();
         assert_success_contains(&result, "9.5");
+        probe.assert_single(RecordedTrackingCall::Event {
+                name: "code-health-review".to_string(),
+                context: path_context("/tmp/test.rs"),
+            });
     }
 
     #[tokio::test]
@@ -125,11 +177,17 @@ mod tests {
     #[tokio::test]
     async fn error_returns_tool_error() {
         let _g = set_token("tok");
-        let server = make_cli_mock_server(MockCliRunner::with_err(1, "review failed"));
+        let mut server = make_cli_mock_server(MockCliRunner::with_err(1, "review failed"));
+        let probe = TrackingProbe::install(&mut server);
         let params = FilePathParam {
             file_path: "/tmp/test.rs".to_string(),
         };
         let result = server.code_health_review(Parameters(params)).await.unwrap();
         assert_error_contains(&result, "review failed");
+        probe.assert_single(RecordedTrackingCall::Error {
+                tool: "code-health-review".to_string(),
+                error_kind: "non_zero_exit".to_string(),
+                context: path_context("/tmp/test.rs"),
+            });
     }
 }

@@ -11,6 +11,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::analytics_attribution::AnalyticsContext;
 use crate::cli;
 use crate::cli::CliRunner;
 use crate::docker;
@@ -154,6 +155,12 @@ fn non_empty(value: Option<&str>) -> Option<&str> {
     value.map(str::trim).filter(|v| !v.is_empty())
 }
 
+pub(crate) fn analytics_context(config_path: Option<&str>) -> AnalyticsContext {
+    non_empty(config_path)
+        .map(|path| AnalyticsContext::Path(PathBuf::from(path)))
+        .unwrap_or_default()
+}
+
 fn require_absolute(path: &str) -> Result<(), CliError> {
     if Path::new(path).is_absolute() {
         return Ok(());
@@ -187,6 +194,18 @@ mod tests {
     fn validate_builds_minimal_args() {
         let args = build(Invocation::new(Subcommand::Validate));
         assert_eq!(args, vec!["rules-config", "validate", "--format", "json"]);
+    }
+
+    #[test]
+    fn analytics_uses_config_path_or_current_workspace() {
+        assert_eq!(
+            analytics_context(Some("/repo/.codescene/code-health-rules.json")),
+            AnalyticsContext::Path(PathBuf::from(
+                "/repo/.codescene/code-health-rules.json"
+            ))
+        );
+        assert_eq!(analytics_context(None), AnalyticsContext::CurrentWorkspace);
+        assert_eq!(analytics_context(Some("  ")), AnalyticsContext::CurrentWorkspace);
     }
 
     #[test]
