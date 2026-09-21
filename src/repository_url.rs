@@ -515,4 +515,40 @@ mod tests {
         );
         assert_canonical("git@localhost:Owner/Repo.git", "localhost/owner/repo");
     }
+
+    #[test]
+    fn rejects_missing_hosts_and_paths() {
+        for remote in [
+            "https://example.com",
+            "https://example.com/",
+            "ssh://git@example.com",
+            "git@:Owner/Repo.git",
+            "git@/example.com:Owner/Repo.git",
+            "git@example.com:",
+        ] {
+            assert_eq!(canonical_repository_id(remote), None, "accepted {remote}");
+        }
+    }
+
+    #[test]
+    fn identifies_all_hosted_providers() {
+        for (remote, expected) in [
+            ("git@gitlab.com:Owner/Repo.git", "gitlab.com/owner/repo"),
+            (
+                "git@bitbucket.org:Owner/Repo.git",
+                "bitbucket.org/owner/repo",
+            ),
+        ] {
+            assert_canonical(remote, expected);
+        }
+    }
+
+    #[test]
+    fn rejects_empty_azure_identity_parts() {
+        let empty = String::new();
+        let project = "project".to_string();
+        let repository = "repository".to_string();
+
+        assert!(super::azure_identity("dev.azure.com", [&empty, &project, &repository]).is_none());
+    }
 }

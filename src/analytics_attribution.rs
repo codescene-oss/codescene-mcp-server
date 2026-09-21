@@ -128,6 +128,14 @@ impl From<crate::repository_projects::RepositoryProjectsError> for NoProjectMatc
 mod tests {
     use super::*;
     use crate::http::tests::MockHttpClient;
+    use crate::http::HttpResponse;
+
+    fn configured_credential() -> AuthCredential {
+        AuthCredential::Configured {
+            access_token: "test-token".to_string(),
+            onprem_url: None,
+        }
+    }
 
     #[test]
     fn models_all_attribution_sources() {
@@ -240,6 +248,72 @@ mod tests {
 
         assert_eq!(result, AttributionOutcome::ProjectIds(vec![7, 42]));
         assert!(requests.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn path_context_reports_repository_discovery_failure() {
+        let directory = tempfile::tempdir().unwrap();
+
+        let result = resolve_attribution(
+            AnalyticsContext::Path(directory.path().to_path_buf()),
+            Some(configured_credential()),
+            Arc::new(MockHttpClient::new(Vec::new())),
+            Arc::new(RepositoryProjectsCache::default()),
+        )
+        .await;
+
+        assert_eq!(
+            result,
+            AttributionOutcome::Failure(NoProjectMatchingReason::NotInGitRepository)
+        );
+    }
+
+    #[tokio::test]
+    async fn path_context_requires_authentication_after_repository_discovery() {
+        let repository = tempfile::tempdir().unwrap();
+        std::fs::create_dir(repository.path().join(".git")).unwrap();
+        std::fs::write(
+            repository.path().join(".git/config"),
+            "[remote \"origin\"]\nurl = https://github.com/Acme/Web.git\n",
+        )
+        .unwrap();
+
+        let result = resolve_attribution(
+            AnalyticsContext::Path(repository.path().to_path_buf()),
+            None,
+            Arc::new(MockHttpClient::new(Vec::new())),
+            Arc::new(RepositoryProjectsCache::default()),
+        )
+        .await;
+
+        assert_eq!(
+            result,
+            AttributionOutcome::Failure(NoProjectMatchingReason::AuthenticationUnavailable)
+        );
+    }
+
+    #[tokio::test]
+    async fn path_context_matches_repository_projects() {
+        let repository = tempfile::tempdir().unwrap();
+        std::fs::create_dir(repository.path().join(".git")).unwrap();
+        std::fs::write(
+            repository.path().join(".git/config"),
+            "[remote \"origin\"]\nurl = https://github.com/Acme/Web.git\n",
+        )
+        .unwrap();
+        let client = MockHttpClient::always(HttpResponse::ok(
+            r#"{"repositories":[{"repository_id":"github.com/acme/web","project_ids":[42]}]}"#,
+        ));
+
+        let result = resolve_attribution(
+            AnalyticsContext::Path(repository.path().to_path_buf()),
+            Some(configured_credential()),
+            Arc::new(client),
+            Arc::new(RepositoryProjectsCache::default()),
+        )
+        .await;
+
+        assert_eq!(result, AttributionOutcome::ProjectIds(vec![42]));
     }
 
     #[test]

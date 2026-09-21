@@ -613,6 +613,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn processing_without_attribution_delivers_event_unchanged() {
+        let delivery_client = MockHttpClient::always(HttpResponse::ok(""));
+        let requests = delivery_client.captured_requests.clone();
+
+        process_tracking_event(
+            tracking_event("mcp-test", json!({"tool": "review"})),
+            None,
+            &delivery_client,
+        )
+        .await
+        .unwrap();
+
+        let requests = requests.lock().unwrap();
+        let body: Value = serde_json::from_str(requests[0].body.as_deref().unwrap()).unwrap();
+        assert_eq!(body["event-properties"]["tool"], "review");
+        assert!(body["event-properties"].get("project-ids").is_none());
+    }
+
+    #[tokio::test]
     async fn enrichment_request_failure_still_delivers_privacy_safe_event() {
         const RAW_ERROR: &str = "raw mapping failure with private infrastructure details";
         let repository = repository_with_sensitive_remote();

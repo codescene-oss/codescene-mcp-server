@@ -806,4 +806,60 @@ mod tests {
             Err(RepositoryRootError::GitCommandFailed)
         );
     }
+
+    #[tokio::test]
+    async fn rejects_empty_repository_root_output() {
+        let directory = tempfile::tempdir().unwrap();
+        let runner = MockGitRunner::new([successful_output("\n")]);
+
+        assert_eq!(
+            resolve_repository_root(&runner, directory.path()).await,
+            Err(RepositoryRootError::InvalidRepositoryRoot)
+        );
+    }
+
+    #[test]
+    fn reads_empty_remote_config_and_relative_worktree_gitdir() {
+        let repository = tempfile::tempdir().unwrap();
+        let git_dir = repository.path().join("metadata/worktrees/feature");
+        std::fs::create_dir_all(&git_dir).unwrap();
+        std::fs::write(
+            repository.path().join("metadata/config"),
+            "[core]\n\tbare = false\n",
+        )
+        .unwrap();
+        std::fs::write(
+            repository.path().join(".git"),
+            "gitdir: metadata/worktrees/feature\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            read_remote_urls(repository.path()).unwrap(),
+            EffectiveRemoteUrls::NoRemotes
+        );
+    }
+
+    #[test]
+    fn ignores_malformed_empty_and_unknown_config_entries() {
+        let urls = parse_remote_config(
+            "malformed\n\
+             [unknown \"section\"]\n\
+             value = ignored\n\
+             [remote \"origin\"]\n\
+             url =\n\
+             unknown = ignored\n\
+             url = https://example.com/Acme/Web.git\n\
+             [url \"https://mirror.example.com/\"]\n\
+             unknown = https://example.com/\n",
+        );
+
+        assert_eq!(urls, ["https://example.com/Acme/Web.git"]);
+    }
+
+    #[test]
+    fn resolves_relative_paths_from_current_directory() {
+        assert!(nearest_existing_directory(Path::new("src/future/file.rs"))
+            .is_some_and(|path| path.ends_with("src")));
+    }
 }
