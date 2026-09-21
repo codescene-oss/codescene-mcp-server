@@ -465,6 +465,10 @@ mod tests {
         );
     }
 
+    fn git_config(repository: &Path, key: &str, value: &str) {
+        git(repository, &["config", "--add", key, value]);
+    }
+
     struct MockGitRunner {
         responses: Mutex<VecDeque<GitCommandOutput>>,
         calls: Mutex<Vec<Vec<String>>>,
@@ -861,5 +865,127 @@ mod tests {
     fn resolves_relative_paths_from_current_directory() {
         assert!(nearest_existing_directory(Path::new("src/future/file.rs"))
             .is_some_and(|path| path.ends_with("src")));
+    }
+
+    #[tokio::test]
+    async fn discovers_ids_from_multiple_fetch_and_push_remotes() {
+        let repository = init_repository();
+        git(
+            repository.path(),
+            &["remote", "add", "origin", "git@github.com:Acme/Web.git"],
+        );
+        git_config(
+            repository.path(),
+            "remote.origin.url",
+            "https://gitlab.com/Acme/Platform/Web.git",
+        );
+        git_config(
+            repository.path(),
+            "remote.origin.pushurl",
+            "ssh://git@push.example.com/Acme/Web.git",
+        );
+        git(
+            repository.path(),
+            &[
+                "remote",
+                "add",
+                "upstream",
+                "https://example.org/Shared/Library.git",
+            ],
+        );
+
+        assert_eq!(
+            discover_repository_ids(&ProductionGitRunner, Some(repository.path()))
+                .await
+                .unwrap(),
+            [
+                "example.org/shared/library",
+                "github.com/acme/web",
+                "gitlab.com/acme/platform/web",
+                "push.example.com/acme/web",
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn expands_instead_of_and_push_instead_of() {
+        let repository = init_repository();
+        git_config(
+            repository.path(),
+            "url.https://fetch.example.com/.insteadOf",
+            "fetch:",
+        );
+        git_config(
+            repository.path(),
+            "url.ssh://git@push.example.com/.pushInsteadOf",
+            "fetch:",
+        );
+        git(
+            repository.path(),
+            &["remote", "add", "origin", "fetch:Acme/Web.git"],
+        );
+
+        assert_eq!(
+            discover_repository_ids(&ProductionGitRunner, Some(repository.path()))
+                .await
+                .unwrap(),
+            ["fetch.example.com/acme/web", "push.example.com/acme/web"]
+        );
+    }
+
+    #[tokio::test]
+    async fn reports_unsupported_remotes() {
+        let repository = init_repository();
+        git(
+            repository.path(),
+            &["remote", "add", "origin", "../local/repository.git"],
+        );
+
+        assert_eq!(
+            discover_repository_ids(&ProductionGitRunner, Some(repository.path())).await,
+            Err(RepositoryDiscoveryReason::NoSupportedGitRemotes)
+        );
+    }
+
+    #[tokio::test]
+    async fn discovers_remote_from_worktree() {
+        let repository = init_repository();
+        commit_file(repository.path(), "README.md");
+        git(
+            repository.path(),
+            &["remote", "add", "origin", "git@github.com:Acme/Web.git"],
+        );
+        let worktree_parent = tempfile::tempdir().unwrap();
+        let worktree = worktree_parent.path().join("integration-feature");
+        git(
+            repository.path(),
+            &[
+                "worktree",
+                "add",
+                "--quiet",
+                "-b",
+                "integration-feature",
+                worktree.to_str().unwrap(),
+            ],
+        );
+
+        assert_eq!(
+            discover_repository_ids(&ProductionGitRunner, Some(&worktree))
+                .await
+                .unwrap(),
+            ["github.com/acme/web"]
+        );
+    }
+
+    #[test]
+    fn selects_docker_mount_for_current_workspace() {
+        let _lock = crate::config::lock_test_env();
+        let _docker = crate::environment::force_docker(true);
+        std::env::set_var("CS_MOUNT_PATH", "/host/project");
+        let selected =
+            repository_action_path_with(None, || panic!("current directory must not be read"));
+        std::env::remove_var("CS_MOUNT_PATH");
+
+        assert_eq!(selected.unwrap(), Path::new("/mount"));
     }
 }

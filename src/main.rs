@@ -12,8 +12,6 @@ mod environment;
 mod errors;
 mod event_properties;
 mod git_repository;
-#[cfg(test)]
-mod git_repository_integration_tests;
 mod hashing;
 mod http;
 mod license;
