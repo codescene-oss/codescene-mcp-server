@@ -1263,6 +1263,8 @@ mod tests {
         "explain_code_health_productivity",
         "code_health_review",
         "code_health_score",
+        "pre_commit_code_health_safeguard",
+        "analyze_change_set",
         "code_health_refactoring_business_case",
         "rules_config_validate",
         "rules_config_list_thresholds",
@@ -1279,8 +1281,6 @@ mod tests {
     ];
 
     const MUTATING_TOOLS: &[&str] = &[
-        "pre_commit_code_health_safeguard",
-        "analyze_change_set",
         "rules_config_set_rule",
         "rules_config_set_threshold",
         "set_config",

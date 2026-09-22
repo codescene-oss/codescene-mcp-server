@@ -37,7 +37,7 @@ RUN groupadd -g 1000 mcp && useradd -u 1000 -g mcp -m mcp
 # Install the CodeScene CLI (cs-tool) with integrity verification
 # as root (needs write access to /usr/local or default install dir),
 # then make it accessible to the non-root user.
-ARG CS_CLI_INSTALLER_SHA256="6a119bd0746de31740bb899fbcc16f44b31df2392740642d5a29616961501f06"
+ARG CS_CLI_INSTALLER_SHA256="b7bcc7c38139617d742304b524c0592972a0aa26601ef4b25f4946f3b5b00271"
 RUN set -eu; \
     curl --proto '=https' --tlsv1.2 -fsSL -o /tmp/install-cs-tool.sh \
          https://downloads.codescene.io/enterprise/cli/install-cs-tool.sh && \
