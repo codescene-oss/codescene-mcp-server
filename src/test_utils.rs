@@ -903,8 +903,13 @@ mod tests {
             r#"{"status":"signed_in","access-token":"tok","api-url":null,"account-id":42}"#,
         );
         run_switch_account_flow_with(&runner, 42).await.unwrap();
+        let config = crate::config::load().unwrap();
         assert_eq!(
-            std::env::var("CS_OAUTH_ACCOUNT_ID").ok().as_deref(),
+            config.values.get("account_id").map(String::as_str),
+            Some("42")
+        );
+        assert_eq!(
+            config.values.get("oauth_account_id").map(String::as_str),
             Some("42")
         );
         drop(env);
