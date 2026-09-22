@@ -3,6 +3,7 @@ use std::path::Path;
 
 use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
+use serde_json::json;
 
 use crate::docker;
 use crate::skills;
@@ -20,6 +21,7 @@ pub(crate) async fn handle(
     let skill = match skill {
         Some(s) => s,
         None => {
+            server.track("download-skill", json!({ "result": "unknown-skill" }));
             return Ok(tool_error(&format!(
                 "Unknown skill: '{}'. Use list_skills to see available skills.",
                 params.skill_name
@@ -32,6 +34,7 @@ pub(crate) async fn handle(
     let skill_file = skill_dir.join("SKILL.md");
 
     if skill_file.exists() && !params.overwrite {
+        server.track("download-skill", json!({ "result": "already-exists" }));
         return Ok(tool_error(&format!(
             "Skill '{}' already exists at {}. Set overwrite=true to replace it.",
             skill.name,
@@ -40,6 +43,10 @@ pub(crate) async fn handle(
     }
 
     if let Err(e) = fs::create_dir_all(&skill_dir) {
+        server.track(
+            "download-skill",
+            json!({ "result": "create-directory-failed" }),
+        );
         return Ok(tool_error(&format!(
             "Failed to create directory {}: {e}",
             skill_dir.display()
@@ -47,6 +54,7 @@ pub(crate) async fn handle(
     }
 
     if let Err(e) = fs::write(&skill_file, skill.content) {
+        server.track("download-skill", json!({ "result": "write-failed" }));
         return Ok(tool_error(&format!(
             "Failed to write {}: {e}",
             skill_file.display()
@@ -58,6 +66,7 @@ pub(crate) async fn handle(
         skill.name,
         skill_file.display()
     );
+    server.track("download-skill", json!({ "result": "success" }));
     let text = server.maybe_version_warning(&msg).await;
     Ok(CallToolResult::success(vec![Content::text(text)]))
 }
@@ -68,6 +77,7 @@ mod tests {
 
     use crate::tests::{assert_error_contains, assert_success_contains, make_server, set_token};
     use crate::tools::DownloadSkillParam;
+    use crate::{RecordedTrackingCall, TrackingProbe};
 
     #[tokio::test]
     async fn downloads_skill_to_directory() {
@@ -78,11 +88,14 @@ mod tests {
             destination_dir: tmp.path().to_str().unwrap().to_string(),
             overwrite: false,
         };
-        let result = make_server(false)
-            .download_skill(Parameters(params))
-            .await
-            .unwrap();
+        let mut server = make_server(false);
+        let probe = TrackingProbe::install(&mut server);
+        let result = server.download_skill(Parameters(params)).await.unwrap();
         assert_success_contains(&result, "Downloaded skill");
+        probe.assert_single(RecordedTrackingCall::Event {
+            name: "download-skill".to_string(),
+            context: crate::analytics_attribution::AnalyticsContext::CurrentWorkspace,
+        });
 
         let file = tmp
             .path()

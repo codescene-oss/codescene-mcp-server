@@ -277,17 +277,45 @@ pub fn test_enriched_event_contains_common_properties() {
     let payloads = server.get_payloads();
     let props = find_event_properties(&payloads, "mcp-code-health-score");
 
-    assert_properties_are_nonempty(&props, &["instance-id", "version"]);
+    assert_common_properties(&props);
+}
 
-    let env_val = props
-        .get("environment")
-        .and_then(|v| v.as_str())
-        .expect("Missing 'environment' property");
-    let valid_environments = ["docker", "source", "binary"];
-    assert!(
-        valid_environments.contains(&env_val),
-        "environment should be one of {valid_environments:?}, got '{env_val}'"
-    );
+pub fn test_agent_instruction_properties_reflect_repository_guidance() {
+    let cases = [
+        (None, false, false),
+        (Some("Run the test suite."), true, false),
+        (
+            Some(include_str!("../../../docs/AGENTS-full.md")),
+            true,
+            true,
+        ),
+    ];
+
+    for (instructions, expected_file, expected_codescene) in cases {
+        let temp = create_temp_dir("cs_mcp_agent_instructions_event_").expect("temp");
+        let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
+        if let Some(contents) = instructions {
+            std::fs::write(repo_dir.join("AGENTS.md"), contents).expect("write AGENTS.md");
+        }
+
+        let (_result, payloads, _client) = run_tool_with_fake_server(
+            &repo_dir,
+            |client, _| {
+                let response = client
+                    .call_tool("get_config", json!({}), TIMEOUT)
+                    .expect("get_config should succeed");
+                extract_result_text(&response)
+            },
+            &[],
+        );
+        let props = find_event_properties(&payloads, "mcp-get-config");
+
+        assert_eq!(props["agents-file-present"], expected_file);
+        assert_eq!(
+            props["agents-file-contains-codescene-mcp-instructions"],
+            expected_codescene
+        );
+    }
 }
 
 pub fn test_enriched_event_contains_tool_specific_properties() {
@@ -391,6 +419,14 @@ where
 
 fn assert_common_properties(props: &serde_json::Value) {
     assert_properties_are_nonempty(props, &["instance-id", "version"]);
+    assert!(
+        props["agents-file-present"].is_boolean(),
+        "Missing boolean 'agents-file-present'"
+    );
+    assert!(
+        props["agents-file-contains-codescene-mcp-instructions"].is_boolean(),
+        "Missing boolean 'agents-file-contains-codescene-mcp-instructions'"
+    );
     let env_val = props
         .get("environment")
         .and_then(|v| v.as_str())

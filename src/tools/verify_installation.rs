@@ -4,6 +4,7 @@ use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
 use serde_json::json;
 
+use crate::agent_instructions;
 use crate::analytics_attribution::AnalyticsContext;
 use crate::api_client;
 use crate::auth::AuthCredential;
@@ -71,6 +72,7 @@ async fn run_all_checks(project_root: &str, ctx: &CheckContext<'_>) -> Vec<Check
     let path = Path::new(project_root);
     let mut checks = vec![
         check_git_repository(path),
+        check_agent_instructions(path),
         check_token_via_cli(path, ctx).await,
         check_cli_connectivity(path, ctx).await,
     ];
@@ -215,8 +217,9 @@ async fn check_api_connectivity(ctx: &CheckContext<'_>) -> CheckResult {
         return CheckResult {
             name: "API Connectivity",
             passed: false,
-            detail: "Skipped — not signed in. Call the `login` tool (or optionally set a PAT) first."
-                .to_string(),
+            detail:
+                "Skipped — not signed in. Call the `login` tool (or optionally set a PAT) first."
+                    .to_string(),
         };
     };
     match api_client::query_api_with_auth("v2/projects", ctx.http_client, Some(credential)).await {
@@ -273,6 +276,32 @@ fn check_git_repository(path: &Path) -> CheckResult {
             passed: false,
             detail: format!("'{}' is not inside a git repository.", path.display()),
         },
+    }
+}
+
+fn check_agent_instructions(path: &Path) -> CheckResult {
+    let instructions = agent_instructions::detect(Some(path));
+    let (passed, detail) = match (
+        instructions.file_present,
+        instructions.codescene_mcp_instructions_present,
+    ) {
+        (true, true) => (
+            true,
+            "Found an agent instructions file with CodeScene MCP guidance.",
+        ),
+        (true, false) => (
+            false,
+            "Found an agent instructions file, but it does not contain CodeScene MCP guidance.",
+        ),
+        (false, _) => (
+            false,
+            "No supported agent instructions file was found in the repository.",
+        ),
+    };
+    CheckResult {
+        name: "Agent Instructions",
+        passed,
+        detail: detail.to_string(),
     }
 }
 
@@ -342,8 +371,6 @@ mod tests {
             git_repository_path: path.to_string(),
         }
     }
-
-    const TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
     const SSL_HANDSHAKE_STDERR: &str =
         "License check failed (https://codescene.example.com/api/v2/tool-license/cli):\n\
@@ -689,6 +716,43 @@ mod tests {
         let result = check_git_repository(dir.path());
         assert!(!result.passed);
         assert!(result.detail.contains("not inside a git repository"));
+    }
+
+    // -- check_agent_instructions -------------------------------------------
+
+    #[test]
+    fn agent_instructions_pass_with_codescene_guidance() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".git")).unwrap();
+        std::fs::write(dir.path().join("AGENTS.md"), "Use CodeScene MCP tools.").unwrap();
+
+        let result = check_agent_instructions(dir.path());
+
+        assert!(result.passed);
+        assert!(result.detail.contains("CodeScene MCP guidance"));
+    }
+
+    #[test]
+    fn agent_instructions_fail_without_codescene_guidance() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".git")).unwrap();
+        std::fs::write(dir.path().join("AGENTS.md"), "Run tests.").unwrap();
+
+        let result = check_agent_instructions(dir.path());
+
+        assert!(!result.passed);
+        assert!(result.detail.contains("does not contain"));
+    }
+
+    #[test]
+    fn agent_instructions_fail_when_file_is_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".git")).unwrap();
+
+        let result = check_agent_instructions(dir.path());
+
+        assert!(!result.passed);
+        assert!(result.detail.contains("No supported"));
     }
 
     // -- check_environment ---------------------------------------------------

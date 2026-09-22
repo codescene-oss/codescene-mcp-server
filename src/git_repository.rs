@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
 #[derive(Debug)]
 pub(crate) struct GitCommandOutput {
     success: bool,
@@ -8,6 +9,7 @@ pub(crate) struct GitCommandOutput {
     stderr: String,
 }
 
+#[cfg(test)]
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum GitCommandError {
     #[error("failed to execute Git")]
@@ -22,8 +24,10 @@ pub(crate) enum RepositoryRootError {
     NoExistingDirectory,
     #[error("the action path is not inside a Git repository")]
     NotInRepository,
+    #[cfg(test)]
     #[error("Git repository discovery failed")]
     GitCommandFailed,
+    #[cfg(test)]
     #[error("Git returned an invalid repository root")]
     InvalidRepositoryRoot,
 }
@@ -51,6 +55,7 @@ pub(crate) enum EffectiveRemoteUrls {
 
 #[async_trait::async_trait]
 pub(crate) trait GitRunner: Send + Sync {
+    #[cfg(test)]
     async fn run(
         &self,
         args: &[&str],
@@ -69,6 +74,7 @@ pub(crate) struct ProductionGitRunner;
 
 #[async_trait::async_trait]
 impl GitRunner for ProductionGitRunner {
+    #[cfg(test)]
     async fn run(
         &self,
         args: &[&str],
@@ -97,6 +103,7 @@ impl GitRunner for ProductionGitRunner {
     }
 }
 
+#[cfg(test)]
 fn git_command(args: &[&str], working_dir: &Path) -> tokio::process::Command {
     let mut command = tokio::process::Command::new("git");
     command
@@ -110,6 +117,7 @@ fn git_command(args: &[&str], working_dir: &Path) -> tokio::process::Command {
     command
 }
 
+#[cfg(test)]
 pub(crate) async fn resolve_repository_root(
     runner: &dyn GitRunner,
     action_path: &Path,
@@ -370,9 +378,11 @@ pub(crate) async fn discover_repository_ids(
 fn repository_root_reason(error: RepositoryRootError) -> RepositoryDiscoveryReason {
     match error {
         RepositoryRootError::NotInRepository => RepositoryDiscoveryReason::NotInGitRepository,
-        RepositoryRootError::NoExistingDirectory
-        | RepositoryRootError::GitCommandFailed
-        | RepositoryRootError::InvalidRepositoryRoot => RepositoryDiscoveryReason::GitCommandFailed,
+        RepositoryRootError::NoExistingDirectory => RepositoryDiscoveryReason::GitCommandFailed,
+        #[cfg(test)]
+        RepositoryRootError::GitCommandFailed | RepositoryRootError::InvalidRepositoryRoot => {
+            RepositoryDiscoveryReason::GitCommandFailed
+        }
     }
 }
 

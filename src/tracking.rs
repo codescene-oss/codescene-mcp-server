@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use serde_json::{json, Value};
 
+use crate::agent_instructions;
 use crate::analytics_attribution::{
     merge_attribution, resolve_attribution, AnalyticsContext, AttributionOutcome,
     NoProjectMatchingReason,
@@ -122,6 +123,12 @@ fn create_tracking_event(
 }
 
 async fn enrich_tracking_event(event: &mut TrackingEvent, attribution: TrackingAttribution) {
+    let instruction_path = match &attribution.context {
+        AnalyticsContext::Path(path) => Some(path.as_path()),
+        AnalyticsContext::ExplicitProjectIds(_) | AnalyticsContext::CurrentWorkspace => None,
+    };
+    let instructions = agent_instructions::detect(instruction_path);
+    merge_agent_instructions(&mut event.properties, instructions);
     let outcome = tokio::time::timeout(
         ATTRIBUTION_TIMEOUT,
         resolve_attribution(
@@ -136,6 +143,23 @@ async fn enrich_tracking_event(event: &mut TrackingEvent, attribution: TrackingA
         NoProjectMatchingReason::GitCommandFailed,
     ));
     merge_attribution(&mut event.properties, outcome);
+}
+
+fn merge_agent_instructions(
+    properties: &mut Value,
+    instructions: agent_instructions::AgentInstructions,
+) {
+    let Some(properties) = properties.as_object_mut() else {
+        return;
+    };
+    properties.insert(
+        "agents-file-present".to_string(),
+        json!(instructions.file_present),
+    );
+    properties.insert(
+        "agents-file-contains-codescene-mcp-instructions".to_string(),
+        json!(instructions.codescene_mcp_instructions_present),
+    );
 }
 
 fn build_tracking_body(te: &mut TrackingEvent) -> Value {
@@ -610,6 +634,30 @@ mod tests {
         assert_eq!(event.properties["tool"], "review");
         assert_eq!(event.properties["project-ids"], json!([7, 42]));
         assert!(event.properties.get("no-project-matching-reason").is_none());
+        assert!(event.properties["agents-file-present"].is_boolean());
+        assert!(event.properties["agents-file-contains-codescene-mcp-instructions"].is_boolean());
+    }
+
+    #[test]
+    fn agent_instruction_properties_override_tool_values() {
+        let mut properties = json!({
+            "agents-file-present": "spoofed",
+            "agents-file-contains-codescene-mcp-instructions": "spoofed",
+        });
+
+        merge_agent_instructions(
+            &mut properties,
+            agent_instructions::AgentInstructions {
+                file_present: true,
+                codescene_mcp_instructions_present: false,
+            },
+        );
+
+        assert_eq!(properties["agents-file-present"], true);
+        assert_eq!(
+            properties["agents-file-contains-codescene-mcp-instructions"],
+            false
+        );
     }
 
     #[tokio::test]
