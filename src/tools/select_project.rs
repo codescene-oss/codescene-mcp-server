@@ -25,7 +25,7 @@ pub(crate) async fn handle(server: &CodeSceneServer) -> Result<CallToolResult, E
             server.track("select-project", props);
             let text = serde_json::to_string(output).unwrap_or_default();
             let text = server.maybe_version_warning(&text).await;
-            Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+            Ok(CallToolResult::success(vec![rmcp::model::ContentBlock::text(
                 text,
             )]))
         }
