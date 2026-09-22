@@ -3,6 +3,7 @@ use std::path::Path;
 
 use rmcp::model::{CallToolResult, Content};
 use rmcp::ErrorData;
+use serde_json::json;
 
 use crate::docker;
 use crate::skills;
@@ -44,6 +45,15 @@ pub(crate) async fn handle(
     }
 
     if !errors.is_empty() {
+        server.track(
+            "sync-skills",
+            json!({
+                "downloaded-count": downloaded.len(),
+                "skipped-count": skipped.len(),
+                "error-count": errors.len(),
+                "result": "write-failed",
+            }),
+        );
         return Ok(tool_error(&format!(
             "Failed to write some skills:\n{}",
             errors.join("\n")
@@ -51,6 +61,15 @@ pub(crate) async fn handle(
     }
 
     let msg = format_summary(&downloaded, &skipped, dest);
+    server.track(
+        "sync-skills",
+        json!({
+            "downloaded-count": downloaded.len(),
+            "skipped-count": skipped.len(),
+            "error-count": 0,
+            "result": "success",
+        }),
+    );
     let text = server.maybe_version_warning(&msg).await;
     Ok(CallToolResult::success(vec![Content::text(text)]))
 }
@@ -94,8 +113,30 @@ mod tests {
         assert_error_contains, assert_success_contains, make_server, result_text, set_token,
     };
     use crate::tools::SyncSkillsParam;
+    use crate::{RecordedTrackingCall, TrackingProbe};
 
     use super::format_summary;
+
+    #[tokio::test]
+    async fn tracks_successful_sync() {
+        let _g = set_token("tok");
+        let destination = tempfile::tempdir().unwrap();
+        let mut server = make_server(false);
+        let probe = TrackingProbe::install(&mut server);
+        let result = server
+            .sync_skills(Parameters(SyncSkillsParam {
+                destination_dir: destination.path().to_string_lossy().into_owned(),
+                overwrite: false,
+            }))
+            .await
+            .unwrap();
+
+        assert_success_contains(&result, "Downloaded");
+        probe.assert_single(RecordedTrackingCall::Event {
+            name: "sync-skills".to_string(),
+            context: crate::analytics_attribution::AnalyticsContext::CurrentWorkspace,
+        });
+    }
 
     async fn sync_with_precreated_skill(overwrite: bool) -> String {
         let tmp = tempfile::tempdir().unwrap();

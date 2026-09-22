@@ -120,10 +120,6 @@ impl FakeHttpsServer {
             .collect()
     }
 
-    pub fn request_count(&self) -> usize {
-        self.captured_requests.lock().unwrap().len()
-    }
-
     pub fn get_payloads(&self) -> Vec<serde_json::Value> {
         let locked = self.captured_requests.lock().unwrap();
         locked

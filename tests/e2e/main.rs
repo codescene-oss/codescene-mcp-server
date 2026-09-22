@@ -234,12 +234,14 @@ fn test_pre_commit_safeguard() {
 
 #[test]
 fn test_pre_commit_reports_no_issues_found_for_clean_staged_changes() {
-    tests::pre_commit_code_health_safeguard::test_reports_no_issues_found_for_clean_staged_changes();
+    tests::pre_commit_code_health_safeguard::test_reports_no_issues_found_for_clean_staged_changes(
+    );
 }
 
 #[test]
 fn test_pre_commit_reports_no_files_modified_for_empty_staging_area() {
-    tests::pre_commit_code_health_safeguard::test_reports_no_files_modified_for_empty_staging_area();
+    tests::pre_commit_code_health_safeguard::test_reports_no_files_modified_for_empty_staging_area(
+    );
 }
 
 #[test]
@@ -313,6 +315,11 @@ fn test_explain_code_health_productivity() {
 #[test]
 fn test_verify_installation() {
     let (command, env, repo_dir, _tmp) = setup();
+    std::fs::write(
+        repo_dir.join("AGENTS.md"),
+        include_str!("../../docs/AGENTS-full.md"),
+    )
+    .expect("write agent instructions");
     let mut client = make_client(&command, &env, &repo_dir);
 
     assert!(client.start(), "Server should start");
@@ -336,6 +343,10 @@ fn test_verify_installation() {
     assert!(
         lower.contains("[pass] runtime environment"),
         "Environment check should pass"
+    );
+    assert!(
+        lower.contains("[pass] agent instructions"),
+        "CodeScene MCP agent instructions should be detected: {result_text}"
     );
     assert!(
         result_text.contains("checks passed"),

@@ -181,10 +181,6 @@ impl MockCliRunner {
     pub(crate) fn calls(&self) -> Arc<Mutex<Vec<Vec<String>>>> {
         self.calls.clone()
     }
-
-    pub(crate) fn call_count(&self) -> usize {
-        self.calls.lock().unwrap().len()
-    }
 }
 
 #[async_trait]

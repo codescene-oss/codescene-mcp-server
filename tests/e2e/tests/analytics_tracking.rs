@@ -391,6 +391,19 @@ where
 
 fn assert_common_properties(props: &serde_json::Value) {
     assert_properties_are_nonempty(props, &["instance-id", "version"]);
+    assert!(
+        props["agents-file-present"].is_boolean(),
+        "Missing boolean 'agents-file-present'"
+    );
+    assert!(
+        props["agents-file-contains-codescene-mcp-instructions"].is_boolean(),
+        "Missing boolean 'agents-file-contains-codescene-mcp-instructions'"
+    );
+    assert_eq!(props["agents-file-present"], true);
+    assert_eq!(
+        props["agents-file-contains-codescene-mcp-instructions"],
+        true
+    );
     let env_val = props
         .get("environment")
         .and_then(|v| v.as_str())
