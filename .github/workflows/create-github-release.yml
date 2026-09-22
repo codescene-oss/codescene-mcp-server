@@ -6,10 +6,11 @@ name: Create GitHub Release
 # (GitHub's generate-notes engine, configured by .github/release.yml, which
 # categorizes merged PRs by label).
 #
-# The same tag push also triggers build-exe.yml and build-release.yml. Those
-# upload artifacts to this release and fan out to the publish + update
-# workflows. The release is created WITHOUT the "latest" flag; the promote job
-# in update-packaging-metadata.yml sets it as latest once every downstream
+# The same tag push also triggers build-exe.yml, which uploads artifacts to this
+# release and fans out to the publish + update workflows. Docker publishing is
+# available separately through build-release.yml's manual workflow dispatch.
+# The release is created WITHOUT the "latest" flag; the promote job in
+# update-packaging-metadata.yml sets it as latest once every downstream
 # publish/update step has completed successfully.
 #
 # This workflow runs first so the release exists with proper generated notes
@@ -72,4 +73,5 @@ jobs:
       - name: Summary
         run: |
           echo "Created release ${{ github.ref_name }} (not yet latest)." >> "$GITHUB_STEP_SUMMARY"
-          echo "Build and publish pipelines were triggered by the same tag push." >> "$GITHUB_STEP_SUMMARY"
+          echo "Executable build and package publishing pipelines were triggered by the same tag push." >> "$GITHUB_STEP_SUMMARY"
+          echo "Docker publishing remains available as a separate manual workflow." >> "$GITHUB_STEP_SUMMARY"

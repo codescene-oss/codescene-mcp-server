@@ -7,7 +7,9 @@ description: Use when a developer wants to cut, publish, or ship a new release o
 
 To release the CodeScene MCP Server, create and push an annotated `MCP-<version>`
 tag. That single push is the entire process — CI does everything else (release
-notes, binaries, Docker, npm, packaging metadata, and marking it latest).
+notes, binaries, npm, packaging metadata, and marking it latest). Docker images
+are published separately by manually running the Build and Publish Docker
+Release workflow with the release tag.
 
 1. Decide the next version following semver. The latest release is the most
    recent `MCP-<version>` tag.
