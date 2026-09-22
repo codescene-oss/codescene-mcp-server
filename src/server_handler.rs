@@ -1,9 +1,8 @@
 use rmcp::model::{
-    AnnotateAble, GetPromptRequestParams, GetPromptResult, Implementation, ListPromptsResult,
+    GetPromptRequestParams, GetPromptResult, Implementation, ListPromptsResult,
     ListResourceTemplatesResult, ListResourcesResult, PaginatedRequestParams, Prompt,
-    PromptArgument, PromptMessage, PromptMessageRole, RawResource, RawResourceTemplate,
-    ReadResourceRequestParams, ReadResourceResult, ResourceContents, ServerCapabilities,
-    ServerInfo,
+    PromptArgument, PromptMessage, ReadResourceRequestParams, ReadResourceResult, Resource,
+    ResourceContents, ResourceTemplate, Role, ServerCapabilities, ServerInfo,
 };
 use rmcp::service::RequestContext;
 use rmcp::{tool_handler, ErrorData, RoleServer, ServerHandler};
@@ -148,7 +147,7 @@ fn resolve_prompt(name: &str, is_docker: bool) -> Result<GetPromptResult, ErrorD
         )
     })?;
     Ok(GetPromptResult::new(vec![PromptMessage::new_text(
-        PromptMessageRole::User,
+        Role::User,
         text,
     )]))
 }
@@ -163,24 +162,21 @@ fn build_resources_list() -> ListResourcesResult {
             let manifest_name = format!("{} manifest", skill.name);
             let manifest_desc = format!("File manifest for the {} skill", skill.name);
             vec![
-                RawResource::new(main_uri, &skill.name)
+                Resource::new(main_uri, &skill.name)
                     .with_description(&skill.description)
                     .with_mime_type("text/markdown")
-                    .with_size(skill.content.len() as u32)
-                    .no_annotation(),
-                RawResource::new(manifest_uri_str, manifest_name)
+                    .with_size(skill.content.len() as u64),
+                Resource::new(manifest_uri_str, manifest_name)
                     .with_description(manifest_desc)
-                    .with_mime_type("application/json")
-                    .no_annotation(),
+                    .with_mime_type("application/json"),
             ]
         })
         .collect();
     resources.push(
-        RawResource::new(MCP_USAGE_APP_URI, "MCP usage overview")
+        Resource::new(MCP_USAGE_APP_URI, "MCP usage overview")
             .with_description("Interactive overview of CodeScene MCP safeguard usage")
             .with_mime_type(MCP_APPS_MIME_TYPE)
-            .with_size(crate::resources::mcp_usage_app().len() as u32)
-            .no_annotation(),
+            .with_size(crate::resources::mcp_usage_app().len() as u64),
     );
     ListResourcesResult {
         resources,
@@ -239,14 +235,14 @@ fn resolve_resource(uri: &str) -> Result<ReadResourceResult, ErrorData> {
 }
 
 fn build_resource_templates() -> ListResourceTemplatesResult {
-    let template = RawResourceTemplate::new("skill://{skill_name}/{path}", "Skill file")
+    let template = ResourceTemplate::new("skill://{skill_name}/{path}", "Skill file")
         .with_description(
             "Access a specific file within a CodeScene skill. \
          Use skill_name from the resource list and path from the manifest.",
         )
         .with_mime_type("text/markdown");
     ListResourceTemplatesResult {
-        resource_templates: vec![template.no_annotation()],
+        resource_templates: vec![template],
         next_cursor: None,
         meta: None,
     }
@@ -406,7 +402,7 @@ mod tests {
         assert!(result.is_ok());
         let prompt = result.unwrap();
         let text = match &prompt.messages[0].content {
-            rmcp::model::PromptMessageContent::Text { text } => text.as_str(),
+            rmcp::model::ContentBlock::Text(content) => content.text.as_str(),
             _ => panic!("expected text content"),
         };
         assert!(

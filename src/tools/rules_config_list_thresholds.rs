@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use rmcp::model::{CallToolResult, Content};
+use rmcp::model::{CallToolResult, ContentBlock as Content};
 use rmcp::ErrorData;
 
 use crate::event_properties;

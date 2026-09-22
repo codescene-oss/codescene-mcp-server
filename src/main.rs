@@ -48,7 +48,7 @@ use std::sync::Arc;
 
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, Content, Meta};
+use rmcp::model::{CallToolResult, ContentBlock as Content, Meta};
 use rmcp::schemars::{self, JsonSchema};
 use rmcp::service::ServerInitializeError;
 use rmcp::transport::IntoTransport;
