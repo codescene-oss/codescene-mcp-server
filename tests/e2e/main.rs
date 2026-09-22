@@ -906,6 +906,11 @@ fn test_analytics_enriched_common_properties() {
 }
 
 #[test]
+fn test_analytics_agent_instruction_properties() {
+    tests::analytics_tracking::test_agent_instruction_properties_reflect_repository_guidance();
+}
+
+#[test]
 fn test_analytics_enriched_tool_specific_properties() {
     tests::analytics_tracking::test_enriched_event_contains_tool_specific_properties();
 }
