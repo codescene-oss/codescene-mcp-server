@@ -10,8 +10,7 @@ use crate::auth::AuthCredential;
 use crate::errors::ApiError;
 use crate::http::HttpClient;
 
-const CLOUD_ENDPOINT: &str = "mcp/repository-projects";
-const ONPREM_ENDPOINT: &str = "v2/mcp/repository-projects";
+const REPOSITORY_PROJECTS_ENDPOINT: &str = "v2/mcp/repository-projects";
 const SUCCESS_CACHE_TTL: Duration = Duration::from_secs(15 * 60);
 const FAILURE_CACHE_TTL: Duration = Duration::from_secs(30);
 
@@ -165,14 +164,10 @@ pub(crate) async fn fetch_repository_projects(
     client: &dyn HttpClient,
     credential: &AuthCredential,
 ) -> Result<RepositoryProjects, RepositoryProjectsError> {
-    let endpoint = if credential.web_root().is_some() {
-        ONPREM_ENDPOINT
-    } else {
-        CLOUD_ENDPOINT
-    };
-    let response = api_client::query_api_with_auth(endpoint, client, Some(credential))
-        .await
-        .map_err(classify_api_error)?;
+    let response =
+        api_client::query_api_with_auth(REPOSITORY_PROJECTS_ENDPOINT, client, Some(credential))
+            .await
+            .map_err(classify_api_error)?;
     let response: RepositoryProjectsResponse =
         serde_json::from_value(response).map_err(|_| RepositoryProjectsError::InvalidResponse)?;
     let repositories = response
@@ -293,7 +288,7 @@ mod tests {
         assert_eq!(requests[0].method, Method::Get);
         assert_eq!(
             requests[0].url,
-            "https://api.codescene.io/mcp/repository-projects"
+            "https://api.codescene.io/v2/mcp/repository-projects"
         );
         assert_eq!(
             requests[0].headers.get("Authorization").map(String::as_str),
