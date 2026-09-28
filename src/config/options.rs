@@ -71,6 +71,16 @@ pub const OPTIONS: &[ConfigOption] = &[
         docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
     },
     ConfigOption {
+        key: "disable_setup_hint",
+        env_var: "CS_DISABLE_SETUP_HINT",
+        description: "Disable agent instructions setup hints",
+        sensitive: false,
+        hidden: true,
+        api_only: false,
+        aliases: &[],
+        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
+    },
+    ConfigOption {
         key: "tracking_environment",
         env_var: "CS_ENVIRONMENT",
         description: "Override analytics environment label sent in tracking events",

@@ -650,6 +650,7 @@ mod tests {
             agent_instructions::AgentInstructions {
                 file_present: true,
                 codescene_mcp_instructions_present: false,
+                preferred_file: Some(std::path::PathBuf::from("AGENTS.md")),
             },
         );
 
