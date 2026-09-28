@@ -8,7 +8,6 @@ use rmcp::model::{
 use rmcp::service::RequestContext;
 use rmcp::{tool_handler, ErrorData, RoleServer, ServerHandler};
 
-use crate::analytics_attribution::AnalyticsContext;
 use crate::{config, environment, prompts, setup_hint, skills, CodeSceneServer};
 
 pub(crate) const MCP_USAGE_APP_URI: &str = "ui://codescene/mcp-usage-overview";
@@ -24,19 +23,7 @@ impl ServerHandler for CodeSceneServer {
         let action_path = setup_hint::action_path(request.arguments.as_ref());
         let tool_context = ToolCallContext::new(self, request, context);
         let mut result = self.tool_router.call(tool_context).await?;
-        if let Some(variant_id) = setup_hint::maybe_add(&mut result, action_path.as_deref()) {
-            let analytics_context = action_path
-                .map(AnalyticsContext::Path)
-                .unwrap_or(AnalyticsContext::CurrentWorkspace);
-            self.track_with_context(
-                "codescene-setup-hint",
-                serde_json::json!({
-                    "variant-id": variant_id,
-                    "message-wording": "v1",
-                }),
-                analytics_context,
-            );
-        }
+        setup_hint::add_and_track(self, &mut result, action_path);
         Ok(result)
     }
 

@@ -4,8 +4,11 @@ use rmcp::model::{CallToolResult, ContentBlock as Content, JsonObject};
 use serde_json::{json, Value};
 
 use crate::agent_instructions;
+use crate::analytics_attribution::AnalyticsContext;
+use crate::CodeSceneServer;
 
-const DOCS_URL: &str = "https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/AGENTS-standalone.md";
+const DOCS_URL: &str =
+    "https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/AGENTS-standalone.md";
 const SUGGESTED_INSTRUCTIONS: &str = "## CodeScene\nAfter changing code, run `code_health_review` on the changed files. If Code Health drops, fix the issues, run the review again, and use `code_health_score` to confirm the result. Before finishing, run `pre_commit_code_health_safeguard` and only stop when it passes.";
 const PATH_ARGUMENTS: &[&str] = &["file_path", "git_repository_path", "config_path"];
 
@@ -22,6 +25,26 @@ pub(crate) fn action_path(arguments: Option<&JsonObject>) -> Option<PathBuf> {
             .and_then(Value::as_str)
             .map(PathBuf::from)
     })
+}
+
+pub(crate) fn add_and_track(
+    server: &CodeSceneServer,
+    result: &mut CallToolResult,
+    action_path: Option<PathBuf>,
+) {
+    if let Some(variant_id) = maybe_add(result, action_path.as_deref()) {
+        let analytics_context = action_path
+            .map(AnalyticsContext::Path)
+            .unwrap_or(AnalyticsContext::CurrentWorkspace);
+        server.track_with_context(
+            "codescene-setup-hint",
+            json!({
+                "variant-id": variant_id,
+                "message-wording": "v1",
+            }),
+            analytics_context,
+        );
+    }
 }
 
 pub(crate) fn maybe_add(
@@ -96,6 +119,105 @@ fn is_disabled() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::make_server;
+    use crate::{RecordedTrackingCall, TrackingProbe};
+
+    fn repository_with_instructions(content: &str) -> tempfile::TempDir {
+        let repository = tempfile::tempdir().unwrap();
+        std::fs::create_dir(repository.path().join(".git")).unwrap();
+        std::fs::write(repository.path().join("AGENTS.md"), content).unwrap();
+        repository
+    }
+
+    #[test]
+    fn action_path_uses_first_string_path_argument() {
+        let arguments = json!({
+            "file_path": 42,
+            "git_repository_path": "/repo",
+            "config_path": "/repo/rules.json"
+        });
+
+        assert_eq!(
+            action_path(arguments.as_object()),
+            Some(PathBuf::from("/repo"))
+        );
+        assert_eq!(action_path(None), None);
+        assert_eq!(action_path(json!({}).as_object()), None);
+    }
+
+    #[test]
+    fn add_and_track_decorates_result_and_tracks_variant() {
+        let repository = repository_with_instructions("Run tests.");
+        let action_path = repository.path().join("src/main.rs");
+        std::fs::create_dir(repository.path().join("src")).unwrap();
+        std::fs::write(&action_path, "fn main() {}").unwrap();
+        let mut server = make_server(false);
+        let probe = TrackingProbe::install(&mut server);
+        let mut result =
+            CallToolResult::success(vec![Content::text(r#"{"score":10.0,"review":[]}"#)]);
+
+        add_and_track(&server, &mut result, Some(action_path.clone()));
+
+        assert!(result.content[0]
+            .as_text()
+            .unwrap()
+            .text
+            .contains("codescene_setup_hint"));
+        probe.assert_single(RecordedTrackingCall::Event {
+            name: "codescene-setup-hint".to_string(),
+            context: AnalyticsContext::Path(action_path),
+        });
+    }
+
+    #[test]
+    fn add_and_track_does_not_track_when_result_cannot_be_decorated() {
+        let mut server = make_server(false);
+        let probe = TrackingProbe::install(&mut server);
+        let mut result = CallToolResult::success(vec![]);
+
+        add_and_track(&server, &mut result, None);
+
+        assert!(probe.calls().is_empty());
+    }
+
+    #[test]
+    fn maybe_add_decorates_eligible_json_result() {
+        let repository = repository_with_instructions("Run tests.");
+        let mut result = CallToolResult::success(vec![Content::text(r#"{"score":10.0}"#)]);
+
+        assert_eq!(
+            maybe_add(&mut result, Some(repository.path())),
+            Some("repository-file-without-codescene-v1")
+        );
+        assert!(result.content[0]
+            .as_text()
+            .unwrap()
+            .text
+            .contains("codescene_setup_hint"));
+    }
+
+    #[test]
+    fn maybe_add_skips_errors_and_existing_guidance() {
+        let repository = repository_with_instructions("Use CodeScene MCP tools.");
+        let mut error = CallToolResult::error(vec![Content::text("failed")]);
+        let mut success = CallToolResult::success(vec![Content::text(r#"{"score":10.0}"#)]);
+
+        assert_eq!(maybe_add(&mut error, Some(repository.path())), None);
+        assert_eq!(maybe_add(&mut success, Some(repository.path())), None);
+    }
+
+    #[test]
+    fn maybe_add_respects_disable_environment_values() {
+        let _lock = crate::config::lock_test_env();
+        let repository = repository_with_instructions("Run tests.");
+        let mut result = CallToolResult::success(vec![Content::text(r#"{"score":10.0}"#)]);
+
+        std::env::set_var("CS_DISABLE_SETUP_HINT", "1");
+        assert_eq!(maybe_add(&mut result, Some(repository.path())), None);
+        std::env::set_var("CS_DISABLE_SETUP_HINT", "FALSE");
+        assert!(maybe_add(&mut result, Some(repository.path())).is_some());
+        std::env::remove_var("CS_DISABLE_SETUP_HINT");
+    }
 
     #[test]
     fn existing_file_hint_names_the_detected_file_and_requires_consent() {
@@ -129,9 +251,7 @@ mod tests {
 
         assert!(merge_into_json_result(&mut result, &hint.content));
         assert_eq!(result.content.len(), 1);
-        let Content::Text(content) = &result.content[0] else {
-            panic!("expected text content");
-        };
+        let content = result.content[0].as_text().expect("expected text content");
         let response: Value = serde_json::from_str(&content.text).unwrap();
         assert_eq!(response["score"], 10.0);
         assert_eq!(
@@ -150,4 +270,14 @@ mod tests {
         assert_eq!(result, original);
     }
 
+    #[test]
+    fn merge_rejects_empty_content_and_hint_without_payload() {
+        let mut empty = CallToolResult::success(vec![]);
+        let mut json_result = CallToolResult::success(vec![Content::text(r#"{"score":10.0}"#)]);
+        let repository = repository_with_instructions("Run tests.");
+
+        assert!(!merge_into_json_result(&mut empty, &json!({})));
+        assert!(!merge_into_json_result(&mut json_result, &json!({})));
+        assert_eq!(maybe_add(&mut empty, Some(repository.path())), None);
+    }
 }
