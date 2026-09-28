@@ -45,12 +45,14 @@ pub(crate) async fn handle(
         );
         return Ok(tool_error(&e.message));
     }
+    let content_hash = event_properties::hash_file_content(fp);
     let review_result = run_review(fp, &*server.cli_runner).await;
     match review_result {
         Ok(output) => {
             let result_text = business_case_text(&output);
             let props = event_properties::business_case_properties(
                 Path::new(&params.file_path),
+                content_hash.as_deref(),
                 &result_text,
             );
             server.track_with_context(

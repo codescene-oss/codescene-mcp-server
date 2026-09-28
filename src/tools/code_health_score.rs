@@ -41,11 +41,16 @@ pub(crate) async fn handle(
         );
         return Ok(tool_error(&e.message));
     }
+    let content_hash = event_properties::hash_file_content(fp);
     let result = run_review(fp, &*server.cli_runner).await;
     match result {
         Ok(output) => {
             let score = extract_score(&output);
-            let props = event_properties::score_properties(Path::new(&params.file_path), score);
+            let props = event_properties::score_properties(
+                Path::new(&params.file_path),
+                content_hash.as_deref(),
+                score,
+            );
             server.track_with_context("code-health-score", props, analytics_context);
             let msg = score
                 .map(|s| format!("Code Health score: {s}"))

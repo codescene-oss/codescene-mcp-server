@@ -1,8 +1,12 @@
 use sha2::{Digest, Sha256};
 
 pub fn truncated_sha256(input: &str) -> String {
+    truncated_sha256_bytes(input.as_bytes())
+}
+
+pub fn truncated_sha256_bytes(input: &[u8]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(input.as_bytes());
+    hasher.update(input);
     let result = hasher.finalize();
     hex_encode_truncated(&result, 16)
 }
@@ -37,5 +41,13 @@ mod tests {
     #[test]
     fn different_inputs_differ() {
         assert_ne!(truncated_sha256("a"), truncated_sha256("b"));
+    }
+
+    #[test]
+    fn hashes_arbitrary_bytes() {
+        assert_ne!(
+            truncated_sha256_bytes(&[0, 159, 146, 150]),
+            truncated_sha256_bytes(&[0, 159, 146, 151])
+        );
     }
 }
