@@ -15,10 +15,11 @@ const INSTRUCTION_DIRECTORIES: &[&str] = &[".cursor/rules", ".amazonq/rules"];
 const CODESCENE_MCP_MARKERS: &[&str] =
     &["codescene mcp", "codescene-mcp", "codehealth-mcp", "cs-mcp"];
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct AgentInstructions {
     pub(crate) file_present: bool,
     pub(crate) codescene_mcp_instructions_present: bool,
+    pub(crate) preferred_file: Option<PathBuf>,
 }
 
 pub(crate) fn detect(action_path: Option<&Path>) -> AgentInstructions {
@@ -40,9 +41,14 @@ fn repository_root(action_path: Option<&Path>) -> Option<PathBuf> {
 
 fn detect_in_repository(repository_root: &Path) -> AgentInstructions {
     let files = instruction_files(repository_root);
+    let preferred_file = files.first();
     AgentInstructions {
-        file_present: !files.is_empty(),
-        codescene_mcp_instructions_present: files.iter().any(|path| contains_codescene_mcp(path)),
+        file_present: preferred_file.is_some(),
+        codescene_mcp_instructions_present: preferred_file
+            .is_some_and(|path| contains_codescene_mcp(path)),
+        preferred_file: preferred_file
+            .and_then(|path| path.strip_prefix(repository_root).ok())
+            .map(Path::to_path_buf),
     }
 }
 
@@ -116,8 +122,34 @@ mod tests {
             AgentInstructions {
                 file_present: true,
                 codescene_mcp_instructions_present: false,
+                preferred_file: Some(PathBuf::from("AGENTS.md")),
             }
         );
+    }
+
+    #[test]
+    fn prefers_agents_file_when_multiple_instruction_files_exist() {
+        let repository = repository();
+        fs::write(repository.path().join("AGENTS.md"), "Run tests.").unwrap();
+        fs::write(repository.path().join("CLAUDE.md"), "Run tests.").unwrap();
+
+        let result = detect(Some(repository.path()));
+
+        assert_eq!(result.preferred_file, Some(PathBuf::from("AGENTS.md")));
+    }
+
+    #[test]
+    fn checks_codescene_guidance_only_in_preferred_file() {
+        let repository = repository();
+        fs::write(repository.path().join("AGENTS.md"), "").unwrap();
+        let rules = repository.path().join(".amazonq/rules");
+        fs::create_dir_all(&rules).unwrap();
+        fs::write(rules.join("codescene.md"), "Use CodeScene MCP tools.").unwrap();
+
+        let result = detect(Some(repository.path()));
+
+        assert_eq!(result.preferred_file, Some(PathBuf::from("AGENTS.md")));
+        assert!(!result.codescene_mcp_instructions_present);
     }
 
     #[test]
@@ -136,6 +168,7 @@ mod tests {
             AgentInstructions {
                 file_present: true,
                 codescene_mcp_instructions_present: true,
+                preferred_file: Some(PathBuf::from("CLAUDE.md")),
             }
         );
     }
@@ -169,6 +202,7 @@ mod tests {
                 AgentInstructions {
                     file_present: true,
                     codescene_mcp_instructions_present: true,
+                    preferred_file: Some(PathBuf::from("AGENTS.md")),
                 }
             );
         }

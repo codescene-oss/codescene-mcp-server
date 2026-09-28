@@ -14,6 +14,8 @@ The simplest way to configure the MCP server is to ask your AI assistant directl
 
 > "Disable the CodeScene version update check"
 
+> "Disable CodeScene agent instructions setup hints"
+
 The AI will use the `set_config` tool to save the value persistently. You can verify any setting by asking:
 
 > "What is my current CodeScene configuration?"
@@ -258,6 +260,20 @@ You may want to disable this in air-gapped environments or if the extra network 
 ```
 
 
+
+## `disable_setup_hint`
+
+
+|                          |                                     |
+| ------------------------ | ----------------------------------- |
+| **Environment variable** | `CS_DISABLE_SETUP_HINT`             |
+| **Sensitive**            | No                                  |
+| **Hidden**               | Yes (not shown in default listings) |
+
+
+Set to `"true"` to suppress setup hints on eligible tool responses that offer to add CodeScene guidance to a repository-local agent instructions file. The server never creates or edits an instructions file without explicit user consent.
+
+You can also disable the hints with the `set_config` tool by setting `disable_setup_hint` to `true`.
 
 ## `ca_bundle`
 

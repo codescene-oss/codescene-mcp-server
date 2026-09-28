@@ -1,19 +1,45 @@
+use rmcp::handler::server::tool::ToolCallContext;
 use rmcp::model::{
-    GetPromptRequestParams, GetPromptResult, Implementation, ListPromptsResult,
-    ListResourceTemplatesResult, ListResourcesResult, PaginatedRequestParams, Prompt,
-    PromptArgument, PromptMessage, ReadResourceRequestParams, ReadResourceResult, Resource,
+    CallToolRequestParams, CallToolResult, GetPromptRequestParams, GetPromptResult, Implementation,
+    ListPromptsResult, ListResourceTemplatesResult, ListResourcesResult, PaginatedRequestParams,
+    Prompt, PromptArgument, PromptMessage, ReadResourceRequestParams, ReadResourceResult, Resource,
     ResourceContents, ResourceTemplate, Role, ServerCapabilities, ServerInfo,
 };
 use rmcp::service::RequestContext;
 use rmcp::{tool_handler, ErrorData, RoleServer, ServerHandler};
 
-use crate::{config, environment, prompts, skills, CodeSceneServer};
+use crate::analytics_attribution::AnalyticsContext;
+use crate::{config, environment, prompts, setup_hint, skills, CodeSceneServer};
 
 pub(crate) const MCP_USAGE_APP_URI: &str = "ui://codescene/mcp-usage-overview";
 const MCP_APPS_MIME_TYPE: &str = "text/html;profile=mcp-app";
 
 #[tool_handler(router = "self.tool_router")]
 impl ServerHandler for CodeSceneServer {
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let action_path = setup_hint::action_path(request.arguments.as_ref());
+        let tool_context = ToolCallContext::new(self, request, context);
+        let mut result = self.tool_router.call(tool_context).await?;
+        if let Some(variant_id) = setup_hint::maybe_add(&mut result, action_path.as_deref()) {
+            let analytics_context = action_path
+                .map(AnalyticsContext::Path)
+                .unwrap_or(AnalyticsContext::CurrentWorkspace);
+            self.track_with_context(
+                "codescene-setup-hint",
+                serde_json::json!({
+                    "variant-id": variant_id,
+                    "message-wording": "v1",
+                }),
+                analytics_context,
+            );
+        }
+        Ok(result)
+    }
+
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(
             ServerCapabilities::builder()
@@ -384,7 +410,11 @@ mod tests {
         let names = prompt_names(true);
         assert_eq!(names.len(), 3);
         assert!(!names.iter().any(|n| n == "login" || n == "switch_account"));
-        for expected in ["logout", "review_code_health", "plan_code_health_refactoring"] {
+        for expected in [
+            "logout",
+            "review_code_health",
+            "plan_code_health_refactoring",
+        ] {
             assert!(names.iter().any(|n| n == expected), "missing {expected}");
         }
     }

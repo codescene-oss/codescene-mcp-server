@@ -1,4 +1,4 @@
-﻿mod api_client;
+mod api_client;
 mod agent_instructions;
 mod analytics_attribution;
 mod auth;
@@ -22,6 +22,7 @@ mod repository_url;
 mod repository_projects;
 mod resources;
 mod server_handler;
+mod setup_hint;
 mod skills;
 mod startup;
 #[cfg(test)]
@@ -129,7 +130,6 @@ pub(crate) const API_ONLY_TOOLS: &[&str] = &[
 /// Tools that cannot be disabled via `enabled_tools` config.
 pub(crate) const ALWAYS_ENABLED_TOOLS: &[&str] =
     &["get_config", "set_config", "login", "logout", "switch_account"];
-
 
 pub(crate) fn inlined_schema_for<T: JsonSchema + 'static>(
 ) -> Arc<serde_json::Map<String, serde_json::Value>> {

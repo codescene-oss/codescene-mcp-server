@@ -53,6 +53,7 @@ pub mod pre_commit_code_health_safeguard;
 pub mod relative_paths;
 pub mod require_access_token;
 pub mod rules_config;
+pub mod setup_hint;
 pub mod shutdown_during_handshake;
 pub mod skill_resources;
 pub mod ssl_api_ca_bundle;

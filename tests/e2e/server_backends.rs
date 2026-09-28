@@ -148,6 +148,7 @@ impl DockerBackend {
         "CS_ONPREM_URL",
         "CS_VERSION_CHECK_URL",
         "CS_DISABLE_VERSION_CHECK",
+        "CS_DISABLE_SETUP_HINT",
         "CS_TRACKING_URL",
         "CS_DISABLE_TRACKING",
         "CS_ENVIRONMENT",
