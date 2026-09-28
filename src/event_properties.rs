@@ -3,7 +3,7 @@ use std::path::Path;
 
 use serde_json::{json, Value};
 
-use crate::hashing::truncated_sha256;
+use crate::hashing::{truncated_sha256, truncated_sha256_bytes};
 
 #[derive(Debug, Clone, Copy)]
 pub enum ConfigAction {
@@ -20,8 +20,8 @@ impl ConfigAction {
     }
 }
 
-pub fn review_properties(file_path: &Path, result: &str) -> Value {
-    let mut props = json!({ "file-hash": hash_path(file_path) });
+pub fn review_properties(file_path: &Path, content_hash: Option<&str>, result: &str) -> Value {
+    let mut props = file_properties(file_path, content_hash);
     if let Some(data) = parse_json_dict(result) {
         if let Some(score) = data.get("score") {
             props["score"] = score.clone();
@@ -34,11 +34,10 @@ pub fn review_properties(file_path: &Path, result: &str) -> Value {
     props
 }
 
-pub fn score_properties(file_path: &Path, score: Option<f64>) -> Value {
-    json!({
-        "file-hash": hash_path(file_path),
-        "score": score,
-    })
+pub fn score_properties(file_path: &Path, content_hash: Option<&str>, score: Option<f64>) -> Value {
+    let mut props = file_properties(file_path, content_hash);
+    props["score"] = json!(score);
+    props
 }
 
 pub fn pre_commit_properties(repo_path: &Path, result: &str) -> Value {
@@ -56,8 +55,12 @@ pub fn change_set_properties(repo_path: &Path, base_ref: &Path, result: &str) ->
     props
 }
 
-pub fn business_case_properties(file_path: &Path, result: &str) -> Value {
-    let mut props = json!({ "file-hash": hash_path(file_path) });
+pub fn business_case_properties(
+    file_path: &Path,
+    content_hash: Option<&str>,
+    result: &str,
+) -> Value {
+    let mut props = file_properties(file_path, content_hash);
     if let Some(data) = parse_json_dict(result) {
         if let Some(outcome) = data.get("outcome").and_then(|o| o.as_object()) {
             if let Some(v) = outcome.get("current_code_health") {
@@ -115,6 +118,20 @@ pub fn rules_config_properties(subcommand: &str, config_path: Option<&Path>) -> 
 
 fn hash_path(path: &Path) -> String {
     truncated_sha256(&path.to_string_lossy())
+}
+
+pub fn hash_file_content(path: &Path) -> Option<String> {
+    std::fs::read(path)
+        .ok()
+        .map(|content| truncated_sha256_bytes(&content))
+}
+
+fn file_properties(file_path: &Path, content_hash: Option<&str>) -> Value {
+    let mut props = json!({ "file-hash": hash_path(file_path) });
+    if let Some(hash) = content_hash {
+        props["content-hash"] = json!(hash);
+    }
+    props
 }
 
 fn parse_json_dict(s: &str) -> Option<Value> {
@@ -216,6 +233,20 @@ mod tests {
         assert_ne!(a, b);
     }
 
+    #[test]
+    fn hash_file_content_tracks_changes() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), b"before").unwrap();
+        let before = hash_file_content(file.path());
+
+        std::fs::write(file.path(), b"after").unwrap();
+        let after = hash_file_content(file.path());
+
+        assert!(before.is_some());
+        assert_ne!(before, after);
+        assert!(hash_file_content(Path::new("/missing/file")).is_none());
+    }
+
     // ---- parse_json_dict ----
 
     #[test]
@@ -248,14 +279,16 @@ mod tests {
 
     #[test]
     fn score_properties_with_score() {
-        let props = score_properties(Path::new("/test.rs"), Some(8.5));
+        let props = score_properties(Path::new("/test.rs"), Some("content"), Some(8.5));
         assert!(props.get("file-hash").is_some());
+        assert_eq!(props["content-hash"], json!("content"));
         assert_eq!(props["score"], json!(8.5));
     }
 
     #[test]
     fn score_properties_without_score() {
-        let props = score_properties(Path::new("/test.rs"), None);
+        let props = score_properties(Path::new("/test.rs"), None, None);
+        assert!(props.get("content-hash").is_none());
         assert!(props["score"].is_null());
     }
 
@@ -264,22 +297,23 @@ mod tests {
     #[test]
     fn review_properties_includes_file_hash_and_score() {
         let result = r#"{"score": 7.5, "review": [{"category": "Complex Method"}]}"#;
-        let props = review_properties(Path::new("/test.rs"), result);
+        let props = review_properties(Path::new("/test.rs"), Some("content"), result);
         assert!(props.get("file-hash").is_some());
+        assert_eq!(props["content-hash"], json!("content"));
         assert_eq!(props["score"], json!(7.5));
     }
 
     #[test]
     fn review_properties_includes_categories() {
         let result = r#"{"score": 7.5, "review": [{"category": "Complex Method"}]}"#;
-        let props = review_properties(Path::new("/test.rs"), result);
+        let props = review_properties(Path::new("/test.rs"), None, result);
         assert_eq!(props["categories"], json!(["Complex Method"]));
         assert_eq!(props["category-count"], json!(1));
     }
 
     #[test]
     fn review_properties_with_invalid_json() {
-        let props = review_properties(Path::new("/test.rs"), "not json");
+        let props = review_properties(Path::new("/test.rs"), None, "not json");
         assert!(props.get("file-hash").is_some());
         assert!(props.get("score").is_none());
     }
@@ -287,7 +321,7 @@ mod tests {
     #[test]
     fn review_properties_no_review_key() {
         let result = r#"{"score": 10.0}"#;
-        let props = review_properties(Path::new("/test.rs"), result);
+        let props = review_properties(Path::new("/test.rs"), None, result);
         assert_eq!(props["score"], json!(10.0));
         assert!(props.get("categories").is_none());
     }
@@ -347,16 +381,18 @@ mod tests {
     #[test]
     fn business_case_properties_with_outcome() {
         let result = r#"{"outcome":{"current_code_health":3.0,"target_code_health":10.0}}"#;
-        let props = business_case_properties(Path::new("/test.rs"), result);
+        let props = business_case_properties(Path::new("/test.rs"), Some("content"), result);
         assert!(props.get("file-hash").is_some());
+        assert_eq!(props["content-hash"], json!("content"));
         assert_eq!(props["current-code-health"], json!(3.0));
         assert_eq!(props["target-code-health"], json!(10.0));
     }
 
     #[test]
     fn business_case_properties_without_outcome() {
-        let props = business_case_properties(Path::new("/test.rs"), "{}");
+        let props = business_case_properties(Path::new("/test.rs"), None, "{}");
         assert!(props.get("file-hash").is_some());
+        assert!(props.get("content-hash").is_none());
         assert!(props.get("current-code-health").is_none());
     }
 

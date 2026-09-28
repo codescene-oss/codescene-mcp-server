@@ -373,6 +373,13 @@ fn hash_path(path: &Path) -> String {
     hex::encode(&result[..8])
 }
 
+fn hash_content(path: &Path) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(std::fs::read(path).expect("test file should be readable"));
+    let result = hasher.finalize();
+    hex::encode(&result[..8])
+}
+
 fn hash_ref(git_ref: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(git_ref.as_bytes());
@@ -488,6 +495,14 @@ pub fn test_enriched_review_event() {
         .and_then(|v| v.as_str())
         .unwrap_or("");
     assert_eq!(file_hash, expected_hash, "file-hash mismatch");
+
+    // content-hash
+    let expected_hash = hash_content(&repo_dir.join("src/services/order_processor.py"));
+    let content_hash = props
+        .get("content-hash")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    assert_eq!(content_hash, expected_hash, "content-hash mismatch");
 
     // score
     assert!(props.get("score").is_some(), "Should have score");

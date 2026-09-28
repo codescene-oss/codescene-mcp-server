@@ -41,11 +41,15 @@ pub(crate) async fn handle(
         );
         return Ok(tool_error(&e.message));
     }
+    let content_hash = event_properties::hash_file_content(fp);
     let result = run_review(fp, &*server.cli_runner).await;
     match result {
         Ok(output) => {
-            let props =
-                event_properties::review_properties(Path::new(&params.file_path), &output);
+            let props = event_properties::review_properties(
+                Path::new(&params.file_path),
+                content_hash.as_deref(),
+                &output,
+            );
             server.track_with_context("code-health-review", props, analytics_context);
             let text = server.maybe_version_warning(&output).await;
             Ok(CallToolResult::success(vec![Content::text(text)]))
