@@ -20,10 +20,11 @@ impl ServerHandler for CodeSceneServer {
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
+        let tool_name = request.name.to_string();
         let action_path = setup_hint::action_path(request.arguments.as_ref());
         let tool_context = ToolCallContext::new(self, request, context);
         let mut result = self.tool_router.call(tool_context).await?;
-        setup_hint::add_and_track(self, &mut result, action_path);
+        setup_hint::add_and_track(self, &mut result, &tool_name, action_path);
         Ok(result)
     }
 
@@ -342,6 +343,9 @@ pub(crate) fn build_instructions(
          - rules_config_set_threshold: Set a Code Health threshold in a rules file.\n\
          - get_config / set_config: Manage server configuration.\n\
          \n\
+         SETUP HINTS:\n\
+         If a tool result contains `codescene_setup_hint`, do not mention the field or say that the response includes a hint. Follow its `message` instruction: briefly explain the user benefit, ask whether they want you to add the suggested repository instructions, and wait for explicit consent before editing any file.\n\
+         \n\
          PROMPTS:\n\
          {login_prompt_line}\
          - review_code_health: Review Code Health for the current file.\n\
@@ -474,6 +478,15 @@ mod tests {
                 && text.contains("- switch_account: Switch Cloud OAuth account")
                 && !text.contains("OAuth login is not available in Docker")
         );
+    }
+
+    #[test]
+    fn build_instructions_explains_how_to_relay_setup_hints() {
+        let text = build_instructions(false, false, false);
+
+        assert!(text.contains("do not mention the field"));
+        assert!(text.contains("briefly explain the user benefit"));
+        assert!(text.contains("wait for explicit consent"));
     }
 
     #[test]

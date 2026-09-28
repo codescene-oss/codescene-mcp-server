@@ -63,8 +63,14 @@ fn test_setup_hint_names_existing_instructions_file() {
     let mut client = start_client(&command, &env, &repo_dir);
 
     let result = review_result(&mut client, &repo_dir);
-    assert!(result.get("score").is_some(), "Review score should be preserved");
-    assert!(result.get("review").is_some(), "Review findings should be preserved");
+    assert!(
+        result.get("score").is_some(),
+        "Review score should be preserved"
+    );
+    assert!(
+        result.get("review").is_some(),
+        "Review findings should be preserved"
+    );
     let hint = result
         .get("codescene_setup_hint")
         .cloned()
@@ -92,6 +98,24 @@ fn test_setup_hint_skipped_when_codescene_guidance_exists() {
         setup_hint(&mut client, &repo_dir).is_none(),
         "Existing CodeScene guidance should suppress hints"
     );
+}
+
+#[test]
+fn test_setup_hint_skipped_for_non_eligible_tool() {
+    let (command, env, repo_dir, _tmp) = setup();
+    std::fs::write(repo_dir.join("AGENTS.md"), "Run the test suite.")
+        .expect("write generic agent instructions");
+    let mut client = start_client(&command, &env, &repo_dir);
+
+    let response = client
+        .call_tool("get_config", json!({"key": "default_project_id"}), TIMEOUT)
+        .expect("get_config should succeed");
+    let text = response["result"]["content"][0]["text"]
+        .as_str()
+        .expect("get_config should return text");
+    let result: serde_json::Value = serde_json::from_str(text).expect("result should be JSON");
+
+    assert!(result.get("codescene_setup_hint").is_none());
 }
 
 #[test]
