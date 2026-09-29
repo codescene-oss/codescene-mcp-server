@@ -378,6 +378,19 @@ mod tests {
         .unwrap()
     }
 
+    fn get_config_request_message() -> ClientJsonRpcMessage {
+        serde_json::from_value(json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "get_config",
+                "arguments": {}
+            }
+        }))
+        .unwrap()
+    }
+
     #[test]
     fn api_only_tools_has_expected_entries() {
         assert!([
@@ -1463,6 +1476,41 @@ mod tests {
 
         let close_result = service.close().await;
         assert!(close_result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn initialized_client_can_call_tool_through_server_handler() {
+        use rmcp::ServiceExt;
+
+        let transport = ScriptedTransport::from_messages(vec![
+            initialize_request_message(),
+            initialized_notification_message(),
+            get_config_request_message(),
+        ]);
+        let sent = transport.sent.clone();
+        let mut server = make_server(false);
+        let probe = crate::TrackingProbe::install(&mut server);
+
+        let service = server
+            .serve(transport)
+            .await
+            .expect("MCP handshake should succeed");
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_millis(500), service.waiting()).await;
+
+        let responses: Vec<serde_json::Value> = sent
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|message| serde_json::to_value(message).ok())
+            .collect();
+        assert!(responses.iter().any(|response| {
+            response.get("id") == Some(&json!(2)) && response.pointer("/result/content").is_some()
+        }));
+        assert!(probe.calls().iter().any(|call| matches!(
+            call,
+            crate::RecordedTrackingCall::Event { name, .. } if name == "get-config"
+        )));
     }
 
     #[tokio::test]

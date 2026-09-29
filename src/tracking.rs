@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::Arc;
 
 use serde_json::{json, Value};
@@ -13,6 +14,29 @@ use crate::http::{HttpClient, HttpRequest, Method, ReqwestClient};
 use crate::repository_projects::RepositoryProjectsCache;
 
 const ATTRIBUTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+tokio::task_local! {
+    static MCP_CLIENT_INFO: Option<McpClientInfo>;
+}
+
+#[derive(Clone)]
+pub(crate) struct McpClientInfo {
+    name: String,
+    version: String,
+}
+
+impl McpClientInfo {
+    pub(crate) fn new(name: String, version: String) -> Self {
+        Self { name, version }
+    }
+}
+
+pub(crate) async fn with_mcp_client_info<T>(
+    client_info: Option<McpClientInfo>,
+    future: impl Future<Output = T>,
+) -> T {
+    MCP_CLIENT_INFO.scope(client_info, future).await
+}
 
 struct TrackingEvent {
     url: String,
@@ -107,10 +131,11 @@ fn build_error_properties(evt: &ErrorEvent<'_>) -> Value {
 
 fn create_tracking_event(
     event: &str,
-    properties: Value,
+    mut properties: Value,
     instance_id: &str,
     auth: &TrackingAuth,
 ) -> Option<TrackingEvent> {
+    merge_mcp_client_info(&mut properties);
     Some(TrackingEvent {
         url: resolve_tracking_url(auth.api_root.as_deref())?,
         event: format!("mcp-{event}"),
@@ -120,6 +145,23 @@ fn create_tracking_event(
         properties,
         access_token: auth.access_token.clone(),
     })
+}
+
+fn merge_mcp_client_info(properties: &mut Value) {
+    let Some(properties) = properties.as_object_mut() else {
+        return;
+    };
+    let _ = MCP_CLIENT_INFO.try_with(|client_info| {
+        let Some(client_info) = client_info else {
+            return;
+        };
+        if !client_info.name.is_empty() {
+            properties.insert("mcp-client-name".to_string(), json!(client_info.name));
+        }
+        if !client_info.version.is_empty() {
+            properties.insert("mcp-client-version".to_string(), json!(client_info.version));
+        }
+    });
 }
 
 async fn enrich_tracking_event(event: &mut TrackingEvent, attribution: TrackingAttribution) {
@@ -608,6 +650,57 @@ mod tests {
         let body = build_tracking_body(&mut te);
         // Properties stay as-is when not an object
         assert_eq!(body["event-properties"], "not-an-object");
+    }
+
+    #[tokio::test]
+    async fn merge_mcp_client_info_includes_only_available_values() {
+        let mut properties = json!({});
+        merge_mcp_client_info(&mut properties);
+        assert!(properties.get("mcp-client-name").is_none());
+        assert!(properties.get("mcp-client-version").is_none());
+
+        with_mcp_client_info(None, async {
+            merge_mcp_client_info(&mut properties);
+        })
+        .await;
+        assert!(properties.get("mcp-client-name").is_none());
+        assert!(properties.get("mcp-client-version").is_none());
+
+        with_mcp_client_info(
+            Some(McpClientInfo::new(String::new(), String::new())),
+            async {
+                merge_mcp_client_info(&mut properties);
+            },
+        )
+        .await;
+        assert!(properties.get("mcp-client-name").is_none());
+        assert!(properties.get("mcp-client-version").is_none());
+
+        with_mcp_client_info(
+            Some(McpClientInfo::new(
+                "test-client".to_string(),
+                "1.2.3".to_string(),
+            )),
+            async {
+                merge_mcp_client_info(&mut properties);
+            },
+        )
+        .await;
+        assert_eq!(properties["mcp-client-name"], "test-client");
+        assert_eq!(properties["mcp-client-version"], "1.2.3");
+
+        let mut non_object_properties = json!(null);
+        with_mcp_client_info(
+            Some(McpClientInfo::new(
+                "test-client".to_string(),
+                "1.2.3".to_string(),
+            )),
+            async {
+                merge_mcp_client_info(&mut non_object_properties);
+            },
+        )
+        .await;
+        assert!(non_object_properties.is_null());
     }
 
     #[tokio::test]

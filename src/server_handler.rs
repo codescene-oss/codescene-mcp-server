@@ -8,7 +8,7 @@ use rmcp::model::{
 use rmcp::service::RequestContext;
 use rmcp::{tool_handler, ErrorData, RoleServer, ServerHandler};
 
-use crate::{config, environment, prompts, setup_hint, skills, CodeSceneServer};
+use crate::{config, environment, prompts, setup_hint, skills, tracking, CodeSceneServer};
 
 pub(crate) const MCP_USAGE_APP_URI: &str = "ui://codescene/mcp-usage-overview";
 const MCP_APPS_MIME_TYPE: &str = "text/html;profile=mcp-app";
@@ -20,12 +20,21 @@ impl ServerHandler for CodeSceneServer {
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        let tool_name = request.name.to_string();
-        let action_path = setup_hint::action_path(request.arguments.as_ref());
-        let tool_context = ToolCallContext::new(self, request, context);
-        let mut result = self.tool_router.call(tool_context).await?;
-        setup_hint::add_and_track(self, &mut result, &tool_name, action_path);
-        Ok(result)
+        let client_info = context.peer.peer_info().map(|peer_info| {
+            tracking::McpClientInfo::new(
+                peer_info.client_info.name.clone(),
+                peer_info.client_info.version.clone(),
+            )
+        });
+        tracking::with_mcp_client_info(client_info, async {
+            let tool_name = request.name.to_string();
+            let action_path = setup_hint::action_path(request.arguments.as_ref());
+            let tool_context = ToolCallContext::new(self, request, context);
+            let mut result = self.tool_router.call(tool_context).await?;
+            setup_hint::add_and_track(self, &mut result, &tool_name, action_path);
+            Ok(result)
+        })
+        .await
     }
 
     fn get_info(&self) -> ServerInfo {

@@ -454,6 +454,8 @@ where
 
 fn assert_common_properties(props: &serde_json::Value) {
     assert_properties_are_nonempty(props, &["instance-id", "version"]);
+    assert_eq!(props["mcp-client-name"], "integration-test-client");
+    assert_eq!(props["mcp-client-version"], "1.0.0");
     assert!(
         props["agents-file-present"].is_boolean(),
         "Missing boolean 'agents-file-present'"
