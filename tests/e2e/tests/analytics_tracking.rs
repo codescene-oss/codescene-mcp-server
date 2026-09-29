@@ -379,6 +379,14 @@ fn create_many_repository_files(repo_dir: &Path) {
     }
 }
 
+fn exclude_analytics_config(repo_dir: &Path) {
+    std::fs::write(
+        repo_dir.join(".git/info/exclude"),
+        ".cs_config_analytics/\n",
+    )
+    .expect("exclude analytics test config");
+}
+
 // ---------------------------------------------------------------------------
 // SHA-256 hash helper (reproduces server's 16-char hex prefix)
 // ---------------------------------------------------------------------------
@@ -485,6 +493,7 @@ fn git_in(repo_dir: &Path, args: &[&str]) {
 pub fn test_enriched_review_event() {
     let temp = create_temp_dir("cs_mcp_review_event_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
+    exclude_analytics_config(&repo_dir);
 
     let (result, payloads, _client, _elapsed) = run_tool_with_fake_server(
         &repo_dir,
@@ -550,6 +559,7 @@ pub fn test_repository_file_count_performance() {
     let sample_files = get_sample_files();
     let repo_dir = create_git_repo(temp.path(), &sample_files).expect("repo");
     create_many_repository_files(&repo_dir);
+    exclude_analytics_config(&repo_dir);
 
     let (result, payloads, _client, elapsed) = run_tool_with_fake_server(
         &repo_dir,

@@ -292,11 +292,19 @@ mod tests {
     fn repository_file_count_honors_gitignore() {
         let repository = tempfile::tempdir().unwrap();
         std::fs::create_dir(repository.path().join(".git")).unwrap();
+        std::fs::create_dir(repository.path().join(".git/info")).unwrap();
         std::fs::create_dir(repository.path().join("src")).unwrap();
         std::fs::create_dir(repository.path().join("target")).unwrap();
+        std::fs::create_dir(repository.path().join("local-cache")).unwrap();
         std::fs::write(repository.path().join(".gitignore"), "target/\n").unwrap();
+        std::fs::write(
+            repository.path().join(".git/info/exclude"),
+            "local-cache/\n",
+        )
+        .unwrap();
         std::fs::write(repository.path().join("src/main.rs"), "fn main() {}\n").unwrap();
         std::fs::write(repository.path().join("target/generated.rs"), "generated\n").unwrap();
+        std::fs::write(repository.path().join("local-cache/state.json"), "{}\n").unwrap();
         std::fs::write(repository.path().join(".git/config"), "[core]\n").unwrap();
 
         assert_eq!(
