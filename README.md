@@ -130,6 +130,9 @@ You can also [build a static executable from source](docs/building-executable-lo
 <details>
 <summary><b>Docker</b></summary>
 
+> [!WARNING]
+> The Docker distribution is being retired. From October 1 through December 31, 2026, Docker images will be released only for bug fixes. No Docker images will be released after December 31, 2026. Migrate to [NPM / npx](docs/npm-installation.md), [Homebrew](docs/homebrew-installation.md), the [Windows installer](docs/windows-installation.md), or another installation option above.
+
 ```bash
 docker pull codescene/codescene-mcp
 ```
