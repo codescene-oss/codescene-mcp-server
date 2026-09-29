@@ -491,6 +491,11 @@ fn git_in(repo_dir: &Path, args: &[&str]) {
 // ---------------------------------------------------------------------------
 
 pub fn test_enriched_review_event() {
+    if is_docker() {
+        skip_if_docker("exact repository file counts include bind-mount artifacts");
+        return;
+    }
+
     let temp = create_temp_dir("cs_mcp_review_event_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
     exclude_analytics_config(&repo_dir);
@@ -555,6 +560,11 @@ pub fn test_enriched_review_event() {
 }
 
 pub fn test_repository_file_count_performance() {
+    if is_docker() {
+        skip_if_docker("repository file-count performance is covered by native backends");
+        return;
+    }
+
     let temp = create_temp_dir("cs_mcp_large_repo_event_").expect("temp");
     let sample_files = get_sample_files();
     let repo_dir = create_git_repo(temp.path(), &sample_files).expect("repo");
