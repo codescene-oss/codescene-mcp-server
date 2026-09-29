@@ -1,6 +1,9 @@
 # Installing CodeScene MCP Server via Docker
 
-Docker provides a self-contained way to run the CodeScene MCP Server without installing any dependencies. This is the recommended method for most users.
+> [!WARNING]
+> The Docker distribution is being retired. From October 1 through December 31, 2026, Docker images will be released only for bug fixes. No Docker images will be released after December 31, 2026. Migrate to [NPM / npx](npm-installation.md), [Homebrew](homebrew-installation.md), or the [Windows installer](windows-installation.md).
+
+Docker provides a self-contained way to run the CodeScene MCP Server without installing any dependencies. The instructions below remain available during the maintenance window for existing users.
 
 ## Prerequisites
 
