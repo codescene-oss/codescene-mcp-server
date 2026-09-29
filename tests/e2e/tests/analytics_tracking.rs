@@ -19,6 +19,8 @@ const TOOL_NAME: &str = "code_health_score";
 const TIMEOUT: Duration = Duration::from_secs(60);
 const UNREACHABLE_ANALYTICS_URL: &str = "https://192.0.2.1:1";
 const REPOSITORY_PROJECTS_PATH: &str = "/api/v2/mcp/repository-projects";
+const LARGE_REPOSITORY_FILE_COUNT: usize = 10_000;
+const LARGE_REPOSITORY_MAX_REPORTING_TIME: Duration = Duration::from_secs(5);
 
 // From analyze_change_set — triggers delta-analysis findings
 const CLEAN_ADDITION: &str = r#"
@@ -129,7 +131,7 @@ fn find_event_properties(payloads: &[serde_json::Value], event_type: &str) -> se
         .iter()
         .find(|p| p.get("event-type").and_then(|v| v.as_str()) == Some(event_type))
         .and_then(|p| p.get("event-properties").cloned())
-        .unwrap_or_else(|| panic!("Should find {event_type} event"))
+        .unwrap_or_else(|| panic!("Should find {event_type} event in {payloads:?}"))
 }
 
 fn assert_properties_are_nonempty(props: &serde_json::Value, keys: &[&str]) {
@@ -144,9 +146,12 @@ fn assert_properties_are_nonempty(props: &serde_json::Value, keys: &[&str]) {
     }
 }
 
-fn wait_for_analytics(server: &FakeHttpServer) {
+fn wait_for_event(server: &FakeHttpServer, event_type: &str) {
     let deadline = Instant::now() + Duration::from_secs(30);
-    while server.get_payloads().is_empty() && Instant::now() < deadline {
+    while !server.get_payloads().iter().any(|payload| {
+        payload.get("event-type").and_then(|value| value.as_str()) == Some(event_type)
+    }) && Instant::now() < deadline
+    {
         std::thread::sleep(Duration::from_millis(200));
     }
 }
@@ -170,7 +175,7 @@ fn score_with_tracking_server(
     let (command, env, repo_dir, server, tmp) = analytics_setup_with_tracking_server(extra);
     let (result, client) = start_client_and_score(&command, &env, &repo_dir);
     if !tracking_disabled(extra) {
-        wait_for_analytics(&server);
+        wait_for_event(&server, "mcp-code-health-score");
     }
     (result, server, tmp, client)
 }
@@ -298,8 +303,9 @@ pub fn test_agent_instruction_properties_reflect_repository_guidance() {
             std::fs::write(repo_dir.join("AGENTS.md"), contents).expect("write AGENTS.md");
         }
 
-        let (_result, payloads, _client) = run_tool_with_fake_server(
+        let (_result, payloads, _client, _elapsed) = run_tool_with_fake_server(
             &repo_dir,
+            "mcp-get-config",
             |client, _| {
                 let response = client
                     .call_tool("get_config", json!({}), TIMEOUT)
@@ -362,6 +368,25 @@ fn assert_score_property(props: &serde_json::Value, result: &str) {
     let _ = score_str;
 }
 
+fn create_many_repository_files(repo_dir: &Path) {
+    for directory_index in 0..LARGE_REPOSITORY_FILE_COUNT / 1_000 {
+        let directory = repo_dir.join("bulk").join(format!("{directory_index:02}"));
+        std::fs::create_dir_all(&directory).expect("create bulk file directory");
+        for file_index in 0..1_000 {
+            std::fs::write(directory.join(format!("file-{file_index}.txt")), b"test")
+                .expect("create bulk repository file");
+        }
+    }
+}
+
+fn exclude_analytics_config(repo_dir: &Path) {
+    std::fs::write(
+        repo_dir.join(".git/info/exclude"),
+        ".cs_config_analytics/\n",
+    )
+    .expect("exclude analytics test config");
+}
+
 // ---------------------------------------------------------------------------
 // SHA-256 hash helper (reproduces server's 16-char hex prefix)
 // ---------------------------------------------------------------------------
@@ -393,9 +418,10 @@ fn hash_ref(git_ref: &str) -> String {
 
 fn run_tool_with_fake_server<F>(
     repo_dir: &Path,
+    event_type: &str,
     tool_caller: F,
     extra_env: &[(&str, &str)],
-) -> (String, Vec<serde_json::Value>, MCPClient)
+) -> (String, Vec<serde_json::Value>, MCPClient, Duration)
 where
     F: FnOnce(&mut MCPClient, &Path) -> String,
 {
@@ -417,11 +443,13 @@ where
     assert!(client.start(), "Server should start");
     client.initialize().expect("Initialize should succeed");
 
+    let start = Instant::now();
     let result_text = tool_caller(&mut client, repo_dir);
-    wait_for_analytics(&server);
+    wait_for_event(&server, event_type);
+    let elapsed = start.elapsed();
 
     let payloads = server.get_payloads();
-    (result_text, payloads, client)
+    (result_text, payloads, client, elapsed)
 }
 
 fn assert_common_properties(props: &serde_json::Value) {
@@ -463,11 +491,18 @@ fn git_in(repo_dir: &Path, args: &[&str]) {
 // ---------------------------------------------------------------------------
 
 pub fn test_enriched_review_event() {
+    if is_docker() {
+        skip_if_docker("exact repository file counts include bind-mount artifacts");
+        return;
+    }
+
     let temp = create_temp_dir("cs_mcp_review_event_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
+    exclude_analytics_config(&repo_dir);
 
-    let (result, payloads, _client) = run_tool_with_fake_server(
+    let (result, payloads, _client, _elapsed) = run_tool_with_fake_server(
         &repo_dir,
+        "mcp-code-health-review",
         |client, rd| {
             let file = rd.join("src/services/order_processor.py");
             let resp = client
@@ -504,6 +539,9 @@ pub fn test_enriched_review_event() {
         .unwrap_or("");
     assert_eq!(content_hash, expected_hash, "content-hash mismatch");
 
+    assert_eq!(props["file-extension"], "py");
+    assert_eq!(props["repo-file-count"], get_sample_files().len());
+
     // score
     assert!(props.get("score").is_some(), "Should have score");
 
@@ -521,6 +559,36 @@ pub fn test_enriched_review_event() {
     );
 }
 
+pub fn test_repository_file_count_performance() {
+    if is_docker() {
+        skip_if_docker("repository file-count performance is covered by native backends");
+        return;
+    }
+
+    let temp = create_temp_dir("cs_mcp_large_repo_event_").expect("temp");
+    let sample_files = get_sample_files();
+    let repo_dir = create_git_repo(temp.path(), &sample_files).expect("repo");
+    create_many_repository_files(&repo_dir);
+    exclude_analytics_config(&repo_dir);
+
+    let (result, payloads, _client, elapsed) = run_tool_with_fake_server(
+        &repo_dir,
+        "mcp-code-health-score",
+        call_code_health_score,
+        &[],
+    );
+    assert_has_score(&result);
+    let props = find_event_properties(&payloads, "mcp-code-health-score");
+    assert_eq!(
+        props["repo-file-count"],
+        sample_files.len() + LARGE_REPOSITORY_FILE_COUNT
+    );
+    assert!(
+        elapsed < LARGE_REPOSITORY_MAX_REPORTING_TIME,
+        "Counting files in a large repository took too long: {elapsed:?}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Enriched pre-commit event test
 // ---------------------------------------------------------------------------
@@ -529,8 +597,9 @@ pub fn test_enriched_pre_commit_event() {
     let temp = create_temp_dir("cs_mcp_precommit_event_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
 
-    let (result, payloads, _client) = run_tool_with_fake_server(
+    let (result, payloads, _client, _elapsed) = run_tool_with_fake_server(
         &repo_dir,
+        "mcp-pre-commit-code-health-safeguard",
         |client, rd| {
             let file = rd.join("src/utils/calculator.py");
             let original = std::fs::read_to_string(&file).expect("read");
@@ -591,8 +660,9 @@ fn create_feature_branch(addition: &str) -> (PathBuf, TempDir) {
 }
 
 fn run_analyze_change_set(repo_dir: &Path) -> (String, Vec<serde_json::Value>, MCPClient) {
-    run_tool_with_fake_server(
+    let (result, payloads, client, _elapsed) = run_tool_with_fake_server(
         repo_dir,
+        "mcp-analyze-change-set",
         |client, rd| {
             let resp = client
                 .call_tool(
@@ -604,7 +674,8 @@ fn run_analyze_change_set(repo_dir: &Path) -> (String, Vec<serde_json::Value>, M
             extract_result_text(&resp)
         },
         &[],
-    )
+    );
+    (result, payloads, client)
 }
 
 // ---------------------------------------------------------------------------
@@ -657,8 +728,9 @@ pub fn test_enriched_pre_commit_event_with_findings() {
     let temp = create_temp_dir("cs_mcp_precommit_findings_").expect("temp");
     let repo_dir = create_git_repo(temp.path(), &get_sample_files()).expect("repo");
 
-    let (result, payloads, _client) = run_tool_with_fake_server(
+    let (result, payloads, _client, _elapsed) = run_tool_with_fake_server(
         &repo_dir,
+        "mcp-pre-commit-code-health-safeguard",
         |client, rd| {
             let file = rd.join("src/utils/calculator.py");
             let original = std::fs::read_to_string(&file).expect("read");

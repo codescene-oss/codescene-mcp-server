@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
@@ -128,10 +128,42 @@ pub fn hash_file_content(path: &Path) -> Option<String> {
 
 fn file_properties(file_path: &Path, content_hash: Option<&str>) -> Value {
     let mut props = json!({ "file-hash": hash_path(file_path) });
+    if let Some(extension) = file_extension(file_path) {
+        props["file-extension"] = json!(extension);
+    }
+    if let Some(file_count) = repository_file_count(file_path) {
+        props["repo-file-count"] = json!(file_count);
+    }
     if let Some(hash) = content_hash {
         props["content-hash"] = json!(hash);
     }
     props
+}
+
+fn file_extension(file_path: &Path) -> Option<String> {
+    file_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+}
+
+fn repository_file_count(file_path: &Path) -> Option<usize> {
+    let adapted_path = PathBuf::from(crate::docker::adapt_path_for_docker(file_path));
+    let repository_root = crate::cli::find_git_root(&adapted_path)?;
+    Some(
+        ignore::WalkBuilder::new(repository_root)
+            .hidden(false)
+            .git_global(false)
+            .filter_entry(|entry| entry.file_name() != ".git")
+            .build()
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_type()
+                    .is_some_and(|file_type| file_type.is_file())
+            })
+            .count(),
+    )
 }
 
 fn parse_json_dict(s: &str) -> Option<Value> {
@@ -247,6 +279,44 @@ mod tests {
         assert!(hash_file_content(Path::new("/missing/file")).is_none());
     }
 
+    #[test]
+    fn file_extension_is_lowercase_and_optional() {
+        assert_eq!(
+            file_extension(Path::new("/src/example.RS")),
+            Some("rs".to_string())
+        );
+        assert_eq!(file_extension(Path::new("/src/Makefile")), None);
+    }
+
+    #[test]
+    fn repository_file_count_honors_gitignore() {
+        let repository = tempfile::tempdir().unwrap();
+        std::fs::create_dir(repository.path().join(".git")).unwrap();
+        std::fs::create_dir(repository.path().join(".git/info")).unwrap();
+        std::fs::create_dir(repository.path().join("src")).unwrap();
+        std::fs::create_dir(repository.path().join("target")).unwrap();
+        std::fs::create_dir(repository.path().join("local-cache")).unwrap();
+        std::fs::write(repository.path().join(".gitignore"), "target/\n").unwrap();
+        std::fs::write(
+            repository.path().join(".git/info/exclude"),
+            "local-cache/\n",
+        )
+        .unwrap();
+        std::fs::write(repository.path().join("src/main.rs"), "fn main() {}\n").unwrap();
+        std::fs::write(repository.path().join("target/generated.rs"), "generated\n").unwrap();
+        std::fs::write(repository.path().join("local-cache/state.json"), "{}\n").unwrap();
+        std::fs::write(repository.path().join(".git/config"), "[core]\n").unwrap();
+
+        assert_eq!(
+            repository_file_count(&repository.path().join("src/main.rs")),
+            Some(2)
+        );
+        assert_eq!(
+            repository_file_count(Path::new("/not/a/repository/file.rs")),
+            None
+        );
+    }
+
     // ---- parse_json_dict ----
 
     #[test]
@@ -279,8 +349,9 @@ mod tests {
 
     #[test]
     fn score_properties_with_score() {
-        let props = score_properties(Path::new("/test.rs"), Some("content"), Some(8.5));
+        let props = score_properties(Path::new("/test.RS"), Some("content"), Some(8.5));
         assert!(props.get("file-hash").is_some());
+        assert_eq!(props["file-extension"], json!("rs"));
         assert_eq!(props["content-hash"], json!("content"));
         assert_eq!(props["score"], json!(8.5));
     }

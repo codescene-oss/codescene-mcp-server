@@ -48,6 +48,7 @@ rustls-pemfile = "2.2.0"
 
 # File system paths
 dirs = "6"
+ignore = "0.4"
 
 # UUID generation (instance ID)
 uuid = { version = "1", features = ["v4"] }
