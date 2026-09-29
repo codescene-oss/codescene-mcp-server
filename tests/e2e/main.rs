@@ -922,6 +922,11 @@ fn test_analytics_enriched_review_event() {
 }
 
 #[test]
+fn test_analytics_repository_file_count_performance() {
+    tests::analytics_tracking::test_repository_file_count_performance();
+}
+
+#[test]
 fn test_analytics_enriched_pre_commit_event() {
     tests::analytics_tracking::test_enriched_pre_commit_event();
 }
