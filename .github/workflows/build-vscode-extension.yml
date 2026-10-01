@@ -161,6 +161,9 @@ jobs:
       (github.event_name == 'workflow_dispatch' && inputs.skip_publish != true)
     needs: build-vsix
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Download all VSIX artifacts
         uses: actions/download-artifact@v7
@@ -172,17 +175,21 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_PUBLISHING_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_PUBLISHING_TENANT_ID }}
+          allow-no-subscriptions: true
 
       - name: Publish to VS Code Marketplace
-        if: env.VSCODE_MARKETPLACE_PUBLISHING_TOKEN != ''
-        env:
-          VSCODE_MARKETPLACE_PUBLISHING_TOKEN: ${{ secrets.VSCODE_MARKETPLACE_PUBLISHING_TOKEN }}
         run: |
-          npm install -g @vscode/vsce
+          npm install -g @vscode/vsce@4.0.0
           for file in ./vsix-artifacts/*.vsix; do
             echo "Publishing ${file} to VS Code Marketplace"
-            if output=$(vsce publish --pat "$VSCODE_MARKETPLACE_PUBLISHING_TOKEN" --packagePath "${file}" 2>&1); then
+            if output=$(vsce publish --azure-credential --packagePath "${file}" 2>&1); then
               echo "$output"
             elif [[ "$output" == *"already exists"* ]]; then
               echo "$output"
