@@ -180,8 +180,8 @@ jobs:
       - name: Azure login (OIDC)
         uses: azure/login@v3
         with:
-          client-id: ${{ secrets.AZURE_PUBLISHING_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_PUBLISHING_TENANT_ID }}
+          client-id: ${{ secrets.AZURE_MARKETPLACE_PUBLISHING_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_MARKETPLACE_PUBLISHING_TENANT_ID }}
           allow-no-subscriptions: true
 
       - name: Publish to VS Code Marketplace
