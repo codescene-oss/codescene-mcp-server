@@ -15,6 +15,14 @@ on:
         type: boolean
         default: true
         description: Publish to Open VSX
+      dry_run:
+        type: boolean
+        default: false
+        description: Verify release assets and Marketplace publish rights without publishing
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   publish:
@@ -57,17 +65,28 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+
+      - name: Azure login (OIDC)
+        if: inputs.publish_vscode_marketplace
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_PUBLISHING_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_PUBLISHING_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Verify VS Code Marketplace publish rights
+        if: inputs.publish_vscode_marketplace
+        run: |
+          npm install -g @vscode/vsce@4.0.0
+          vsce verify-pat --azure-credential codescene
 
       - name: Publish to VS Code Marketplace
-        if: inputs.publish_vscode_marketplace && env.VSCODE_MARKETPLACE_PUBLISHING_TOKEN != ''
-        env:
-          VSCODE_MARKETPLACE_PUBLISHING_TOKEN: ${{ secrets.VSCODE_MARKETPLACE_PUBLISHING_TOKEN }}
+        if: inputs.publish_vscode_marketplace && !inputs.dry_run
         run: |
-          npm install -g @vscode/vsce
           for file in ./vsix-artifacts/*.vsix; do
             echo "Publishing ${file} to VS Code Marketplace"
-            if output=$(vsce publish --pat "$VSCODE_MARKETPLACE_PUBLISHING_TOKEN" --packagePath "${file}" 2>&1); then
+            if output=$(vsce publish --azure-credential --packagePath "${file}" 2>&1); then
               echo "$output"
             elif [[ "$output" == *"already exists"* ]]; then
               echo "$output"
@@ -79,7 +98,7 @@ jobs:
           done
 
       - name: Publish to Open VSX
-        if: inputs.publish_open_vsx && env.OPEN_VSX_PUBLISHING_TOKEN != ''
+        if: inputs.publish_open_vsx && !inputs.dry_run && env.OPEN_VSX_PUBLISHING_TOKEN != ''
         env:
           OPEN_VSX_PUBLISHING_TOKEN: ${{ secrets.OPEN_VSX_PUBLISHING_TOKEN }}
         run: |
