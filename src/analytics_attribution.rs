@@ -149,7 +149,7 @@ mod tests {
         ));
         assert!(matches!(
             AnalyticsContext::Path(PathBuf::from("/workspace/src/main.rs")),
-            AnalyticsContext::Path(path) if path == PathBuf::from("/workspace/src/main.rs")
+            AnalyticsContext::Path(path) if path == std::path::Path::new("/workspace/src/main.rs")
         ));
     }
 

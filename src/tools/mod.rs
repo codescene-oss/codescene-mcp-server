@@ -88,7 +88,7 @@ pub struct ChangeSetParam {
     pub git_repository_path: String,
 }
 
-/// Parameters for selecting/listing projects.
+// Parameters for selecting/listing projects.
 // No additional params needed — the tool lists all projects.
 
 /// Parameters for project-scoped tools.

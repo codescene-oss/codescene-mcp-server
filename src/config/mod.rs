@@ -203,7 +203,7 @@ pub fn save(data: &ConfigData) -> Result<(), ConfigError> {
     std::fs::write(temp.path(), &content)?;
     restrict_path_permissions(temp.path());
     temp.persist(&path)
-        .map_err(|e| ConfigError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| ConfigError::Io(std::io::Error::other(e)))?;
     Ok(())
 }
 
@@ -241,15 +241,15 @@ pub fn snapshot_client_env_vars() {
 pub fn is_client_env_var(env_var: &str) -> bool {
     #[cfg(not(test))]
     {
-        return CLIENT_ENV_VARS.get().map_or(false, |s| s.contains(env_var));
+        CLIENT_ENV_VARS.get().is_some_and(|s| s.contains(env_var))
     }
 
     #[cfg(test)]
     {
-        return CLIENT_ENV_VARS
+        CLIENT_ENV_VARS
             .get()
             .and_then(|s| s.lock().ok().map(|g| g.contains(env_var)))
-            .unwrap_or(false);
+            .unwrap_or(false)
     }
 }
 

@@ -922,7 +922,7 @@ mod tests {
         };
         let req = send_event_and_capture_request(None, te).await;
 
-        assert!(req.headers.get("Authorization").is_none());
+        assert!(!req.headers.contains_key("Authorization"));
         assert_eq!(req.headers.get("Content-Type").unwrap(), "application/json");
         assert_standard_headers(&req);
     }

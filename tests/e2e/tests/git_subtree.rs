@@ -9,6 +9,13 @@ use std::process::Command;
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SUBTREE_PREFIX: &str = "lib/external";
 
+type SubtreeSetup = (
+    Vec<String>,
+    Vec<(String, String)>,
+    std::path::PathBuf,
+    tempfile::TempDir,
+);
+
 fn git(cwd: &Path, args: &[&str]) {
     let output = Command::new("git")
         .args(args)
@@ -73,12 +80,7 @@ class Config:
     dir
 }
 
-fn subtree_setup() -> Option<(
-    Vec<String>,
-    Vec<(String, String)>,
-    std::path::PathBuf,
-    tempfile::TempDir,
-)> {
+fn subtree_setup() -> Option<SubtreeSetup> {
     // Check git subtree availability
     let check = Command::new("git").args(["subtree", "--help"]).output();
     if check.is_err() || !check.unwrap().status.success() {

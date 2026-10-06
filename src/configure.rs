@@ -603,7 +603,7 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert!(parsed.get("available_tools").is_some());
         let tools = parsed["available_tools"].as_array().unwrap();
-        assert!(tools.len() > 0);
+        assert!(!tools.is_empty());
         // Should include configurable tools
         assert!(tools
             .iter()

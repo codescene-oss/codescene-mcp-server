@@ -45,7 +45,7 @@ async fn query_api_url_with_auth(
     let resp = client
         .send(request)
         .await
-        .map_err(|e| ApiError::Transport(e))?;
+        .map_err(ApiError::Transport)?;
 
     parse_api_response(resp)
 }
@@ -549,7 +549,7 @@ mod tests {
     #[test]
     fn build_api_headers_without_token_omits_authorization() {
         let headers = build_api_headers("");
-        assert!(headers.get("Authorization").is_none());
+        assert!(!headers.contains_key("Authorization"));
         assert_eq!(headers.get("Accept").unwrap(), "application/json");
         assert!(headers
             .get("User-Agent")

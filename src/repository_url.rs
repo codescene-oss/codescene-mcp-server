@@ -166,7 +166,7 @@ fn contains_invalid_percent_escape(value: &[u8]) -> bool {
 }
 
 impl Provider {
-    fn normalize_id<'a>(self, id: &'a str) -> &'a str {
+    fn normalize_id(self, id: &str) -> &str {
         match self {
             Self::Azure | Self::Bitbucket | Self::GitHub | Self::GitLab | Self::Other => {
                 id.strip_suffix(".git").unwrap_or(id)
