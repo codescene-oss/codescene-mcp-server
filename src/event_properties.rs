@@ -545,7 +545,7 @@ mod tests {
 
     #[test]
     fn categories_from_entries_deduplicates_and_sorts() {
-        let entries = vec![
+        let entries = [
             json!({"category": "Complex Method"}),
             json!({"category": "Large Method"}),
             json!({"category": "Complex Method"}),

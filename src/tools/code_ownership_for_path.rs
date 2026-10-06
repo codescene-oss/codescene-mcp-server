@@ -53,7 +53,7 @@ pub(crate) async fn handle(
                 ContextualErrorEvent::for_project(e.kind(), "code-ownership", params.project_id),
                 &e,
             );
-            Ok(tool_error(&format!("Error: {e}")))
+            Ok(tool_error(format!("Error: {e}")))
         }
     }
 }

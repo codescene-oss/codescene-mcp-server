@@ -54,7 +54,7 @@ pub(crate) async fn handle(
                 "result": "write-failed",
             }),
         );
-        return Ok(tool_error(&format!(
+        return Ok(tool_error(format!(
             "Failed to write some skills:\n{}",
             errors.join("\n")
         )));

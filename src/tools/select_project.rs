@@ -142,7 +142,7 @@ mod tests {
         std::env::remove_var("CS_DEFAULT_PROJECT_ID");
         let http = make_api_mock(HttpResponse::ok(r#"[{"id":99,"name":"TestProject"}]"#));
         let result = run_select_project(&http, None).await.unwrap();
-        assert!(result["projects"].as_array().unwrap().len() > 0);
+        assert!(!result["projects"].as_array().unwrap().is_empty());
         assert_eq!(result["projects"][0]["name"], "TestProject");
     }
 

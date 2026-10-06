@@ -48,9 +48,7 @@ fn normalized_name(name: &Option<String>) -> Option<&str> {
 }
 
 fn pat_block_response(server: &CodeSceneServer) -> Option<CallToolResult> {
-    if auth::configured_credential().is_none() {
-        return None;
-    }
+    auth::configured_credential()?;
     tracing::info!("skipping switch_account because CS_ACCESS_TOKEN is configured");
     server.track(
         "auth-switch-account",

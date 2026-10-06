@@ -15,6 +15,8 @@ pub struct CapturedRequest {
     pub body: String,
 }
 
+type RequestHandler = Arc<dyn Fn(&CapturedRequest) -> (u16, String) + Send + Sync>;
+
 pub struct FakeHttpServer {
     port: u16,
     captured_requests: Arc<Mutex<Vec<CapturedRequest>>>,
@@ -35,8 +37,7 @@ impl FakeHttpServer {
 
         let reqs = Arc::clone(&captured_requests);
         let stop = Arc::clone(&shutdown);
-        let handler: Arc<dyn Fn(&CapturedRequest) -> (u16, String) + Send + Sync> =
-            Arc::new(handler);
+        let handler: RequestHandler = Arc::new(handler);
 
         thread::spawn(move || accept_loop(&listener, &reqs, &stop, &handler));
 
@@ -106,7 +107,7 @@ fn accept_loop(
     listener: &TcpListener,
     captured: &Arc<Mutex<Vec<CapturedRequest>>>,
     shutdown: &Arc<Mutex<bool>>,
-    handler: &Arc<dyn Fn(&CapturedRequest) -> (u16, String) + Send + Sync>,
+    handler: &RequestHandler,
 ) {
     while !is_shutdown(shutdown) {
         match try_accept(listener) {
@@ -140,7 +141,7 @@ fn try_accept(listener: &TcpListener) -> AcceptResult {
 fn handle_connection(
     stream: &mut TcpStream,
     captured: &Arc<Mutex<Vec<CapturedRequest>>>,
-    handler: &Arc<dyn Fn(&CapturedRequest) -> (u16, String) + Send + Sync>,
+    handler: &RequestHandler,
 ) {
     let Some(request) = parse_http_request(stream) else {
         return;
@@ -156,7 +157,7 @@ fn parse_http_request(stream: &mut TcpStream) -> Option<CapturedRequest> {
     let mut request_line = String::new();
     reader.read_line(&mut request_line).ok()?;
 
-    let parts: Vec<&str> = request_line.trim().split_whitespace().collect();
+    let parts: Vec<&str> = request_line.split_whitespace().collect();
     if parts.len() < 2 {
         return None;
     }

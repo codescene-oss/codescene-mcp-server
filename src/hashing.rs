@@ -12,7 +12,7 @@ pub fn truncated_sha256_bytes(input: &[u8]) -> String {
 }
 
 fn hex_encode_truncated(bytes: &[u8], max_hex_chars: usize) -> String {
-    let byte_count = (max_hex_chars + 1) / 2;
+    let byte_count = max_hex_chars.div_ceil(2);
     let mut out = String::with_capacity(max_hex_chars);
     for &b in bytes.iter().take(byte_count) {
         use std::fmt::Write;

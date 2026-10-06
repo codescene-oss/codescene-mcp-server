@@ -245,12 +245,10 @@ fn api_url_label(credential: Option<&AuthCredential>) -> String {
 /// check.  Falls back to a non-existent path which still triggers the
 /// license validation before the CLI reports "file not found".
 fn find_probe_file(repo_path: &Path) -> String {
-    for entry in repo_path.read_dir().into_iter().flatten() {
-        if let Ok(e) = entry {
-            let path = e.path();
-            if path.is_file() {
-                return path.to_string_lossy().to_string();
-            }
+    for entry in repo_path.read_dir().into_iter().flatten().flatten() {
+        let path = entry.path();
+        if path.is_file() {
+            return path.to_string_lossy().to_string();
         }
     }
     repo_path.join("__probe__.py").to_string_lossy().to_string()

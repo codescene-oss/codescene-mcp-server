@@ -73,7 +73,7 @@ pub(crate) async fn handle(
                 },
                 &e,
             );
-            Ok(tool_error(&format!("Error: {e}")))
+            Ok(tool_error(format!("Error: {e}")))
         }
     }
 }

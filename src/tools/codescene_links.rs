@@ -1,11 +1,11 @@
-/// Constructs user-facing CodeScene URLs for technical debt pages.
-///
-/// On-prem and cloud use different path structures:
-///   On-prem: {web_root}/{project_id}/analyses/{analysis_id}/...
-///   Cloud:   https://codescene.io/projects/{project_id}/jobs/{analysis_id}/results/...
-///
-/// The `web_root` parameter is `None` for cloud, or `Some("https://host")` for on-prem.
-/// Callers obtain it from `auth::resolve_web_root(credential)`.
+//! Constructs user-facing CodeScene URLs for technical debt pages.
+//!
+//! On-prem and cloud use different path structures:
+//!   On-prem: {web_root}/{project_id}/analyses/{analysis_id}/...
+//!   Cloud:   https://codescene.io/projects/{project_id}/jobs/{analysis_id}/results/...
+//!
+//! The `web_root` parameter is `None` for cloud, or `Some("https://host")` for on-prem.
+//! Callers obtain it from `auth::resolve_web_root(credential)`.
 
 /// Returns the base path for an analysis page (without trailing slash).
 ///

@@ -25,7 +25,7 @@ fn spawn_line_reader<R: std::io::Read + Send + 'static>(
     mut on_line: impl FnMut(String) + Send + 'static,
 ) {
     thread::spawn(move || {
-        for line in BufReader::new(stream).lines().flatten() {
+        for line in BufReader::new(stream).lines().map_while(Result::ok) {
             if !line.is_empty() {
                 on_line(line);
             }

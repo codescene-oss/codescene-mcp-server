@@ -54,7 +54,7 @@ fn api_error_result(
     error: crate::errors::ApiError,
 ) -> CallToolResult {
     server.track_api_err("show-mcp-usage-overview", &error);
-    tool_error(&format!("Error fetching MCP usage {source}: {error}"))
+    tool_error(format!("Error fetching MCP usage {source}: {error}"))
 }
 
 fn remove_user_identities(value: &mut Value) {
@@ -175,15 +175,19 @@ fn string_array(value: &Value) -> impl Iterator<Item = &str> {
 }
 
 fn formatted_average(total: f64, count: usize) -> String {
-    (count > 0)
-        .then(|| format!("{:.2}", total / count as f64))
-        .unwrap_or_else(|| "-".to_string())
+    if count > 0 {
+        format!("{:.2}", total / count as f64)
+    } else {
+        "-".to_string()
+    }
 }
 
 fn formatted_percent(part: usize, total: usize) -> String {
-    (total > 0)
-        .then(|| format!("{:.0}%", part as f64 / total as f64 * 100.0))
-        .unwrap_or_else(|| "-".to_string())
+    if total > 0 {
+        format!("{:.0}%", part as f64 / total as f64 * 100.0)
+    } else {
+        "-".to_string()
+    }
 }
 
 fn markdown_count_table(value: &Value, heading: &str) -> String {

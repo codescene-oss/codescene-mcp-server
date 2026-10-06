@@ -580,7 +580,7 @@ pub fn docker_ca_bundle(ca_cert_path: &Path, repo_dir: &Path) -> String {
         let dest = repo_dir.join("ca-bundle.pem");
         std::fs::copy(ca_cert_path, &dest)
             .expect("failed to copy CA cert into repo_dir for Docker");
-        format!("/mount/ca-bundle.pem")
+        "/mount/ca-bundle.pem".to_string()
     } else {
         ca_cert_path.to_string_lossy().to_string()
     }

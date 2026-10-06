@@ -22,7 +22,7 @@ pub(crate) async fn handle(
         Some(s) => s,
         None => {
             server.track("download-skill", json!({ "result": "unknown-skill" }));
-            return Ok(tool_error(&format!(
+            return Ok(tool_error(format!(
                 "Unknown skill: '{}'. Use list_skills to see available skills.",
                 params.skill_name
             )));
@@ -35,7 +35,7 @@ pub(crate) async fn handle(
 
     if skill_file.exists() && !params.overwrite {
         server.track("download-skill", json!({ "result": "already-exists" }));
-        return Ok(tool_error(&format!(
+        return Ok(tool_error(format!(
             "Skill '{}' already exists at {}. Set overwrite=true to replace it.",
             skill.name,
             skill_file.display()
@@ -47,7 +47,7 @@ pub(crate) async fn handle(
             "download-skill",
             json!({ "result": "create-directory-failed" }),
         );
-        return Ok(tool_error(&format!(
+        return Ok(tool_error(format!(
             "Failed to create directory {}: {e}",
             skill_dir.display()
         )));
@@ -55,7 +55,7 @@ pub(crate) async fn handle(
 
     if let Err(e) = fs::write(&skill_file, skill.content) {
         server.track("download-skill", json!({ "result": "write-failed" }));
-        return Ok(tool_error(&format!(
+        return Ok(tool_error(format!(
             "Failed to write {}: {e}",
             skill_file.display()
         )));

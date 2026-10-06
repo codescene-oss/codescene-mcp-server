@@ -38,8 +38,8 @@ const SSL_TRUSTSTORE_PASSWORD: &str = "changeit";
 /// 3. Extracted from embedded zip to cache directory
 pub fn resolve_cli_path() -> Result<PathBuf, CliError> {
     resolve_from_env_override()
-        .or_else(|| resolve_from_docker())
-        .unwrap_or_else(|| extract_embedded_cli())
+        .or_else(resolve_from_docker)
+        .unwrap_or_else(extract_embedded_cli)
 }
 
 fn resolve_from_env_override() -> Option<Result<PathBuf, CliError>> {
@@ -59,7 +59,7 @@ fn resolve_from_docker() -> Option<Result<PathBuf, CliError>> {
         return None;
     }
     let p = PathBuf::from(DOCKER_CLI_PATH);
-    p.exists().then(|| Ok(p))
+    p.exists().then_some(Ok(p))
 }
 
 pub async fn run_cli(args: &[&str], working_dir: Option<&Path>) -> Result<String, CliError> {

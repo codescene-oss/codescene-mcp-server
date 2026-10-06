@@ -24,11 +24,11 @@ test-all:
 
 .PHONY: lint
 lint:
-	cargo clippy -- -D warnings
+	cargo clippy --all-targets -- -D warnings
 
 .PHONY: lint-fix
 lint-fix:
-	cargo clippy --fix --allow-dirty
+	cargo clippy --fix --all-targets --allow-dirty
 
 .PHONY: format
 format:

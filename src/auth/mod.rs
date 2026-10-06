@@ -121,7 +121,7 @@ fn api_base_from_optional_url(
         return Ok("https://api.codescene.io".to_string());
     };
     crate::config::require_https(label, url)
-        .map_err(|e| crate::errors::ApiError::Transport(e.into()))?;
+        .map_err(crate::errors::ApiError::Transport)?;
     Ok(normalize(url))
 }
 

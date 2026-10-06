@@ -1,3 +1,6 @@
+// Tests serialize process-wide environment mutations across async calls.
+#![cfg_attr(test, allow(clippy::await_holding_lock))]
+
 mod api_client;
 mod agent_instructions;
 mod analytics_attribution;
@@ -300,13 +303,12 @@ impl CodeSceneServer {
         tool: &str,
         project_id: i64,
     ) -> Result<AuthCredential, CallToolResult> {
-        let credential = self.resolve_auth_credential().await.map_err(|result| {
+        let credential = self.resolve_auth_credential().await.inspect_err(|_| {
             self.track_error_with_context(ContextualErrorEvent::for_project(
                 "authentication_unavailable",
                 tool,
                 project_id,
             ));
-            result
         })?;
         if self.is_standalone {
             self.track_error_with_context(ContextualErrorEvent::for_project(

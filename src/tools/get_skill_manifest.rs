@@ -23,7 +23,7 @@ pub(crate) async fn handle(
         }
         None => {
             server.track("get-skill-manifest", json!({ "result": "unknown-skill" }));
-            Ok(tool_error(&format!(
+            Ok(tool_error(format!(
                 "Unknown skill: '{}'. Use list_skills to see available skills.",
                 params.skill_name
             )))

@@ -19,6 +19,8 @@ pub struct CapturedRequest {
     pub body: String,
 }
 
+type RequestHandler = Arc<dyn Fn(&CapturedRequest) -> (u16, String) + Send + Sync>;
+
 /// Result of generating a CA and server certificate pair.
 pub struct GeneratedCerts {
     pub ca_cert_path: PathBuf,
@@ -65,13 +67,12 @@ impl FakeHttpsServer {
         let port = listener.local_addr().unwrap().port();
         listener.set_nonblocking(true).unwrap();
 
-        let acceptor = Arc::new(rustls::ServerConfig::from(tls_config));
+        let acceptor = Arc::new(tls_config);
         let shutdown = Arc::new(Mutex::new(false));
         let captured_requests: Arc<Mutex<Vec<CapturedRequest>>> = Arc::new(Mutex::new(Vec::new()));
         let stop = Arc::clone(&shutdown);
         let reqs = Arc::clone(&captured_requests);
-        let handler: Arc<dyn Fn(&CapturedRequest) -> (u16, String) + Send + Sync> =
-            Arc::new(handler);
+        let handler: RequestHandler = Arc::new(handler);
 
         thread::spawn(move || {
             serve_loop(
@@ -184,7 +185,7 @@ struct ServerState {
     tls_config: Arc<rustls::ServerConfig>,
     shutdown: Arc<Mutex<bool>>,
     captured: Arc<Mutex<Vec<CapturedRequest>>>,
-    handler: Arc<dyn Fn(&CapturedRequest) -> (u16, String) + Send + Sync>,
+    handler: RequestHandler,
 }
 
 fn serve_loop(listener: TcpListener, state: ServerState) {
@@ -208,7 +209,7 @@ fn handle_tls_connection(
     tcp: std::net::TcpStream,
     server_conn: rustls::ServerConnection,
     captured: &Arc<Mutex<Vec<CapturedRequest>>>,
-    handler: &Arc<dyn Fn(&CapturedRequest) -> (u16, String) + Send + Sync>,
+    handler: &RequestHandler,
 ) {
     tcp.set_nonblocking(false).ok();
     let mut tls = rustls::StreamOwned::new(server_conn, tcp);
@@ -243,7 +244,7 @@ fn parse_request(stream: &mut impl Read) -> Option<CapturedRequest> {
 fn parse_request_line(reader: &mut impl BufRead) -> Option<(String, String)> {
     let mut line = String::new();
     reader.read_line(&mut line).ok()?;
-    let parts: Vec<&str> = line.trim().split_whitespace().collect();
+    let parts: Vec<&str> = line.split_whitespace().collect();
     if parts.len() < 2 {
         return None;
     }

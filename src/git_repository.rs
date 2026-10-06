@@ -239,15 +239,15 @@ fn expanded_remote_urls<'a>(
     let mut urls = BTreeSet::new();
     for remote in remotes {
         for url in &remote.urls {
-            urls.insert(apply_rewrite(url, &rewrites));
+            urls.insert(apply_rewrite(url, rewrites));
         }
         if remote.push_urls.is_empty() {
             for url in &remote.urls {
-                urls.insert(apply_rewrite(url, &push_rewrites));
+                urls.insert(apply_rewrite(url, push_rewrites));
             }
         } else {
             for url in &remote.push_urls {
-                urls.insert(apply_rewrite(url, &rewrites));
+                urls.insert(apply_rewrite(url, rewrites));
             }
         }
     }
