@@ -11,6 +11,16 @@ pub struct ConfigOption {
 
 pub const OPTIONS: &[ConfigOption] = &[
     ConfigOption {
+        key: "debug",
+        env_var: "CS_DEBUG",
+        description: "Log project matching and telemetry diagnostics locally (default: false). Includes repository IDs, project IDs, telemetry event types, HTTP statuses, and failure reasons; never credentials, raw URLs, or telemetry payloads.",
+        sensitive: false,
+        hidden: false,
+        api_only: false,
+        aliases: &[],
+        docs_url: "https://codescene.io/docs/integrations/mcp.html#configuration",
+    },
+    ConfigOption {
         key: "access_token",
         env_var: "CS_ACCESS_TOKEN",
         description: "CodeScene access token (PAT or standalone license)",
@@ -208,6 +218,15 @@ pub fn is_valid_key(key: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn debug_option_is_visible_and_not_sensitive() {
+        let option = find_option("debug").unwrap();
+        assert_eq!(option.env_var, "CS_DEBUG");
+        assert_eq!(find_option("CS_DEBUG").unwrap().key, "debug");
+        assert!(!option.hidden);
+        assert!(!option.sensitive);
+    }
 
     #[test]
     fn find_option_by_key() {

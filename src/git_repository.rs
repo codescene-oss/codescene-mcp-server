@@ -186,7 +186,7 @@ fn read_remote_urls(repository_root: &Path) -> Result<EffectiveRemoteUrls, Remot
     let config_path = git_config_path(repository_root).ok_or(RemoteUrlError::GitCommandFailed)?;
     let config =
         std::fs::read_to_string(config_path).map_err(|_| RemoteUrlError::GitCommandFailed)?;
-    let urls = parse_remote_config(&config);
+    let urls = parse_remote_config(&config)?;
     if urls.is_empty() {
         Ok(EffectiveRemoteUrls::NoRemotes)
     } else {
@@ -212,23 +212,62 @@ fn git_config_path(repository_root: &Path) -> Option<PathBuf> {
     gitdir.parent()?.parent().map(|path| path.join("config"))
 }
 
-fn parse_remote_config(config: &str) -> Vec<String> {
-    let mut section = ConfigSection::Other;
+fn parse_remote_config(config: &str) -> Result<Vec<String>, RemoteUrlError> {
+    let config = gix_config::File::from_bytes_no_includes(
+        config.as_bytes(),
+        gix_config::file::Metadata::default(),
+        Default::default(),
+    )
+    .map_err(|_| RemoteUrlError::GitCommandFailed)?;
     let mut remotes = std::collections::BTreeMap::<String, RemoteConfig>::new();
     let mut rewrites = Vec::new();
     let mut push_rewrites = Vec::new();
 
-    for line in config.lines() {
-        parse_config_line(
-            line,
-            &mut section,
-            &mut remotes,
-            &mut rewrites,
-            &mut push_rewrites,
-        );
+    for section in config.sections() {
+        let header = section.header();
+        let Some(subsection) = header.subsection_name() else {
+            continue;
+        };
+        let name = std::str::from_utf8(subsection).map_err(|_| RemoteUrlError::GitCommandFailed)?;
+        if header.name().eq_ignore_ascii_case(b"remote") {
+            let remote = remotes.entry(name.to_string()).or_default();
+            remote.urls.extend(config_values(&section, "url")?);
+            remote.push_urls.extend(config_values(&section, "pushurl")?);
+        } else if header.name().eq_ignore_ascii_case(b"url") {
+            rewrites.extend(
+                config_values(&section, "insteadof")?
+                    .into_iter()
+                    .map(|prefix| (prefix, name.to_string())),
+            );
+            push_rewrites.extend(
+                config_values(&section, "pushinsteadof")?
+                    .into_iter()
+                    .map(|prefix| (prefix, name.to_string())),
+            );
+        }
     }
 
-    expanded_remote_urls(remotes.values(), &rewrites, &push_rewrites)
+    Ok(expanded_remote_urls(
+        remotes.values(),
+        &rewrites,
+        &push_rewrites,
+    ))
+}
+
+fn config_values(
+    section: &gix_config::file::SectionRef<'_>,
+    key: &str,
+) -> Result<Vec<String>, RemoteUrlError> {
+    section
+        .values(key)
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            std::str::from_utf8(&value)
+                .map(str::to_string)
+                .map_err(|_| RemoteUrlError::GitCommandFailed)
+        })
+        .collect()
 }
 
 fn expanded_remote_urls<'a>(
@@ -254,87 +293,10 @@ fn expanded_remote_urls<'a>(
     urls.into_iter().collect()
 }
 
-fn parse_config_line(
-    line: &str,
-    section: &mut ConfigSection,
-    remotes: &mut std::collections::BTreeMap<String, RemoteConfig>,
-    rewrites: &mut Vec<(String, String)>,
-    push_rewrites: &mut Vec<(String, String)>,
-) {
-    let line = line.trim();
-    if line.starts_with('[') {
-        *section = parse_config_section(line);
-        return;
-    }
-    let Some((key, value)) = line.split_once('=') else {
-        return;
-    };
-    let value = value.trim();
-    if value.is_empty() {
-        return;
-    }
-    match section {
-        ConfigSection::Remote(name) => add_remote_value(remotes, name, key.trim(), value),
-        ConfigSection::Url(base) => add_rewrite(rewrites, push_rewrites, base, key, value),
-        ConfigSection::Other => {}
-    }
-}
-
-fn add_remote_value(
-    remotes: &mut std::collections::BTreeMap<String, RemoteConfig>,
-    name: &str,
-    key: &str,
-    value: &str,
-) {
-    let remote = remotes.entry(name.to_string()).or_default();
-    match key {
-        "url" => remote.urls.push(value.to_string()),
-        "pushurl" => remote.push_urls.push(value.to_string()),
-        _ => {}
-    }
-}
-
-fn add_rewrite(
-    rewrites: &mut Vec<(String, String)>,
-    push_rewrites: &mut Vec<(String, String)>,
-    base: &str,
-    key: &str,
-    value: &str,
-) {
-    let rewrite = (value.to_string(), base.to_string());
-    match key.trim().to_ascii_lowercase().as_str() {
-        "insteadof" => rewrites.push(rewrite),
-        "pushinsteadof" => push_rewrites.push(rewrite),
-        _ => {}
-    }
-}
-
 #[derive(Default)]
 struct RemoteConfig {
     urls: Vec<String>,
     push_urls: Vec<String>,
-}
-
-enum ConfigSection {
-    Remote(String),
-    Url(String),
-    Other,
-}
-
-fn parse_config_section(line: &str) -> ConfigSection {
-    let Some((kind, value)) = line
-        .strip_prefix('[')
-        .and_then(|line| line.strip_suffix(']'))
-        .and_then(|line| line.split_once(' '))
-    else {
-        return ConfigSection::Other;
-    };
-    let value = value.trim().trim_matches('"').to_string();
-    match kind.to_ascii_lowercase().as_str() {
-        "remote" => ConfigSection::Remote(value),
-        "url" => ConfigSection::Url(value),
-        _ => ConfigSection::Other,
-    }
 }
 
 fn apply_rewrite(url: &str, rewrites: &[(String, String)]) -> String {
@@ -855,10 +817,9 @@ mod tests {
     }
 
     #[test]
-    fn ignores_malformed_empty_and_unknown_config_entries() {
+    fn ignores_empty_and_unknown_config_entries() {
         let urls = parse_remote_config(
-            "malformed\n\
-             [unknown \"section\"]\n\
+            "[unknown \"section\"]\n\
              value = ignored\n\
              [remote \"origin\"]\n\
              url =\n\
@@ -866,9 +827,50 @@ mod tests {
              url = https://example.com/Acme/Web.git\n\
              [url \"https://mirror.example.com/\"]\n\
              unknown = https://example.com/\n",
-        );
+        )
+        .unwrap();
 
         assert_eq!(urls, ["https://example.com/Acme/Web.git"]);
+    }
+
+    #[test]
+    fn rejects_malformed_config_without_exposing_its_contents() {
+        assert_eq!(
+            parse_remote_config("[remote \"origin\"]\nurl = \"secret\n"),
+            Err(RemoteUrlError::GitCommandFailed)
+        );
+    }
+
+    #[tokio::test]
+    async fn parses_valid_git_syntax_like_git() {
+        let repository = init_repository();
+        std::fs::write(
+            repository.path().join(".git/config"),
+            concat!(
+                "[REMOTE \"origin\"] # section comment\r\n",
+                "URL = \"https://example.com/Acme/Web.git\" # value comment\r\n",
+                "PushURL = \"ssh://git@push.example.com/Acme/Web.git\" ; comment\r\n",
+                "[remote.upstream]\n",
+                "url = \"https://example.org/Team/\"\\\n",
+                "\"Service.git\"\n",
+            ),
+        )
+        .unwrap();
+
+        let expected = effective_remote_urls(&ProductionGitRunner, repository.path())
+            .await
+            .unwrap();
+        assert_eq!(read_remote_urls(repository.path()).unwrap(), expected);
+        assert_eq!(
+            discover_repository_ids(&ProductionGitRunner, Some(repository.path()))
+                .await
+                .unwrap(),
+            [
+                "example.com/acme/web",
+                "example.org/team/service",
+                "push.example.com/acme/web",
+            ]
+        );
     }
 
     #[test]

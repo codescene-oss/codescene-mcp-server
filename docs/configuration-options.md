@@ -40,6 +40,40 @@ Environment variables set by your MCP client always take precedence over values 
 
 
 
+## `debug`
+
+|                          |                                  |
+| ------------------------ | -------------------------------- |
+| **Environment variable** | `CS_DEBUG`                       |
+| **Default**              | `false`                          |
+
+Set to `"true"` or `"1"` to log project matching and telemetry diagnostics to
+stderr and, when file logging is enabled, the server's log files. You can also enable it at runtime
+with `set_config` using key `debug` and value `true`; no restart is required.
+
+Logs include canonical repository IDs, matched project IDs (including empty
+results), and failure reasons. Explicit project IDs and matching timeouts are
+also logged. Each attempted repository ID is logged with its own matched project
+IDs and result (`matched`, `no-project-ids`, or `repository-not-found`). Missing
+mappings include a troubleshooting hint about SSH host aliases, repository paths,
+and account access. SSH aliases are not resolved automatically, so this hint
+identifies a possible cause, not a confirmed diagnosis.
+
+Telemetry logs report whether tracking is enabled (`enabled=true`) or disabled
+(`enabled=false`) for each attempted event, even when tracking is turned off.
+They also record each outgoing POST's event type and its response HTTP
+status and success flag, or a `transport-error` failure reason. These messages
+do not include request or response bodies, headers, raw endpoint URLs, or raw
+transport error details.
+
+Credentials and raw Git remote URLs are never included in these
+diagnostic messages. Repository and project identifiers may still be private;
+review logs before sharing them.
+
+Matching diagnostics run as part of usage analytics attribution. If
+`disable_tracking` is enabled, that attribution does not run and no project
+matching diagnostics are emitted. Disable debug logging again with value `false`.
+
 ## `access_token`
 
 

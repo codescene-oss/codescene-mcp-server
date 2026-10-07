@@ -6,11 +6,11 @@ use serde_json::{json, Value};
 
 use crate::agent_instructions;
 use crate::analytics_attribution::{
-    merge_attribution, resolve_attribution, AnalyticsContext, AttributionOutcome,
-    NoProjectMatchingReason,
+    debug_enabled, log_attribution, merge_attribution, resolve_attribution, AnalyticsContext,
+    AttributionOutcome, NoProjectMatchingReason,
 };
 use crate::auth::AuthCredential;
-use crate::http::{HttpClient, HttpRequest, Method, ReqwestClient};
+use crate::http::{HttpClient, HttpRequest, HttpResponse, Method, ReqwestClient};
 use crate::repository_projects::RepositoryProjectsCache;
 
 const ATTRIBUTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
@@ -70,7 +70,15 @@ pub(crate) struct AttributedEvent<'a> {
 }
 
 pub(crate) fn track_event_with_attribution(event: AttributedEvent<'_>) {
-    if is_disabled() {
+    let enabled = !is_disabled();
+    if debug_enabled() {
+        tracing::info!(
+            event_type = format!("mcp-{}", event.event),
+            enabled,
+            "Telemetry tracking state"
+        );
+    }
+    if !enabled {
         return;
     }
     let Some(tracking_event) =
@@ -184,6 +192,7 @@ async fn enrich_tracking_event(event: &mut TrackingEvent, attribution: TrackingA
     .unwrap_or(AttributionOutcome::Failure(
         NoProjectMatchingReason::GitCommandFailed,
     ));
+    log_attribution(&outcome);
     merge_attribution(&mut event.properties, outcome);
 }
 
@@ -242,8 +251,39 @@ async fn send_event(mut te: TrackingEvent, client: &dyn HttpClient) -> Result<()
         timeout_secs: 10,
     };
 
-    let _response = client.send(request).await?;
-    Ok(())
+    if debug_enabled() {
+        tracing::info!(
+            event_type = te.event,
+            method = "POST",
+            "Telemetry request sending"
+        );
+    }
+    let response = client.send(request).await;
+    log_telemetry_result(&te.event, &response);
+    response.map(|_| ())
+}
+
+fn log_telemetry_result(event: &str, response: &Result<HttpResponse, String>) {
+    if !debug_enabled() {
+        return;
+    }
+    match response {
+        Ok(response) => {
+            tracing::info!(
+                event_type = event,
+                status = response.status,
+                success = response.is_success(),
+                "Telemetry response received"
+            );
+        }
+        Err(_) => {
+            tracing::info!(
+                event_type = event,
+                reason = "transport-error",
+                "Telemetry request failed"
+            );
+        }
+    }
 }
 
 /// Resolve the tracking endpoint URL.
@@ -297,6 +337,7 @@ fn flag_enabled(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analytics_attribution::tests::capture_logs;
     use crate::config;
     use crate::http::tests::MockHttpClient;
     use crate::http::HttpResponse;
@@ -888,6 +929,106 @@ mod tests {
             .is_some_and(|v| v.starts_with("codescene-mcp/")));
     }
 
+    fn capture_telemetry_send(client: &dyn HttpClient) -> (Result<(), String>, String) {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("create telemetry test runtime");
+        let event = TrackingEvent {
+            url: "https://sensitive-user:sensitive-password@track.test/private-track?token=secret-query"
+                .to_string(),
+            event: "mcp-test-event".to_string(),
+            instance_id: "sensitive-instance".to_string(),
+            environment: "test".to_string(),
+            version: "1.0.0",
+            properties: json!({"detail": "sensitive-payload"}),
+            access_token: ACCESS_TOKEN.to_string(),
+        };
+        let mut result = None;
+        let logs = capture_logs(|| {
+            result = Some(runtime.block_on(send_event(event, client)));
+        });
+        (result.unwrap(), logs)
+    }
+
+    fn assert_telemetry_log_privacy(logs: &str) {
+        for sensitive in [
+            ACCESS_TOKEN,
+            "sensitive-user",
+            "sensitive-password",
+            "private-track",
+            "secret-query",
+            "sensitive-instance",
+            "sensitive-payload",
+            "sensitive-response-body",
+            "sensitive-transport-error",
+        ] {
+            assert!(
+                !logs.contains(sensitive),
+                "Telemetry logs exposed {sensitive}"
+            );
+        }
+    }
+
+    #[test]
+    fn telemetry_logging_is_off_by_default_and_can_toggle_at_runtime() {
+        let _lock = config::lock_test_env();
+        let client = MockHttpClient::always(HttpResponse::ok("sensitive-response-body"));
+        std::env::remove_var("CS_DEBUG");
+        let (result, logs) = capture_telemetry_send(&client);
+        assert!(result.is_ok());
+        assert!(logs.is_empty());
+
+        std::env::set_var("CS_DEBUG", "true");
+        let (result, logs) = capture_telemetry_send(&client);
+        assert!(result.is_ok());
+        for expected in [
+            "event_type=\"mcp-test-event\" method=\"POST\"",
+            "Telemetry request sending",
+            "status=200 success=true",
+            "Telemetry response received",
+        ] {
+            assert!(
+                logs.contains(expected),
+                "Missing telemetry diagnostic: {expected}"
+            );
+        }
+        assert_telemetry_log_privacy(&logs);
+
+        std::env::set_var("CS_DEBUG", "false");
+        let (result, logs) = capture_telemetry_send(&client);
+        assert!(result.is_ok());
+        assert!(logs.is_empty());
+        std::env::remove_var("CS_DEBUG");
+    }
+
+    #[test]
+    fn telemetry_logging_reports_http_errors_without_changing_delivery_behavior() {
+        let _lock = config::lock_test_env();
+        std::env::set_var("CS_DEBUG", "1");
+        let client = MockHttpClient::always(HttpResponse::error(403, "sensitive-response-body"));
+        let (result, logs) = capture_telemetry_send(&client);
+        std::env::remove_var("CS_DEBUG");
+        assert!(result.is_ok());
+        assert!(logs.contains("event_type=\"mcp-test-event\" status=403 success=false"));
+        assert_telemetry_log_privacy(&logs);
+    }
+
+    #[test]
+    fn telemetry_logging_reports_transport_errors_without_exposing_details() {
+        let _lock = config::lock_test_env();
+        std::env::set_var("CS_DEBUG", "true");
+        let client = FailingHttpClient {
+            error: "sensitive-transport-error https://sensitive-user:sensitive-password@track.test",
+        };
+        let (result, logs) = capture_telemetry_send(&client);
+        std::env::remove_var("CS_DEBUG");
+        assert!(result.is_err());
+        assert!(logs.contains("event_type=\"mcp-test-event\" reason=\"transport-error\""));
+        assert!(logs.contains("Telemetry request failed"));
+        assert_telemetry_log_privacy(&logs);
+    }
+
     #[tokio::test]
     async fn send_event_posts_to_correct_url() {
         let _lock = config::lock_test_env();
@@ -972,16 +1113,58 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn telemetry_logging_reports_tracking_state_when_toggled() {
+        let _lock = config::lock_test_env();
+        std::env::set_var("CS_DEBUG", "true");
+        std::env::set_var("CS_TRACKING_URL", "http://127.0.0.1:1");
+        for (disabled, enabled) in [("1", false), ("0", true), ("true", false), ("false", true)] {
+            std::env::set_var("CS_DISABLE_TRACKING", disabled);
+            for call in [TestTrackingCall::Event, TestTrackingCall::Error] {
+                let logs = capture_logs(|| {
+                    run_test_tracking_call(call, Arc::new(MockHttpClient::new(Vec::new())));
+                });
+                assert!(logs.contains("Telemetry tracking state"));
+                assert!(logs.contains(&format!("enabled={enabled}")));
+            }
+        }
+        std::env::remove_var("CS_DEBUG");
+        std::env::remove_var("CS_DISABLE_TRACKING");
+        std::env::remove_var("CS_TRACKING_URL");
+    }
+
+    #[tokio::test]
+    async fn telemetry_tracking_state_logging_is_off_without_debug() {
+        let _lock = config::lock_test_env();
+        std::env::remove_var("CS_DEBUG");
+        std::env::set_var("CS_TRACKING_URL", "http://127.0.0.1:1");
+        for disabled in ["1", "0"] {
+            std::env::set_var("CS_DISABLE_TRACKING", disabled);
+            let logs = capture_logs(|| {
+                run_test_tracking_call(
+                    TestTrackingCall::Event,
+                    Arc::new(MockHttpClient::new(Vec::new())),
+                );
+            });
+            assert!(logs.is_empty());
+        }
+        std::env::remove_var("CS_DISABLE_TRACKING");
+        std::env::remove_var("CS_TRACKING_URL");
+    }
+
+    #[tokio::test]
     async fn attributed_tracking_disabled_skips_all_attribution() {
         let _lock = config::lock_test_env();
         std::env::set_var("CS_DISABLE_TRACKING", "1");
+        std::env::set_var("CS_DEBUG", "true");
         for call in [TestTrackingCall::Event, TestTrackingCall::Error] {
             let client = MockHttpClient::new(Vec::new());
             let requests = client.captured_requests.clone();
-            run_test_tracking_call(call, Arc::new(client));
+            let logs = capture_logs(|| run_test_tracking_call(call, Arc::new(client)));
+            assert!(logs.contains("enabled=false"));
             assert!(requests.lock().unwrap().is_empty());
         }
         std::env::remove_var("CS_DISABLE_TRACKING");
+        std::env::remove_var("CS_DEBUG");
     }
 
     async fn run_with_tracking_enabled(f: impl FnOnce()) {
