@@ -6,7 +6,9 @@ use serde_json::{json, Value};
 use crate::auth::AuthCredential;
 use crate::git_repository::{discover_repository_ids, ProductionGitRunner};
 use crate::http::HttpClient;
-use crate::repository_projects::{matching_project_ids, RepositoryProjectsCache};
+use crate::repository_projects::{
+    matching_project_ids, RepositoryProjects, RepositoryProjectsCache,
+};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) enum AnalyticsContext {
@@ -62,6 +64,7 @@ pub(crate) async fn resolve_attribution(
     };
     match cache.get_or_fetch(&*client, credential).await {
         Ok(mappings) => {
+            log_repository_matches(&repository_ids, &mappings);
             AttributionOutcome::ProjectIds(matching_project_ids(&repository_ids, &mappings))
         }
         Err(error) => AttributionOutcome::Failure(error.into()),
@@ -71,6 +74,38 @@ pub(crate) async fn resolve_attribution(
 fn debug_enabled() -> bool {
     crate::config::try_read_env("CS_DEBUG")
         .is_some_and(|value| value.trim().eq_ignore_ascii_case("true") || value.trim() == "1")
+}
+
+fn log_repository_matches(repository_ids: &[String], mappings: &RepositoryProjects) {
+    if !debug_enabled() {
+        return;
+    }
+    for repository_id in repository_ids {
+        let project_ids = matching_project_ids(std::slice::from_ref(repository_id), mappings);
+        let repository_found = mappings
+            .repositories
+            .iter()
+            .any(|mapping| mapping.repository_id == *repository_id);
+        let match_result = if !repository_found {
+            "repository-not-found"
+        } else if project_ids.is_empty() {
+            "no-project-ids"
+        } else {
+            "matched"
+        };
+        tracing::info!(
+            repository_id,
+            project_ids = ?project_ids,
+            match_result,
+            "Project matching repository result"
+        );
+        if !repository_found {
+            tracing::info!(
+                repository_id,
+                "No exact repository mapping found. SSH host aliases are not resolved: if the remote uses an alias, compare its SSH HostName with the repository host configured in CodeScene. Also check repository path and account access."
+            );
+        }
+    }
 }
 
 pub(crate) fn log_attribution(outcome: &AttributionOutcome) {
@@ -214,6 +249,41 @@ mod tests {
         assert!(logs.contains("project_ids=[7, 42]"));
         assert!(logs.contains("project_ids=[]"));
         assert!(logs.contains("no-supported-git-remotes"));
+    }
+
+    #[test]
+    fn debug_logging_reports_each_repository_and_ssh_alias_hint() {
+        let _lock = crate::config::lock_test_env();
+        let mappings = RepositoryProjects {
+            repositories: vec![
+                crate::repository_projects::RepositoryProject {
+                    repository_id: "github.com/acme/web".to_string(),
+                    project_ids: vec![42],
+                },
+                crate::repository_projects::RepositoryProject {
+                    repository_id: "github.com/acme/empty".to_string(),
+                    project_ids: Vec::new(),
+                },
+            ],
+        };
+        let repository_ids = vec![
+            "github.com/acme/web".to_string(),
+            "github.com/acme/empty".to_string(),
+            "github-work/acme/web".to_string(),
+        ];
+        std::env::remove_var("CS_DEBUG");
+        assert!(capture_logs(|| log_repository_matches(&repository_ids, &mappings)).is_empty());
+        std::env::set_var("CS_DEBUG", "true");
+        let logs = capture_logs(|| log_repository_matches(&repository_ids, &mappings));
+        std::env::remove_var("CS_DEBUG");
+
+        assert!(logs.contains(
+            "repository_id=\"github.com/acme/web\" project_ids=[42] match_result=\"matched\""
+        ));
+        assert!(logs.contains("repository_id=\"github.com/acme/empty\" project_ids=[] match_result=\"no-project-ids\""));
+        assert!(logs.contains("repository_id=\"github-work/acme/web\" project_ids=[] match_result=\"repository-not-found\""));
+        assert!(logs.contains("SSH host aliases are not resolved"));
+        assert!(logs.contains("HostName"));
     }
 
     #[test]

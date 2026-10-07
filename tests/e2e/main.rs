@@ -892,6 +892,76 @@ fn test_analytics_event_contains_project_ids() {
 
 // --- Repository Project Matching ---
 #[test]
+fn test_mock_project_matching_scp_ssh() {
+    tests::repository_project_matching::test_mock_project_matching_scp_ssh();
+}
+
+#[test]
+fn test_mock_project_matching_ssh_url() {
+    tests::repository_project_matching::test_mock_project_matching_ssh_url();
+}
+
+#[test]
+fn test_mock_project_matching_https() {
+    tests::repository_project_matching::test_mock_project_matching_https();
+}
+
+#[test]
+fn test_mock_project_matching_multiple_fetch_urls() {
+    tests::repository_project_matching::test_mock_project_matching_multiple_fetch_urls();
+}
+
+#[test]
+fn test_mock_project_matching_fetch_and_push_urls() {
+    tests::repository_project_matching::test_mock_project_matching_fetch_and_push_urls();
+}
+
+#[test]
+fn test_mock_project_matching_unions_and_deduplicates_remotes() {
+    tests::repository_project_matching::test_mock_project_matching_unions_and_deduplicates_remotes();
+}
+
+#[test]
+fn test_mock_project_matching_instead_of() {
+    tests::repository_project_matching::test_mock_project_matching_instead_of();
+}
+
+#[test]
+fn test_mock_project_matching_push_instead_of() {
+    tests::repository_project_matching::test_mock_project_matching_push_instead_of();
+}
+
+#[test]
+fn test_mock_project_matching_quoted_git_config() {
+    tests::repository_project_matching::test_mock_project_matching_quoted_git_config();
+}
+
+#[test]
+fn test_mock_project_matching_unmatched_ssh_alias() {
+    tests::repository_project_matching::test_mock_project_matching_unmatched_ssh_alias();
+}
+
+#[test]
+fn test_mock_project_matching_no_remotes() {
+    tests::repository_project_matching::test_mock_project_matching_no_remotes();
+}
+
+#[test]
+fn test_mock_project_matching_unsupported_remote() {
+    tests::repository_project_matching::test_mock_project_matching_unsupported_remote();
+}
+
+#[test]
+fn test_mock_project_matching_worktree() {
+    tests::repository_project_matching::test_mock_project_matching_worktree();
+}
+
+#[test]
+fn test_mock_project_matching_worktree_subdirectory() {
+    tests::repository_project_matching::test_mock_project_matching_worktree_subdirectory();
+}
+
+#[test]
 fn test_matches_repository_from_active_account() {
     tests::repository_project_matching::test_matches_repository_from_active_account();
 }

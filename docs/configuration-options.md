@@ -53,7 +53,13 @@ with `set_config` using key `debug` and value `true`; no restart is required.
 
 Logs include canonical repository IDs, matched project IDs (including empty
 results), and failure reasons. Explicit project IDs and matching timeouts are
-also logged. Credentials and raw Git remote URLs are never included in these
+also logged. Each attempted repository ID is logged with its own matched project
+IDs and result (`matched`, `no-project-ids`, or `repository-not-found`). Missing
+mappings include a troubleshooting hint about SSH host aliases, repository paths,
+and account access. SSH aliases are not resolved automatically, so this hint
+identifies a possible cause, not a confirmed diagnosis.
+
+Credentials and raw Git remote URLs are never included in these
 diagnostic messages. Repository and project identifiers may still be private;
 review logs before sharing them.
 

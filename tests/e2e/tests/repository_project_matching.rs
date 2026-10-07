@@ -1,8 +1,10 @@
-//! Live repository-to-project matching integration tests.
+//! Repository-to-project matching integration tests.
 //!
 //! Validates that Git remotes resolve to the project IDs returned by CodeScene,
 //! including repositories from the active account and other accessible accounts.
 //! Linked worktrees must inherit those mappings from the main checkout.
+//! Mocked API cases exercise remote formats, Git config syntax, and failures
+//! without requiring live account data or fetching from the configured remotes.
 
 use super::fake_http_server::FakeHttpServer;
 use super::*;
@@ -18,6 +20,274 @@ const REPOSITORY_PROJECTS_URL: &str = "https://api.codescene.io/v2/mcp/repositor
 const PROJECTS_URL: &str = "https://api.codescene.io/v2/projects";
 const EVENT_TYPE: &str = "mcp-get-config";
 const TIMEOUT: Duration = Duration::from_secs(60);
+
+pub fn test_mock_project_matching_scp_ssh() {
+    assert_mock_remote("git@github.com:acme/web.git", json!({"project-ids": [42]}));
+}
+
+pub fn test_mock_project_matching_ssh_url() {
+    assert_mock_remote(
+        "ssh://git@github.com:2222/acme/web.git",
+        json!({"project-ids": [42]}),
+    );
+}
+
+pub fn test_mock_project_matching_https() {
+    assert_mock_remote(
+        "https://GITHUB.com/Acme/Web.git",
+        json!({"project-ids": [42]}),
+    );
+}
+
+pub fn test_mock_project_matching_multiple_fetch_urls() {
+    assert_mock_origin_config(
+        "remote.origin.url",
+        "git@bitbucket.org:team/mirror.git",
+        &[42, 99],
+    );
+}
+
+pub fn test_mock_project_matching_fetch_and_push_urls() {
+    assert_mock_origin_config(
+        "remote.origin.pushurl",
+        "ssh://git@example.org/team/service.git",
+        &[42, 64],
+    );
+}
+
+pub fn test_mock_project_matching_unions_and_deduplicates_remotes() {
+    assert_mock_matching(
+        |repo| {
+            git_in(
+                repo,
+                &["remote", "add", "origin", "git@github.com:acme/web.git"],
+            );
+            git_in(
+                repo,
+                &[
+                    "remote",
+                    "add",
+                    "duplicate",
+                    "https://github.com/acme/web.git",
+                ],
+            );
+            git_in(
+                repo,
+                &[
+                    "remote",
+                    "add",
+                    "upstream",
+                    "git@bitbucket.org:team/mirror.git",
+                ],
+            );
+            repo.to_path_buf()
+        },
+        json!({"project-ids": [42, 99]}),
+    );
+}
+
+pub fn test_mock_project_matching_instead_of() {
+    assert_mock_matching(
+        |repo| {
+            git_in(
+                repo,
+                &["config", "url.ssh://git@github.com/.insteadOf", "work:"],
+            );
+            git_in(repo, &["remote", "add", "origin", "work:acme/web.git"]);
+            repo.to_path_buf()
+        },
+        json!({"project-ids": [42]}),
+    );
+}
+
+pub fn test_mock_project_matching_push_instead_of() {
+    assert_mock_matching(
+        |repo| {
+            git_in(
+                repo,
+                &[
+                    "config",
+                    "url.ssh://git@example.org/.pushInsteadOf",
+                    "https://github.com/",
+                ],
+            );
+            git_in(
+                repo,
+                &["remote", "add", "origin", "https://github.com/acme/web.git"],
+            );
+            repo.to_path_buf()
+        },
+        json!({"project-ids": [42, 64]}),
+    );
+}
+
+pub fn test_mock_project_matching_quoted_git_config() {
+    assert_mock_matching(
+        |repo| {
+            let config_path = repo.join(".git/config");
+            let config = std::fs::read_to_string(&config_path).expect("read Git config");
+            let fixture = r#"
+[REMOTE "origin"] # section comment
+URL = "ssh://git@github.com/Acme/"\
+"Web.git" # value comment
+PushURL = "ssh://git@example.org/team/service.git" ; push comment
+[remote.upstream]
+url = "https://bitbucket.org/team/mirror.git"
+"#;
+            std::fs::write(
+                config_path,
+                format!("{config}{}", fixture.replace('\n', "\r\n")),
+            )
+            .expect("write Git config syntax fixture");
+            repo.to_path_buf()
+        },
+        json!({"project-ids": [42, 64, 99]}),
+    );
+}
+
+pub fn test_mock_project_matching_unmatched_ssh_alias() {
+    assert_mock_remote("git@github-work:acme/web.git", json!({"project-ids": []}));
+}
+
+pub fn test_mock_project_matching_no_remotes() {
+    assert_mock_matching(
+        Path::to_path_buf,
+        json!({"no-project-matching-reason": "no-git-remotes"}),
+    );
+}
+
+pub fn test_mock_project_matching_unsupported_remote() {
+    assert_mock_remote(
+        "file:///tmp/unsupported.git",
+        json!({"no-project-matching-reason": "no-supported-git-remotes"}),
+    );
+}
+
+pub fn test_mock_project_matching_worktree() {
+    assert_mock_worktree_matching(false);
+}
+
+pub fn test_mock_project_matching_worktree_subdirectory() {
+    assert_mock_worktree_matching(true);
+}
+
+fn assert_mock_remote(remote: &str, expected: serde_json::Value) {
+    assert_mock_matching(
+        |repo| {
+            git_in(repo, &["remote", "add", "origin", remote]);
+            repo.to_path_buf()
+        },
+        expected,
+    );
+}
+
+fn assert_mock_origin_config(key: &str, value: &str, expected_ids: &[i64]) {
+    assert_mock_matching(
+        |repo| {
+            git_in(
+                repo,
+                &["remote", "add", "origin", "git@github.com:acme/web.git"],
+            );
+            git_in(repo, &["config", "--add", key, value]);
+            repo.to_path_buf()
+        },
+        json!({"project-ids": expected_ids}),
+    );
+}
+
+fn assert_mock_worktree_matching(nested: bool) {
+    if is_docker() {
+        skip_if_docker("linked worktree metadata points outside the mounted checkout");
+        return;
+    }
+    assert_mock_matching(
+        |repo| {
+            git_in(
+                repo,
+                &["remote", "add", "origin", "git@github.com:acme/web.git"],
+            );
+            let worktree = repo
+                .parent()
+                .expect("repository parent")
+                .join("mock-worktree");
+            git_in(
+                repo,
+                &[
+                    "worktree",
+                    "add",
+                    "-b",
+                    "mock-feature",
+                    &worktree.to_string_lossy(),
+                ],
+            );
+            assert!(
+                worktree.join(".git").is_file(),
+                "Expected a linked worktree"
+            );
+            if nested {
+                worktree.join("src/utils")
+            } else {
+                worktree
+            }
+        },
+        json!({"project-ids": [42]}),
+    );
+}
+
+fn mock_repository_projects_server() -> FakeHttpServer {
+    FakeHttpServer::start(|request| {
+        if request.method == "GET" && request.path == "/api/v2/mcp/repository-projects" {
+            return (
+                200,
+                json!({"repositories": [
+                    {"repository_id": "github.com/acme/web", "project_ids": [42]},
+                    {"repository_id": "bitbucket.org/team/mirror", "project_ids": [99, 42]},
+                    {"repository_id": "example.org/team/service", "project_ids": [64]},
+                    {"repository_id": "example.org/acme/web", "project_ids": [64]}
+                ]})
+                .to_string(),
+            );
+        }
+        (404, json!({"error": "not_found"}).to_string())
+    })
+}
+
+fn assert_mock_matching(
+    configure: impl FnOnce(&Path) -> std::path::PathBuf,
+    expected: serde_json::Value,
+) {
+    let (command, mut env, repo_dir, _tmp) = setup();
+    let workspace_dir = configure(&repo_dir);
+    let api_server = mock_repository_projects_server();
+    let tracking_server = FakeHttpServer::always_ok();
+    use_isolated_config_dir(&mut env, &workspace_dir, ".cs_config_mock_matching");
+    replace_env(&mut env, "CS_ACCESS_TOKEN", "mock-project-matching-token");
+    replace_env(&mut env, "CS_ONPREM_URL", &api_server.url());
+    replace_env(&mut env, "CS_TRACKING_URL", &tracking_server.url());
+    replace_env(&mut env, "CS_DISABLE_TRACKING", "0");
+    replace_env(&mut env, "CS_DISABLE_VERSION_CHECK", "1");
+
+    let mut client = make_client(&command, &env, &workspace_dir);
+    assert!(client.start(), "Server should start");
+    client.initialize().expect("Initialize should succeed");
+    let response = client
+        .call_tool("get_config", json!({}), TIMEOUT)
+        .expect("get_config should succeed");
+    assert!(!extract_result_text(&response).is_empty());
+    let properties = wait_for_event_properties(&tracking_server);
+    for key in ["project-ids", "no-project-matching-reason"] {
+        assert_eq!(properties.get(key), expected.get(key), "Unexpected {key}");
+    }
+    if expected.get("no-project-matching-reason").is_none() {
+        assert!(api_server.get_requests().iter().any(|request| {
+            request.method == "GET" && request.path == "/api/v2/mcp/repository-projects"
+        }));
+    } else {
+        assert!(!api_server.get_requests().iter().any(|request| {
+            request.method == "GET" && request.path == "/api/v2/mcp/repository-projects"
+        }));
+    }
+}
 
 #[derive(Clone, Deserialize)]
 struct RepositoryMapping {
