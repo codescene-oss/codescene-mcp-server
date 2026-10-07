@@ -2,6 +2,8 @@
 
 You can install the CodeScene MCP Server on Windows using a simple PowerShell command.
 
+For VS Code / GitHub Copilot, the [CodeScene MCP extension](https://marketplace.visualstudio.com/items?itemName=codescene.codescene-codehealth-mcp) bundles the server and configures it automatically, without a separate PowerShell installation.
+
 ## Prerequisites
 
 - Windows 10 or later
@@ -18,13 +20,15 @@ irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/in
 
 This downloads the latest version to `%LOCALAPPDATA%\Programs\cs-mcp` and adds it to your PATH.
 
-After installation, restart your terminal and verify it runs:
+After installation, fully quit and reopen your AI assistant or IDE, including all VS Code windows if you use GitHub Copilot. These applications inherit PATH at startup and do not automatically pick up the installer's changes. Opening a new integrated terminal or restarting only the MCP server is not sufficient to refresh VS Code's PATH.
+
+Open a new PowerShell window and verify it runs:
 
 ```powershell
 cs-mcp
 ```
 
-> **Note:** For PATH changes to take effect, you may need to restart your terminal, IDE, or other applications. Some applications (like VS Code or Claude Desktop) may require a full restart to pick up the new PATH.
+Then configure your AI assistant using the instructions below. Running the executable by itself does not connect it to GitHub Copilot or another assistant.
 
 ## Updating
 
@@ -48,18 +52,22 @@ After installing, configure your AI assistant to use the `cs-mcp` binary directl
 
 ### VS Code / GitHub Copilot
 
-Add to your VS Code `settings.json` or `.vscode/mcp.json`:
+The simplest option is to install the [CodeScene MCP extension](https://marketplace.visualstudio.com/items?itemName=codescene.codescene-codehealth-mcp), which bundles and automatically configures the server.
+
+If you installed with PowerShell, add the following to `.vscode/mcp.json`, or use **MCP: Open User Configuration** in the Command Palette for user-level configuration:
 
 ```json
 {
   "servers": {
     "codescene": {
       "type": "stdio",
-      "command": "cs-mcp"
+      "command": "${env:LOCALAPPDATA}\\Programs\\cs-mcp\\cs-mcp.exe"
     }
   }
 }
 ```
+
+This uses the installer's executable path directly, so VS Code does not need an updated PATH to find it. If you use `"command": "cs-mcp"` instead, fully quit and reopen VS Code after installation. Use **MCP: List Servers** in the Command Palette to select `codescene` and start it.
 
 ### Cursor
 
@@ -129,15 +137,21 @@ For additional configuration — including CodeScene on-prem, custom SSL/TLS cer
 
 ## Troubleshooting
 
+### Installed, but GitHub Copilot cannot start the server
+
+If you installed with PowerShell while VS Code was already running, fully quit all VS Code windows and reopen VS Code. Restarting only the MCP server, reloading a window, or changing PATH in an integrated terminal does not refresh the environment inherited by VS Code.
+
+Alternatively, use the explicit executable path in the [VS Code configuration above](#vs-code--github-copilot), or install the CodeScene MCP extension. A Windows reboot should not normally be necessary.
+
 ### Binary not in PATH
 
-If `cs-mcp` is not recognized, ensure the install directory is in your PATH:
+If `cs-mcp` is not recognized, first open a new PowerShell window. To add the install directory to PATH for the current PowerShell session:
 
 ```powershell
 $env:Path += ";$env:LOCALAPPDATA\Programs\cs-mcp"
 ```
 
-To make this permanent, run the PATH modification from the installation script above.
+This changes only the current shell's environment, not an already-running IDE or AI assistant. To make the change permanent, rerun the installation script above, then fully quit and reopen your terminal and AI assistant.
 
 ### Manual Download
 
