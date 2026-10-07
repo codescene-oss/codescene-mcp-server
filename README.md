@@ -97,11 +97,15 @@ brew install cs-mcp
 <details>
 <summary><b>Windows</b></summary>
 
+For VS Code / GitHub Copilot, the [CodeScene MCP extension](https://marketplace.visualstudio.com/items?itemName=codescene.codescene-codehealth-mcp) bundles and automatically configures the server without a separate PowerShell installation.
+
 Run this in PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/install.ps1 | iex
 ```
+
+After installing, fully quit and reopen your AI assistant or IDE (including all VS Code windows) so it picks up the updated PATH, then configure the MCP server using the guide below. Restarting only the MCP server or an integrated terminal does not refresh VS Code's PATH. The guide also includes a VS Code configuration that uses the executable path directly and avoids this PATH requirement.
 
 📖 **[Full installation & integration guide](docs/windows-installation.md)**
 
