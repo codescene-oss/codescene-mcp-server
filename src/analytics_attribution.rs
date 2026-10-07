@@ -71,7 +71,7 @@ pub(crate) async fn resolve_attribution(
     }
 }
 
-fn debug_enabled() -> bool {
+pub(crate) fn debug_enabled() -> bool {
     crate::config::try_read_env("CS_DEBUG")
         .is_some_and(|value| value.trim().eq_ignore_ascii_case("true") || value.trim() == "1")
 }
@@ -182,7 +182,7 @@ impl From<crate::repository_projects::RepositoryProjectsError> for NoProjectMatc
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::http::tests::MockHttpClient;
     use crate::http::HttpResponse;
@@ -203,7 +203,7 @@ mod tests {
         }
     }
 
-    fn capture_logs(action: impl FnOnce()) -> String {
+    pub(crate) fn capture_logs(action: impl FnOnce()) -> String {
         let capture = LogCapture(Arc::new(Mutex::new(Vec::new())));
         let writer = capture.clone();
         let subscriber = tracing_subscriber::fmt()

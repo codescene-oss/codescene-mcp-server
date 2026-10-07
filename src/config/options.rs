@@ -13,7 +13,7 @@ pub const OPTIONS: &[ConfigOption] = &[
     ConfigOption {
         key: "debug",
         env_var: "CS_DEBUG",
-        description: "Log project matching diagnostics locally (default: false). Includes canonical repository IDs, matched project IDs, and failure reasons; never credentials or raw remote URLs.",
+        description: "Log project matching and telemetry diagnostics locally (default: false). Includes repository IDs, project IDs, telemetry event types, HTTP statuses, and failure reasons; never credentials, raw URLs, or telemetry payloads.",
         sensitive: false,
         hidden: false,
         api_only: false,
