@@ -54,6 +54,9 @@ pub(crate) async fn resolve_attribution(
             Ok(ids) => ids,
             Err(reason) => return AttributionOutcome::Failure(reason.into()),
         };
+    if debug_enabled() {
+        tracing::info!(repository_ids = ?repository_ids, "Project matching repositories discovered");
+    }
     let Some(credential) = credential.as_ref() else {
         return AttributionOutcome::Failure(NoProjectMatchingReason::AuthenticationUnavailable);
     };
@@ -62,6 +65,25 @@ pub(crate) async fn resolve_attribution(
             AttributionOutcome::ProjectIds(matching_project_ids(&repository_ids, &mappings))
         }
         Err(error) => AttributionOutcome::Failure(error.into()),
+    }
+}
+
+fn debug_enabled() -> bool {
+    crate::config::try_read_env("CS_DEBUG")
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("true") || value.trim() == "1")
+}
+
+pub(crate) fn log_attribution(outcome: &AttributionOutcome) {
+    if !debug_enabled() {
+        return;
+    }
+    match outcome {
+        AttributionOutcome::ProjectIds(ids) => {
+            tracing::info!(project_ids = ?ids, "Project matching completed");
+        }
+        AttributionOutcome::Failure(reason) => {
+            tracing::info!(reason = reason.as_str(), "Project matching failed");
+        }
     }
 }
 
@@ -129,6 +151,104 @@ mod tests {
     use super::*;
     use crate::http::tests::MockHttpClient;
     use crate::http::HttpResponse;
+    use std::io::Write;
+    use std::sync::Mutex;
+
+    #[derive(Clone)]
+    struct LogCapture(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for LogCapture {
+        fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buffer);
+            Ok(buffer.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn capture_logs(action: impl FnOnce()) -> String {
+        let capture = LogCapture(Arc::new(Mutex::new(Vec::new())));
+        let writer = capture.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .without_time()
+            .with_ansi(false)
+            .with_writer(move || writer.clone())
+            .finish();
+        tracing::subscriber::with_default(subscriber, action);
+        let bytes = capture.0.lock().unwrap().clone();
+        String::from_utf8(bytes).unwrap()
+    }
+
+    #[test]
+    fn debug_logging_is_off_unless_explicitly_enabled() {
+        let _lock = crate::config::lock_test_env();
+        std::env::remove_var("CS_DEBUG");
+        assert!(!debug_enabled());
+        for value in ["false", "0", "", "invalid"] {
+            std::env::set_var("CS_DEBUG", value);
+            let logs = capture_logs(|| log_attribution(&AttributionOutcome::ProjectIds(vec![42])));
+            assert!(logs.is_empty(), "Debug logging should be off for {value:?}");
+        }
+        for value in ["true", "TRUE", "1", " true "] {
+            std::env::set_var("CS_DEBUG", value);
+            assert!(debug_enabled());
+        }
+        std::env::remove_var("CS_DEBUG");
+    }
+
+    #[test]
+    fn debug_logging_includes_matches_empty_results_and_failures() {
+        let _lock = crate::config::lock_test_env();
+        std::env::set_var("CS_DEBUG", "true");
+        let logs = capture_logs(|| {
+            log_attribution(&AttributionOutcome::ProjectIds(vec![7, 42]));
+            log_attribution(&AttributionOutcome::ProjectIds(Vec::new()));
+            log_attribution(&AttributionOutcome::Failure(
+                NoProjectMatchingReason::NoSupportedGitRemotes,
+            ));
+        });
+        std::env::remove_var("CS_DEBUG");
+
+        assert!(logs.contains("project_ids=[7, 42]"));
+        assert!(logs.contains("project_ids=[]"));
+        assert!(logs.contains("no-supported-git-remotes"));
+    }
+
+    #[test]
+    fn debug_repository_logging_does_not_include_credentials() {
+        let _lock = crate::config::lock_test_env();
+        std::env::set_var("CS_DEBUG", "true");
+        let repository = tempfile::tempdir().unwrap();
+        std::fs::create_dir(repository.path().join(".git")).unwrap();
+        std::fs::write(
+            repository.path().join(".git/config"),
+            "[remote \"origin\"]\nurl = https://secret-user:secret-password@github.com/Acme/Web.git\n",
+        )
+        .unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        let logs = capture_logs(|| {
+            let outcome = runtime.block_on(resolve_attribution(
+                AnalyticsContext::Path(repository.path().to_path_buf()),
+                Some(configured_credential()),
+                Arc::new(MockHttpClient::always(HttpResponse::ok(
+                    r#"{"repositories":[{"repository_id":"github.com/acme/web","project_ids":[42]}]}"#,
+                ))),
+                Arc::new(RepositoryProjectsCache::default()),
+            ));
+            log_attribution(&outcome);
+        });
+        std::env::remove_var("CS_DEBUG");
+
+        assert!(logs.contains("github.com/acme/web"));
+        assert!(logs.contains("project_ids=[42]"));
+        for secret in ["secret-user", "secret-password", "test-token", "https://"] {
+            assert!(!logs.contains(secret));
+        }
+    }
 
     fn configured_credential() -> AuthCredential {
         AuthCredential::Configured {

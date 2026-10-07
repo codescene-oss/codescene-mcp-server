@@ -890,6 +890,33 @@ fn test_analytics_event_contains_project_ids() {
     tests::analytics_tracking::test_analytics_event_contains_project_ids();
 }
 
+// --- Repository Project Matching ---
+#[test]
+fn test_matches_repository_from_active_account() {
+    tests::repository_project_matching::test_matches_repository_from_active_account();
+}
+
+#[test]
+fn test_matches_repository_from_other_account() {
+    tests::repository_project_matching::test_matches_repository_from_other_account();
+}
+
+#[test]
+fn test_unions_projects_across_accounts() {
+    tests::repository_project_matching::test_unions_projects_across_accounts();
+}
+
+#[test]
+fn test_matches_worktree_projects_from_active_account() {
+    tests::repository_project_matching::test_matches_worktree_projects_from_active_account();
+}
+
+#[test]
+fn test_matches_worktree_subdirectory_projects_from_other_account() {
+    tests::repository_project_matching::test_matches_worktree_subdirectory_projects_from_other_account(
+    );
+}
+
 #[test]
 fn test_analytics_disabled_tracking_sends_no_events() {
     tests::analytics_tracking::test_disabled_tracking_sends_no_events();

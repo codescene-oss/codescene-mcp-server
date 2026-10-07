@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 
 use crate::agent_instructions;
 use crate::analytics_attribution::{
-    merge_attribution, resolve_attribution, AnalyticsContext, AttributionOutcome,
+    log_attribution, merge_attribution, resolve_attribution, AnalyticsContext, AttributionOutcome,
     NoProjectMatchingReason,
 };
 use crate::auth::AuthCredential;
@@ -184,6 +184,7 @@ async fn enrich_tracking_event(event: &mut TrackingEvent, attribution: TrackingA
     .unwrap_or(AttributionOutcome::Failure(
         NoProjectMatchingReason::GitCommandFailed,
     ));
+    log_attribution(&outcome);
     merge_attribution(&mut event.properties, outcome);
 }
 

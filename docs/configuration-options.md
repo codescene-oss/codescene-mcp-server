@@ -40,6 +40,27 @@ Environment variables set by your MCP client always take precedence over values 
 
 
 
+## `debug`
+
+|                          |                                  |
+| ------------------------ | -------------------------------- |
+| **Environment variable** | `CS_DEBUG`                       |
+| **Default**              | `false`                          |
+
+Set to `"true"` or `"1"` to log project matching diagnostics to stderr and, when
+file logging is enabled, the server's log files. You can also enable it at runtime
+with `set_config` using key `debug` and value `true`; no restart is required.
+
+Logs include canonical repository IDs, matched project IDs (including empty
+results), and failure reasons. Explicit project IDs and matching timeouts are
+also logged. Credentials and raw Git remote URLs are never included in these
+diagnostic messages. Repository and project identifiers may still be private;
+review logs before sharing them.
+
+Matching diagnostics run as part of usage analytics attribution. If
+`disable_tracking` is enabled, that attribution does not run and no project
+matching diagnostics are emitted. Disable debug logging again with value `false`.
+
 ## `access_token`
 
 

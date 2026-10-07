@@ -52,6 +52,7 @@ pub mod platform_specific;
 pub mod pre_commit_code_health_safeguard;
 pub mod relative_paths;
 pub mod require_access_token;
+pub mod repository_project_matching;
 pub mod rules_config;
 pub mod setup_hint;
 pub mod shutdown_during_handshake;
