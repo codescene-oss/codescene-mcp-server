@@ -8,12 +8,19 @@ const DEFECTS_COEFFICIENTS: &str = include_str!("regression/defects.json");
 
 const TIME_COEFFICIENTS: &str = include_str!("regression/time.json");
 
-#[derive(Debug, Clone, Copy)]
-struct HealthScore(f64);
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct HealthScore(pub f64);
 
 impl HealthScore {
-    fn value(self) -> f64 {
+    pub const MIN: HealthScore = HealthScore(1.0);
+    pub const MAX: HealthScore = HealthScore(10.0);
+
+    pub fn value(self) -> f64 {
         self.0
+    }
+
+    pub fn is_valid_target(self) -> bool {
+        (Self::MIN..=Self::MAX).contains(&self)
     }
 }
 
@@ -28,6 +35,14 @@ const SCENARIOS: &[(f64, &str)] = &[
     (9.1, "top 5%"),
     (10.0, "optimal"),
 ];
+
+const USER_SELECTED_SCENARIO: &str = "user-selected target";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetError {
+    OutOfRange,
+    NotAboveCurrent,
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BusinessCase {
@@ -45,22 +60,47 @@ pub struct Outcome {
     pub time_reduction_percent: f64,
 }
 
+/// Business case for the next incremental scenario above the current score.
 pub fn make_business_case(current_score: f64) -> Option<BusinessCase> {
     let current = HealthScore(current_score);
-    let (target_score, label) = find_target_scenario(current)?;
+    let (target, label) = find_target_scenario(current)?;
+    Some(build_business_case(
+        ScoreRange {
+            baseline: current,
+            target,
+        },
+        label,
+    ))
+}
+
+/// Business case for an explicit, user-selected target score.
+pub fn make_business_case_for_target(
+    current: HealthScore,
+    target: HealthScore,
+) -> Result<BusinessCase, TargetError> {
+    if !target.is_valid_target() {
+        return Err(TargetError::OutOfRange);
+    }
+    if target <= current {
+        return Err(TargetError::NotAboveCurrent);
+    }
     let range = ScoreRange {
         baseline: current,
-        target: target_score,
+        target,
     };
+    Ok(build_business_case(range, scenario_label_for(target)))
+}
+
+fn build_business_case(range: ScoreRange, label: &str) -> BusinessCase {
     let metrics = collect_metrics(range);
 
     let (defect_pessimistic, defect_optimistic) = metrics.defects;
     let (time_pessimistic, time_optimistic) = metrics.time;
 
-    Some(BusinessCase {
+    BusinessCase {
         scenario: label.to_string(),
-        target_score: target_score.value(),
-        current_score,
+        target_score: range.target.value(),
+        current_score: range.baseline.value(),
         optimistic_outcome: Outcome {
             defect_reduction_percent: defect_optimistic,
             time_reduction_percent: time_optimistic,
@@ -73,7 +113,7 @@ pub fn make_business_case(current_score: f64) -> Option<BusinessCase> {
             "90% CI: defects [{defect_pessimistic:.1}%, {defect_optimistic:.1}%], \
              time [{time_pessimistic:.1}%, {time_optimistic:.1}%]"
         ),
-    })
+    }
 }
 
 fn find_target_scenario(current: HealthScore) -> Option<(HealthScore, &'static str)> {
@@ -81,6 +121,13 @@ fn find_target_scenario(current: HealthScore) -> Option<(HealthScore, &'static s
         .iter()
         .find(|(target, _)| *target > current.value())
         .map(|(t, l)| (HealthScore(*t), *l))
+}
+
+fn scenario_label_for(target: HealthScore) -> &'static str {
+    SCENARIOS
+        .iter()
+        .find(|(score, _)| *score == target.value())
+        .map_or(USER_SELECTED_SCENARIO, |(_, label)| *label)
 }
 
 struct Metrics {
@@ -256,6 +303,68 @@ mod tests {
     fn make_business_case_above_all_scenarios_returns_none() {
         // 10.0 is the highest scenario target, so anything >= 10.0 returns None
         assert!(make_business_case(10.5).is_none());
+    }
+
+    // ---- make_business_case_for_target ----
+
+    #[test]
+    fn target_10_from_medium_score_skips_incremental_scenario() {
+        let bc = make_business_case_for_target(HealthScore(6.0), HealthScore(10.0)).unwrap();
+        assert_eq!(bc.scenario, "optimal");
+        assert_eq!(bc.target_score, 10.0);
+        assert_eq!(bc.current_score, 6.0);
+    }
+
+    #[test]
+    fn target_matches_default_metrics_for_same_range() {
+        let explicit = make_business_case_for_target(HealthScore(2.0), HealthScore(5.15)).unwrap();
+        let default = make_business_case(2.0).unwrap();
+        assert_eq!(explicit.scenario, default.scenario);
+        assert_eq!(explicit.confidence_interval, default.confidence_interval);
+    }
+
+    #[test]
+    fn target_10_from_score_2_uses_full_range_metrics() {
+        let bc = make_business_case_for_target(HealthScore(2.0), HealthScore(10.0)).unwrap();
+        assert_eq!(bc.optimistic_outcome.defect_reduction_percent, -84.78);
+        assert_eq!(bc.pessimistic_outcome.defect_reduction_percent, -91.24);
+    }
+
+    #[test]
+    fn custom_target_gets_user_selected_label() {
+        let bc = make_business_case_for_target(HealthScore(8.0), HealthScore(9.5)).unwrap();
+        assert_eq!(bc.scenario, "user-selected target");
+        assert_eq!(bc.target_score, 9.5);
+    }
+
+    #[test]
+    fn target_not_above_current_is_rejected() {
+        assert_eq!(
+            make_business_case_for_target(HealthScore(9.5), HealthScore(9.5)).unwrap_err(),
+            TargetError::NotAboveCurrent
+        );
+        assert_eq!(
+            make_business_case_for_target(HealthScore(9.5), HealthScore(9.1)).unwrap_err(),
+            TargetError::NotAboveCurrent
+        );
+    }
+
+    #[test]
+    fn target_out_of_range_is_rejected() {
+        for target in [0.5, 10.5, f64::NAN] {
+            assert_eq!(
+                make_business_case_for_target(HealthScore(2.0), HealthScore(target)).unwrap_err(),
+                TargetError::OutOfRange
+            );
+        }
+    }
+
+    #[test]
+    fn valid_target_bounds_are_inclusive() {
+        assert!(HealthScore(1.0).is_valid_target());
+        assert!(HealthScore(10.0).is_valid_target());
+        assert!(!HealthScore(0.99).is_valid_target());
+        assert!(!HealthScore(10.01).is_valid_target());
     }
 
     // ---- percentile edge cases ----

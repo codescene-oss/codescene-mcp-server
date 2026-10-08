@@ -5,6 +5,7 @@ description: Run CodeScene's MCP tool for estimating the ROI when refactoring a 
 
 Make the business case for refactoring a given file or hotspot so that its Code Health improves.
 Use **CodeScene MCP Server** with **code_health_refactoring_business_case** to get a data-driven estimate of the business benefits.
+By default the tool targets the next incremental Code Health level; if the user names a specific target (e.g. a perfect 10.0), pass it as `target_code_health`.
 
 After running the tool:
 

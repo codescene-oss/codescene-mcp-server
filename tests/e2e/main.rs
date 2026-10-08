@@ -433,6 +433,21 @@ fn test_business_case_no_file_errors() {
     tests::business_case::test_business_case_no_file_errors();
 }
 
+#[test]
+fn test_business_case_user_selected_target() {
+    tests::business_case::test_business_case_user_selected_target();
+}
+
+#[test]
+fn test_business_case_rejects_out_of_range_target() {
+    tests::business_case::test_business_case_rejects_out_of_range_target();
+}
+
+#[test]
+fn test_business_case_target_not_above_current() {
+    tests::business_case::test_business_case_target_not_above_current();
+}
+
 // --- Relative Paths ---
 #[test]
 fn test_relative_path_simple() {
