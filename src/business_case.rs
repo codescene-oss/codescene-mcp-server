@@ -94,8 +94,10 @@ pub fn make_business_case_for_target(
 fn build_business_case(range: ScoreRange, label: &str) -> BusinessCase {
     let metrics = collect_metrics(range);
 
-    let (defect_pessimistic, defect_optimistic) = metrics.defects;
-    let (time_pessimistic, time_optimistic) = metrics.time;
+    // ci90 yields (p5, p95) of signed changes where negative means fewer
+    // defects / less time, so p5 is the optimistic bound.
+    let (defect_optimistic, defect_pessimistic) = reductions(metrics.defects);
+    let (time_optimistic, time_pessimistic) = reductions(metrics.time);
 
     BusinessCase {
         scenario: label.to_string(),
@@ -110,10 +112,16 @@ fn build_business_case(range: ScoreRange, label: &str) -> BusinessCase {
             time_reduction_percent: time_pessimistic,
         },
         confidence_interval: format!(
-            "90% CI: defects [{defect_pessimistic:.1}%, {defect_optimistic:.1}%], \
-             time [{time_pessimistic:.1}%, {time_optimistic:.1}%]"
+            "90% CI: defect reduction [{defect_pessimistic:.1}%, {defect_optimistic:.1}%], \
+             time reduction [{time_pessimistic:.1}%, {time_optimistic:.1}%]"
         ),
     }
+}
+
+/// Convert signed relative changes into reductions, where positive means
+/// improvement. Negation rather than `abs` keeps a worsening visible.
+fn reductions((p5, p95): (f64, f64)) -> (f64, f64) {
+    (-p5, -p95)
 }
 
 fn find_target_scenario(current: HealthScore) -> Option<(HealthScore, &'static str)> {
@@ -275,8 +283,7 @@ mod tests {
         assert_eq!(bc.scenario, "industry average");
         assert_eq!(bc.target_score, 5.15);
         assert_eq!(bc.current_score, 2.0);
-        assert!(bc.optimistic_outcome.defect_reduction_percent < 0.0);
-        assert!(bc.pessimistic_outcome.defect_reduction_percent < 0.0);
+        assert!(bc.pessimistic_outcome.defect_reduction_percent > 0.0);
         assert!(bc.confidence_interval.contains("CI"));
     }
 
@@ -305,6 +312,48 @@ mod tests {
         assert!(make_business_case(10.5).is_none());
     }
 
+    // ---- outcome direction ----
+
+    #[test]
+    fn outcomes_match_original_python_reference() {
+        // The Python implementation reported 27/11 (defects) and 12/2 (time)
+        // as optimistic/pessimistic reductions for 3.9 -> 5.15.
+        let bc = make_business_case(3.9).unwrap();
+        let reductions = |o: &Outcome| (o.defect_reduction_percent, o.time_reduction_percent);
+        assert_eq!(
+            (
+                reductions(&bc.optimistic_outcome),
+                reductions(&bc.pessimistic_outcome)
+            ),
+            ((27.33, 11.89), (10.66, 1.91))
+        );
+    }
+
+    #[test]
+    fn optimistic_outcome_is_never_below_pessimistic() {
+        for current in [1.0, 3.9, 5.2, 8.0, 9.3] {
+            let bc = make_business_case(current).unwrap();
+            let (opt, pess) = (&bc.optimistic_outcome, &bc.pessimistic_outcome);
+            assert!(
+                opt.defect_reduction_percent >= pess.defect_reduction_percent,
+                "defects at {current}: {bc:?}"
+            );
+            assert!(
+                opt.time_reduction_percent >= pess.time_reduction_percent,
+                "time at {current}: {bc:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn confidence_interval_lists_pessimistic_then_optimistic() {
+        let bc = make_business_case(3.9).unwrap();
+        assert_eq!(
+            bc.confidence_interval,
+            "90% CI: defect reduction [10.7%, 27.3%], time reduction [1.9%, 11.9%]"
+        );
+    }
+
     // ---- make_business_case_for_target ----
 
     #[test]
@@ -326,8 +375,8 @@ mod tests {
     #[test]
     fn target_10_from_score_2_uses_full_range_metrics() {
         let bc = make_business_case_for_target(HealthScore(2.0), HealthScore(10.0)).unwrap();
-        assert_eq!(bc.optimistic_outcome.defect_reduction_percent, -84.78);
-        assert_eq!(bc.pessimistic_outcome.defect_reduction_percent, -91.24);
+        assert_eq!(bc.optimistic_outcome.defect_reduction_percent, 91.24);
+        assert_eq!(bc.pessimistic_outcome.defect_reduction_percent, 84.78);
     }
 
     #[test]
@@ -361,10 +410,9 @@ mod tests {
 
     #[test]
     fn valid_target_bounds_are_inclusive() {
-        assert!(HealthScore(1.0).is_valid_target());
-        assert!(HealthScore(10.0).is_valid_target());
-        assert!(!HealthScore(0.99).is_valid_target());
-        assert!(!HealthScore(10.01).is_valid_target());
+        for (score, valid) in [(1.0, true), (10.0, true), (0.99, false), (10.01, false)] {
+            assert_eq!(HealthScore(score).is_valid_target(), valid, "{score}");
+        }
     }
 
     // ---- percentile edge cases ----

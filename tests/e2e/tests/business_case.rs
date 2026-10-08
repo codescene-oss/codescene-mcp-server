@@ -117,6 +117,18 @@ pub fn test_business_case_user_selected_target() {
         .unwrap_or_else(|e| panic!("Expected business case JSON ({e}): {result_text}"));
     assert_eq!(case["target_score"], json!(OPTIMAL_TARGET), "{result_text}");
     assert_eq!(case["scenario"], json!(OPTIMAL_SCENARIO), "{result_text}");
+    assert_optimistic_beats_pessimistic(&case, &result_text);
+}
+
+fn assert_optimistic_beats_pessimistic(case: &Value, result_text: &str) {
+    for metric in ["defect_reduction_percent", "time_reduction_percent"] {
+        let optimistic = case["optimistic_outcome"][metric].as_f64().unwrap();
+        let pessimistic = case["pessimistic_outcome"][metric].as_f64().unwrap();
+        assert!(
+            pessimistic > 0.0 && optimistic >= pessimistic,
+            "Expected positive reductions with optimistic >= pessimistic for {metric}: {result_text}"
+        );
+    }
 }
 
 pub fn test_business_case_rejects_out_of_range_target() {
