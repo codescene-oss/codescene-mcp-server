@@ -19,13 +19,18 @@ Do not use this skill to explain Code Health fundamentals. Use `explaining-code-
 
 ## Quick Reference
 
-- `code_health_refactoring_business_case`: Generate modeled outcomes for one file.
+- `code_health_refactoring_business_case`: Generate modeled outcomes for one file. Omit `target_code_health` for the next incremental target, or pass it (e.g. `10.0`) to evaluate a specific uplift.
 - `code_health_score`: Optional supporting baseline when the user wants the current score called out separately.
+
+## Choosing a Target
+
+- **Next sensible target (default):** omit `target_code_health`. The tool picks the next step above the current score: 5.15 (industry average), then 9.1 (top 5%), then 10.0 (optimal). Use this for iterative improvement planning, especially at lower Code Health levels.
+- **User-selected target:** pass `target_code_health` when the user asks about a specific goal, such as reaching a perfect 10.0. The target must be between 1.0 and 10.0 and higher than the file's current Code Health.
 
 ## Implementation
 
-1. Run `code_health_refactoring_business_case` for the target file.
-2. Present the recommended target scenario.
+1. Run `code_health_refactoring_business_case` for the target file, adding `target_code_health` only if the user asked for a specific target.
+2. Present the target scenario, and say whether it is the incremental next step or the user-selected goal.
 3. Summarize the optimistic and pessimistic outcomes as a bounded range, not a promise.
 4. Translate the output into a short investment rationale tied to delivery speed and defect reduction.
 5. If needed, pair the result with `code_health_score` or `code_health_review` to show why the file is a refactoring candidate.

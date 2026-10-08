@@ -71,6 +71,19 @@ pub struct FilePathParam {
     pub file_path: String,
 }
 
+/// Parameters for `code_health_refactoring_business_case`.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct BusinessCaseParam {
+    /// Absolute path to the source code file to analyze.
+    pub file_path: String,
+
+    /// Optional target Code Health (1.0-10.0) chosen by the user, e.g. 10.0.
+    /// Must be higher than the file's current Code Health. Omit to target the
+    /// next incremental scenario (5.15 industry average, 9.1 top 5%, 10.0 optimal).
+    #[serde(default)]
+    pub target_code_health: Option<f64>,
+}
+
 /// Git repository path parameter.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct GitRepoParam {
@@ -260,6 +273,28 @@ mod tests {
         let json = r#"{"file_path": "/tmp/foo.rs"}"#;
         let p: FilePathParam = serde_json::from_str(json).unwrap();
         assert_eq!(p.file_path, "/tmp/foo.rs");
+    }
+
+    #[test]
+    fn business_case_param_defaults_target_to_none() {
+        let json = r#"{"file_path": "/tmp/foo.rs"}"#;
+        let p: BusinessCaseParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.file_path, "/tmp/foo.rs");
+        assert!(p.target_code_health.is_none());
+    }
+
+    #[test]
+    fn business_case_param_deserializes_target() {
+        let json = r#"{"file_path": "/tmp/foo.rs", "target_code_health": 10}"#;
+        let p: BusinessCaseParam = serde_json::from_str(json).unwrap();
+        assert_eq!(p.target_code_health, Some(10.0));
+    }
+
+    #[test]
+    fn business_case_param_schema_requires_only_file_path() {
+        let schema = crate::inlined_schema_for::<BusinessCaseParam>();
+        let required = schema.get("required").and_then(|value| value.as_array());
+        assert_eq!(required.unwrap(), &vec![serde_json::json!("file_path")]);
     }
 
     #[test]

@@ -44,6 +44,11 @@ The JSON result also includes a top-level `metadata` object with scope and cover
 
 Generate a data-driven business case for refactoring a source file. Returns quantified predictions tied to the file's current Code Health, including optimistic and pessimistic outcome estimates for improvements in development speed and defect reduction, with a 90% confidence interval.
 
+The tool supports two target modes:
+
+- **Incremental (default):** omit `target_code_health` to get the next sensible target above the file's current score: 5.15 (industry average), then 9.1 (top 5%), then 10.0 (optimal). This suits step-by-step improvement planning, especially at lower Code Health levels.
+- **User-selected:** pass `target_code_health` (1.0–10.0, higher than the current score) to make the business case for any uplift, including a perfect 10.0.
+
 ## Code Health Rules Configuration
 
 These tools validate and edit `code-health-rules.json` files, which customize CodeScene's Code Health analysis by adjusting rule weights and thresholds. They are local, filesystem-only operations using the embedded CodeScene CLI and require no access token. When a `config_path` is provided it must be an absolute path; otherwise the CLI uses `.codescene/code-health-rules.json` in the current git repository.
