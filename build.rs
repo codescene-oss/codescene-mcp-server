@@ -291,7 +291,7 @@ fn maybe_embed_local_cli(dest_zip: &str) -> bool {
 
 /// Pinned CLI version (commit hash from `cs version` output).
 /// Update this when upgrading the CLI, along with cli-checksums.sha256.
-const CLI_VERSION: &str = "05282e918f9e90f08a572b3142e8b3abac983d1e";
+const CLI_VERSION: &str = "410d3dc0697d10ced8e8d1602984cd1af0580aae";
 
 fn cli_download_url() -> String {
     let (os_part, arch_part) = cli_platform_parts();
