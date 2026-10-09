@@ -115,7 +115,9 @@ List the technical debt goals for a specific file in a project. Use when you nee
 
 **Availability:** CodeScene Core users (cloud or on-prem)
 
-Find the owner or owners of a specific path in a project. Use to identify likely reviewers or domain experts for code reviews and technical questions about a file or directory. Returns a list of owners with their key areas and links to the CodeScene System Map page.
+Find historical owners of a file or directory and join their contributor status from the same analysis snapshot. Each result retains `owner` and `path` and adds `former_contributor` (`true`, `false`, or `null`), `owner_status`, `reviewer_candidate`, and `ownership_note`.
+
+Recommend a reviewer only when `reviewer_candidate` is `true`, and confirm availability. Former contributors remain visible for knowledge-transfer and handover planning, but are not current reviewer candidates. Missing, conflicting, malformed, or unavailable author status is reported as `unknown` with `reviewer_candidate=false`. No matching files returns `[]`; no owner links are returned.
 
 ## MCP Usage & Impact
 
