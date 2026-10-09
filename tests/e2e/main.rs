@@ -233,18 +233,6 @@ fn test_pre_commit_safeguard() {
 }
 
 #[test]
-fn test_pre_commit_reports_no_issues_found_for_clean_staged_changes() {
-    tests::pre_commit_code_health_safeguard::test_reports_no_issues_found_for_clean_staged_changes(
-    );
-}
-
-#[test]
-fn test_pre_commit_reports_no_files_modified_for_empty_staging_area() {
-    tests::pre_commit_code_health_safeguard::test_reports_no_files_modified_for_empty_staging_area(
-    );
-}
-
-#[test]
 fn test_outside_git_repo() {
     let (command, env, _, _tmp) = setup();
     let standalone_dir = create_temp_dir("cs_mcp_standalone_").expect("temp dir");
@@ -413,926 +401,267 @@ fn test_verify_non_repo_fails_git_check() {
     );
 }
 
-// ============================================================================
-// Ported test modules
-// ============================================================================
-
-// --- Business Case ---
-#[test]
-fn test_business_case_basic_response() {
-    tests::business_case::test_business_case_basic_response();
-}
-
-#[test]
-fn test_business_case_contains_metrics() {
-    tests::business_case::test_business_case_contains_metrics();
-}
-
-#[test]
-fn test_business_case_no_file_errors() {
-    tests::business_case::test_business_case_no_file_errors();
-}
-
-#[test]
-fn test_business_case_user_selected_target() {
-    tests::business_case::test_business_case_user_selected_target();
-}
-
-#[test]
-fn test_business_case_rejects_out_of_range_target() {
-    tests::business_case::test_business_case_rejects_out_of_range_target();
-}
-
-#[test]
-fn test_business_case_target_not_above_current() {
-    tests::business_case::test_business_case_target_not_above_current();
-}
-
-// --- Relative Paths ---
-#[test]
-fn test_relative_path_simple() {
-    tests::relative_paths::test_relative_path_simple();
-}
-
-#[test]
-fn test_relative_path_nested() {
-    tests::relative_paths::test_relative_path_nested();
-}
-
-#[test]
-fn test_relative_path_dot_prefix() {
-    tests::relative_paths::test_relative_path_dot_prefix();
-}
-
-#[test]
-fn test_relative_path_from_subdir() {
-    tests::relative_paths::test_relative_path_from_subdir();
-}
-
-#[test]
-fn test_mixed_slashes() {
-    tests::relative_paths::test_mixed_slashes();
-}
-
-#[test]
-fn test_absolute_path() {
-    tests::relative_paths::test_absolute_path();
-}
-
-// --- Require Access Token ---
-#[test]
-fn test_guarded_tool_blocked_without_token() {
-    tests::require_access_token::test_guarded_tool_blocked_without_token();
-}
-
-#[test]
-fn test_explain_tool_blocked_without_token() {
-    tests::require_access_token::test_explain_tool_blocked_without_token();
-}
-
-#[test]
-fn test_get_config_works_without_token() {
-    tests::require_access_token::test_get_config_works_without_token();
-}
-
-#[test]
-fn test_set_config_works_without_token() {
-    tests::require_access_token::test_set_config_works_without_token();
-}
-
-#[test]
-fn test_guarded_tool_works_with_token() {
-    tests::require_access_token::test_guarded_tool_works_with_token();
-}
-
-// --- Enabled Tools ---
-#[test]
-fn test_all_tools_without_filter() {
-    tests::enabled_tools::test_all_tools_without_filter();
-}
-
-#[test]
-fn test_filter_restricts_tools() {
-    tests::enabled_tools::test_filter_restricts_tools();
-}
-
-#[test]
-fn test_config_tools_always_present() {
-    tests::enabled_tools::test_config_tools_always_present();
-}
-
-#[test]
-fn test_set_enabled_tools_restart_warning() {
-    tests::enabled_tools::test_set_enabled_tools_restart_warning();
-}
-
-#[test]
-fn test_set_invalid_tool_name_warning() {
-    tests::enabled_tools::test_set_invalid_tool_name_warning();
-}
-
-#[test]
-fn test_get_enabled_tools_shows_available() {
-    tests::enabled_tools::test_get_enabled_tools_shows_available();
-}
-
-// --- Tool Annotations ---
-#[test]
-fn test_tool_read_only_annotations() {
-    tests::tool_annotations::test_tool_read_only_annotations();
-}
-
-// --- Configure ---
-#[test]
-fn test_config_tools_visible() {
-    tests::configure::test_tools_visible();
-}
-
-#[test]
-fn test_config_set_then_get() {
-    tests::configure::test_set_then_get();
-}
-
-#[test]
-fn test_config_sensitive_masking() {
-    tests::configure::test_sensitive_masking();
-}
-
-#[test]
-fn test_config_list_all() {
-    tests::configure::test_list_all();
-}
-
-#[test]
-fn test_config_invalid_key() {
-    tests::configure::test_invalid_key();
-}
-
-#[test]
-fn test_config_delete_value() {
-    tests::configure::test_delete_value();
-}
-
-#[test]
-fn test_config_env_override() {
-    tests::configure::test_env_override();
-}
-
-#[test]
-fn test_config_hidden_option_accessible_by_key() {
-    tests::configure::test_hidden_option_accessible_by_key();
-}
-
-#[test]
-fn test_config_standalone_hides_api_only() {
-    tests::configure::test_standalone_hides_api_only();
-}
-
-#[test]
-fn test_config_rejects_http_url() {
-    tests::configure::test_set_config_rejects_http_url();
-}
-
-#[test]
-fn test_config_accepts_https_url() {
-    tests::configure::test_set_config_accepts_https_url();
-}
-
-#[test]
-fn test_config_http_rejection_does_not_persist() {
-    tests::configure::test_set_config_http_rejection_does_not_persist();
-}
-
-#[test]
-fn test_config_non_url_key_unaffected() {
-    tests::configure::test_set_config_non_url_key_unaffected();
-}
-
-// --- Rules Config ---
-#[test]
-fn test_rules_config_tools_listed() {
-    tests::rules_config::test_rules_config_tools_listed();
-}
-
-#[test]
-fn test_rules_config_validate_reports_valid_config() {
-    tests::rules_config::test_validate_reports_valid_config();
-}
-
-#[test]
-fn test_rules_config_list_thresholds_returns_defaults() {
-    tests::rules_config::test_list_thresholds_returns_defaults();
-}
-
-#[test]
-fn test_rules_config_list_thresholds_rejects_unknown_language() {
-    tests::rules_config::test_list_thresholds_rejects_unknown_language();
-}
-
-#[test]
-fn test_rules_config_set_rule_disable_and_enable_persist() {
-    tests::rules_config::test_set_rule_disable_and_enable_persist();
-}
-
-#[test]
-fn test_rules_config_set_threshold_persists_value() {
-    tests::rules_config::test_set_threshold_persists_value();
-}
-
-#[test]
-fn test_rules_config_set_threshold_rejects_invalid_value() {
-    tests::rules_config::test_set_threshold_rejects_invalid_value();
-}
-
-#[test]
-fn test_rules_config_set_then_validate_roundtrip() {
-    tests::rules_config::test_set_then_validate_roundtrip();
-}
-
-#[test]
-fn test_rules_config_relative_config_path_is_rejected() {
-    tests::rules_config::test_relative_config_path_is_rejected();
-}
-
-#[test]
-fn test_rules_config_works_without_access_token() {
-    tests::rules_config::test_works_without_access_token();
-}
-
-// --- Standalone License ---
-#[test]
-fn test_standalone_hides_api_tools() {
-    tests::standalone_license::test_standalone_hides_api_tools();
-}
-
-#[test]
-fn test_standalone_keeps_cli_tools() {
-    tests::standalone_license::test_standalone_keeps_cli_tools();
-}
-
-#[test]
-fn test_pat_exposes_all_tools() {
-    tests::standalone_license::test_pat_exposes_all_tools();
-}
-
-// --- Analyze Change Set ---
-#[test]
-fn test_change_set_passes_on_clean_branch() {
-    tests::analyze_change_set::test_passes_on_clean_branch();
-}
-
-#[test]
-fn test_change_set_fails_on_degraded_branch() {
-    tests::analyze_change_set::test_fails_on_degraded_branch();
-}
-
-#[test]
-fn test_change_set_fails_on_new_file_degraded() {
-    tests::analyze_change_set::test_fails_on_new_file_with_degraded_health();
-}
-
-#[test]
-fn test_change_set_passes_on_new_file_clean() {
-    tests::analyze_change_set::test_passes_on_new_file_with_clean_health();
-}
-
-#[test]
-fn test_change_set_reports_no_issues_found_for_clean_change_set() {
-    tests::analyze_change_set::test_reports_no_issues_found_for_clean_change_set();
-}
-
-#[test]
-fn test_change_set_reports_no_files_modified_for_empty_change_set() {
-    tests::analyze_change_set::test_reports_no_files_modified_for_empty_change_set();
-}
-
-// --- Bundled Docs ---
-#[test]
-fn test_bundled_explain_code_health() {
-    tests::bundled_docs::test_explain_code_health();
-}
-
-#[test]
-fn test_bundled_explain_code_health_productivity() {
-    tests::bundled_docs::test_explain_code_health_productivity();
-}
-
-#[test]
-fn test_bundled_no_doc_file_errors() {
-    tests::bundled_docs::test_no_doc_file_errors();
-}
-
-#[test]
-fn test_mcp_usage_overview_tool_and_resource() {
-    tests::mcp_usage_overview::test_usage_tool_and_resource();
-}
-
-// --- Discovery Fallback ---
-#[test]
-fn test_server_discover_falls_back_without_exiting() {
-    tests::discovery_fallback::test_server_discover_falls_back_without_exiting();
-}
-
-// --- Shutdown During Handshake ---
-#[test]
-fn test_stdin_closed_before_any_input() {
-    tests::shutdown_during_handshake::test_stdin_closed_before_any_input();
-}
-
-#[test]
-fn test_stdin_closed_after_initialize_request() {
-    tests::shutdown_during_handshake::test_stdin_closed_after_initialize_request();
-}
-
-#[test]
-fn test_stdin_closed_after_full_handshake() {
-    tests::shutdown_during_handshake::test_stdin_closed_after_full_handshake();
-}
-
-#[test]
-fn test_sigterm_before_any_input() {
-    tests::shutdown_during_handshake::test_sigterm_before_any_input();
-}
-
-#[test]
-fn test_sigterm_after_full_handshake() {
-    tests::shutdown_during_handshake::test_sigterm_after_full_handshake();
-}
-
-// --- Docker Path Translation ---
-#[test]
-fn test_docker_verify_finds_git_repo() {
-    tests::docker_path_translation::test_docker_verify_finds_git_repo();
-}
-
-#[test]
-fn test_docker_code_health_score() {
-    tests::docker_path_translation::test_docker_code_health_score();
-}
-
-#[test]
-fn test_docker_pre_commit_safeguard() {
-    tests::docker_path_translation::test_docker_pre_commit_safeguard();
-}
-
-#[test]
-fn test_docker_code_health_review() {
-    tests::docker_path_translation::test_docker_code_health_review();
-}
-
-// --- Platform Specific ---
-#[test]
-fn test_platform_absolute_paths() {
-    tests::platform_specific::test_absolute_paths();
-}
-
-#[test]
-fn test_platform_relative_paths() {
-    tests::platform_specific::test_relative_paths();
-}
-
-#[test]
-fn test_platform_symlinks() {
-    tests::platform_specific::test_symlinks();
-}
-
-#[test]
-fn test_platform_spaces_in_paths() {
-    tests::platform_specific::test_spaces_in_paths();
-}
-
-#[test]
-fn test_platform_unicode_in_paths() {
-    tests::platform_specific::test_unicode_in_paths();
-}
-
-// --- Git Worktree ---
-#[test]
-fn test_worktree_code_health_score() {
-    tests::git_worktree::test_worktree_code_health_score();
-}
-
-#[test]
-fn test_worktree_code_health_review() {
-    tests::git_worktree::test_worktree_code_health_review();
-}
-
-#[test]
-fn test_worktree_pre_commit() {
-    tests::git_worktree::test_worktree_pre_commit();
-}
-
-#[test]
-fn test_worktree_absolute_paths() {
-    tests::git_worktree::test_worktree_absolute_paths();
-}
-
-// --- Git Subtree ---
-#[test]
-fn test_subtree_code_health_score() {
-    tests::git_subtree::test_subtree_code_health_score();
-}
-
-#[test]
-fn test_subtree_code_health_review() {
-    tests::git_subtree::test_subtree_code_health_review();
-}
-
-#[test]
-fn test_subtree_pre_commit() {
-    tests::git_subtree::test_subtree_pre_commit();
-}
-
-#[test]
-fn test_subtree_absolute_paths() {
-    tests::git_subtree::test_subtree_absolute_paths();
-}
-
-#[test]
-fn test_subtree_main_repo_still_works() {
-    tests::git_subtree::test_main_repo_still_works();
-}
-
-// --- Version Check ---
-#[test]
-fn test_version_tool_responds_when_github_unreachable() {
-    tests::version_check::test_tool_responds_when_github_unreachable();
-}
-
-#[test]
-fn test_version_no_version_update_noise() {
-    tests::version_check::test_no_version_update_noise();
-}
-
-#[test]
-fn test_version_response_time_acceptable() {
-    tests::version_check::test_response_time_acceptable();
-}
-
-#[test]
-fn test_version_info_appears_after_background_fetch() {
-    tests::version_check::test_version_info_appears_after_background_fetch();
-}
-
-#[test]
-fn test_version_disabled_no_banner() {
-    tests::version_check::test_disabled_version_check_no_banner();
-}
-
-#[test]
-fn test_version_disabled_no_network_traffic() {
-    tests::version_check::test_disabled_version_check_no_network_traffic();
-}
-
-// --- Analytics Tracking ---
-#[test]
-fn test_analytics_tool_responds_when_unreachable() {
-    tests::analytics_tracking::test_tool_responds_when_analytics_unreachable();
-}
-
-#[test]
-fn test_analytics_response_time_not_delayed() {
-    tests::analytics_tracking::test_response_time_not_delayed_by_analytics();
-}
-
-#[test]
-fn test_analytics_events_are_sent() {
-    tests::analytics_tracking::test_analytics_events_are_sent();
-}
-
-#[test]
-fn test_analytics_event_contains_project_ids() {
-    tests::analytics_tracking::test_analytics_event_contains_project_ids();
-}
-
-// --- Repository Project Matching ---
-#[test]
-fn test_mock_project_matching_scp_ssh() {
-    tests::repository_project_matching::test_mock_project_matching_scp_ssh();
-}
-
-#[test]
-fn test_mock_project_matching_ssh_url() {
-    tests::repository_project_matching::test_mock_project_matching_ssh_url();
-}
-
-#[test]
-fn test_mock_project_matching_https() {
-    tests::repository_project_matching::test_mock_project_matching_https();
-}
-
-#[test]
-fn test_mock_project_matching_multiple_fetch_urls() {
-    tests::repository_project_matching::test_mock_project_matching_multiple_fetch_urls();
-}
-
-#[test]
-fn test_mock_project_matching_fetch_and_push_urls() {
-    tests::repository_project_matching::test_mock_project_matching_fetch_and_push_urls();
-}
-
-#[test]
-fn test_mock_project_matching_unions_and_deduplicates_remotes() {
-    tests::repository_project_matching::test_mock_project_matching_unions_and_deduplicates_remotes();
-}
-
-#[test]
-fn test_mock_project_matching_instead_of() {
-    tests::repository_project_matching::test_mock_project_matching_instead_of();
-}
-
-#[test]
-fn test_mock_project_matching_push_instead_of() {
-    tests::repository_project_matching::test_mock_project_matching_push_instead_of();
-}
-
-#[test]
-fn test_mock_project_matching_quoted_git_config() {
-    tests::repository_project_matching::test_mock_project_matching_quoted_git_config();
-}
-
-#[test]
-fn test_mock_project_matching_unmatched_ssh_alias() {
-    tests::repository_project_matching::test_mock_project_matching_unmatched_ssh_alias();
-}
-
-#[test]
-fn test_mock_project_matching_no_remotes() {
-    tests::repository_project_matching::test_mock_project_matching_no_remotes();
-}
-
-#[test]
-fn test_mock_project_matching_unsupported_remote() {
-    tests::repository_project_matching::test_mock_project_matching_unsupported_remote();
-}
-
-#[test]
-fn test_mock_project_matching_worktree() {
-    tests::repository_project_matching::test_mock_project_matching_worktree();
-}
-
-#[test]
-fn test_mock_project_matching_worktree_subdirectory() {
-    tests::repository_project_matching::test_mock_project_matching_worktree_subdirectory();
-}
-
-#[test]
-fn test_matches_repository_from_active_account() {
-    tests::repository_project_matching::test_matches_repository_from_active_account();
-}
-
-#[test]
-fn test_matches_repository_from_other_account() {
-    tests::repository_project_matching::test_matches_repository_from_other_account();
-}
-
-#[test]
-fn test_unions_projects_across_accounts() {
-    tests::repository_project_matching::test_unions_projects_across_accounts();
-}
-
-#[test]
-fn test_matches_worktree_projects_from_active_account() {
-    tests::repository_project_matching::test_matches_worktree_projects_from_active_account();
-}
-
-#[test]
-fn test_matches_worktree_subdirectory_projects_from_other_account() {
-    tests::repository_project_matching::test_matches_worktree_subdirectory_projects_from_other_account(
-    );
-}
-
-#[test]
-fn test_analytics_disabled_tracking_sends_no_events() {
-    tests::analytics_tracking::test_disabled_tracking_sends_no_events();
-}
-
-#[test]
-fn test_analytics_disabled_tracking_returns_valid_results() {
-    tests::analytics_tracking::test_disabled_tracking_returns_valid_results();
-}
-
-#[test]
-fn test_analytics_enriched_common_properties() {
-    tests::analytics_tracking::test_enriched_event_contains_common_properties();
-}
-
-#[test]
-fn test_analytics_agent_instruction_properties() {
-    tests::analytics_tracking::test_agent_instruction_properties_reflect_repository_guidance();
-}
-
-#[test]
-fn test_analytics_enriched_tool_specific_properties() {
-    tests::analytics_tracking::test_enriched_event_contains_tool_specific_properties();
-}
-
-// --- Analytics Tracking (enriched tool-specific) ---
-#[test]
-fn test_analytics_enriched_review_event() {
-    tests::analytics_tracking::test_enriched_review_event();
-}
-
-#[test]
-fn test_analytics_repository_file_count_performance() {
-    tests::analytics_tracking::test_repository_file_count_performance();
-}
-
-#[test]
-fn test_analytics_enriched_pre_commit_event() {
-    tests::analytics_tracking::test_enriched_pre_commit_event();
-}
-
-#[test]
-fn test_analytics_enriched_analyze_change_set_event() {
-    tests::analytics_tracking::test_enriched_analyze_change_set_event();
-}
-
-#[test]
-fn test_analytics_enriched_pre_commit_with_findings() {
-    tests::analytics_tracking::test_enriched_pre_commit_event_with_findings();
-}
-
-#[test]
-fn test_analytics_enriched_change_set_with_findings() {
-    tests::analytics_tracking::test_enriched_analyze_change_set_event_with_findings();
-}
-
-// --- Analytics Environment Override ---
-#[test]
-fn test_analytics_default_environment_is_sent() {
-    tests::analytics_environment_override::test_default_environment_is_sent();
-}
-
-#[test]
-fn test_analytics_overridden_environment_is_sent() {
-    tests::analytics_environment_override::test_overridden_environment_is_sent();
-}
-
-// --- CloudFront Headers ---
-#[test]
-fn test_cloudfront_api_client_headers() {
-    tests::cloudfront_headers::test_api_client_headers();
-}
-
-// --- Error Logging ---
-#[test]
-fn test_error_telemetry_sends_only_kind() {
-    tests::error_logging::test_error_telemetry_sends_only_kind();
-}
-
-#[test]
-fn test_error_telemetry_invalid_token() {
-    tests::error_logging::test_error_telemetry_invalid_token();
-}
-
-#[test]
-fn test_error_logged_to_file() {
-    tests::error_logging::test_error_logged_to_file();
-}
-
-#[test]
-fn test_file_logging_disabled_when_zero() {
-    tests::error_logging::test_file_logging_disabled_when_zero();
-}
-
-#[test]
-fn test_unsupported_file_type_detail_in_telemetry() {
-    tests::error_logging::test_unsupported_file_type_detail_in_telemetry();
-}
-
-// --- Code Ownership ---
-#[test]
-fn test_ownership_current_and_former_contributors() {
-    tests::code_ownership::test_ownership_current_and_former_contributors();
-}
-
-#[test]
-fn test_ownership_missing_and_conflicting_status() {
-    tests::code_ownership::test_ownership_missing_and_conflicting_status();
-}
-
-#[test]
-fn test_ownership_unavailable_author_statistics() {
-    tests::code_ownership::test_ownership_unavailable_author_statistics();
-}
-
-#[test]
-fn test_ownership_malformed_author_statistics() {
-    tests::code_ownership::test_ownership_malformed_author_statistics();
-}
-
-#[test]
-fn test_ownership_empty_results_skip_statistics() {
-    tests::code_ownership::test_ownership_empty_results_skip_statistics();
-}
-
-// --- Skill Resources ---
-#[test]
-fn test_skill_init_capabilities() {
-    tests::skill_resources::test_init_capabilities();
-}
-
-#[test]
-fn test_skill_list_resources() {
-    tests::skill_resources::test_list_resources();
-}
-
-#[test]
-fn test_skill_read_skill_md() {
-    tests::skill_resources::test_read_skill_md();
-}
-
-#[test]
-fn test_skill_read_manifest() {
-    tests::skill_resources::test_read_manifest();
-}
-
-#[test]
-fn test_skill_list_resource_templates() {
-    tests::skill_resources::test_list_resource_templates();
-}
-
-#[test]
-fn test_skill_read_error_cases() {
-    tests::skill_resources::test_read_error_cases();
-}
-
-#[test]
-fn test_skill_list_skills_tool() {
-    tests::skill_resources::test_list_skills_tool();
-}
-
-#[test]
-fn test_skill_get_manifest_tool() {
-    tests::skill_resources::test_get_skill_manifest_tool();
-}
-
-#[test]
-fn test_skill_download_tool() {
-    tests::skill_resources::test_download_skill_tool();
-}
-
-#[test]
-fn test_skill_sync_tool() {
-    tests::skill_resources::test_sync_skills_tool();
-}
-
-// --- SSL CLI Truststore ---
-#[test]
-fn test_ssl_truststore_args_injected() {
-    tests::ssl_cli_truststore::test_truststore_args_are_injected();
-}
-
-#[test]
-fn test_ssl_truststore_args_missing_without_cert() {
-    tests::ssl_cli_truststore::test_truststore_args_missing_without_cert();
-}
-
-#[test]
-fn test_ssl_truststore_args_not_injected_when_ca_bundle_path_invalid() {
-    tests::ssl_cli_truststore::test_truststore_args_not_injected_when_ca_bundle_path_invalid();
-}
-
-// --- SSL CLI CA Bundle ---
-#[test]
-fn test_ssl_cli_connectivity_passes_with_ca_bundle() {
-    tests::ssl_cli_ca_bundle::test_cli_connectivity_passes_with_ca_bundle();
-}
-
-#[test]
-fn test_ssl_cli_connectivity_fails_without_ca_bundle() {
-    tests::ssl_cli_ca_bundle::test_cli_connectivity_fails_without_ca_bundle();
-}
-
-// --- SSL API CA Bundle ---
-#[test]
-fn test_api_uses_ca_bundle() {
-    tests::ssl_api_ca_bundle::test_api_uses_ca_bundle();
-}
-
-#[test]
-fn test_api_fails_without_ca_bundle() {
-    tests::ssl_api_ca_bundle::test_api_fails_without_ca_bundle();
-}
-
-#[test]
-fn test_api_fails_with_invalid_ca_bundle_path() {
-    tests::ssl_api_ca_bundle::test_api_fails_with_invalid_ca_bundle_path();
-}
-
-// --- SSL CA Bundle Path Formats ---
-#[test]
-fn test_ssl_path_baseline_fails_without_ca_bundle() {
-    tests::ssl_ca_bundle_path_formats::test_baseline_fails_without_ca_bundle();
-}
-
-#[test]
-fn test_ssl_path_canonical_succeeds() {
-    tests::ssl_ca_bundle_path_formats::test_canonical_path_succeeds();
-}
-
-#[test]
-fn test_ssl_path_forward_slash_succeeds() {
-    tests::ssl_ca_bundle_path_formats::test_forward_slash_path_succeeds();
-}
-
-#[cfg(windows)]
-#[test]
-fn test_ssl_path_backslash_succeeds() {
-    tests::ssl_ca_bundle_path_formats::test_backslash_path_succeeds();
-}
-
-#[test]
-fn test_ssl_path_nonexistent_ca_bundle_fails() {
-    tests::ssl_ca_bundle_path_formats::test_nonexistent_ca_bundle_path_fails();
-}
-
-#[test]
-fn test_ssl_path_set_config_ca_bundle_applies_immediately() {
-    tests::ssl_ca_bundle_path_formats::test_set_config_ca_bundle_applies_immediately();
-}
-
-// --- OAuth Login ---
-#[test]
-fn test_login_skips_when_pat_configured() {
-    tests::oauth_login::test_login_skips_when_pat_configured();
-}
-
-#[test]
-fn test_login_reuses_existing_session() {
-    tests::oauth_login::test_login_reuses_existing_session();
-}
-
-#[test]
-fn test_login_interactive_flow_persists_token() {
-    tests::oauth_login::test_login_interactive_flow_persists_token();
-}
-
-#[test]
-fn test_login_fetches_token_when_login_omits_access_token() {
-    tests::oauth_login::test_login_fetches_token_when_login_omits_access_token();
-}
-
-#[test]
-fn test_failed_login_persists_signed_out_state() {
-    tests::oauth_login::test_failed_login_persists_signed_out_state();
-}
-
-#[test]
-fn test_persisted_oauth_reused_by_second_process() {
-    tests::oauth_login::test_persisted_oauth_reused_by_second_process();
-}
-
-#[test]
-fn test_expiry_without_token_triggers_refresh() {
-    tests::oauth_login::test_expiry_without_token_triggers_refresh();
-}
-
-#[test]
-fn test_pat_takes_precedence_over_oauth() {
-    tests::oauth_login::test_pat_takes_precedence_over_oauth();
-}
-
-#[test]
-fn test_logout_clears_oauth_after_login() {
-    tests::oauth_login::test_logout_clears_oauth_after_login();
-}
-
-#[test]
-fn test_logout_notes_pat_still_configured() {
-    tests::oauth_login::test_logout_notes_pat_still_configured();
-}
-
-#[test]
-fn test_switch_account_reuses_cli_slot() {
-    tests::oauth_login::test_switch_account_reuses_cli_slot();
-}
-
-#[test]
-fn test_switch_account_lists_without_args() {
-    tests::oauth_login::test_switch_account_lists_without_args();
-}
-
-#[test]
-fn test_switch_account_switches_by_name() {
-    tests::oauth_login::test_switch_account_switches_by_name();
-}
-
-// --- OAuth Login Flow (real CLI + mock IdP, host-only) ---
-#[test]
-fn test_oauth_authorization_code_flow_persists_token() {
-    tests::oauth_login_flow::test_oauth_authorization_code_flow_persists_token();
-}
-
-#[test]
-fn test_oauth_flow_fails_when_routes_missing() {
-    tests::oauth_login_flow::test_oauth_flow_fails_when_routes_missing();
-}
-
-// --- Stress Test ---
-#[test]
-#[ignore] // Long-running; run with --ignored
-fn test_stress_review() {
-    tests::stress_code_health_review::test_stress_code_health_review();
+// Keep test registration declarative: one name-to-function mapping per case.
+// Attributes are forwarded so platform restrictions and ignored tests stay explicit.
+macro_rules! register_tests {
+    ($( $(#[$attribute:meta])* $name:ident => $target:path; )*) => {
+        $(
+            $(#[$attribute])*
+            #[test]
+            fn $name() {
+                $target();
+            }
+        )*
+    };
+}
+
+register_tests! {
+    // pre_commit_code_health_safeguard
+    test_pre_commit_reports_no_issues_found_for_clean_staged_changes => tests::pre_commit_code_health_safeguard::test_reports_no_issues_found_for_clean_staged_changes;
+    test_pre_commit_reports_no_files_modified_for_empty_staging_area => tests::pre_commit_code_health_safeguard::test_reports_no_files_modified_for_empty_staging_area;
+
+    // business_case
+    test_business_case_basic_response => tests::business_case::test_business_case_basic_response;
+    test_business_case_contains_metrics => tests::business_case::test_business_case_contains_metrics;
+    test_business_case_no_file_errors => tests::business_case::test_business_case_no_file_errors;
+    test_business_case_user_selected_target => tests::business_case::test_business_case_user_selected_target;
+    test_business_case_rejects_out_of_range_target => tests::business_case::test_business_case_rejects_out_of_range_target;
+    test_business_case_target_not_above_current => tests::business_case::test_business_case_target_not_above_current;
+
+    // relative_paths
+    test_relative_path_simple => tests::relative_paths::test_relative_path_simple;
+    test_relative_path_nested => tests::relative_paths::test_relative_path_nested;
+    test_relative_path_dot_prefix => tests::relative_paths::test_relative_path_dot_prefix;
+    test_relative_path_from_subdir => tests::relative_paths::test_relative_path_from_subdir;
+    test_mixed_slashes => tests::relative_paths::test_mixed_slashes;
+    test_absolute_path => tests::relative_paths::test_absolute_path;
+
+    // require_access_token
+    test_guarded_tool_blocked_without_token => tests::require_access_token::test_guarded_tool_blocked_without_token;
+    test_explain_tool_blocked_without_token => tests::require_access_token::test_explain_tool_blocked_without_token;
+    test_get_config_works_without_token => tests::require_access_token::test_get_config_works_without_token;
+    test_set_config_works_without_token => tests::require_access_token::test_set_config_works_without_token;
+    test_guarded_tool_works_with_token => tests::require_access_token::test_guarded_tool_works_with_token;
+
+    // enabled_tools
+    test_all_tools_without_filter => tests::enabled_tools::test_all_tools_without_filter;
+    test_filter_restricts_tools => tests::enabled_tools::test_filter_restricts_tools;
+    test_config_tools_always_present => tests::enabled_tools::test_config_tools_always_present;
+    test_set_enabled_tools_restart_warning => tests::enabled_tools::test_set_enabled_tools_restart_warning;
+    test_set_invalid_tool_name_warning => tests::enabled_tools::test_set_invalid_tool_name_warning;
+    test_get_enabled_tools_shows_available => tests::enabled_tools::test_get_enabled_tools_shows_available;
+
+    // tool_annotations
+    test_tool_read_only_annotations => tests::tool_annotations::test_tool_read_only_annotations;
+
+    // configure
+    test_config_tools_visible => tests::configure::test_tools_visible;
+    test_config_set_then_get => tests::configure::test_set_then_get;
+    test_config_sensitive_masking => tests::configure::test_sensitive_masking;
+    test_config_list_all => tests::configure::test_list_all;
+    test_config_invalid_key => tests::configure::test_invalid_key;
+    test_config_delete_value => tests::configure::test_delete_value;
+    test_config_env_override => tests::configure::test_env_override;
+    test_config_hidden_option_accessible_by_key => tests::configure::test_hidden_option_accessible_by_key;
+    test_config_standalone_hides_api_only => tests::configure::test_standalone_hides_api_only;
+    test_config_rejects_http_url => tests::configure::test_set_config_rejects_http_url;
+    test_config_accepts_https_url => tests::configure::test_set_config_accepts_https_url;
+    test_config_http_rejection_does_not_persist => tests::configure::test_set_config_http_rejection_does_not_persist;
+    test_config_non_url_key_unaffected => tests::configure::test_set_config_non_url_key_unaffected;
+
+    // rules_config
+    test_rules_config_tools_listed => tests::rules_config::test_rules_config_tools_listed;
+    test_rules_config_validate_reports_valid_config => tests::rules_config::test_validate_reports_valid_config;
+    test_rules_config_list_thresholds_returns_defaults => tests::rules_config::test_list_thresholds_returns_defaults;
+    test_rules_config_list_thresholds_rejects_unknown_language => tests::rules_config::test_list_thresholds_rejects_unknown_language;
+    test_rules_config_set_rule_disable_and_enable_persist => tests::rules_config::test_set_rule_disable_and_enable_persist;
+    test_rules_config_set_threshold_persists_value => tests::rules_config::test_set_threshold_persists_value;
+    test_rules_config_set_threshold_rejects_invalid_value => tests::rules_config::test_set_threshold_rejects_invalid_value;
+    test_rules_config_set_then_validate_roundtrip => tests::rules_config::test_set_then_validate_roundtrip;
+    test_rules_config_relative_config_path_is_rejected => tests::rules_config::test_relative_config_path_is_rejected;
+    test_rules_config_works_without_access_token => tests::rules_config::test_works_without_access_token;
+
+    // standalone_license
+    test_standalone_hides_api_tools => tests::standalone_license::test_standalone_hides_api_tools;
+    test_standalone_keeps_cli_tools => tests::standalone_license::test_standalone_keeps_cli_tools;
+    test_pat_exposes_all_tools => tests::standalone_license::test_pat_exposes_all_tools;
+
+    // analyze_change_set
+    test_change_set_passes_on_clean_branch => tests::analyze_change_set::test_passes_on_clean_branch;
+    test_change_set_fails_on_degraded_branch => tests::analyze_change_set::test_fails_on_degraded_branch;
+    test_change_set_fails_on_new_file_degraded => tests::analyze_change_set::test_fails_on_new_file_with_degraded_health;
+    test_change_set_passes_on_new_file_clean => tests::analyze_change_set::test_passes_on_new_file_with_clean_health;
+    test_change_set_reports_no_issues_found_for_clean_change_set => tests::analyze_change_set::test_reports_no_issues_found_for_clean_change_set;
+    test_change_set_reports_no_files_modified_for_empty_change_set => tests::analyze_change_set::test_reports_no_files_modified_for_empty_change_set;
+
+    // bundled_docs
+    test_bundled_explain_code_health => tests::bundled_docs::test_explain_code_health;
+    test_bundled_explain_code_health_productivity => tests::bundled_docs::test_explain_code_health_productivity;
+    test_bundled_no_doc_file_errors => tests::bundled_docs::test_no_doc_file_errors;
+
+    // mcp_usage_overview
+    test_mcp_usage_overview_tool_and_resource => tests::mcp_usage_overview::test_usage_tool_and_resource;
+
+    // discovery_fallback
+    test_server_discover_falls_back_without_exiting => tests::discovery_fallback::test_server_discover_falls_back_without_exiting;
+
+    // shutdown_during_handshake
+    test_stdin_closed_before_any_input => tests::shutdown_during_handshake::test_stdin_closed_before_any_input;
+    test_stdin_closed_after_initialize_request => tests::shutdown_during_handshake::test_stdin_closed_after_initialize_request;
+    test_stdin_closed_after_full_handshake => tests::shutdown_during_handshake::test_stdin_closed_after_full_handshake;
+    test_sigterm_before_any_input => tests::shutdown_during_handshake::test_sigterm_before_any_input;
+    test_sigterm_after_full_handshake => tests::shutdown_during_handshake::test_sigterm_after_full_handshake;
+
+    // docker_path_translation
+    test_docker_verify_finds_git_repo => tests::docker_path_translation::test_docker_verify_finds_git_repo;
+    test_docker_code_health_score => tests::docker_path_translation::test_docker_code_health_score;
+    test_docker_pre_commit_safeguard => tests::docker_path_translation::test_docker_pre_commit_safeguard;
+    test_docker_code_health_review => tests::docker_path_translation::test_docker_code_health_review;
+
+    // platform_specific
+    test_platform_absolute_paths => tests::platform_specific::test_absolute_paths;
+    test_platform_relative_paths => tests::platform_specific::test_relative_paths;
+    test_platform_symlinks => tests::platform_specific::test_symlinks;
+    test_platform_spaces_in_paths => tests::platform_specific::test_spaces_in_paths;
+    test_platform_unicode_in_paths => tests::platform_specific::test_unicode_in_paths;
+
+    // git_worktree
+    test_worktree_code_health_score => tests::git_worktree::test_worktree_code_health_score;
+    test_worktree_code_health_review => tests::git_worktree::test_worktree_code_health_review;
+    test_worktree_pre_commit => tests::git_worktree::test_worktree_pre_commit;
+    test_worktree_absolute_paths => tests::git_worktree::test_worktree_absolute_paths;
+
+    // git_subtree
+    test_subtree_code_health_score => tests::git_subtree::test_subtree_code_health_score;
+    test_subtree_code_health_review => tests::git_subtree::test_subtree_code_health_review;
+    test_subtree_pre_commit => tests::git_subtree::test_subtree_pre_commit;
+    test_subtree_absolute_paths => tests::git_subtree::test_subtree_absolute_paths;
+    test_subtree_main_repo_still_works => tests::git_subtree::test_main_repo_still_works;
+
+    // version_check
+    test_version_tool_responds_when_github_unreachable => tests::version_check::test_tool_responds_when_github_unreachable;
+    test_version_no_version_update_noise => tests::version_check::test_no_version_update_noise;
+    test_version_response_time_acceptable => tests::version_check::test_response_time_acceptable;
+    test_version_info_appears_after_background_fetch => tests::version_check::test_version_info_appears_after_background_fetch;
+    test_version_disabled_no_banner => tests::version_check::test_disabled_version_check_no_banner;
+    test_version_disabled_no_network_traffic => tests::version_check::test_disabled_version_check_no_network_traffic;
+
+    // analytics_tracking
+    test_analytics_tool_responds_when_unreachable => tests::analytics_tracking::test_tool_responds_when_analytics_unreachable;
+    test_analytics_response_time_not_delayed => tests::analytics_tracking::test_response_time_not_delayed_by_analytics;
+    test_analytics_events_are_sent => tests::analytics_tracking::test_analytics_events_are_sent;
+    test_analytics_event_contains_project_ids => tests::analytics_tracking::test_analytics_event_contains_project_ids;
+
+    // repository_project_matching
+    test_mock_project_matching_scp_ssh => tests::repository_project_matching::test_mock_project_matching_scp_ssh;
+    test_mock_project_matching_ssh_url => tests::repository_project_matching::test_mock_project_matching_ssh_url;
+    test_mock_project_matching_https => tests::repository_project_matching::test_mock_project_matching_https;
+    test_mock_project_matching_multiple_fetch_urls => tests::repository_project_matching::test_mock_project_matching_multiple_fetch_urls;
+    test_mock_project_matching_fetch_and_push_urls => tests::repository_project_matching::test_mock_project_matching_fetch_and_push_urls;
+    test_mock_project_matching_unions_and_deduplicates_remotes => tests::repository_project_matching::test_mock_project_matching_unions_and_deduplicates_remotes;
+    test_mock_project_matching_instead_of => tests::repository_project_matching::test_mock_project_matching_instead_of;
+    test_mock_project_matching_push_instead_of => tests::repository_project_matching::test_mock_project_matching_push_instead_of;
+    test_mock_project_matching_quoted_git_config => tests::repository_project_matching::test_mock_project_matching_quoted_git_config;
+    test_mock_project_matching_unmatched_ssh_alias => tests::repository_project_matching::test_mock_project_matching_unmatched_ssh_alias;
+    test_mock_project_matching_no_remotes => tests::repository_project_matching::test_mock_project_matching_no_remotes;
+    test_mock_project_matching_unsupported_remote => tests::repository_project_matching::test_mock_project_matching_unsupported_remote;
+    test_mock_project_matching_worktree => tests::repository_project_matching::test_mock_project_matching_worktree;
+    test_mock_project_matching_worktree_subdirectory => tests::repository_project_matching::test_mock_project_matching_worktree_subdirectory;
+    test_matches_repository_from_active_account => tests::repository_project_matching::test_matches_repository_from_active_account;
+    test_matches_repository_from_other_account => tests::repository_project_matching::test_matches_repository_from_other_account;
+    test_unions_projects_across_accounts => tests::repository_project_matching::test_unions_projects_across_accounts;
+    test_matches_worktree_projects_from_active_account => tests::repository_project_matching::test_matches_worktree_projects_from_active_account;
+    test_matches_worktree_subdirectory_projects_from_other_account => tests::repository_project_matching::test_matches_worktree_subdirectory_projects_from_other_account;
+
+    // analytics_tracking
+    test_analytics_disabled_tracking_sends_no_events => tests::analytics_tracking::test_disabled_tracking_sends_no_events;
+    test_analytics_disabled_tracking_returns_valid_results => tests::analytics_tracking::test_disabled_tracking_returns_valid_results;
+    test_analytics_enriched_common_properties => tests::analytics_tracking::test_enriched_event_contains_common_properties;
+    test_analytics_agent_instruction_properties => tests::analytics_tracking::test_agent_instruction_properties_reflect_repository_guidance;
+    test_analytics_enriched_tool_specific_properties => tests::analytics_tracking::test_enriched_event_contains_tool_specific_properties;
+    test_analytics_enriched_review_event => tests::analytics_tracking::test_enriched_review_event;
+    test_analytics_repository_file_count_performance => tests::analytics_tracking::test_repository_file_count_performance;
+    test_analytics_enriched_pre_commit_event => tests::analytics_tracking::test_enriched_pre_commit_event;
+    test_analytics_enriched_analyze_change_set_event => tests::analytics_tracking::test_enriched_analyze_change_set_event;
+    test_analytics_enriched_pre_commit_with_findings => tests::analytics_tracking::test_enriched_pre_commit_event_with_findings;
+    test_analytics_enriched_change_set_with_findings => tests::analytics_tracking::test_enriched_analyze_change_set_event_with_findings;
+
+    // analytics_environment_override
+    test_analytics_default_environment_is_sent => tests::analytics_environment_override::test_default_environment_is_sent;
+    test_analytics_overridden_environment_is_sent => tests::analytics_environment_override::test_overridden_environment_is_sent;
+
+    // cloudfront_headers
+    test_cloudfront_api_client_headers => tests::cloudfront_headers::test_api_client_headers;
+
+    // error_logging
+    test_error_telemetry_sends_only_kind => tests::error_logging::test_error_telemetry_sends_only_kind;
+    test_error_telemetry_invalid_token => tests::error_logging::test_error_telemetry_invalid_token;
+    test_error_logged_to_file => tests::error_logging::test_error_logged_to_file;
+    test_file_logging_disabled_when_zero => tests::error_logging::test_file_logging_disabled_when_zero;
+    test_unsupported_file_type_detail_in_telemetry => tests::error_logging::test_unsupported_file_type_detail_in_telemetry;
+
+    // code_ownership
+    test_ownership_current_and_former_contributors => tests::code_ownership::test_ownership_current_and_former_contributors;
+    test_ownership_missing_and_conflicting_status => tests::code_ownership::test_ownership_missing_and_conflicting_status;
+    test_ownership_unavailable_author_statistics => tests::code_ownership::test_ownership_unavailable_author_statistics;
+    test_ownership_malformed_author_statistics => tests::code_ownership::test_ownership_malformed_author_statistics;
+    test_ownership_empty_results_skip_statistics => tests::code_ownership::test_ownership_empty_results_skip_statistics;
+
+    // skill_resources
+    test_skill_init_capabilities => tests::skill_resources::test_init_capabilities;
+    test_skill_list_resources => tests::skill_resources::test_list_resources;
+    test_skill_read_skill_md => tests::skill_resources::test_read_skill_md;
+    test_skill_read_manifest => tests::skill_resources::test_read_manifest;
+    test_skill_list_resource_templates => tests::skill_resources::test_list_resource_templates;
+    test_skill_read_error_cases => tests::skill_resources::test_read_error_cases;
+    test_skill_list_skills_tool => tests::skill_resources::test_list_skills_tool;
+    test_skill_get_manifest_tool => tests::skill_resources::test_get_skill_manifest_tool;
+    test_skill_download_tool => tests::skill_resources::test_download_skill_tool;
+    test_skill_sync_tool => tests::skill_resources::test_sync_skills_tool;
+
+    // ssl_cli_truststore
+    test_ssl_truststore_args_injected => tests::ssl_cli_truststore::test_truststore_args_are_injected;
+    test_ssl_truststore_args_missing_without_cert => tests::ssl_cli_truststore::test_truststore_args_missing_without_cert;
+    test_ssl_truststore_args_not_injected_when_ca_bundle_path_invalid => tests::ssl_cli_truststore::test_truststore_args_not_injected_when_ca_bundle_path_invalid;
+
+    // ssl_cli_ca_bundle
+    test_ssl_cli_connectivity_passes_with_ca_bundle => tests::ssl_cli_ca_bundle::test_cli_connectivity_passes_with_ca_bundle;
+    test_ssl_cli_connectivity_fails_without_ca_bundle => tests::ssl_cli_ca_bundle::test_cli_connectivity_fails_without_ca_bundle;
+
+    // ssl_api_ca_bundle
+    test_api_uses_ca_bundle => tests::ssl_api_ca_bundle::test_api_uses_ca_bundle;
+    test_api_fails_without_ca_bundle => tests::ssl_api_ca_bundle::test_api_fails_without_ca_bundle;
+    test_api_fails_with_invalid_ca_bundle_path => tests::ssl_api_ca_bundle::test_api_fails_with_invalid_ca_bundle_path;
+
+    // ssl_ca_bundle_path_formats
+    test_ssl_path_baseline_fails_without_ca_bundle => tests::ssl_ca_bundle_path_formats::test_baseline_fails_without_ca_bundle;
+    test_ssl_path_canonical_succeeds => tests::ssl_ca_bundle_path_formats::test_canonical_path_succeeds;
+    test_ssl_path_forward_slash_succeeds => tests::ssl_ca_bundle_path_formats::test_forward_slash_path_succeeds;
+    #[cfg(windows)]
+    test_ssl_path_backslash_succeeds => tests::ssl_ca_bundle_path_formats::test_backslash_path_succeeds;
+    test_ssl_path_nonexistent_ca_bundle_fails => tests::ssl_ca_bundle_path_formats::test_nonexistent_ca_bundle_path_fails;
+    test_ssl_path_set_config_ca_bundle_applies_immediately => tests::ssl_ca_bundle_path_formats::test_set_config_ca_bundle_applies_immediately;
+
+    // oauth_login
+    test_login_skips_when_pat_configured => tests::oauth_login::test_login_skips_when_pat_configured;
+    test_login_reuses_existing_session => tests::oauth_login::test_login_reuses_existing_session;
+    test_login_interactive_flow_persists_token => tests::oauth_login::test_login_interactive_flow_persists_token;
+    test_login_fetches_token_when_login_omits_access_token => tests::oauth_login::test_login_fetches_token_when_login_omits_access_token;
+    test_failed_login_persists_signed_out_state => tests::oauth_login::test_failed_login_persists_signed_out_state;
+    test_persisted_oauth_reused_by_second_process => tests::oauth_login::test_persisted_oauth_reused_by_second_process;
+    test_expiry_without_token_triggers_refresh => tests::oauth_login::test_expiry_without_token_triggers_refresh;
+    test_pat_takes_precedence_over_oauth => tests::oauth_login::test_pat_takes_precedence_over_oauth;
+    test_logout_clears_oauth_after_login => tests::oauth_login::test_logout_clears_oauth_after_login;
+    test_logout_notes_pat_still_configured => tests::oauth_login::test_logout_notes_pat_still_configured;
+    test_switch_account_reuses_cli_slot => tests::oauth_login::test_switch_account_reuses_cli_slot;
+    test_switch_account_lists_without_args => tests::oauth_login::test_switch_account_lists_without_args;
+    test_switch_account_switches_by_name => tests::oauth_login::test_switch_account_switches_by_name;
+
+    // oauth_login_flow
+    test_oauth_authorization_code_flow_persists_token => tests::oauth_login_flow::test_oauth_authorization_code_flow_persists_token;
+    test_oauth_flow_fails_when_routes_missing => tests::oauth_login_flow::test_oauth_flow_fails_when_routes_missing;
+
+    // stress_code_health_review
+    #[ignore] // Long-running; run with --ignored
+    test_stress_review => tests::stress_code_health_review::test_stress_code_health_review;
 }

@@ -15,7 +15,7 @@ Use this skill when adding an end-to-end integration test for a new or existing 
 - **MCP Server:** Rust binary built with `cargo build --release`
 - **Test framework:** Rust integration tests via `cargo test --test e2e`
 - **Test location:** `tests/e2e/`
-- **Entry point:** `tests/e2e/main.rs` — contains `#[test]` wrapper functions and shared setup
+- **Entry point:** `tests/e2e/main.rs` — contains the `register_tests!` registry, core tests, and shared setup
 - **Module index:** `tests/e2e/tests/mod.rs` — declares all test modules and re-exports infrastructure
 - **Backend abstraction:** `ServerBackend` trait with three implementations: `CargoBackend` (static binary), `DockerBackend` (container), `NpmBackend` (npm package). Every test must work with all backends.
 - **Backend selection:** `CS_MCP_BACKEND` env var (`static` / `docker` / `npm`); `create_backend()` factory
@@ -121,7 +121,7 @@ fn setup_and_call(command: &[String], env: &[(String, String)], repo_dir: &Path)
 
 ### 4. Implement individual test functions
 
-Each test function is a `pub fn` (not `#[test]`) — the `#[test]` wrappers live in `main.rs`:
+Each test function is a `pub fn` (not `#[test]`) — `register_tests!` generates the `#[test]` wrappers in `main.rs`:
 
 ```rust
 pub fn test_feature_basic_response() {
@@ -161,7 +161,7 @@ pub fn test_feature_no_errors() {
 ```
 
 Conventions:
-- **Functions are `pub fn`, not `#[test]`** — the `#[test]` attribute goes on the wrapper in `main.rs`.
+- **Functions are `pub fn`, not `#[test]`** — register them in `main.rs` to generate the wrapper.
 - **Always hold `_tmp` (`TempDir`)** — dropping it deletes the temp directory. The variable must live until the test completes.
 - **Use `setup()`** for the standard git-repo-based test setup.
 - **Use `make_client()`** to create an `MCPClient` from command/env/cwd.
@@ -179,34 +179,23 @@ pub mod <feature>;
 
 Keep modules in alphabetical order.
 
-### 6. Add `#[test]` wrappers in `main.rs`
+### 6. Register tests in `main.rs`
 
-Add wrapper functions in `tests/e2e/main.rs` under a comment section header:
+Add entries to the existing `register_tests!` block in `tests/e2e/main.rs`, grouped by feature:
 
 ```rust
-// --- Feature Name ---
-#[test]
-fn test_feature_basic_response() {
-    tests::feature::test_feature_basic_response();
-}
-
-#[test]
-fn test_feature_contains_expected_data() {
-    tests::feature::test_feature_contains_expected_data();
-}
-
-#[test]
-fn test_feature_no_errors() {
-    tests::feature::test_feature_no_errors();
-}
+    // feature
+    test_feature_basic_response => tests::feature::test_feature_basic_response;
+    test_feature_contains_expected_data => tests::feature::test_feature_contains_expected_data;
+    test_feature_no_errors => tests::feature::test_feature_no_errors;
 ```
 
 Conventions:
-- The wrapper function name matches the test function name exactly.
-- Each wrapper is a one-liner that delegates to the module function.
-- Group wrappers under a `// --- Feature Name ---` comment.
+- Use the test function name as the registry name for new tests; preserve existing aliases when refactoring.
+- Each entry maps a discoverable test name to its module function. Do not add handwritten forwarding wrappers.
+- Group entries under a `// feature` comment.
 - Place new sections in logical order relative to existing tests.
-- For ignored tests (e.g., stress tests), add `#[ignore]` above `fn`.
+- For ignored or platform-specific tests, put `#[ignore]` or `#[cfg(...)]` above the entry; the macro forwards these attributes.
 
 ## Canonical Example: `business_case.rs`
 
@@ -269,7 +258,7 @@ Before considering the test complete:
 - [ ] Each test function is `pub fn` (not `#[test]`)
 - [ ] `_tmp` (`TempDir`) held alive for the duration of each test
 - [ ] Module declared in `tests/e2e/tests/mod.rs` (alphabetical order)
-- [ ] `#[test]` wrappers added in `tests/e2e/main.rs` under a section comment
+- [ ] Entries added to `register_tests!` in `tests/e2e/main.rs` under a feature comment
 - [ ] Fixtures added to `fixtures.rs` if new code samples needed
 - [ ] `cargo test --test e2e test_<feature>` passes
 - [ ] `code_health_review` passes on all new/modified files
