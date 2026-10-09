@@ -38,6 +38,7 @@ pub mod analyze_change_set;
 pub mod bundled_docs;
 pub mod business_case;
 pub mod cloudfront_headers;
+pub mod code_ownership;
 pub mod configure;
 pub mod discovery_fallback;
 pub mod docker_path_translation;

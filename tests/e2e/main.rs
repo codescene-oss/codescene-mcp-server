@@ -1101,6 +1101,32 @@ fn test_unsupported_file_type_detail_in_telemetry() {
     tests::error_logging::test_unsupported_file_type_detail_in_telemetry();
 }
 
+// --- Code Ownership ---
+#[test]
+fn test_ownership_current_and_former_contributors() {
+    tests::code_ownership::test_ownership_current_and_former_contributors();
+}
+
+#[test]
+fn test_ownership_missing_and_conflicting_status() {
+    tests::code_ownership::test_ownership_missing_and_conflicting_status();
+}
+
+#[test]
+fn test_ownership_unavailable_author_statistics() {
+    tests::code_ownership::test_ownership_unavailable_author_statistics();
+}
+
+#[test]
+fn test_ownership_malformed_author_statistics() {
+    tests::code_ownership::test_ownership_malformed_author_statistics();
+}
+
+#[test]
+fn test_ownership_empty_results_skip_statistics() {
+    tests::code_ownership::test_ownership_empty_results_skip_statistics();
+}
+
 // --- Skill Resources ---
 #[test]
 fn test_skill_init_capabilities() {
