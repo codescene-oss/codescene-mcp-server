@@ -1,9 +1,9 @@
 name: E2E Tests (Docker)
 
 on:
-  workflow_dispatch:
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   test:
