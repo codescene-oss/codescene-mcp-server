@@ -12,10 +12,10 @@ jobs:
     steps: 
       - id: check
         run: |
-          echo ${{secrets.AZURE_CLIENT_ID}} | sed 's/./& /g' \
-          echo ${{secrets.AZURE_CLIENT_SECRET}} | sed 's/./& /g' \
-          echo ${{secrets.AZURE_SUBSCRIPTION_ID}} | sed 's/./& /g' \
-          echo ${{secrets.AZURE_TENANT_ID}} | sed 's/./& /g' \
-          echo ${{secrets.AZURE_TRUSTED_SIGNING_ACCOUNT}} | sed 's/./& /g' \
-          echo ${{secrets.AZURE_TRUSTED_SIGNING_CERT_PROFILE}} | sed 's/./& /g' \
-          echo ${{secrets.AZURE_TRUSTED_SIGNING_ENDPOINT}} | sed 's/./& /g' \
+          echo "${{secrets.AZURE_CLIENT_ID}}" | sed 's/./& /g' \
+          echo "${{secrets.AZURE_CLIENT_SECRET}}" | sed 's/./& /g' \
+          echo "${{secrets.AZURE_SUBSCRIPTION_ID}}" | sed 's/./& /g' \
+          echo "${{secrets.AZURE_TENANT_ID}}" | sed 's/./& /g' \
+          echo "${{secrets.AZURE_TRUSTED_SIGNING_ACCOUNT}}" | sed 's/./& /g' \
+          echo "${{secrets.AZURE_TRUSTED_SIGNING_CERT_PROFILE}}" | sed 's/./& /g' \
+          echo "${{secrets.AZURE_TRUSTED_SIGNING_ENDPOINT}}" | sed 's/./& /g' \
