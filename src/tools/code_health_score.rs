@@ -54,7 +54,13 @@ pub(crate) async fn handle(
             server.track_with_context("code-health-score", props, analytics_context);
             let msg = score
                 .map(|s| format!("Code Health score: {s}"))
-                .unwrap_or_else(|| "Could not determine Code Health score.".to_string());
+                .unwrap_or_else(|| {
+                    "Could not determine Code Health score. The CLI returned no numeric score \
+                     (null/nil means no scorable code in the file). If the file is large, \
+                     retry after a slow review completes; the MCP server does not apply a \
+                     five-second answer timeout."
+                        .to_string()
+                });
             let text = server.maybe_version_warning(&msg).await;
             Ok(CallToolResult::success(vec![Content::text(text)]))
         }
