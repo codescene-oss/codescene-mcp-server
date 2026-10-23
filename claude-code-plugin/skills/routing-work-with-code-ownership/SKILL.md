@@ -26,11 +26,14 @@ Do not use this skill to rank technical debt. Use `prioritizing-technical-debt` 
 
 1. Establish the correct project context.
 2. Run `code_ownership_for_path` for the relevant file or directory.
-3. Present likely owners with their key areas.
-4. Use the ownership result to recommend reviewers, escalation paths, or stakeholders.
+3. Present historical owners with their key areas and `owner_status`.
+4. Recommend reviewers only when `reviewer_candidate` is true, and confirm availability before assigning work. A current contributor flag does not prove that the person is available.
+5. Keep former contributors visible as historical owners and highlight ownership handover needs. When status is unknown, report that current reviewer routing could not be verified; do not assume the owner is current or invent a replacement.
+6. Treat missing contributor-status fields, including responses from older MCP versions, as unknown even if an owner name is returned.
 
 ## Common Mistakes
 
 - Using repository intuition instead of ownership data when the tool is available.
 - Treating ownership as an absolute truth instead of a strong signal.
+- Recommending former contributors or owners with unknown status as current reviewers.
 - Omitting the path context when the subsystem spans multiple files.

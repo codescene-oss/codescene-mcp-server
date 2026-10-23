@@ -92,13 +92,13 @@ CS_MCP_EXECUTABLE=target/release/cs-mcp cargo test --test e2e
 | `stress_code_health_review` | Stress test (250 iterations, `#[ignore]`) |
 | `version_check` | Version check tool and background fetch |
 
-All modules are declared in `tests/e2e/tests/mod.rs` and wrappers are in `tests/e2e/main.rs`.
+All modules are declared in `tests/e2e/tests/mod.rs` and registered in the `register_tests!` block in `tests/e2e/main.rs`, which generates their `#[test]` wrappers.
 
 ## Infrastructure
 
 | File | Role |
 |---|---|
-| `tests/e2e/main.rs` | Entry point, `#[test]` wrappers, `setup()`, `find_or_build_executable()`, `make_client()` |
+| `tests/e2e/main.rs` | Entry point, `register_tests!` registry, core tests, `setup()`, `find_or_build_executable()`, `make_client()` |
 | `tests/e2e/tests/mod.rs` | Module declarations and infrastructure re-exports |
 | `tests/e2e/mcp_client.rs` | `MCPClient` — JSON-RPC over stdio |
 | `tests/e2e/server_backends.rs` | `ServerBackend` trait + 3 backend implementations |

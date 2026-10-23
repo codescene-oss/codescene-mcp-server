@@ -69,7 +69,9 @@ Use `making-the-business-case-for-code-health` for ROI framing.
 
 6. **Route ownership for action**
    - Use `code_ownership_for_path` for top 3 risky files/areas.
-   - Suggest reviewers/test collaborators.
+   - Suggest reviewers/test collaborators only when `reviewer_candidate` is true and contributor status is verified as current; confirm availability before assigning work.
+   - Retain former contributors as historical owners and flag the need to confirm a handover or current collaborator.
+   - Treat missing status fields (including responses from older MCP versions) as unknown. Report the routing gap instead of recommending an unverified owner or inventing a replacement.
 
 ## Required Output Schema
 Always return the following sections in order:
@@ -92,7 +94,7 @@ Always return the following sections in order:
    - Pass/fail recommendation criteria
 
 4. **Ownership and Routing**
-   - Suggested owner/reviewer per top risk area
+   - Historical owner and contributor status per top risk area; verified current reviewer candidates when available
    - Next action handoff
 
 5. **Open Risks**
