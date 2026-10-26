@@ -197,6 +197,12 @@ async fn enrich_tracking_event(event: &mut TrackingEvent, attribution: TrackingA
     };
     let instructions = agent_instructions::detect(instruction_path);
     merge_agent_instructions(&mut event.properties, instructions);
+    merge_git_author_email(
+        &mut event.properties,
+        instruction_path,
+        attribution.credential.as_ref(),
+    )
+    .await;
     let outcome = tokio::time::timeout(
         ATTRIBUTION_TIMEOUT,
         resolve_attribution(
@@ -212,6 +218,30 @@ async fn enrich_tracking_event(event: &mut TrackingEvent, attribution: TrackingA
     ));
     log_attribution(&outcome);
     merge_attribution(&mut event.properties, outcome);
+}
+
+async fn merge_git_author_email(
+    properties: &mut Value,
+    action_path: Option<&std::path::Path>,
+    credential: Option<&AuthCredential>,
+) {
+    let Some(properties) = properties.as_object_mut() else {
+        return;
+    };
+    properties.remove("git-author-email");
+    let onprem_url = match credential {
+        Some(credential) => credential.web_root(),
+        None => crate::auth::default_web_root(),
+    };
+    if onprem_url.is_none() {
+        return;
+    }
+    match crate::git_repository::author_email(action_path).await {
+        Ok(email) => {
+            properties.insert("git-author-email".to_string(), json!(email));
+        }
+        Err(reason) => tracing::warn!(reason, "Telemetry Git author email unavailable"),
+    }
 }
 
 fn merge_agent_instructions(
@@ -815,6 +845,36 @@ mod tests {
             properties["agents-file-contains-codescene-mcp-instructions"],
             false
         );
+    }
+
+    #[tokio::test]
+    async fn git_author_email_is_only_merged_for_onprem_credentials() {
+        let _lock = config::lock_test_env();
+        let repository = repository_with_sensitive_remote();
+        git(repository.path(), &["config", "user.name", "Telemetry Author"]);
+        git(
+            repository.path(),
+            &["config", "user.email", "author@example.com"],
+        );
+        for onprem_url in [None, Some("https://onprem.example.com".to_string())] {
+            let credentials = [
+                AuthCredential::Configured {
+                    access_token: ACCESS_TOKEN.to_string(),
+                    onprem_url: onprem_url.clone(),
+                },
+                AuthCredential::OAuth {
+                    access_token: ACCESS_TOKEN.to_string(),
+                    onprem_url: onprem_url.clone(),
+                },
+            ];
+            for credential in credentials {
+                let mut properties = json!({"git-author-email": "spoofed"});
+                merge_git_author_email(&mut properties, Some(repository.path()), Some(&credential))
+                    .await;
+                let expected = onprem_url.as_ref().map(|_| json!("author@example.com"));
+                assert_eq!(properties.get("git-author-email"), expected.as_ref());
+            }
+        }
     }
 
     #[tokio::test]

@@ -168,6 +168,13 @@ https://codescene.mycompany.com
 
 When this option is not set, the MCP server connects to CodeScene Cloud by default.
 
+When usage tracking is enabled for an on-prem connection, telemetry events include
+`git-author-email`, resolved from Git's current author identity in the tool's
+repository (or the current workspace for tools without a file path). Git author
+environment overrides and Git configuration are respected. If the identity
+cannot be resolved, the field is omitted and a diagnostic warning is logged
+without the identity. Cloud telemetry never includes this field.
+
 **Example — npx:**
 
 ```json

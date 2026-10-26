@@ -5,6 +5,7 @@
 //! - Analytics events are sent when tracking is enabled
 //! - Tracking can be disabled via `CS_DISABLE_TRACKING`
 //! - Enriched events contain required common and tool-specific properties
+//! - Git author email is included only for on-prem users
 
 use super::fake_http_server::FakeHttpServer;
 use super::*;
@@ -21,6 +22,8 @@ const UNREACHABLE_ANALYTICS_URL: &str = "https://192.0.2.1:1";
 const REPOSITORY_PROJECTS_PATH: &str = "/api/v2/mcp/repository-projects";
 const LARGE_REPOSITORY_FILE_COUNT: usize = 10_000;
 const LARGE_REPOSITORY_MAX_REPORTING_TIME: Duration = Duration::from_secs(5);
+const GIT_AUTHOR_EMAIL: &str = "onprem-author@example.com";
+const GIT_AUTHOR_EVENTS: &[&str] = &["mcp-explain-code-health", "mcp-error"];
 
 // From analyze_change_set — triggers delta-analysis findings
 const CLEAN_ADDITION: &str = r#"
@@ -199,6 +202,76 @@ pub fn test_analytics_events_are_sent() {
         server.request_count() > 0,
         "Analytics server should have received at least one request"
     );
+}
+
+fn git_author_email_properties(onprem: bool) -> Vec<serde_json::Value> {
+    let api_server = FakeHttpServer::always_ok();
+    let onprem_url = if onprem {
+        api_server.url()
+    } else {
+        String::new()
+    };
+    let (command, mut env, repo_dir, server, _tmp) = analytics_setup_with_tracking_server(&[
+        ("CS_ONPREM_URL", &onprem_url),
+        ("CS_DISABLE_TRACKING", "0"),
+        ("CS_ACCESS_TOKEN", "telemetry-test-token"),
+    ]);
+    env.retain(|(key, _)| !key.starts_with("GIT_AUTHOR_"));
+    git_in(&repo_dir, &["config", "user.email", GIT_AUTHOR_EMAIL]);
+    let mut client = make_client(&command, &env, &repo_dir);
+    assert!(client.start(), "Server should start");
+    client.initialize().expect("Initialize should succeed");
+    call_git_author_event_tools(&mut client, &repo_dir);
+    GIT_AUTHOR_EVENTS
+        .iter()
+        .map(|event_type| {
+            wait_for_event(&server, event_type);
+            let properties = find_event_properties(&server.get_payloads(), event_type);
+            if onprem {
+                assert_eq!(
+                    properties.get("git-author-email"),
+                    Some(&json!(GIT_AUTHOR_EMAIL)),
+                    "{event_type} properties: {properties}\nServer stderr:\n{}",
+                    client.get_stderr()
+                );
+            }
+            properties
+        })
+        .collect()
+}
+
+fn call_git_author_event_tools(client: &mut MCPClient, repo_dir: &Path) {
+    let response = client
+        .call_tool("explain_code_health", json!({}), TIMEOUT)
+        .expect("Documentation tool should succeed");
+    assert!(extract_result_text(&response)
+        .to_lowercase()
+        .contains("code health"));
+    let response = client
+        .call_tool(
+            TOOL_NAME,
+            json!({"file_path": repo_dir.join("missing.py").to_string_lossy()}),
+            TIMEOUT,
+        )
+        .expect("Missing file should return a tool error");
+    assert_eq!(response["result"]["isError"], json!(true));
+}
+
+#[test]
+fn test_analytics_git_author_email_onprem() {
+    for properties in git_author_email_properties(true) {
+        assert_eq!(properties["git-author-email"], json!(GIT_AUTHOR_EMAIL));
+    }
+}
+
+#[test]
+fn test_analytics_git_author_email_cloud_omitted() {
+    for properties in git_author_email_properties(false) {
+        assert!(
+            properties.get("git-author-email").is_none(),
+            "Cloud events must omit Git author email: {properties}"
+        );
+    }
 }
 
 pub fn test_analytics_event_contains_project_ids() {
