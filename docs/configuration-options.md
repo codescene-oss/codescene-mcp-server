@@ -74,18 +74,6 @@ Matching diagnostics run as part of usage analytics attribution. If
 `disable_tracking` is enabled, that attribution does not run and no project
 matching diagnostics are emitted. Disable debug logging again with value `false`.
 
-### Telemetry during shutdown
-
-On Unix, SIGTERM stops the MCP service and waits up to five seconds for queued
-telemetry, including project attribution and HTTP requests, before exiting
-cleanly. Closing the MCP client's stdin also drains telemetry. Allow at least
-eight seconds before escalating SIGTERM to SIGKILL: MCP service cleanup may
-take up to three seconds before the telemetry drain begins.
-
-Delivery remains best-effort: failed requests are not retried, and a drain
-timeout logs a warning that pending events may be lost. SIGKILL cannot run
-cleanup, so unsent events are lost. Events are not persisted for replay.
-
 ## `access_token`
 
 
