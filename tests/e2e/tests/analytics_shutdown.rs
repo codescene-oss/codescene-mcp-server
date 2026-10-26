@@ -6,6 +6,8 @@
 //! An unavailable endpoint must instead trigger a bounded drain and warning.
 //! SIGKILL still loses queued events because it cannot execute cleanup.
 //! Control delivery has its own budget; it is not bound by the shutdown timeout.
+//! Attribution readiness uses that budget too, since enrichment precedes it.
+//! Gate assertions run outside their mutex so failed checks can still clean up.
 //!
 //! Run with `cargo test --test e2e test_analytics_shutdown -- --nocapture`.
 //! Only local fake endpoints and a dummy token are used. Unix backends signal
@@ -26,6 +28,7 @@ mod unix {
     const BATCH_SIZE: usize = 20;
     const TOOL_TIMEOUT: Duration = Duration::from_secs(60);
     const CONTROL_DELIVERY_TIMEOUT: Duration = Duration::from_secs(60);
+    const GATE_HOLD_TIMEOUT: Duration = TOOL_TIMEOUT.saturating_add(CONTROL_DELIVERY_TIMEOUT);
     const WAIT_TIMEOUT: Duration = Duration::from_secs(5);
     const OBSERVATION_TIME: Duration = Duration::from_secs(1);
     const MAPPING_PATH: &str = "/api/v2/mcp/repository-projects";
@@ -38,25 +41,25 @@ mod unix {
 
     impl Gate {
         fn block(&self) {
-            let mut state = self.state.lock().unwrap();
-            state.0 = true;
-            self.changed.notify_all();
-            let (state, timeout) = self
-                .changed
-                .wait_timeout_while(state, Duration::from_secs(20), |state| !state.1)
-                .unwrap();
-            assert!(
-                !timeout.timed_out() || state.1,
-                "Attribution gate timed out"
-            );
+            let released = {
+                let mut state = self.state.lock().unwrap();
+                state.0 = true;
+                self.changed.notify_all();
+                let (state, _) = self
+                    .changed
+                    .wait_timeout_while(state, GATE_HOLD_TIMEOUT, |state| !state.1)
+                    .unwrap();
+                state.1
+            };
+            assert!(released, "Attribution gate timed out");
         }
 
-        fn wait_until_blocked(&self) {
+        fn wait_until_blocked(&self, timeout: Duration) -> bool {
             let (state, _) = self
                 .changed
-                .wait_timeout_while(self.state.lock().unwrap(), WAIT_TIMEOUT, |state| !state.0)
+                .wait_timeout_while(self.state.lock().unwrap(), timeout, |state| !state.0)
                 .unwrap();
-            assert!(state.0, "Telemetry must reach attribution before shutdown");
+            state.0
         }
 
         fn release(&self) {
@@ -89,6 +92,46 @@ mod unix {
             self.gate.release();
             self.server.shutdown();
         }
+    }
+
+    #[test]
+    fn test_analytics_shutdown_gate_timeout_allows_cleanup() {
+        let api = BlockedAttribution::new();
+        let gate = Arc::clone(&api.gate);
+        let failure = std::panic::catch_unwind(move || {
+            assert!(
+                api.gate.wait_until_blocked(Duration::ZERO),
+                "Simulated readiness timeout"
+            );
+        });
+        assert!(failure.is_err(), "The readiness assertion should fail");
+        assert!(
+            !gate.state.is_poisoned(),
+            "Cleanup must not encounter a poisoned gate"
+        );
+        gate.block();
+        assert!(gate.wait_until_blocked(Duration::ZERO));
+    }
+
+    #[test]
+    fn test_analytics_shutdown_waits_for_delayed_attribution_readiness() {
+        let api = BlockedAttribution::new();
+        let gate = Arc::clone(&api.gate);
+        let started = Instant::now();
+        let delayed_request = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(6));
+            gate.block();
+        });
+        let blocked = api.gate.wait_until_blocked(CONTROL_DELIVERY_TIMEOUT);
+        drop(api);
+        delayed_request
+            .join()
+            .expect("Delayed attribution should finish");
+        assert!(
+            blocked,
+            "Readiness must allow enrichment to exceed five seconds"
+        );
+        assert!(started.elapsed() >= Duration::from_secs(6));
     }
 
     struct SignalClient {
@@ -220,7 +263,11 @@ mod unix {
         configure_env(&mut env, &repo_dir, &api.server, &tracking);
         let mut process = SignalClient::new(command, &env, &repo_dir);
         generate_events(&mut process.client);
-        gate.wait_until_blocked();
+        assert!(
+            gate.wait_until_blocked(CONTROL_DELIVERY_TIMEOUT),
+            "Telemetry must reach the receiver before delaying delivery. Server stderr:\n{}",
+            process.client.get_stderr()
+        );
         let delayed_release = std::thread::spawn(move || {
             std::thread::sleep(Duration::from_secs(6));
             gate.release();
@@ -317,7 +364,11 @@ mod unix {
 
         add_remote(&repo_dir);
         generate_events(&mut process.client);
-        api.gate.wait_until_blocked();
+        assert!(
+            api.gate.wait_until_blocked(CONTROL_DELIVERY_TIMEOUT),
+            "Telemetry must reach attribution before shutdown. Server stderr:\n{}",
+            process.client.get_stderr()
+        );
         assert_eq!(
             event_counts(&tracking),
             [BATCH_SIZE / 2; 2],
