@@ -226,7 +226,16 @@ fn git_author_email_properties(onprem: bool) -> Vec<serde_json::Value> {
         .iter()
         .map(|event_type| {
             wait_for_event(&server, event_type);
-            find_event_properties(&server.get_payloads(), event_type)
+            let properties = find_event_properties(&server.get_payloads(), event_type);
+            if onprem {
+                assert_eq!(
+                    properties.get("git-author-email"),
+                    Some(&json!(GIT_AUTHOR_EMAIL)),
+                    "{event_type} properties: {properties}\nServer stderr:\n{}",
+                    client.get_stderr()
+                );
+            }
+            properties
         })
         .collect()
 }
