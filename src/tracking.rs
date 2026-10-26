@@ -931,6 +931,47 @@ mod tests {
         std::env::remove_var("CS_TRACKING_URL");
     }
 
+    #[tokio::test]
+    async fn spawned_delivery_is_tracked_until_http_response() {
+        let _lock = config::lock_test_env();
+        let receiver = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let mut event = tracking_event("mcp-tracked", json!({}));
+        event.url = format!("http://{}", receiver.server_addr());
+        let response_thread = std::thread::spawn(move || {
+            let mut request = receiver.recv_timeout(Duration::from_secs(2)).unwrap().unwrap();
+            let mut body = String::new();
+            request.as_reader().read_to_string(&mut body).unwrap();
+            request.respond(tiny_http::Response::empty(200)).unwrap();
+            serde_json::from_str::<Value>(&body).unwrap()
+        });
+        let tasks = TaskTracker::new();
+        spawn_tracking_event(event, None, &tasks);
+        assert_eq!(tasks.len(), 1);
+        tasks.close();
+        timeout(Duration::from_secs(2), tasks.wait()).await.unwrap();
+        assert!(tasks.is_empty());
+        let body = response_thread.join().unwrap();
+        assert_eq!(body["event-type"], "mcp-tracked");
+    }
+
+    #[test]
+    fn spawned_delivery_failure_is_logged_and_releases_tracker() {
+        let _lock = config::lock_test_env();
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let logs = capture_logs(|| runtime.block_on(async {
+            let mut event = tracking_event("mcp-failed", json!({}));
+            event.url = "http://127.0.0.1:0".to_string();
+            let tasks = TaskTracker::new();
+            spawn_tracking_event(event, None, &tasks);
+            tasks.close();
+            timeout(Duration::from_secs(2), tasks.wait()).await.unwrap();
+            assert!(tasks.is_empty());
+        }));
+        assert!(logs.contains("Telemetry event delivery failed"));
+        assert!(logs.contains("event_type=\"mcp-failed\""));
+        assert!(!logs.contains(ACCESS_TOKEN));
+    }
+
     async fn send_event_and_capture_request(
         _token: Option<&str>,
         te: TrackingEvent,

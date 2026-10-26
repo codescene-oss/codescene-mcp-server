@@ -63,6 +63,7 @@ gray_matter = { version = "0.3.2", features = ["yaml"] }
 gix-config = { version = "0.61", features = ["sha1"] }
 
 [dev-dependencies]
+rmcp = { version = "2.1", features = ["client"] }
 regex = "1"
 tiny_http = "0.12"
 rcgen = "0.14"

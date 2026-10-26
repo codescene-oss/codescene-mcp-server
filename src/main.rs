@@ -56,6 +56,7 @@ use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ContentBlock as Content, Meta};
 use rmcp::schemars::{self, JsonSchema};
 use rmcp::service::ServerInitializeError;
+use rmcp::transport::IntoTransport;
 use rmcp::{tool, tool_router, ErrorData, ServiceExt};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -919,18 +920,21 @@ fn init_tracing(
 
 
 fn main() -> anyhow::Result<()> {
+    run_with_args(std::env::args().skip(1).collect())
+}
+
+fn run_with_args(args: Vec<String>) -> anyhow::Result<()> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    let result = runtime.block_on(run());
+    let result = runtime.block_on(run(args));
     // Tokio's blocking stdin read cannot be cancelled while the client holds stdin open.
     runtime.shutdown_background();
     result
 }
 
-async fn run() -> anyhow::Result<()> {
+async fn run(args: Vec<String>) -> anyhow::Result<()> {
     let raw_version = env!("CS_MCP_VERSION");
-    let args: Vec<String> = std::env::args().skip(1).collect();
     match parse_cli_args(&args, raw_version) {
         Ok(action) => {
             if dispatch_cli_action(action).await? {
@@ -944,7 +948,7 @@ async fn run() -> anyhow::Result<()> {
         }
     }
 
-    let termination = shutdown::Termination::new()?;
+    let mut termination = shutdown::Termination::new()?;
     config::snapshot_client_env_vars();
     ensure_oauth_client_configured().await;
     let config_data = config::load().unwrap_or_default();
@@ -975,7 +979,9 @@ async fn run() -> anyhow::Result<()> {
         validator: Arc::new(tools::validation::ProductionCliValidator),
     });
 
-    shutdown::serve(server, termination).await
+    let stdio = rmcp::transport::stdio().into_transport();
+    let transport = transport::DiscoveryFallbackTransport::new(stdio);
+    shutdown::serve(server, transport, termination.recv()).await
 }
 
 pub(crate) async fn serve_or_handle_disconnect<T, E, A>(

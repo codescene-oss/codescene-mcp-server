@@ -1,9 +1,10 @@
+use std::future::Future;
 use std::time::Duration;
 
-use rmcp::transport::IntoTransport;
+use rmcp::service::RoleServer;
 use tokio_util::task::TaskTracker;
 
-use crate::{serve_or_handle_disconnect, transport, CodeSceneServer};
+use crate::{serve_or_handle_disconnect, CodeSceneServer};
 
 const SERVICE_CLOSE_TIMEOUT: Duration = Duration::from_secs(3);
 const TELEMETRY_DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
@@ -21,7 +22,7 @@ impl Termination {
         })
     }
 
-    async fn recv(&mut self) {
+    pub(crate) async fn recv(&mut self) {
         #[cfg(unix)]
         self.signal.recv().await;
         #[cfg(not(unix))]
@@ -30,12 +31,17 @@ impl Termination {
     }
 }
 
-pub(crate) async fn serve(
+pub(crate) async fn serve<T, E, A>(
     server: CodeSceneServer,
-    mut termination: Termination,
-) -> anyhow::Result<()> {
+    transport: T,
+    termination: impl Future<Output = ()>,
+) -> anyhow::Result<()>
+where
+    T: rmcp::transport::IntoTransport<RoleServer, E, A>,
+    E: std::error::Error + Send + Sync + 'static,
+{
     let tasks = server.tracking_tasks.clone();
-    let result = serve_until_shutdown(server, &mut termination).await;
+    let result = serve_until_shutdown(server, transport, termination).await;
     if drain_telemetry(&tasks, TELEMETRY_DRAIN_TIMEOUT)
         .await
         .is_err()
@@ -48,15 +54,19 @@ pub(crate) async fn serve(
     result
 }
 
-async fn serve_until_shutdown(
+async fn serve_until_shutdown<T, E, A>(
     server: CodeSceneServer,
-    termination: &mut Termination,
-) -> anyhow::Result<()> {
-    let stdio = rmcp::transport::stdio().into_transport();
-    let transport = transport::DiscoveryFallbackTransport::new(stdio);
+    transport: T,
+    termination: impl Future<Output = ()>,
+) -> anyhow::Result<()>
+where
+    T: rmcp::transport::IntoTransport<RoleServer, E, A>,
+    E: std::error::Error + Send + Sync + 'static,
+{
+    tokio::pin!(termination);
     let service = tokio::select! {
         result = serve_or_handle_disconnect(server, transport) => result?,
-        () = termination.recv() => return Ok(()),
+        () = &mut termination => return Ok(()),
     };
     let Some(service) = service else {
         return Ok(());
@@ -67,7 +77,7 @@ async fn serve_until_shutdown(
     tokio::pin!(waiting);
     tokio::select! {
         result = &mut waiting => { result?; }
-        () = termination.recv() => {
+        () = termination => {
             cancellation.cancel();
             match tokio::time::timeout(SERVICE_CLOSE_TIMEOUT, waiting).await {
                 Ok(result) => { result?; }
@@ -89,9 +99,194 @@ async fn drain_telemetry(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analytics_attribution::tests::capture_logs;
+    use crate::tests::make_server;
+    use rmcp::transport::{IntoTransport, Transport};
+    use rmcp::ServiceExt;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use tokio::sync::oneshot;
     use tokio::sync::Notify;
+
+    #[test]
+    fn runtime_shuts_down_after_help_action() {
+        crate::run_with_args(vec!["--help".to_string()]).unwrap();
+    }
+
+    #[test]
+    fn runtime_propagates_invalid_cli_arguments() {
+        let error = crate::run_with_args(vec!["--invalid-option".to_string()]).unwrap_err();
+        assert!(error.to_string().contains("invalid command line arguments"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn termination_receives_sigterm() {
+        let mut termination = Termination::new().unwrap();
+        let result = unsafe { libc::kill(std::process::id() as i32, libc::SIGTERM) };
+        assert_eq!(result, 0);
+        tokio::time::timeout(Duration::from_secs(1), termination.recv())
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn disconnect_before_handshake_closes_telemetry_tracker() {
+        let server = make_server(false);
+        let tasks = server.tracking_tasks.clone();
+        let (server_io, client_io) = tokio::io::duplex(4096);
+        drop(client_io);
+        serve(server, server_io, std::future::pending())
+            .await
+            .unwrap();
+        assert!(tasks.is_closed());
+    }
+
+    #[tokio::test]
+    async fn termination_before_handshake_still_drains_telemetry() {
+        let server = make_server(false);
+        let tasks = server.tracking_tasks.clone();
+        let completed = Arc::new(AtomicUsize::new(0));
+        let completed_task = completed.clone();
+        tasks.spawn(async move {
+            tokio::task::yield_now().await;
+            completed_task.fetch_add(1, Ordering::SeqCst);
+        });
+        let (server_io, _client_io) = tokio::io::duplex(4096);
+        serve(server, server_io, std::future::ready(()))
+            .await
+            .unwrap();
+        assert!(tasks.is_closed());
+        assert_eq!(completed.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn invalid_handshake_returns_error_after_closing_tracker() {
+        use tokio::io::AsyncWriteExt;
+        let server = make_server(false);
+        let tasks = server.tracking_tasks.clone();
+        let (server_io, mut client_io) = tokio::io::duplex(4096);
+        client_io
+            .write_all(b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}\n")
+            .await
+            .unwrap();
+        let result = tokio::time::timeout(
+            Duration::from_secs(1),
+            serve(server, server_io, std::future::pending()),
+        )
+        .await
+        .unwrap();
+        assert!(result.is_err());
+        assert!(tasks.is_closed());
+    }
+
+    #[tokio::test]
+    async fn initialized_client_disconnect_drains_telemetry() {
+        assert_initialized_shutdown(false).await;
+    }
+
+    #[tokio::test]
+    async fn termination_after_handshake_cancels_service_and_drains() {
+        assert_initialized_shutdown(true).await;
+    }
+
+    async fn assert_initialized_shutdown(terminate: bool) {
+        let server = make_server(false);
+        let tasks = server.tracking_tasks.clone();
+        let (server_io, client_io) = tokio::io::duplex(4096);
+        let (signal, received) = oneshot::channel();
+        let server = serve(server, server_io, async {
+            if terminate {
+                received.await.unwrap()
+            } else {
+                std::future::pending().await
+            }
+        });
+        let client = async {
+            let client = ().serve(client_io).await.unwrap();
+            if terminate {
+                signal.send(()).unwrap();
+                client.waiting().await.unwrap();
+            } else {
+                client.cancel().await.unwrap();
+            }
+        };
+        let (result, ()) = tokio::join!(server, client);
+        result.unwrap();
+        assert!(tasks.is_closed());
+    }
+
+    struct StalledClose<T>(T);
+
+    impl<T: Transport<RoleServer>> Transport<RoleServer> for StalledClose<T> {
+        type Error = T::Error;
+
+        fn send(
+            &mut self,
+            item: rmcp::model::ServerJsonRpcMessage,
+        ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'static {
+            self.0.send(item)
+        }
+
+        fn receive(
+            &mut self,
+        ) -> impl Future<Output = Option<rmcp::model::ClientJsonRpcMessage>> + Send {
+            self.0.receive()
+        }
+
+        fn close(&mut self) -> impl Future<Output = Result<(), Self::Error>> + Send {
+            std::future::pending()
+        }
+    }
+
+    fn capture_shutdown_logs(future: impl Future<Output = ()>) -> String {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        capture_logs(|| runtime.block_on(future))
+    }
+
+    #[test]
+    fn stalled_service_close_is_bounded_and_logged() {
+        let logs = capture_shutdown_logs(async {
+            let server = make_server(false);
+            let (server_io, client_io) = tokio::io::duplex(4096);
+            let transport = StalledClose(server_io.into_transport());
+            let (signal, received) = oneshot::channel();
+            let running = tokio::spawn(serve(server, transport, async { received.await.unwrap() }));
+            let client = ().serve(client_io).await.unwrap();
+            signal.send(()).unwrap();
+            tokio::time::timeout(Duration::from_secs(4), running)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            drop(client);
+        });
+        assert!(logs.contains("MCP service shutdown timed out"));
+    }
+
+    #[test]
+    fn stalled_telemetry_is_bounded_and_logged_by_server() {
+        let logs = capture_shutdown_logs(async {
+            let server = make_server(false);
+            let tasks = server.tracking_tasks.clone();
+            let handle = tasks.spawn(std::future::pending::<()>());
+            let (server_io, _client_io) = tokio::io::duplex(4096);
+            tokio::time::timeout(
+                Duration::from_secs(6),
+                serve(server, server_io, std::future::ready(())),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            handle.abort();
+            assert!(handle.await.unwrap_err().is_cancelled());
+        });
+        assert!(logs.contains("Telemetry shutdown drain timed out"));
+        assert!(logs.contains("pending_events=1"));
+    }
 
     #[tokio::test]
     async fn empty_tracker_drains_immediately() {
