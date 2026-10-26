@@ -8,6 +8,10 @@
 //! Requires:
 //! - `CS_ACCESS_TOKEN` environment variable set
 //! - `git` available in PATH
+//!
+//! Telemetry shutdown diagnostics use a dummy token and local endpoints:
+//! `cargo test --test e2e test_analytics_shutdown -- --nocapture`.
+//! They require queued delivery on SIGTERM and characterize SIGKILL loss.
 
 mod file_utils;
 mod fixtures;

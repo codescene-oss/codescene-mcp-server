@@ -6,6 +6,8 @@ use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
+#[cfg(unix)]
+use std::process::ExitStatus;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -55,7 +57,18 @@ impl MCPClient {
     }
 
     pub fn start(&mut self) -> bool {
+        self.spawn_command(self.build_command())
+    }
+
+    #[cfg(unix)]
+    pub fn start_in_process_group(&mut self) -> bool {
+        use std::os::unix::process::CommandExt;
         let mut cmd = self.build_command();
+        cmd.process_group(0);
+        self.spawn_command(cmd)
+    }
+
+    fn spawn_command(&mut self, mut cmd: Command) -> bool {
         match cmd.spawn() {
             Ok(child) => self.attach_to_process(child),
             Err(e) => {
@@ -232,6 +245,26 @@ impl MCPClient {
             let _ = child.wait();
         }
         self.process = None;
+    }
+
+    #[cfg(unix)]
+    pub fn process_id(&self) -> u32 {
+        self.process.as_ref().expect("Server should be running").id()
+    }
+
+    #[cfg(unix)]
+    pub fn wait_for_exit(&mut self, timeout: Duration) -> Result<ExitStatus, String> {
+        let deadline = Instant::now() + timeout;
+        let child = self.process.as_mut().ok_or("No process")?;
+        loop {
+            if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
+                return Ok(status);
+            }
+            if Instant::now() >= deadline {
+                return Err(format!("Server did not exit within {timeout:?}"));
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
     }
 
     pub fn get_stderr(&self) -> String {

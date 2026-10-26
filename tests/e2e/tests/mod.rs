@@ -33,6 +33,7 @@ pub mod fake_https_server;
 pub mod fake_oauth_server;
 
 pub mod analytics_environment_override;
+pub mod analytics_shutdown;
 pub mod analytics_tracking;
 pub mod analyze_change_set;
 pub mod bundled_docs;

@@ -3,6 +3,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use serde_json::{json, Value};
+use tokio_util::task::TaskTracker;
 
 use crate::agent_instructions;
 use crate::analytics_attribution::{
@@ -69,7 +70,7 @@ pub(crate) struct AttributedEvent<'a> {
     pub(crate) attribution: TrackingAttribution,
 }
 
-pub(crate) fn track_event_with_attribution(event: AttributedEvent<'_>) {
+pub(crate) fn track_event_with_attribution(event: AttributedEvent<'_>, tasks: &TaskTracker) {
     let enabled = !is_disabled();
     if debug_enabled() {
         tracing::info!(
@@ -86,12 +87,22 @@ pub(crate) fn track_event_with_attribution(event: AttributedEvent<'_>) {
     else {
         return;
     };
-    spawn_tracking_event(tracking_event, Some(event.attribution));
+    spawn_tracking_event(tracking_event, Some(event.attribution), tasks);
 }
 
-fn spawn_tracking_event(tracking_event: TrackingEvent, attribution: Option<TrackingAttribution>) {
-    tokio::spawn(async move {
-        let _ = process_tracking_event(tracking_event, attribution, &ReqwestClient).await;
+fn spawn_tracking_event(
+    tracking_event: TrackingEvent,
+    attribution: Option<TrackingAttribution>,
+    tasks: &TaskTracker,
+) {
+    tasks.spawn(async move {
+        let event_type = tracking_event.event.clone();
+        if process_tracking_event(tracking_event, attribution, &ReqwestClient)
+            .await
+            .is_err()
+        {
+            tracing::warn!(event_type, "Telemetry event delivery failed");
+        }
     });
 }
 
@@ -115,15 +126,22 @@ pub struct ErrorEvent<'a> {
     pub auth: &'a TrackingAuth,
 }
 
-pub(crate) fn track_error_with_attribution(evt: &ErrorEvent<'_>, attribution: TrackingAttribution) {
+pub(crate) fn track_error_with_attribution(
+    evt: &ErrorEvent<'_>,
+    attribution: TrackingAttribution,
+    tasks: &TaskTracker,
+) {
     let properties = build_error_properties(evt);
-    track_event_with_attribution(AttributedEvent {
-        event: "error",
-        properties,
-        instance_id: evt.instance_id,
-        auth: evt.auth,
-        attribution,
-    });
+    track_event_with_attribution(
+        AttributedEvent {
+            event: "error",
+            properties,
+            instance_id: evt.instance_id,
+            auth: evt.auth,
+            attribution,
+        },
+        tasks,
+    );
 }
 
 fn build_error_properties(evt: &ErrorEvent<'_>) -> Value {
@@ -484,13 +502,16 @@ mod tests {
             api_root: None,
         };
         match call {
-            TestTrackingCall::Event => track_event_with_attribution(AttributedEvent {
-                event: "test-event",
-                properties: json!({"key": "value"}),
-                instance_id: "test-instance",
-                auth: &auth,
-                attribution: test_attribution(client),
-            }),
+            TestTrackingCall::Event => track_event_with_attribution(
+                AttributedEvent {
+                    event: "test-event",
+                    properties: json!({"key": "value"}),
+                    instance_id: "test-instance",
+                    auth: &auth,
+                    attribution: test_attribution(client),
+                },
+                &TaskTracker::new(),
+            ),
             TestTrackingCall::Error => track_error_with_attribution(
                 &ErrorEvent {
                     error_kind: "some-error",
@@ -500,6 +521,7 @@ mod tests {
                     auth: &auth,
                 },
                 test_attribution(client),
+                &TaskTracker::new(),
             ),
         }
     }
@@ -891,13 +913,16 @@ mod tests {
             api_root: None,
         };
 
-        track_event_with_attribution(AttributedEvent {
-            event: "test-event",
-            properties: json!({"tool": "review"}),
-            instance_id: "test-instance",
-            auth: &auth,
-            attribution: path_attribution(repository.path(), client),
-        });
+        track_event_with_attribution(
+            AttributedEvent {
+                event: "test-event",
+                properties: json!({"tool": "review"}),
+                instance_id: "test-instance",
+                auth: &auth,
+                attribution: path_attribution(repository.path(), client),
+            },
+            &TaskTracker::new(),
+        );
 
         timeout(Duration::from_secs(2), started.notified())
             .await
