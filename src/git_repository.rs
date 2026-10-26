@@ -108,11 +108,17 @@ fn git_command(args: &[&str], working_dir: &Path) -> tokio::process::Command {
     command
         .args(args)
         .current_dir(working_dir)
+        .stdin(std::process::Stdio::null())
         .kill_on_drop(true)
         .env("LC_ALL", "C")
         .env("GIT_TERMINAL_PROMPT", "0");
     for variable in crate::config::sensitive_env_vars() {
         command.env_remove(variable);
+    }
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
     }
     command
 }
