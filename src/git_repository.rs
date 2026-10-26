@@ -103,18 +103,44 @@ impl GitRunner for ProductionGitRunner {
     }
 }
 
-#[cfg(test)]
 fn git_command(args: &[&str], working_dir: &Path) -> tokio::process::Command {
     let mut command = tokio::process::Command::new("git");
     command
         .args(args)
         .current_dir(working_dir)
+        .kill_on_drop(true)
         .env("LC_ALL", "C")
         .env("GIT_TERMINAL_PROMPT", "0");
     for variable in crate::config::sensitive_env_vars() {
         command.env_remove(variable);
     }
     command
+}
+
+pub(crate) async fn author_email(action_path: Option<&Path>) -> Result<String, &'static str> {
+    let path = repository_action_path_with(action_path, std::env::current_dir)
+        .map_err(|_| "working-directory-unavailable")?;
+    let directory = nearest_existing_directory(&action_path_for_git(&path))
+        .ok_or("working-directory-unavailable")?;
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        git_command(&["var", "GIT_AUTHOR_IDENT"], &directory).output(),
+    )
+    .await
+    .map_err(|_| "git-author-timeout")?
+    .map_err(|_| "git-command-failed")?;
+    if !output.status.success() {
+        return Err("git-author-unavailable");
+    }
+    let identity = String::from_utf8(output.stdout).map_err(|_| "invalid-git-author")?;
+    parse_author_email(&identity).ok_or("invalid-git-author")
+}
+
+fn parse_author_email(identity: &str) -> Option<String> {
+    let (_, tail) = identity.rsplit_once('<')?;
+    let (email, _) = tail.split_once('>')?;
+    let email = email.trim();
+    (!email.is_empty()).then(|| email.to_string())
 }
 
 #[cfg(test)]
@@ -439,6 +465,37 @@ mod tests {
 
     fn git_config(repository: &Path, key: &str, value: &str) {
         git(repository, &["config", "--add", key, value]);
+    }
+
+    #[test]
+    fn parses_git_author_email_without_name_or_timestamp() {
+        assert_eq!(
+            parse_author_email("Test Author <author@example.com> 1234567890 +0000\n"),
+            Some("author@example.com".to_string())
+        );
+        for identity in ["", "invalid", "Test <>", "Test <missing-end"] {
+            assert_eq!(parse_author_email(identity), None);
+        }
+    }
+
+    #[tokio::test]
+    async fn author_email_respects_repository_and_author_override() {
+        let _lock = crate::config::lock_test_env();
+        let repository = init_repository();
+        git_config(repository.path(), "user.name", "Test Author");
+        git_config(repository.path(), "user.email", "local-author@example.com");
+        let previous_email = std::env::var_os("GIT_AUTHOR_EMAIL");
+        std::env::remove_var("GIT_AUTHOR_EMAIL");
+        let nested_file = repository.path().join("src").join("missing.rs");
+        let local_email = author_email(Some(&nested_file)).await;
+        std::env::set_var("GIT_AUTHOR_EMAIL", "override@example.com");
+        let email = author_email(Some(repository.path())).await;
+        match previous_email {
+            Some(value) => std::env::set_var("GIT_AUTHOR_EMAIL", value),
+            None => std::env::remove_var("GIT_AUTHOR_EMAIL"),
+        }
+        assert_eq!(local_email, Ok("local-author@example.com".to_string()));
+        assert_eq!(email, Ok("override@example.com".to_string()));
     }
 
     struct MockGitRunner {
