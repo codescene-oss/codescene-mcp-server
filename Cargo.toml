@@ -12,7 +12,8 @@ path = "src/main.rs"
 rmcp = { version = "2.1", features = ["server", "macros", "transport-io"] }
 
 # Async runtime
-tokio = { version = "1", features = ["macros", "rt", "io-std", "sync", "time", "process", "fs"] }
+tokio = { version = "1", features = ["macros", "rt", "io-std", "sync", "time", "process", "fs", "signal"] }
+tokio-util = { version = "0.7", features = ["rt"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -62,6 +63,7 @@ gray_matter = { version = "0.3.2", features = ["yaml"] }
 gix-config = { version = "0.61", features = ["sha1"] }
 
 [dev-dependencies]
+rmcp = { version = "2.1", features = ["client"] }
 regex = "1"
 tiny_http = "0.12"
 rcgen = "0.14"

@@ -26,6 +26,7 @@ mod repository_projects;
 mod resources;
 mod server_handler;
 mod setup_hint;
+mod shutdown;
 mod skills;
 mod startup;
 #[cfg(test)]
@@ -172,6 +173,7 @@ pub(crate) struct CodeSceneServer {
     pub(crate) http_client: Arc<dyn HttpClient>,
     pub(crate) validator: Arc<dyn Validator>,
     pub(crate) repository_projects_cache: Arc<RepositoryProjectsCache>,
+    pub(crate) tracking_tasks: tokio_util::task::TaskTracker,
     #[cfg(test)]
     pub(crate) tracking_probe: Option<TrackingProbe>,
 }
@@ -383,18 +385,21 @@ impl CodeSceneServer {
             return;
         }
         let (auth, credential) = self.tracking_auth();
-        tracking::track_event_with_attribution(tracking::AttributedEvent {
-            event,
-            properties: props,
-            instance_id: &self.instance_id,
-            auth: &auth,
-            attribution: tracking::TrackingAttribution {
-                context,
-                credential,
-                http_client: self.http_client.clone(),
-                cache: self.repository_projects_cache.clone(),
+        tracking::track_event_with_attribution(
+            tracking::AttributedEvent {
+                event,
+                properties: props,
+                instance_id: &self.instance_id,
+                auth: &auth,
+                attribution: tracking::TrackingAttribution {
+                    context,
+                    credential,
+                    http_client: self.http_client.clone(),
+                    cache: self.repository_projects_cache.clone(),
+                },
             },
-        });
+            &self.tracking_tasks,
+        );
     }
 
     pub(crate) fn track_api_err(&self, tool: &str, err: &errors::ApiError) {
@@ -456,6 +461,7 @@ impl CodeSceneServer {
                 http_client: self.http_client.clone(),
                 cache: self.repository_projects_cache.clone(),
             },
+            &self.tracking_tasks,
         );
     }
 
@@ -548,6 +554,7 @@ impl CodeSceneServer {
             http_client: deps.http_client,
             validator: deps.validator,
             repository_projects_cache: Arc::new(RepositoryProjectsCache::default()),
+            tracking_tasks: tokio_util::task::TaskTracker::new(),
             #[cfg(test)]
             tracking_probe: None,
         }
@@ -912,10 +919,22 @@ fn init_tracing(
 }
 
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
+    run_with_args(std::env::args().skip(1).collect())
+}
+
+fn run_with_args(args: Vec<String>) -> anyhow::Result<()> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    let result = runtime.block_on(run(args));
+    // Tokio's blocking stdin read cannot be cancelled while the client holds stdin open.
+    runtime.shutdown_background();
+    result
+}
+
+async fn run(args: Vec<String>) -> anyhow::Result<()> {
     let raw_version = env!("CS_MCP_VERSION");
-    let args: Vec<String> = std::env::args().skip(1).collect();
     match parse_cli_args(&args, raw_version) {
         Ok(action) => {
             if dispatch_cli_action(action).await? {
@@ -929,6 +948,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    let mut termination = shutdown::Termination::new()?;
     config::snapshot_client_env_vars();
     ensure_oauth_client_configured().await;
     let config_data = config::load().unwrap_or_default();
@@ -959,17 +979,9 @@ async fn main() -> anyhow::Result<()> {
         validator: Arc::new(tools::validation::ProductionCliValidator),
     });
 
-    // Covered by e2e test: test_shutdown_during_handshake.py
     let stdio = rmcp::transport::stdio().into_transport();
     let transport = transport::DiscoveryFallbackTransport::new(stdio);
-    let Some(service) = serve_or_handle_disconnect(server, transport).await? else {
-        return Ok(());
-    };
-
-    tracing::info!("CodeScene MCP server ready");
-
-    service.waiting().await?;
-    Ok(())
+    shutdown::serve(server, transport, termination.recv()).await
 }
 
 pub(crate) async fn serve_or_handle_disconnect<T, E, A>(

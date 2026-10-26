@@ -165,12 +165,8 @@ pub fn test_stdin_closed_after_full_handshake() {
 }
 
 // ---------------------------------------------------------------------------
-// SIGTERM tests (Unix + npm backend only)
+// SIGTERM tests (Unix static and npm backends)
 // ---------------------------------------------------------------------------
-
-fn is_npm_backend() -> bool {
-    std::env::var("CS_MCP_BACKEND").as_deref() == Ok("npm")
-}
 
 #[allow(unused_mut)]
 fn sigterm_and_wait(mut child: std::process::Child) -> (Option<i32>, String) {
@@ -190,8 +186,8 @@ fn sigterm_and_wait(mut child: std::process::Child) -> (Option<i32>, String) {
 
 #[test]
 pub fn test_sigterm_before_any_input() {
-    if cfg!(windows) || !is_npm_backend() {
-        eprintln!("  SKIP: SIGTERM tests only run on Unix with npm backend");
+    if cfg!(windows) || is_docker() {
+        eprintln!("  SKIP: direct-process SIGTERM tests require Unix static or npm backend");
         return;
     }
 
@@ -205,8 +201,8 @@ pub fn test_sigterm_before_any_input() {
 
 #[test]
 pub fn test_sigterm_after_full_handshake() {
-    if cfg!(windows) || !is_npm_backend() {
-        eprintln!("  SKIP: SIGTERM tests only run on Unix with npm backend");
+    if cfg!(windows) || is_docker() {
+        eprintln!("  SKIP: direct-process SIGTERM tests require Unix static or npm backend");
         return;
     }
 

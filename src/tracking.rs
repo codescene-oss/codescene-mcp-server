@@ -3,6 +3,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use serde_json::{json, Value};
+use tokio_util::task::TaskTracker;
 
 use crate::agent_instructions;
 use crate::analytics_attribution::{
@@ -69,7 +70,7 @@ pub(crate) struct AttributedEvent<'a> {
     pub(crate) attribution: TrackingAttribution,
 }
 
-pub(crate) fn track_event_with_attribution(event: AttributedEvent<'_>) {
+pub(crate) fn track_event_with_attribution(event: AttributedEvent<'_>, tasks: &TaskTracker) {
     let enabled = !is_disabled();
     if debug_enabled() {
         tracing::info!(
@@ -86,12 +87,22 @@ pub(crate) fn track_event_with_attribution(event: AttributedEvent<'_>) {
     else {
         return;
     };
-    spawn_tracking_event(tracking_event, Some(event.attribution));
+    spawn_tracking_event(tracking_event, Some(event.attribution), tasks);
 }
 
-fn spawn_tracking_event(tracking_event: TrackingEvent, attribution: Option<TrackingAttribution>) {
-    tokio::spawn(async move {
-        let _ = process_tracking_event(tracking_event, attribution, &ReqwestClient).await;
+fn spawn_tracking_event(
+    tracking_event: TrackingEvent,
+    attribution: Option<TrackingAttribution>,
+    tasks: &TaskTracker,
+) {
+    tasks.spawn(async move {
+        let event_type = tracking_event.event.clone();
+        if process_tracking_event(tracking_event, attribution, &ReqwestClient)
+            .await
+            .is_err()
+        {
+            tracing::warn!(event_type, "Telemetry event delivery failed");
+        }
     });
 }
 
@@ -115,15 +126,22 @@ pub struct ErrorEvent<'a> {
     pub auth: &'a TrackingAuth,
 }
 
-pub(crate) fn track_error_with_attribution(evt: &ErrorEvent<'_>, attribution: TrackingAttribution) {
+pub(crate) fn track_error_with_attribution(
+    evt: &ErrorEvent<'_>,
+    attribution: TrackingAttribution,
+    tasks: &TaskTracker,
+) {
     let properties = build_error_properties(evt);
-    track_event_with_attribution(AttributedEvent {
-        event: "error",
-        properties,
-        instance_id: evt.instance_id,
-        auth: evt.auth,
-        attribution,
-    });
+    track_event_with_attribution(
+        AttributedEvent {
+            event: "error",
+            properties,
+            instance_id: evt.instance_id,
+            auth: evt.auth,
+            attribution,
+        },
+        tasks,
+    );
 }
 
 fn build_error_properties(evt: &ErrorEvent<'_>) -> Value {
@@ -484,13 +502,16 @@ mod tests {
             api_root: None,
         };
         match call {
-            TestTrackingCall::Event => track_event_with_attribution(AttributedEvent {
-                event: "test-event",
-                properties: json!({"key": "value"}),
-                instance_id: "test-instance",
-                auth: &auth,
-                attribution: test_attribution(client),
-            }),
+            TestTrackingCall::Event => track_event_with_attribution(
+                AttributedEvent {
+                    event: "test-event",
+                    properties: json!({"key": "value"}),
+                    instance_id: "test-instance",
+                    auth: &auth,
+                    attribution: test_attribution(client),
+                },
+                &TaskTracker::new(),
+            ),
             TestTrackingCall::Error => track_error_with_attribution(
                 &ErrorEvent {
                     error_kind: "some-error",
@@ -500,6 +521,7 @@ mod tests {
                     auth: &auth,
                 },
                 test_attribution(client),
+                &TaskTracker::new(),
             ),
         }
     }
@@ -891,19 +913,63 @@ mod tests {
             api_root: None,
         };
 
-        track_event_with_attribution(AttributedEvent {
-            event: "test-event",
-            properties: json!({"tool": "review"}),
-            instance_id: "test-instance",
-            auth: &auth,
-            attribution: path_attribution(repository.path(), client),
-        });
+        track_event_with_attribution(
+            AttributedEvent {
+                event: "test-event",
+                properties: json!({"tool": "review"}),
+                instance_id: "test-instance",
+                auth: &auth,
+                attribution: path_attribution(repository.path(), client),
+            },
+            &TaskTracker::new(),
+        );
 
         timeout(Duration::from_secs(2), started.notified())
             .await
             .expect("detached attribution should start after the tracking call returns");
         release.notify_one();
         std::env::remove_var("CS_TRACKING_URL");
+    }
+
+    #[tokio::test]
+    async fn spawned_delivery_is_tracked_until_http_response() {
+        let _lock = config::lock_test_env();
+        let receiver = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let mut event = tracking_event("mcp-tracked", json!({}));
+        event.url = format!("http://{}", receiver.server_addr());
+        let response_thread = std::thread::spawn(move || {
+            let mut request = receiver.recv_timeout(Duration::from_secs(2)).unwrap().unwrap();
+            let mut body = String::new();
+            request.as_reader().read_to_string(&mut body).unwrap();
+            request.respond(tiny_http::Response::empty(200)).unwrap();
+            serde_json::from_str::<Value>(&body).unwrap()
+        });
+        let tasks = TaskTracker::new();
+        spawn_tracking_event(event, None, &tasks);
+        assert_eq!(tasks.len(), 1);
+        tasks.close();
+        timeout(Duration::from_secs(2), tasks.wait()).await.unwrap();
+        assert!(tasks.is_empty());
+        let body = response_thread.join().unwrap();
+        assert_eq!(body["event-type"], "mcp-tracked");
+    }
+
+    #[test]
+    fn spawned_delivery_failure_is_logged_and_releases_tracker() {
+        let _lock = config::lock_test_env();
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let logs = capture_logs(|| runtime.block_on(async {
+            let mut event = tracking_event("mcp-failed", json!({}));
+            event.url = "http://127.0.0.1:0".to_string();
+            let tasks = TaskTracker::new();
+            spawn_tracking_event(event, None, &tasks);
+            tasks.close();
+            timeout(Duration::from_secs(2), tasks.wait()).await.unwrap();
+            assert!(tasks.is_empty());
+        }));
+        assert!(logs.contains("Telemetry event delivery failed"));
+        assert!(logs.contains("event_type=\"mcp-failed\""));
+        assert!(!logs.contains(ACCESS_TOKEN));
     }
 
     async fn send_event_and_capture_request(

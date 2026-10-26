@@ -496,6 +496,7 @@ dependencies = [
  "thiserror",
  "tiny_http",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -2470,6 +2471,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tokio-util",
  "tracing",
 ]
@@ -3042,6 +3044,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-stream"
+version = "0.1.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3d06f0b082ba57c26b79407372e57cf2a1e28124f78e9479fe80322cf53420b"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
+ "tokio",
+]
+
+[[package]]
 name = "tokio-util"
 version = "0.7.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3050,6 +3063,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "pin-project-lite",
  "tokio",
 ]

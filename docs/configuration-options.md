@@ -554,4 +554,3 @@ Or use `set_config` directly:
 To re-enable all tools, set the value to an empty string:
 
 > "Clear the enabled_tools setting"
-
