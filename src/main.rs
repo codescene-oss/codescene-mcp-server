@@ -1,6 +1,7 @@
 // Tests serialize process-wide environment mutations across async calls.
 #![cfg_attr(test, allow(clippy::await_holding_lock))]
 
+mod account_routing;
 mod api_client;
 mod agent_instructions;
 mod analytics_attribution;
@@ -237,28 +238,7 @@ impl<'a> ContextualErrorEvent<'a> {
 
 impl CodeSceneServer {
     pub(crate) async fn require_token(&self) -> Option<CallToolResult> {
-        match self
-            .auth_manager
-            .resolve_credential(&*self.cli_runner)
-            .await
-        {
-            Ok(Some(credential)) => {
-                self.log_credential_resolved(&credential, "token requirement satisfied");
-                None
-            }
-            Ok(None) => {
-                self.log_no_credential("token requirement failed: no usable credential resolved");
-                Some(CallToolResult::success(vec![Content::text(
-                    token_missing_msg(),
-                )]))
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "auth token check failed");
-                Some(CallToolResult::success(vec![Content::text(
-                    token_missing_msg(),
-                )]))
-            }
-        }
+        self.resolve_auth_credential().await.err()
     }
 
     pub(crate) async fn require_token_with_context(
@@ -266,7 +246,10 @@ impl CodeSceneServer {
         tool: &str,
         context: analytics_attribution::AnalyticsContext,
     ) -> Option<CallToolResult> {
-        let result = self.require_token().await?;
+        let result = self
+            .resolve_auth_credential_for_context(&context)
+            .await
+            .err()?;
         self.track_error_with_context(ContextualErrorEvent {
             error_kind: "authentication_unavailable",
             tool,
@@ -277,6 +260,16 @@ impl CodeSceneServer {
     }
 
     pub(crate) async fn resolve_auth_credential(&self) -> Result<AuthCredential, CallToolResult> {
+        self.resolve_auth_credential_for_context(
+            &analytics_attribution::AnalyticsContext::CurrentWorkspace,
+        )
+        .await
+    }
+
+    async fn resolve_auth_credential_for_context(
+        &self,
+        context: &analytics_attribution::AnalyticsContext,
+    ) -> Result<AuthCredential, CallToolResult> {
         match self
             .auth_manager
             .resolve_credential(&*self.cli_runner)
@@ -284,7 +277,15 @@ impl CodeSceneServer {
         {
             Ok(Some(credential)) => {
                 self.log_credential_resolved(&credential, "resolved auth credential for API tool");
-                Ok(credential)
+                self.route_oauth_account(credential, context)
+                    .await
+                    .map_err(|error| {
+                        tracing::warn!(%error, "automatic OAuth account switch failed");
+                        tools::common::tool_error(format!(
+                            "Automatic CodeScene account switching failed: {error}\n\
+                             Use login or switch_account to retry."
+                        ))
+                    })
             }
             Ok(None) => {
                 self.log_no_credential("failed to resolve auth credential for API tool");
@@ -306,13 +307,17 @@ impl CodeSceneServer {
         tool: &str,
         project_id: i64,
     ) -> Result<AuthCredential, CallToolResult> {
-        let credential = self.resolve_auth_credential().await.inspect_err(|_| {
-            self.track_error_with_context(ContextualErrorEvent::for_project(
-                "authentication_unavailable",
-                tool,
-                project_id,
-            ));
-        })?;
+        let context = analytics_attribution::AnalyticsContext::ExplicitProjectIds(vec![project_id]);
+        let credential = self
+            .resolve_auth_credential_for_context(&context)
+            .await
+            .inspect_err(|_| {
+                self.track_error_with_context(ContextualErrorEvent::for_project(
+                    "authentication_unavailable",
+                    tool,
+                    project_id,
+                ));
+            })?;
         if self.is_standalone {
             self.track_error_with_context(ContextualErrorEvent::for_project(
                 "standalone_license",
