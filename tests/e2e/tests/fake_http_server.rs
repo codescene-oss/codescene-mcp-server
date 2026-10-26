@@ -1,3 +1,6 @@
+//! Local HTTP fixture with blocking request reads, including on platforms where
+//! accepted sockets inherit the listener's nonblocking mode.
+
 use serde_json;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -143,6 +146,10 @@ fn handle_connection(
     captured: &Arc<Mutex<Vec<CapturedRequest>>>,
     handler: &RequestHandler,
 ) {
+    // macOS inherits the nonblocking listener mode on accepted sockets.
+    stream
+        .set_nonblocking(false)
+        .expect("Failed to make accepted HTTP socket blocking");
     let Some(request) = parse_http_request(stream) else {
         return;
     };
@@ -224,4 +231,55 @@ fn write_http_response(stream: &mut TcpStream, status: u16, body: &str) {
     );
     let _ = stream.write_all(response.as_bytes());
     let _ = stream.flush();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+
+    #[test]
+    fn test_fake_http_server_reads_fragmented_request_on_nonblocking_socket() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (mut stream, _) = listener.accept().unwrap();
+        stream.set_nonblocking(true).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+
+        let body = r#"{"event":true}"#;
+        write!(
+            client,
+            "POST /tracking HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            &body[..6]
+        )
+        .unwrap();
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let requests = Arc::clone(&captured);
+        let (done, finished) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            let handler: RequestHandler = Arc::new(|_| (200, "{}".to_string()));
+            handle_connection(&mut stream, &requests, &handler);
+            done.send(()).unwrap();
+        });
+        assert_eq!(
+            finished.recv_timeout(Duration::from_millis(100)),
+            Err(mpsc::RecvTimeoutError::Timeout),
+            "The server must wait for the remaining request body"
+        );
+        client.write_all(body[6..].as_bytes()).unwrap();
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+        worker.join().unwrap();
+
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        let requests = captured.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].body, body);
+    }
 }
