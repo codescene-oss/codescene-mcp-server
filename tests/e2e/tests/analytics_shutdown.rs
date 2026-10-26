@@ -5,6 +5,7 @@
 //! SIGTERM must deliver the queued batch before exiting successfully.
 //! An unavailable endpoint must instead trigger a bounded drain and warning.
 //! SIGKILL still loses queued events because it cannot execute cleanup.
+//! Control delivery has its own budget; it is not bound by the shutdown timeout.
 //!
 //! Run with `cargo test --test e2e test_analytics_shutdown -- --nocapture`.
 //! Only local fake endpoints and a dummy token are used. Unix backends signal
@@ -24,6 +25,7 @@ mod unix {
 
     const BATCH_SIZE: usize = 20;
     const TOOL_TIMEOUT: Duration = Duration::from_secs(60);
+    const CONTROL_DELIVERY_TIMEOUT: Duration = Duration::from_secs(60);
     const WAIT_TIMEOUT: Duration = Duration::from_secs(5);
     const OBSERVATION_TIME: Duration = Duration::from_secs(1);
     const MAPPING_PATH: &str = "/api/v2/mcp/repository-projects";
@@ -191,17 +193,43 @@ mod unix {
         })
     }
 
-    fn wait_for_control(server: &FakeHttpServer) {
+    fn wait_for_control(server: &FakeHttpServer, client: &MCPClient) {
         let expected = [BATCH_SIZE / 2; 2];
-        let deadline = Instant::now() + WAIT_TIMEOUT;
+        let deadline = Instant::now() + CONTROL_DELIVERY_TIMEOUT;
         while event_counts(server) != expected && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(20));
         }
         assert_eq!(
             event_counts(server),
             expected,
-            "Control events must all arrive before testing shutdown"
+            "Control events must all arrive before testing shutdown. Server stderr:\n{}",
+            client.get_stderr()
         );
+    }
+
+    #[test]
+    fn test_analytics_shutdown_control_waits_for_delayed_delivery() {
+        let gate = Arc::new(Gate::default());
+        let handler_gate = Arc::clone(&gate);
+        let tracking = FakeHttpServer::start(move |_| {
+            handler_gate.block();
+            (200, "{}".to_string())
+        });
+        let api = BlockedAttribution::new();
+        let (command, mut env, repo_dir, _tmp) = setup();
+        configure_env(&mut env, &repo_dir, &api.server, &tracking);
+        let mut process = SignalClient::new(command, &env, &repo_dir);
+        generate_events(&mut process.client);
+        gate.wait_until_blocked();
+        let delayed_release = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(6));
+            gate.release();
+        });
+        wait_for_control(&tracking, &process.client);
+        delayed_release
+            .join()
+            .expect("Delayed receiver should finish");
+        tracking.shutdown();
     }
 
     fn add_remote(repo: &Path) {
@@ -285,7 +313,7 @@ mod unix {
         configure_env(&mut env, &repo_dir, &api.server, &tracking);
         let mut process = SignalClient::new(command, &env, &repo_dir);
         generate_events(&mut process.client);
-        wait_for_control(&tracking);
+        wait_for_control(&tracking, &process.client);
 
         add_remote(&repo_dir);
         generate_events(&mut process.client);
