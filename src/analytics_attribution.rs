@@ -259,10 +259,12 @@ pub(crate) mod tests {
                 crate::repository_projects::RepositoryProject {
                     repository_id: "github.com/acme/web".to_string(),
                     project_ids: vec![42],
+                    projects: Vec::new(),
                 },
                 crate::repository_projects::RepositoryProject {
                     repository_id: "github.com/acme/empty".to_string(),
                     project_ids: Vec::new(),
+                    projects: Vec::new(),
                 },
             ],
         };

@@ -24,7 +24,28 @@ Then sign in with the `login` prompt, by asking the assistant, or via **CodeScen
 
 ### Switch Cloud account
 
-Use this when you belong to **more than one** CodeScene Cloud account and need the MCP server to use a different tenant. Cloud OAuth tokens are account-bound, so changing the active account is an explicit switch — not a config tweak.
+Use this when you belong to **more than one** CodeScene Cloud account and need the MCP server to use a different tenant. Cloud OAuth tokens are account-bound, so changing an account requires switching its OAuth session, not just changing a config value.
+
+#### Automatic repository-based switching
+
+Before authenticated tools run, the server matches the repository's Git remotes
+against the `v2/mcp/repository-projects` endpoint. When its `projects` metadata
+identifies a single account different from your current OAuth account, the server
+switches automatically. It reuses stored CLI credentials when available, opening
+the OAuth login flow only when needed. Subsequent tools and server restarts reuse
+the persisted session.
+
+If the current account matches any of the repository's projects, it is kept.
+If several other accounts match, no account is selected automatically; use
+`switch_account` to choose one. Project-specific API tools restrict matching to
+the requested project. Legacy or incomplete responses without account metadata
+do not trigger switching.
+
+This works independently of analytics/tracking and never switches a configured
+PAT. Mapping lookup failures are logged and leave the current session in use.
+If an attempted OAuth switch fails, the tool reports the failure instead of
+continuing with the wrong account. Self-hosted instances without Cloud account
+metadata retain their existing authentication behavior.
 
 Start a switch in any of these ways:
 

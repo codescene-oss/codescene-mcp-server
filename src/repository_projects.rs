@@ -23,6 +23,13 @@ pub(crate) struct RepositoryProjects {
 pub(crate) struct RepositoryProject {
     pub(crate) repository_id: String,
     pub(crate) project_ids: Vec<i64>,
+    pub(crate) projects: Vec<ProjectAccount>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(crate) struct ProjectAccount {
+    pub(crate) project_id: i64,
+    pub(crate) account_id: i64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
@@ -42,6 +49,8 @@ struct RepositoryProjectsResponse {
 struct RepositoryProjectResponse {
     repository_id: String,
     project_ids: Vec<i64>,
+    #[serde(default)]
+    projects: Vec<ProjectAccount>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -180,6 +189,7 @@ pub(crate) async fn fetch_repository_projects(
             Ok(RepositoryProject {
                 repository_id: repository.repository_id,
                 project_ids: repository.project_ids,
+                projects: repository.projects,
             })
         })
         .collect::<Result<_, _>>()?;
@@ -282,6 +292,7 @@ mod tests {
             [RepositoryProject {
                 repository_id: "github.com/acme/web".to_string(),
                 project_ids: vec![42, 7],
+                projects: Vec::new(),
             }]
         );
         let requests = client.captured_requests.lock().unwrap();
@@ -318,6 +329,8 @@ mod tests {
             r#"{"repositories":[{}]}"#,
             r#"{"repositories":[{"repository_id":1,"project_ids":[42]}]}"#,
             r#"{"repositories":[{"repository_id":"github.com/acme/web","project_ids":["42"]}]}"#,
+            r#"{"repositories":[{"repository_id":"github.com/acme/web","project_ids":[42],"projects":null}]}"#,
+            r#"{"repositories":[{"repository_id":"github.com/acme/web","project_ids":[42],"projects":[{"project_id":42,"account_id":"3"}]}]}"#,
             "not-json",
         ] {
             let client = MockHttpClient::always(HttpResponse::ok(body));
@@ -378,14 +391,17 @@ mod tests {
                 RepositoryProject {
                     repository_id: "github.com/acme/web".to_string(),
                     project_ids: vec![456, 123, 456],
+                    projects: Vec::new(),
                 },
                 RepositoryProject {
                     repository_id: "gitlab.com/acme/web".to_string(),
                     project_ids: vec![789, 123],
+                    projects: Vec::new(),
                 },
                 RepositoryProject {
                     repository_id: "github.com/acme/web-extra".to_string(),
                     project_ids: vec![999],
+                    projects: Vec::new(),
                 },
             ],
         };
@@ -407,6 +423,7 @@ mod tests {
             repositories: vec![RepositoryProject {
                 repository_id: "github.com/acme/web".to_string(),
                 project_ids: vec![42],
+                projects: Vec::new(),
             }],
         };
 
@@ -427,6 +444,7 @@ mod tests {
             repositories: vec![RepositoryProject {
                 repository_id: "github.com/other/service".to_string(),
                 project_ids: vec![42],
+                projects: Vec::new(),
             }],
         };
 

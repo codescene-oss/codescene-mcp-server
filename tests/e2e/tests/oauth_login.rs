@@ -38,12 +38,16 @@ fn signed_in_json(token: &str, expires_in_secs: i64) -> String {
     )
 }
 
-fn signed_in_json_with_account(token: &str, expires_in_secs: i64, account_id: i64) -> String {
-    let expires_at = now_epoch() + expires_in_secs;
-    format!(
-        r#"{{"status":"signed_in","access-token":"{token}","api-url":"https://api.codescene.io/api","expires-at":{expires_at},"refresh-token-expires-at":{},"account-id":{account_id}}}"#,
-        expires_at + 3600
-    )
+pub(super) fn signed_in_json_with_account(
+    token: &str,
+    expires_in_secs: i64,
+    account_id: i64,
+) -> String {
+    let mut response: serde_json::Value =
+        serde_json::from_str(&signed_in_json(token, expires_in_secs))
+            .expect("parse signed-in fixture");
+    response["account-id"] = json!(account_id);
+    response.to_string()
 }
 
 fn signed_in_without_access_token(expires_in_secs: i64) -> String {
@@ -71,6 +75,7 @@ fn signed_in_without_access_token(expires_in_secs: i64) -> String {
 ///   first vs. later `auth token` call
 /// - `FAKE_CALL_LOG` — path to an append-only log of every `auth ...`
 ///   invocation, used to assert the CLI auth endpoints were/weren't called
+/// - `FAKE_CONTEXT_LOG` — optional log of every command and its `CS_ACCOUNT_ID`
 const FAKE_CLI_RS: &str = r##"use std::env;
 use std::fs;
 use std::io::Write;
@@ -79,6 +84,13 @@ use std::process;
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).filter(|a| !a.starts_with("-D")).collect();
+
+    if let Ok(path) = env::var("FAKE_CONTEXT_LOG") {
+        let mut log = fs::OpenOptions::new().create(true).append(true).open(path)
+            .expect("open CLI context log");
+        writeln!(log, "{}|{}", args.join(" "), env::var("CS_ACCOUNT_ID").unwrap_or_default())
+            .expect("write CLI context log");
+    }
 
     if args.first().map(|s| s.as_str()) == Some("auth") {
         if let Ok(log_path) = env::var("FAKE_CALL_LOG") {
@@ -148,7 +160,7 @@ fn main() {
 "##;
 
 /// Compile the fake CLI from embedded Rust source and return its path.
-fn make_fake_cli(dir: &Path) -> std::path::PathBuf {
+pub(super) fn make_fake_cli(dir: &Path) -> std::path::PathBuf {
     let source = dir.join("fake_cs_oauth.rs");
     std::fs::write(&source, FAKE_CLI_RS).expect("write fake CLI source");
 
@@ -246,7 +258,7 @@ fn oauth_setup(extra_env: &[(&str, &str)]) -> OAuthTestEnv {
     }
 }
 
-fn read_config(config_dir: &Path) -> serde_json::Value {
+pub(super) fn read_config(config_dir: &Path) -> serde_json::Value {
     let path = config_dir.join("config.json");
     let content = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("failed to read config file {}: {e}", path.display()));
@@ -257,7 +269,7 @@ fn config_file_exists(config_dir: &Path) -> bool {
     config_dir.join("config.json").is_file()
 }
 
-fn seed_config(config_dir: &Path, values: serde_json::Value) {
+pub(super) fn seed_config(config_dir: &Path, values: serde_json::Value) {
     let path = config_dir.join("config.json");
     std::fs::write(&path, serde_json::to_string_pretty(&values).unwrap())
         .expect("seed config file");

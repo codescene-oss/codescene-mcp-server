@@ -36,6 +36,7 @@ pub mod analytics_environment_override;
 pub mod analytics_shutdown;
 pub mod analytics_tracking;
 pub mod analyze_change_set;
+pub mod automatic_account_switching;
 pub mod bundled_docs;
 pub mod business_case;
 pub mod cloudfront_headers;
