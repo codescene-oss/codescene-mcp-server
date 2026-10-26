@@ -839,7 +839,7 @@ mod tests {
         std::env::remove_var("CS_ACCOUNT_ID");
     }
 
-    /// Env setup for `run_logout_flow_with` tests. Keeps the tempdir alive until drop.
+    /// Owns CLI-flow test state and cleans it before releasing the shared test lock.
     struct LogoutFlowEnv {
         _lock: std::sync::MutexGuard<'static, ()>,
         _dir: tempfile::TempDir,
@@ -926,9 +926,6 @@ mod tests {
             Some("42")
         );
         drop(env);
-        std::env::remove_var("CS_OAUTH_TOKEN");
-        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
-        std::env::remove_var("CS_ACCOUNT_ID");
     }
 
     #[tokio::test]
@@ -958,9 +955,6 @@ mod tests {
             "got: {err}"
         );
         drop(env);
-        std::env::remove_var("CS_OAUTH_TOKEN");
-        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
-        std::env::remove_var("CS_ACCOUNT_ID");
     }
 
     #[tokio::test]
@@ -1040,9 +1034,6 @@ mod tests {
             .unwrap()
         );
         drop(env);
-        std::env::remove_var("CS_OAUTH_TOKEN");
-        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
-        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
 
         let env = LogoutFlowEnv::new();
         assert!(
@@ -1091,9 +1082,6 @@ mod tests {
             .unwrap()
         );
         drop(env);
-        std::env::remove_var("CS_OAUTH_TOKEN");
-        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
-        std::env::remove_var("CS_ACCOUNT_ID");
     }
 
     #[tokio::test]
@@ -1118,12 +1106,9 @@ mod tests {
         run_auth_flow_with(&MockCliRunner::with_responses(vec![]))
             .await
             .unwrap();
-        drop(env);
-        std::env::remove_var("CS_OAUTH_TOKEN");
-        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
-        std::env::remove_var("CS_ACCOUNT_ID");
+            drop(env);
 
-        let env = LogoutFlowEnv::new();
+            let env = LogoutFlowEnv::new();
         run_auth_flow_with(&MockCliRunner::with_responses(vec![
             Ok(signed_out.to_string()),
             Ok(signed_in.to_string()),
@@ -1131,9 +1116,6 @@ mod tests {
         .await
         .unwrap();
         drop(env);
-        std::env::remove_var("CS_OAUTH_TOKEN");
-        std::env::remove_var("CS_OAUTH_EXPIRES_AT");
-        std::env::remove_var("CS_OAUTH_ACCOUNT_ID");
 
         let env = LogoutFlowEnv::new();
         let err = run_auth_flow_with(&MockCliRunner::with_responses(vec![
