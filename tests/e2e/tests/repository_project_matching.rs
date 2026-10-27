@@ -5,6 +5,7 @@
 //! Linked worktrees must inherit those mappings from the main checkout.
 //! Mocked API cases exercise remote formats, Git config syntax, and failures
 //! without requiring live account data or fetching from the configured remotes.
+//! On-prem mappings must remain usable with null or missing account IDs.
 
 use super::fake_http_server::FakeHttpServer;
 use super::*;
@@ -36,6 +37,14 @@ pub fn test_mock_project_matching_https() {
     assert_mock_remote(
         "https://GITHUB.com/Acme/Web.git",
         json!({"project-ids": [42]}),
+    );
+}
+
+pub fn test_mock_project_matching_onprem_optional_account_ids() {
+    assert_mock_remote("git@github.com:acme/web.git", json!({"project-ids": [42]}));
+    assert_mock_remote(
+        "git@bitbucket.org:team/mirror.git",
+        json!({"project-ids": [42, 99]}),
     );
 }
 
@@ -240,8 +249,16 @@ fn mock_repository_projects_server() -> FakeHttpServer {
             return (
                 200,
                 json!({"repositories": [
-                    {"repository_id": "github.com/acme/web", "project_ids": [42]},
-                    {"repository_id": "bitbucket.org/team/mirror", "project_ids": [99, 42]},
+                    {
+                        "repository_id": "github.com/acme/web",
+                        "project_ids": [42],
+                        "projects": [{"project_id": 42, "account_id": null}]
+                    },
+                    {
+                        "repository_id": "bitbucket.org/team/mirror",
+                        "project_ids": [99, 42],
+                        "projects": [{"project_id": 99}, {"project_id": 42}]
+                    },
                     {"repository_id": "example.org/team/service", "project_ids": [64]},
                     {"repository_id": "example.org/acme/web", "project_ids": [64]}
                 ]})

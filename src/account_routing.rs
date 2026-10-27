@@ -99,7 +99,7 @@ fn accounts_for_project(projects: &[ProjectAccount], project_id: i64) -> Option<
         .iter()
         .filter(|project| project.project_id == project_id)
         .map(|project| project.account_id)
-        .collect();
+        .collect::<Option<_>>()?;
     if project_id <= 0 || accounts.first().is_none_or(|id| *id <= 0) {
         return None;
     }
@@ -268,6 +268,8 @@ mod tests {
                 r#"{"repositories":[{"repository_id":"github.com/acme/web","project_ids":[10]}]}"#,
             ),
             mapping_response(json!([{"project_id": 10, "account_id": 1}])),
+            mapping_response(json!([{"project_id": 10, "account_id": null}])),
+            mapping_response(json!([{"project_id": 10}])),
             mapping_response(
                 json!([{"project_id": 10, "account_id": 3}, {"project_id": 10, "account_id": 4}]),
             ),
@@ -372,11 +374,11 @@ mod tests {
                     projects: vec![
                         ProjectAccount {
                             project_id: 2,
-                            account_id: 1,
+                            account_id: Some(1),
                         },
                         ProjectAccount {
                             project_id: 10,
-                            account_id: 3,
+                            account_id: Some(3),
                         },
                     ],
                 },
@@ -385,7 +387,7 @@ mod tests {
                     project_ids: vec![20],
                     projects: vec![ProjectAccount {
                         project_id: 20,
-                        account_id: 4,
+                        account_id: Some(4),
                     }],
                 },
             ],
@@ -415,16 +417,16 @@ mod tests {
             vec![],
             vec![ProjectAccount {
                 project_id: 10,
-                account_id: 3,
+                account_id: Some(3),
             }],
             vec![
                 ProjectAccount {
                     project_id: 2,
-                    account_id: 0,
+                    account_id: Some(0),
                 },
                 ProjectAccount {
                     project_id: 10,
-                    account_id: 3,
+                    account_id: Some(3),
                 },
             ],
         ] {
@@ -444,15 +446,45 @@ mod tests {
         let projects = [
             ProjectAccount {
                 project_id: 10,
-                account_id: 3,
+                account_id: Some(3),
             },
             ProjectAccount {
                 project_id: 10,
-                account_id: 4,
+                account_id: Some(4),
             },
         ];
         let accounts = accounts_for_project(&projects, 10).unwrap();
         assert_eq!(account_to_switch(&accounts, Some(1)), None);
         assert_eq!(accounts, BTreeSet::from([3, 4]));
+    }
+
+    #[test]
+    fn missing_account_metadata_does_not_select_a_partial_match() {
+        for projects in [
+            vec![ProjectAccount {
+                project_id: 10,
+                account_id: None,
+            }],
+            vec![
+                ProjectAccount {
+                    project_id: 10,
+                    account_id: Some(3),
+                },
+                ProjectAccount {
+                    project_id: 10,
+                    account_id: None,
+                },
+            ],
+        ] {
+            assert_eq!(accounts_for_project(&projects, 10), None);
+            let mut mappings = mappings();
+            mappings.repositories[0].projects.extend(projects);
+            assert!(candidate_accounts(
+                &mappings,
+                &["github.com/acme/web".to_string()],
+                &AnalyticsContext::CurrentWorkspace,
+            )
+            .is_empty());
+        }
     }
 }

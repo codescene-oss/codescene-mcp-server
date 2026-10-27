@@ -38,8 +38,9 @@ the persisted session.
 If the current account matches any of the repository's projects, it is kept.
 If several other accounts match, no account is selected automatically; use
 `switch_account` to choose one. Project-specific API tools restrict matching to
-the requested project. Legacy or incomplete responses without account metadata
-do not trigger switching.
+the requested project. Legacy or incomplete responses with missing or `null`
+account IDs still support repository-to-project matching, but do not trigger
+switching.
 
 This works independently of analytics/tracking and never switches a configured
 PAT. Mapping lookup failures are logged and leave the current session in use.

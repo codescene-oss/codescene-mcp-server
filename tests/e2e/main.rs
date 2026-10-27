@@ -926,6 +926,11 @@ fn test_mock_project_matching_https() {
 }
 
 #[test]
+fn test_mock_project_matching_onprem_optional_account_ids() {
+    tests::repository_project_matching::test_mock_project_matching_onprem_optional_account_ids();
+}
+
+#[test]
 fn test_mock_project_matching_multiple_fetch_urls() {
     tests::repository_project_matching::test_mock_project_matching_multiple_fetch_urls();
 }
