@@ -1,3 +1,8 @@
+//! Graceful shutdown on Unix SIGINT/SIGTERM or transport closure.
+//!
+//! Both signal handlers remain installed while telemetry drains. A client can
+//! still enforce a shorter deadline with SIGKILL; pending events are not durable.
+
 use std::future::Future;
 use std::time::Duration;
 
@@ -12,6 +17,8 @@ const TELEMETRY_DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
 pub(crate) struct Termination {
     #[cfg(unix)]
     signal: tokio::signal::unix::Signal,
+    #[cfg(unix)]
+    interrupt: tokio::signal::unix::Signal,
 }
 
 impl Termination {
@@ -19,15 +26,22 @@ impl Termination {
         Ok(Self {
             #[cfg(unix)]
             signal: tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?,
+            #[cfg(unix)]
+            interrupt: tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?,
         })
     }
 
     pub(crate) async fn recv(&mut self) {
         #[cfg(unix)]
-        self.signal.recv().await;
+        {
+            let signal = tokio::select! {
+                _ = self.signal.recv() => "SIGTERM",
+                _ = self.interrupt.recv() => "SIGINT",
+            };
+            tracing::info!("{signal} received; draining telemetry");
+        }
         #[cfg(not(unix))]
         std::future::pending::<()>().await;
-        tracing::info!("SIGTERM received; draining telemetry");
     }
 }
 
@@ -121,13 +135,15 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
-    async fn termination_receives_sigterm() {
+    async fn termination_receives_sigint_and_sigterm() {
         let mut termination = Termination::new().unwrap();
-        let result = unsafe { libc::kill(std::process::id() as i32, libc::SIGTERM) };
-        assert_eq!(result, 0);
-        tokio::time::timeout(Duration::from_secs(1), termination.recv())
-            .await
-            .unwrap();
+        for signal in [libc::SIGINT, libc::SIGTERM] {
+            let result = unsafe { libc::kill(std::process::id() as i32, signal) };
+            assert_eq!(result, 0);
+            tokio::time::timeout(Duration::from_secs(1), termination.recv())
+                .await
+                .unwrap();
+        }
     }
 
     #[tokio::test]

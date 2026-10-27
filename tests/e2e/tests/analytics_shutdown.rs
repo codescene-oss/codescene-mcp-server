@@ -1,8 +1,10 @@
-//! Telemetry delivery on SIGTERM and loss characterization on SIGKILL.
+//! Telemetry delivery on graceful signals and loss characterization on SIGKILL.
 //!
 //! A control batch must arrive in full. A second batch is held in project
 //! attribution until shutdown, then measured at the telemetry receiver.
-//! SIGTERM must deliver the queued batch before exiting successfully.
+//! SIGINT and SIGTERM must deliver the queued batch before exiting successfully.
+//! Claude's SIGINT -> SIGTERM (100ms) -> SIGKILL (500ms) sequence is also tested:
+//! responsive attribution can drain; stalled attribution still loses events.
 //! An unavailable endpoint must instead trigger a bounded drain and warning.
 //! SIGKILL still loses queued events because it cannot execute cleanup.
 //! Control delivery has its own budget; it is not bound by the shutdown timeout.
@@ -32,6 +34,30 @@ mod unix {
     const WAIT_TIMEOUT: Duration = Duration::from_secs(5);
     const OBSERVATION_TIME: Duration = Duration::from_secs(1);
     const MAPPING_PATH: &str = "/api/v2/mcp/repository-projects";
+
+    pub(super) enum Shutdown {
+        Signal(i32),
+        Claude,
+    }
+
+    impl Shutdown {
+        fn initial_signal(&self) -> i32 {
+            match self {
+                Self::Signal(signal) => *signal,
+                Self::Claude => libc::SIGINT,
+            }
+        }
+
+        fn supported(&self) -> bool {
+            if matches!(self, Self::Claude) && is_docker() {
+                skip_if_docker(
+                    "Claude's local process deadlines cannot be modeled by Docker CLI round trips",
+                );
+                return false;
+            }
+            true
+        }
+    }
 
     #[derive(Default)]
     struct Gate {
@@ -297,20 +323,20 @@ mod unix {
         );
     }
 
-    fn wait_for_drain_start(client: &MCPClient) {
+    fn wait_for_drain_start(client: &MCPClient, signal: i32) {
+        let name = if signal == libc::SIGINT {
+            "SIGINT"
+        } else {
+            "SIGTERM"
+        };
+        let message = format!("{name} received; draining telemetry");
         let deadline = Instant::now() + WAIT_TIMEOUT;
-        while !client
-            .get_stderr()
-            .contains("SIGTERM received; draining telemetry")
-            && Instant::now() < deadline
-        {
+        while !client.get_stderr().contains(&message) && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(
-            client
-                .get_stderr()
-                .contains("SIGTERM received; draining telemetry"),
-            "Server must handle SIGTERM before attribution is released: {}",
+            client.get_stderr().contains(&message),
+            "Server must handle {name} before attribution is released: {}",
             client.get_stderr()
         );
     }
@@ -336,8 +362,11 @@ mod unix {
     }
 
     fn assert_exit_status(status: std::process::ExitStatus, signal: i32) {
-        if signal == libc::SIGTERM {
-            assert!(status.success(), "SIGTERM must exit cleanly: {status}");
+        if signal != libc::SIGKILL {
+            assert!(
+                status.success(),
+                "Graceful signal {signal} must exit cleanly: {status}"
+            );
         } else if !is_docker() {
             assert_eq!(
                 status.signal(),
@@ -353,7 +382,105 @@ mod unix {
         }
     }
 
-    pub(super) fn run(signal: i32, release_attribution: bool) {
+    fn wait_until_exit(
+        process: &mut SignalClient,
+        deadline: Instant,
+    ) -> Option<std::process::ExitStatus> {
+        loop {
+            if let Some(status) = process
+                .client
+                .try_wait_for_exit()
+                .expect("Check server exit")
+            {
+                return Some(status);
+            }
+            if Instant::now() >= deadline {
+                return None;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    fn claude_shutdown(
+        process: &mut SignalClient,
+        gate: &Gate,
+        release_attribution: bool,
+    ) -> std::process::ExitStatus {
+        let started = Instant::now();
+        process.signal(libc::SIGINT);
+        if let Some(status) = wait_until_exit(process, started + Duration::from_millis(100)) {
+            return status;
+        }
+        process.signal(libc::SIGTERM);
+        if release_attribution {
+            if let Some(status) = wait_until_exit(process, started + Duration::from_millis(150)) {
+                return status;
+            }
+            // Hold attribution through SIGTERM to exercise escalation during draining.
+            gate.release();
+        }
+        if let Some(status) = wait_until_exit(process, started + Duration::from_millis(500)) {
+            return status;
+        }
+        process.signal(libc::SIGKILL);
+        process
+            .client
+            .wait_for_exit(WAIT_TIMEOUT)
+            .expect("SIGKILL must stop server")
+    }
+
+    fn finish_shutdown(
+        shutdown: &Shutdown,
+        process: &mut SignalClient,
+        api: &BlockedAttribution,
+        release: bool,
+    ) -> std::process::ExitStatus {
+        if matches!(shutdown, Shutdown::Claude) {
+            return claude_shutdown(process, &api.gate, release);
+        }
+        let signal = shutdown.initial_signal();
+        process.signal(signal);
+        if signal != libc::SIGKILL {
+            wait_for_drain_start(&process.client, signal);
+        }
+        if release {
+            api.gate.release();
+        }
+        process
+            .client
+            .wait_for_exit(Duration::from_secs(9))
+            .unwrap_or_else(|error| panic!("{error}\nstderr: {}", process.client.get_stderr()))
+    }
+
+    fn assert_shutdown_result(
+        shutdown: &Shutdown,
+        status: std::process::ExitStatus,
+        release_attribution: bool,
+        client: &MCPClient,
+    ) {
+        let forced = matches!(shutdown, Shutdown::Claude) && !release_attribution;
+        let signal = if forced {
+            libc::SIGKILL
+        } else {
+            shutdown.initial_signal()
+        };
+        assert_exit_status(status, signal);
+        if !release_attribution && !forced {
+            assert!(
+                client
+                    .get_stderr()
+                    .contains("Telemetry shutdown drain timed out"),
+                "Stalled telemetry must log a drain timeout: {}",
+                client.get_stderr()
+            );
+        }
+    }
+
+    pub(super) fn run(shutdown: Shutdown, release_attribution: bool) {
+        if !shutdown.supported() {
+            return;
+        }
+        let signal = shutdown.initial_signal();
         let api = BlockedAttribution::new();
         let tracking = FakeHttpServer::always_ok();
         let (command, mut env, repo_dir, _tmp) = setup();
@@ -375,52 +502,21 @@ mod unix {
             "Second batch must still be queued"
         );
 
-        process.signal(signal);
-        if signal == libc::SIGTERM {
-            wait_for_drain_start(&process.client);
-            assert_eq!(
-                event_counts(&tracking),
-                [BATCH_SIZE / 2; 2],
-                "Events must remain queued until shutdown drain starts"
-            );
-        }
-        // Release while the process may still be draining, not after waiting for exit.
-        if release_attribution {
-            api.gate.release();
-        }
-        let status = process
-            .client
-            .wait_for_exit(Duration::from_secs(9))
-            .unwrap_or_else(|error| {
-                panic!(
-                    "{error}\nstderr: {}\nevents: {:?}",
-                    process.client.get_stderr(),
-                    event_counts(&tracking)
-                )
-            });
-        assert_exit_status(status, signal);
-        if !release_attribution {
-            assert!(
-                process
-                    .client
-                    .get_stderr()
-                    .contains("Telemetry shutdown drain timed out"),
-                "Stalled telemetry must log a drain timeout: {}",
-                process.client.get_stderr()
-            );
-        }
+        let status = finish_shutdown(&shutdown, &mut process, &api, release_attribution);
+        assert_shutdown_result(&shutdown, status, release_attribution, &process.client);
         std::thread::sleep(OBSERVATION_TIME);
         let counts = event_counts(&tracking);
         let delivered = counts.iter().sum::<usize>() - BATCH_SIZE;
         eprintln!("signal={signal}, exit={status}, control={BATCH_SIZE}/{BATCH_SIZE}, queued delivered={delivered}/{BATCH_SIZE}, lost={}", BATCH_SIZE - delivered);
-        let expected = if signal == libc::SIGTERM && release_attribution {
+        let expected = if signal != libc::SIGKILL && release_attribution {
             [BATCH_SIZE; 2]
         } else {
             [BATCH_SIZE / 2; 2]
         };
         assert_eq!(
             counts, expected,
-            "SIGTERM must drain every queued event unless the drain times out; SIGKILL cannot drain"
+            "Graceful signals must drain queued events; timeouts and forced kills can lose them. Stderr:\n{}",
+            process.client.get_stderr()
         );
         tracking.shutdown();
     }
@@ -429,7 +525,7 @@ mod unix {
 #[test]
 pub fn test_analytics_shutdown_hard_kill() {
     #[cfg(unix)]
-    unix::run(libc::SIGKILL, true);
+    unix::run(unix::Shutdown::Signal(libc::SIGKILL), true);
     #[cfg(not(unix))]
     eprintln!("SKIP: SIGKILL diagnostics require Unix signals");
 }
@@ -437,7 +533,7 @@ pub fn test_analytics_shutdown_hard_kill() {
 #[test]
 pub fn test_analytics_shutdown_soft_kill() {
     #[cfg(unix)]
-    unix::run(libc::SIGTERM, true);
+    unix::run(unix::Shutdown::Signal(libc::SIGTERM), true);
     #[cfg(not(unix))]
     eprintln!("SKIP: SIGTERM diagnostics require Unix signals");
 }
@@ -445,7 +541,39 @@ pub fn test_analytics_shutdown_soft_kill() {
 #[test]
 pub fn test_analytics_shutdown_soft_kill_timeout() {
     #[cfg(unix)]
-    unix::run(libc::SIGTERM, false);
+    unix::run(unix::Shutdown::Signal(libc::SIGTERM), false);
     #[cfg(not(unix))]
     eprintln!("SKIP: SIGTERM diagnostics require Unix signals");
+}
+
+#[test]
+pub fn test_analytics_shutdown_sigint() {
+    #[cfg(unix)]
+    unix::run(unix::Shutdown::Signal(libc::SIGINT), true);
+    #[cfg(not(unix))]
+    eprintln!("SKIP: SIGINT diagnostics require Unix signals");
+}
+
+#[test]
+pub fn test_analytics_shutdown_sigint_timeout() {
+    #[cfg(unix)]
+    unix::run(unix::Shutdown::Signal(libc::SIGINT), false);
+    #[cfg(not(unix))]
+    eprintln!("SKIP: SIGINT diagnostics require Unix signals");
+}
+
+#[test]
+pub fn test_analytics_shutdown_claude_sequence() {
+    #[cfg(unix)]
+    unix::run(unix::Shutdown::Claude, true);
+    #[cfg(not(unix))]
+    eprintln!("SKIP: Claude signal sequence requires Unix signals");
+}
+
+#[test]
+pub fn test_analytics_shutdown_claude_sequence_stalled() {
+    #[cfg(unix)]
+    unix::run(unix::Shutdown::Claude, false);
+    #[cfg(not(unix))]
+    eprintln!("SKIP: Claude signal sequence requires Unix signals");
 }

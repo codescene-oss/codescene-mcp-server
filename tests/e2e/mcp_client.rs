@@ -253,6 +253,15 @@ impl MCPClient {
     }
 
     #[cfg(unix)]
+    pub fn try_wait_for_exit(&mut self) -> Result<Option<ExitStatus>, String> {
+        self.process
+            .as_mut()
+            .ok_or("No process")?
+            .try_wait()
+            .map_err(|error| error.to_string())
+    }
+
+    #[cfg(unix)]
     pub fn wait_for_exit(&mut self, timeout: Duration) -> Result<ExitStatus, String> {
         let deadline = Instant::now() + timeout;
         let child = self.process.as_mut().ok_or("No process")?;
