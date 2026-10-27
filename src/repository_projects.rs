@@ -29,7 +29,7 @@ pub(crate) struct RepositoryProject {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub(crate) struct ProjectAccount {
     pub(crate) project_id: i64,
-    pub(crate) account_id: i64,
+    pub(crate) account_id: Option<i64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
@@ -319,6 +319,41 @@ mod tests {
             client.captured_requests.lock().unwrap()[0].url,
             "https://codescene.example/api/v2/mcp/repository-projects"
         );
+    }
+
+    #[tokio::test]
+    async fn matches_onprem_projects_with_optional_account_metadata() {
+        for (metadata, expected_account) in [
+            (serde_json::json!({"account_id": null}), None),
+            (serde_json::json!({}), None),
+            (serde_json::json!({"account_id": 3}), Some(3)),
+        ] {
+            let mut project = serde_json::json!({"project_id": 42});
+            project
+                .as_object_mut()
+                .unwrap()
+                .extend(metadata.as_object().unwrap().clone());
+            let body = serde_json::json!({"repositories": [{
+                "repository_id": "github.com/acme/web",
+                "project_ids": [42],
+                "projects": [project],
+            }]});
+            let client = MockHttpClient::always(HttpResponse::ok(&body.to_string()));
+
+            let result =
+                fetch_repository_projects(&client, &credential(Some("https://codescene.example")))
+                    .await
+                    .unwrap();
+
+            assert_eq!(
+                result.repositories[0].projects[0].account_id,
+                expected_account
+            );
+            assert_eq!(
+                matching_project_ids(&["github.com/acme/web".to_string()], &result),
+                [42]
+            );
+        }
     }
 
     #[tokio::test]
