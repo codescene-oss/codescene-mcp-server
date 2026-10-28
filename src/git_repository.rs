@@ -359,10 +359,15 @@ pub(crate) async fn discover_repository_ids(
         EffectiveRemoteUrls::NoRemotes => return Err(RepositoryDiscoveryReason::NoGitRemotes),
         EffectiveRemoteUrls::Found(urls) => urls,
     };
-    let repository_ids = remote_urls
-        .iter()
-        .filter_map(|remote| crate::repository_url::canonical_repository_id(remote))
-        .collect::<BTreeSet<_>>();
+    let mut repository_ids = BTreeSet::new();
+    for remote in remote_urls {
+        let Some(remote) = crate::repository_url::parse_remote(&remote) else {
+            continue;
+        };
+        if let Some(id) = remote.resolve_id().await {
+            repository_ids.insert(id);
+        }
+    }
     if repository_ids.is_empty() {
         return Err(RepositoryDiscoveryReason::NoSupportedGitRemotes);
     }

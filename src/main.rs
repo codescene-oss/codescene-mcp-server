@@ -29,6 +29,7 @@ mod server_handler;
 mod setup_hint;
 mod shutdown;
 mod skills;
+mod ssh_config;
 mod startup;
 #[cfg(test)]
 mod test_utils;

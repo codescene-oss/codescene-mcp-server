@@ -102,7 +102,7 @@ fn log_repository_matches(repository_ids: &[String], mappings: &RepositoryProjec
         if !repository_found {
             tracing::info!(
                 repository_id,
-                "No exact repository mapping found. SSH host aliases are not resolved: if the remote uses an alias, compare its SSH HostName with the repository host configured in CodeScene. Also check repository path and account access."
+                "No exact repository mapping found. Check repository path and account access. For SSH aliases, check HostName in ~/.ssh/config and that OpenSSH is available."
             );
         }
     }
@@ -284,7 +284,7 @@ pub(crate) mod tests {
         ));
         assert!(logs.contains("repository_id=\"github.com/acme/empty\" project_ids=[] match_result=\"no-project-ids\""));
         assert!(logs.contains("repository_id=\"github-work/acme/web\" project_ids=[] match_result=\"repository-not-found\""));
-        assert!(logs.contains("SSH host aliases are not resolved"));
+        assert!(logs.contains("For SSH aliases"));
         assert!(logs.contains("HostName"));
     }
 

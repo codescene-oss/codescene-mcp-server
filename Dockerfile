@@ -18,10 +18,11 @@ RUN CS_MCP_VERSION="${VERSION}" cargo build --release
 FROM debian:bookworm-slim
 
 # git   – needed by several MCP tools that inspect repositories
+# openssh-client – evaluates SSH host aliases for repository matching
 # curl  – used to fetch the CodeScene CLI installer
 # ca-certificates – TLS for outbound HTTPS calls
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates git curl unzip \
+    && apt-get install -y --no-install-recommends ca-certificates git openssh-client curl unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Allow git to operate on bind-mounted repos owned by a different user.
