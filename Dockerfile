@@ -30,10 +30,11 @@ RUN apt-get update \
 # UID the container runs as (the default mcp user, or a --user override).
 RUN git config --system safe.directory '*'
 
-# Create a non-root user to run the server.  Using a fixed UID/GID
-# avoids running as root, which limits blast radius if a vulnerability
-# is exploited inside the container.
-RUN groupadd -g 1000 mcp && useradd -u 1000 -g mcp -m mcp
+# OpenSSH requires a passwd entry even for config-only evaluation. Allow test
+# images to match the UID/GID used for bind-mounted repositories.
+ARG MCP_UID=1000
+ARG MCP_GID=1000
+RUN groupadd -g "${MCP_GID}" mcp && useradd -u "${MCP_UID}" -g mcp -m mcp
 
 # Install the CodeScene CLI (cs-tool) with integrity verification
 # as root (needs write access to /usr/local or default install dir),

@@ -198,7 +198,10 @@ fn assert_mock_ssh_config(remote: &str, config: &str, expected: &[i64]) {
             std::fs::write(&included, config).expect("write SSH alias");
             std::fs::write(
                 ssh_dir.join("config"),
-                format!("Include \"{}\"\n", docker_config_dir(&included, repo)),
+                format!(
+                    "Include \"{}\"\n",
+                    docker_config_dir(&included, repo).replace('\\', "/")
+                ),
             )
             .expect("write SSH config");
             git_in(repo, &["remote", "add", "origin", remote]);
@@ -363,7 +366,12 @@ fn assert_mock_matching_with_env(
     assert!(!extract_result_text(&response).is_empty());
     let properties = wait_for_event_properties(&tracking_server);
     for key in ["project-ids", "no-project-matching-reason"] {
-        assert_eq!(properties.get(key), expected.get(key), "Unexpected {key}");
+        assert_eq!(
+            properties.get(key),
+            expected.get(key),
+            "Unexpected {key} for workspace {workspace_dir:?}. Server stderr:\n{}",
+            client.get_stderr()
+        );
     }
     if expected.get("no-project-matching-reason").is_none() {
         assert!(api_server.get_requests().iter().any(|request| {

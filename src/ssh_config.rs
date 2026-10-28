@@ -9,8 +9,16 @@ pub(crate) struct SshOptions {
 }
 
 pub(crate) async fn resolve_hostname(host: &str, options: &SshOptions) -> Option<String> {
-    let config = dirs::home_dir()?.join(".ssh/config");
+    let config = ssh_home_dir()?.join(".ssh/config");
     resolve_from_config(&config, host, options).await
+}
+
+fn ssh_home_dir() -> Option<std::path::PathBuf> {
+    #[cfg(windows)]
+    if let Some(profile) = std::env::var_os("USERPROFILE").filter(|value| !value.is_empty()) {
+        return Some(profile.into());
+    }
+    dirs::home_dir()
 }
 
 async fn resolve_from_config(config: &Path, host: &str, options: &SshOptions) -> Option<String> {
@@ -103,6 +111,21 @@ fn parse_hostname(output: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn ssh_home_honors_userprofile_override() {
+        let _lock = crate::config::lock_test_env();
+        let saved = std::env::var_os("USERPROFILE");
+        let home = tempfile::tempdir().unwrap();
+        std::env::set_var("USERPROFILE", home.path());
+        let actual = ssh_home_dir();
+        match saved {
+            Some(profile) => std::env::set_var("USERPROFILE", profile),
+            None => std::env::remove_var("USERPROFILE"),
+        }
+        assert_eq!(actual.as_deref(), Some(home.path()));
+    }
 
     #[test]
     fn reads_only_the_effective_hostname() {

@@ -47,7 +47,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build Docker image
-        run: docker build --build-arg VERSION=MCP-0.0.0-test -t codescene-mcp-test .
+        run: >-
+          docker build --build-arg VERSION=MCP-0.0.0-test
+          --build-arg MCP_UID="$(id -u)" --build-arg MCP_GID="$(id -g)"
+          -t codescene-mcp-test .
 
       - name: Run e2e tests (docker backend)
         run: CS_MCP_BACKEND=docker cargo test --test e2e --release -- --test-threads=4
