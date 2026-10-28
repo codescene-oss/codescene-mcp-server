@@ -124,11 +124,16 @@ impl DockerBackend {
 
     fn build_image(&self) {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let (uid, gid) = Self::user_ids();
         let status = Command::new("docker")
             .args([
                 "build",
                 "--build-arg",
                 &format!("VERSION={}", Self::TEST_VERSION),
+                "--build-arg",
+                &format!("MCP_UID={uid}"),
+                "--build-arg",
+                &format!("MCP_GID={gid}"),
                 "-t",
                 &self.image_name,
                 ".",
@@ -138,6 +143,17 @@ impl DockerBackend {
             .expect("docker build should execute");
 
         assert!(status.success(), "docker build failed");
+    }
+
+    fn user_ids() -> (u32, u32) {
+        #[cfg(unix)]
+        unsafe {
+            (libc::getuid(), libc::getgid())
+        }
+        #[cfg(not(unix))]
+        {
+            (1000, 1000)
+        }
     }
 
     /// Docker env vars are passed via `-e` flags in `get_command`, so
@@ -165,10 +181,7 @@ impl ServerBackend for DockerBackend {
     }
 
     fn get_command(&self, working_dir: &Path) -> Vec<String> {
-        #[cfg(unix)]
-        let (uid, gid) = unsafe { (libc::getuid(), libc::getgid()) };
-        #[cfg(not(unix))]
-        let (uid, gid) = (0u32, 0u32);
+        let (uid, gid) = Self::user_ids();
 
         let mut cmd = vec![
             "docker".to_string(),

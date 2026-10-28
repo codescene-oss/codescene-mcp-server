@@ -8,9 +8,10 @@ const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'~')
     .remove(b'+');
 
-struct RemoteParts {
+pub(crate) struct RemoteParts {
     host: String,
     path: Vec<String>,
+    ssh: Option<crate::ssh_config::SshOptions>,
 }
 
 struct RepositoryIdentity {
@@ -35,6 +36,15 @@ enum AzurePath {
 }
 
 impl RemoteParts {
+    pub(crate) async fn resolve_id(mut self) -> Option<String> {
+        if let Some(options) = &self.ssh {
+            if let Some(hostname) = crate::ssh_config::resolve_hostname(&self.host, options).await {
+                self.host = hostname;
+            }
+        }
+        self.repository_identity()?.canonical_id()
+    }
+
     fn repository_identity(self) -> Option<RepositoryIdentity> {
         let host = self.host.trim_end_matches('.').to_string();
         if host.is_empty() {
@@ -175,18 +185,22 @@ impl Provider {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn canonical_repository_id(remote: &str) -> Option<String> {
+    parse_remote(remote)?.repository_identity()?.canonical_id()
+}
+
+pub(crate) fn parse_remote(remote: &str) -> Option<RemoteParts> {
     let remote = remote.trim();
     if remote.is_empty() || is_filesystem_remote(remote.as_bytes()) {
         return None;
     }
 
-    let parts = if remote.contains("://") {
-        parse_url(remote)?
+    if remote.contains("://") {
+        parse_url(remote)
     } else {
-        parse_scp_like(remote)?
-    };
-    parts.repository_identity()?.canonical_id()
+        parse_scp_like(remote)
+    }
 }
 
 fn is_filesystem_remote(remote: &[u8]) -> bool {
@@ -215,6 +229,12 @@ fn parse_url(remote: &str) -> Option<RemoteParts> {
 
     Some(RemoteParts {
         host: url.host_str()?.to_string(),
+        ssh: matches!(url.scheme(), "ssh" | "git+ssh" | "ssh+git").then(|| {
+            crate::ssh_config::SshOptions {
+                user: (!url.username().is_empty()).then(|| url.username().to_string()),
+                port: url.port(),
+            }
+        }),
         path: url
             .path_segments()?
             .filter(|part| !part.is_empty())
@@ -248,7 +268,14 @@ fn parse_scp_like(remote: &str) -> Option<RemoteParts> {
     if path.is_empty() {
         return None;
     }
-    Some(RemoteParts { host, path })
+    Some(RemoteParts {
+        host,
+        path,
+        ssh: Some(crate::ssh_config::SshOptions {
+            user: authority.rsplit_once('@').map(|(user, _)| user.to_string()),
+            port: None,
+        }),
+    })
 }
 
 fn provider_for_host(host: &str) -> Provider {

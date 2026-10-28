@@ -6,6 +6,7 @@
 //! Mocked API cases exercise remote formats, Git config syntax, and failures
 //! without requiring live account data or fetching from the configured remotes.
 //! On-prem mappings must remain usable with null or missing account IDs.
+//! SSH aliases use isolated OpenSSH config, including Includes and Match rules.
 
 use super::fake_http_server::FakeHttpServer;
 use super::*;
@@ -21,6 +22,14 @@ const REPOSITORY_PROJECTS_URL: &str = "https://api.codescene.io/v2/mcp/repositor
 const PROJECTS_URL: &str = "https://api.codescene.io/v2/projects";
 const EVENT_TYPE: &str = "mcp-get-config";
 const TIMEOUT: Duration = Duration::from_secs(60);
+const SSH_ALIAS_CONFIG: &str = "\
+Match originalhost user-codescene user git
+    HostName github.com
+Host github-*
+    HostName github.com
+Host azure-codescene
+    HostName ssh.dev.azure.com
+";
 
 pub fn test_mock_project_matching_scp_ssh() {
     assert_mock_remote("git@github.com:acme/web.git", json!({"project-ids": [42]}));
@@ -158,6 +167,58 @@ pub fn test_mock_project_matching_unmatched_ssh_alias() {
     assert_mock_remote("git@github-work:acme/web.git", json!({"project-ids": []}));
 }
 
+pub fn test_mock_project_matching_ssh_host_alias() {
+    for (remote, expected) in [
+        ("git@github-codescene:acme/web.git", vec![42]),
+        ("ssh://git@github-codescene:2222/acme/web.git", vec![42]),
+        ("git+ssh://git@github-codescene/acme/web.git", vec![42]),
+        ("git@user-codescene:acme/web.git", vec![42]),
+        ("ssh://other@user-codescene/acme/web.git", vec![]),
+        ("https://github-codescene/acme/web.git", vec![]),
+        ("git@azure-codescene:v3/Acme/Platform/Web.git", vec![128]),
+    ] {
+        assert_mock_ssh_config(remote, SSH_ALIAS_CONFIG, &expected);
+    }
+}
+
+pub fn test_mock_project_matching_invalid_ssh_config() {
+    assert_mock_ssh_config("git@github.com:acme/web.git", "InvalidOption yes\n", &[42]);
+    assert_mock_ssh_config(
+        "git@github-codescene:acme/web.git",
+        "InvalidOption yes\n",
+        &[],
+    );
+}
+
+fn assert_mock_ssh_config(remote: &str, config: &str, expected: &[i64]) {
+    assert_mock_matching_with_env(
+        |repo, env| {
+            let ssh_dir = isolated_ssh_home(repo, env).join(".ssh");
+            let included = ssh_dir.join("hosts");
+            std::fs::write(&included, config).expect("write SSH alias");
+            std::fs::write(
+                ssh_dir.join("config"),
+                format!(
+                    "Include \"{}\"\n",
+                    docker_config_dir(&included, repo).replace('\\', "/")
+                ),
+            )
+            .expect("write SSH config");
+            git_in(repo, &["remote", "add", "origin", remote]);
+            repo.to_path_buf()
+        },
+        json!({"project-ids": expected}),
+    );
+}
+
+fn isolated_ssh_home(repo: &Path, env: &mut Vec<(String, String)>) -> std::path::PathBuf {
+    let home = repo.join("ssh-home");
+    std::fs::create_dir_all(home.join(".ssh")).expect("create isolated SSH home");
+    replace_env(env, "HOME", &docker_config_dir(&home, repo));
+    replace_env(env, "USERPROFILE", &docker_config_dir(&home, repo));
+    home
+}
+
 pub fn test_mock_project_matching_no_remotes() {
     assert_mock_matching(
         Path::to_path_buf,
@@ -260,7 +321,8 @@ fn mock_repository_projects_server() -> FakeHttpServer {
                         "projects": [{"project_id": 99}, {"project_id": 42}]
                     },
                     {"repository_id": "example.org/team/service", "project_ids": [64]},
-                    {"repository_id": "example.org/acme/web", "project_ids": [64]}
+                    {"repository_id": "example.org/acme/web", "project_ids": [64]},
+                    {"repository_id": "dev.azure.com/acme/platform/web", "project_ids": [128]}
                 ]})
                 .to_string(),
             );
@@ -273,8 +335,19 @@ fn assert_mock_matching(
     configure: impl FnOnce(&Path) -> std::path::PathBuf,
     expected: serde_json::Value,
 ) {
-    let (command, mut env, repo_dir, _tmp) = setup();
-    let workspace_dir = configure(&repo_dir);
+    assert_mock_matching_with_env(|repo, _env| configure(repo), expected);
+}
+
+fn assert_mock_matching_with_env(
+    configure: impl FnOnce(&Path, &mut Vec<(String, String)>) -> std::path::PathBuf,
+    expected: serde_json::Value,
+) {
+    let (mut command, mut env, repo_dir, _tmp) = setup();
+    isolated_ssh_home(&repo_dir, &mut env);
+    let workspace_dir = configure(&repo_dir, &mut env);
+    if is_docker() {
+        command.splice(2..2, ["-e".to_string(), "HOME".to_string()]);
+    }
     let api_server = mock_repository_projects_server();
     let tracking_server = FakeHttpServer::always_ok();
     use_isolated_config_dir(&mut env, &workspace_dir, ".cs_config_mock_matching");
@@ -293,7 +366,12 @@ fn assert_mock_matching(
     assert!(!extract_result_text(&response).is_empty());
     let properties = wait_for_event_properties(&tracking_server);
     for key in ["project-ids", "no-project-matching-reason"] {
-        assert_eq!(properties.get(key), expected.get(key), "Unexpected {key}");
+        assert_eq!(
+            properties.get(key),
+            expected.get(key),
+            "Unexpected {key} for workspace {workspace_dir:?}. Server stderr:\n{}",
+            client.get_stderr()
+        );
     }
     if expected.get("no-project-matching-reason").is_none() {
         assert!(api_server.get_requests().iter().any(|request| {

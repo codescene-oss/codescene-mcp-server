@@ -961,6 +961,16 @@ fn test_mock_project_matching_quoted_git_config() {
 }
 
 #[test]
+fn test_mock_project_matching_ssh_host_alias() {
+    tests::repository_project_matching::test_mock_project_matching_ssh_host_alias();
+}
+
+#[test]
+fn test_mock_project_matching_invalid_ssh_config() {
+    tests::repository_project_matching::test_mock_project_matching_invalid_ssh_config();
+}
+
+#[test]
 fn test_mock_project_matching_unmatched_ssh_alias() {
     tests::repository_project_matching::test_mock_project_matching_unmatched_ssh_alias();
 }
