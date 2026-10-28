@@ -48,19 +48,6 @@ If an attempted OAuth switch fails, the tool reports the failure instead of
 continuing with the wrong account. Self-hosted instances without Cloud account
 metadata retain their existing authentication behavior.
 
-Repository matching and telemetry attribution also support SSH host aliases.
-For example, `git@github-codescene:empear-analytics/codescene.git` matches
-`github.com/empear-analytics/codescene` when `~/.ssh/config` maps
-`Host github-codescene` to `HostName github.com`. The server uses OpenSSH
-(`ssh -G -F ~/.ssh/config`) to evaluate the user config, including `Include`
-files, host patterns, and user/port-specific rules, without connecting to the
-remote. DNS hostname canonicalization is disabled. Normal SSH config evaluation
-still applies, including any `Match exec` commands in your own config.
-If OpenSSH is unavailable, the config is invalid, or evaluation exceeds five
-seconds, a warning is logged and matching uses the original remote host.
-HTTPS remotes are not affected. In Docker, mount the SSH config (and any included
-files) into the container user's home directory; SSH keys are not required.
-
 Start a switch in any of these ways:
 
 1. **MCP `switch_account` prompt (slash command)** — Instructs the assistant to list your accounts and switch to the one you pick. You can name the account in the prompt when you know it.
