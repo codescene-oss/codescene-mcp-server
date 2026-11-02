@@ -55,7 +55,7 @@ ignore = "0.4"
 uuid = { version = "1", features = ["v4"] }
 
 # Zip extraction (embedded CLI)
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 
 # Temp files (CLI extraction)
 tempfile = "3"
