@@ -521,7 +521,10 @@ fn extract_cli_binary(
             .by_index(i)
             .map_err(|e| CliError::NotFound(format!("Zip entry error: {e}")))?;
 
-        let name = file.name().to_string();
+        let name = file
+            .name()
+            .map_err(|e| CliError::NotFound(format!("Zip entry name error: {e}")))?
+            .into_owned();
         let file_name = Path::new(&name)
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
