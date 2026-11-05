@@ -57,7 +57,7 @@
         "codescene.accountId": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional CodeScene Cloud account/tenant ID (positive integer). Only needed if you belong to multiple Cloud accounts. Prefer **CodeScene: Switch Account** to change accounts while signed in. For a first login you can also set this before **Sign In**. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#account_id)",
+          "markdownDescription": "Optional CodeScene Cloud account/tenant ID (positive integer). Only needed if you belong to multiple Cloud accounts. Prefer **CodeScene CodeHealth MCP: Switch Account** to change accounts while signed in. For a first login you can also set this before **Sign In**. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#account_id)",
           "order": 1
         },
         "codescene.onpremUrl": {
@@ -75,7 +75,7 @@
         "codescene.accessToken": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional Personal Access Token or standalone license token. Prefer OAuth: use the `login` slash command, **CodeScene: Sign In**, or ask the agent to log in. A saved PAT **blocks** OAuth until cleared. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#access_token)",
+          "markdownDescription": "Optional Personal Access Token or standalone license token. Prefer OAuth: use the `login` slash command, **CodeScene CodeHealth MCP: Sign In**, or ask the agent to log in. A saved PAT **blocks** OAuth until cleared. [Documentation](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/configuration-options.md#access_token)",
           "order": 4
         },
         "codescene.enabledTools": {
@@ -101,27 +101,27 @@
     "commands": [
       {
         "command": "codescene.signIn",
-        "title": "CodeScene: Sign In"
+        "title": "CodeScene CodeHealth MCP: Sign In"
       },
       {
         "command": "codescene.signOut",
-        "title": "CodeScene: Sign Out"
+        "title": "CodeScene CodeHealth MCP: Sign Out"
       },
       {
         "command": "codescene.switchAccount",
-        "title": "CodeScene: Switch Account"
+        "title": "CodeScene CodeHealth MCP: Switch Account"
       },
       {
         "command": "codescene.configure",
-        "title": "CodeScene: Configure Access Token (optional / CI)"
+        "title": "CodeScene CodeHealth MCP: Configure Access Token (optional / CI)"
       },
       {
         "command": "codescene.restart",
-        "title": "CodeScene: Restart MCP Server"
+        "title": "CodeScene CodeHealth MCP: Restart MCP Server"
       },
       {
         "command": "codescene.showStatus",
-        "title": "CodeScene: Show Server Status"
+        "title": "CodeScene CodeHealth MCP: Show Server Status"
       }
     ]
   },
