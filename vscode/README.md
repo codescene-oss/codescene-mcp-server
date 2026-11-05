@@ -61,18 +61,18 @@ These tools require OAuth or a CodeScene Personal Access Token and a CodeScene C
 2. **(On-prem only)** Set `codescene.onpremUrl` to your instance URL
 3. **Sign in** using one of:
    - The `login` MCP prompt (slash command) in Copilot Chat
-   - **CodeScene: Sign In** from the Command Palette
+   - **CodeScene CodeHealth MCP: Sign In** from the Command Palette
    - Asking in agent mode: *“Log me in to CodeScene”* (calls the `login` tool)
-4. **(Multi-account Cloud)** Use **CodeScene: Switch Account** (or ask the agent to `switch_account`) and pick the account by name — do not rely on changing `codescene.accountId` alone while signed in
+4. **(Multi-account Cloud)** Use **CodeScene CodeHealth MCP: Switch Account** (or ask the agent to `switch_account`) and pick the account by name — do not rely on changing `codescene.accountId` alone while signed in
 5. Start using CodeScene tools
 
 ### Authentication
 
-**Recommended (interactive):** OAuth via the `login` MCP prompt / `login` tool, or **CodeScene: Sign In**. No token to copy or paste. Sign out with the `logout` prompt / tool, or **CodeScene: Sign Out**.
+**Recommended (interactive):** OAuth via the `login` MCP prompt / `login` tool, or **CodeScene CodeHealth MCP: Sign In**. No token to copy or paste. Sign out with the `logout` prompt / tool, or **CodeScene CodeHealth MCP: Sign Out**.
 
-**Multi-account Cloud:** Use **CodeScene: Switch Account** (pick from a list) or ask the agent to call `switch_account`. Changing `codescene.accountId` in Settings alone does not retarget an active OAuth session.
+**Multi-account Cloud:** Use **CodeScene CodeHealth MCP: Switch Account** (pick from a list) or ask the agent to call `switch_account`. Changing `codescene.accountId` in Settings alone does not retarget an active OAuth session.
 
-**Optional (CI / headless):** Set a Personal Access Token or standalone license via `CodeScene: Configure Access Token (optional / CI)` or the `codescene.accessToken` setting. A saved PAT **blocks** OAuth until you clear it. Sign Out clears OAuth only — remove the PAT separately if needed.
+**Optional (CI / headless):** Set a Personal Access Token or standalone license via `CodeScene CodeHealth MCP: Configure Access Token (optional / CI)` or the `codescene.accessToken` setting. A saved PAT **blocks** OAuth until you clear it. Sign Out clears OAuth only — remove the PAT separately if needed.
 
 - **OAuth / Personal Access Token** — Full tool set, including project-level features.
 - **Standalone access token** — Local Code Health analysis only (scoring, review, refactoring).
@@ -108,12 +108,12 @@ In Copilot Chat, pick these from the slash-command / prompt picker (MCP prompts 
 
 ## Commands
 
-- `CodeScene: Sign In` — Start the OAuth browser login flow
-- `CodeScene: Sign Out` — Clear the stored OAuth session
-- `CodeScene: Switch Account` — Pick a Cloud OAuth account from a list (reuses a stored session when possible)
-- `CodeScene: Configure Access Token (optional / CI)` — Set or clear a PAT/standalone token
-- `CodeScene: Restart MCP Server` — Restart the MCP server (after config changes)
-- `CodeScene: Show Server Status` — Display current server status and configuration
+- `CodeScene CodeHealth MCP: Sign In` — Start the OAuth browser login flow
+- `CodeScene CodeHealth MCP: Sign Out` — Clear the stored OAuth session
+- `CodeScene CodeHealth MCP: Switch Account` — Pick a Cloud OAuth account from a list (reuses a stored session when possible)
+- `CodeScene CodeHealth MCP: Configure Access Token (optional / CI)` — Set or clear a PAT/standalone token
+- `CodeScene CodeHealth MCP: Restart MCP Server` — Restart the MCP server (after config changes)
+- `CodeScene CodeHealth MCP: Show Server Status` — Display current server status and configuration
 
 ## Supported Platforms
 

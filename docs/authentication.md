@@ -8,7 +8,7 @@ For interactive desktop use, no token needs to be manually obtained or configure
 
 1. **MCP `login` prompt (slash command)** — In clients that support MCP prompts (for example VS Code Copilot Chat), invoke the `login` prompt from the chat slash-command / prompt picker. This inserts a short instruction that makes the assistant call the `login` tool.
 2. **Ask the assistant** — Say *"Log me in to CodeScene"* so the agent calls the `login` tool.
-3. **VS Code command** — Run **CodeScene: Sign In** from the Command Palette (VS Code extension only).
+3. **VS Code command** — Run **CodeScene CodeHealth MCP: Sign In** from the Command Palette (VS Code extension only).
 
 The `login` tool opens your browser to complete the OAuth flow. Once done, the MCP server is authenticated for the session.
 
@@ -18,7 +18,7 @@ The `login` tool opens your browser to complete the OAuth flow. Once done, the M
 
 > "Set my CodeScene on-prem URL to https://codescene.mycompany.com"
 
-Then sign in with the `login` prompt, by asking the assistant, or via **CodeScene: Sign In**.
+Then sign in with the `login` prompt, by asking the assistant, or via **CodeScene CodeHealth MCP: Sign In**.
 
 > **Note:** OAuth is not supported in Docker installation.
 
@@ -57,7 +57,7 @@ Start a switch in any of these ways:
 
    If you do not name an account, the assistant lists them (name, ID, type, and whether you are already signed in locally) so you can pick one.
 
-3. **VS Code command** — Run **CodeScene: Switch Account** from the Command Palette and pick an account from the list.
+3. **VS Code command** — Run **CodeScene CodeHealth MCP: Switch Account** from the Command Palette and pick an account from the list.
 
 You do not need to know the numeric account ID. The `switch_account` tool lists accounts via the CLI and can switch by **name**, **org slug**, or **account_id**.
 
@@ -72,7 +72,7 @@ Switching does **not** log you out of other accounts’ stored CLI sessions. Aft
 
 #### Common mistakes
 
-- **`set_config(account_id=…)` alone while signed in** — saves the pin but does **not** retarget the active OAuth session. Always use `switch_account` (or **CodeScene: Switch Account**) to change accounts.
+- **`set_config(account_id=…)` alone while signed in** — saves the pin but does **not** retarget the active OAuth session. Always use `switch_account` (or **CodeScene CodeHealth MCP: Switch Account**) to change accounts.
 - **Calling `login` after changing `account_id`** — `login` short-circuits with “already signed in” if any fresh OAuth token exists, so it will not switch tenants.
 - **Expecting a PAT or on-prem session to switch** — `switch_account` applies to **Cloud OAuth only**. Personal Access Tokens (`CS_ACCESS_TOKEN`) and on-prem OAuth are not multi-account switches; clear or reconfigure those separately.
 
@@ -91,7 +91,7 @@ To clear a stored OAuth session:
 
 1. **MCP `logout` prompt (slash command)** — Invokes the `logout` tool.
 2. **Ask the assistant** — Say *"Log me out of CodeScene"* so the agent calls the `logout` tool.
-3. **VS Code command** — Run **CodeScene: Sign Out** from the Command Palette (VS Code extension only).
+3. **VS Code command** — Run **CodeScene CodeHealth MCP: Sign Out** from the Command Palette (VS Code extension only).
 
 Logout revokes/removes the CLI OAuth credentials and clears MCP OAuth config. It does **not** remove a Personal Access Token (`CS_ACCESS_TOKEN`); clear that separately via `set_config` or your MCP client settings.
 
