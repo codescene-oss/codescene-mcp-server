@@ -483,6 +483,17 @@ fn test_absolute_path() {
     tests::relative_paths::test_absolute_path();
 }
 
+// --- Literal Paths ---
+#[test]
+fn test_literal_paths_code_health_score() {
+    tests::literal_paths::test_literal_paths_code_health_score();
+}
+
+#[test]
+fn test_literal_paths_code_health_review() {
+    tests::literal_paths::test_literal_paths_code_health_review();
+}
+
 // --- Require Access Token ---
 #[test]
 fn test_guarded_tool_blocked_without_token() {

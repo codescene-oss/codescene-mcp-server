@@ -31,8 +31,21 @@ pub(crate) async fn run_review(
     let git_root = cli::find_git_root(Path::new(&resolved));
     let cli_path = make_cli_path(&resolved, git_root.as_deref());
     reject_flag_like(&cli_path, "file_path")?;
+    let cli_path = escape_cli_glob(&cli_path);
     let args = vec!["review", "--output-format=json", &cli_path];
     cli_runner.run(&args, git_root.as_deref()).await
+}
+
+fn escape_cli_glob(path: &str) -> String {
+    let mut escaped = String::with_capacity(path.len());
+    // CLI review expands positional arguments as globs, even for existing files.
+    for ch in path.chars() {
+        if matches!(ch, '\\' | '*' | '?' | '[' | ']' | '{' | '}') {
+            escaped.push('\\');
+        }
+        escaped.push(ch);
+    }
+    escaped
 }
 
 /// Run `git update-index --refresh` to fix index extensions that the
@@ -193,6 +206,55 @@ mod tests {
     fn make_cli_path_non_docker_without_root() {
         let result = make_cli_path("/some/file.rs", None);
         assert_eq!(result, "/some/file.rs");
+    }
+
+    #[test]
+    fn escape_cli_glob_preserves_literal_paths() {
+        let cases = [
+            ("src/main.rs", "src/main.rs"),
+            ("app/with spaces/page.ts", "app/with spaces/page.ts"),
+            (
+                "app/\u{65e5}\u{672c}\u{8a9e}/page.ts",
+                "app/\u{65e5}\u{672c}\u{8a9e}/page.ts",
+            ),
+            ("app/[locale]/page.ts", r"app/\[locale\]/page.ts"),
+            ("/repo/[app]/page.ts", r"/repo/\[app\]/page.ts"),
+            (
+                "app/[locale]/[slug]/page.ts",
+                r"app/\[locale\]/\[slug\]/page.ts",
+            ),
+            ("app/[...slug]/page.ts", r"app/\[...slug\]/page.ts"),
+            ("app/[[...slug]]/page.ts", r"app/\[\[...slug\]\]/page.ts"),
+            ("app/left[/page.ts", r"app/left\[/page.ts"),
+            ("app/right]/page.ts", r"app/right\]/page.ts"),
+            ("app/{draft,live}/page.ts", r"app/\{draft,live\}/page.ts"),
+            ("src/*/file?.ts", r"src/\*/file\?.ts"),
+            (r"src/back\slash.ts", r"src/back\\slash.ts"),
+        ];
+        for (path, expected) in cases {
+            assert_eq!(escape_cli_glob(path), expected, "{path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn run_review_escapes_globs_after_making_path_relative() {
+        use crate::tests::MockCliRunner;
+
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".git")).unwrap();
+        let file_path = dir.path().join("app/[locale]/page.ts");
+        let output = r#"{"score":10,"review":[]}"#;
+        let cli = MockCliRunner::with_ok(output);
+
+        assert_eq!(run_review(&file_path, &cli).await.unwrap(), output);
+        assert_eq!(
+            cli.calls().lock().unwrap().as_slice(),
+            &[vec![
+                "review",
+                "--output-format=json",
+                r"app/\[locale\]/page.ts"
+            ]]
+        );
     }
 
     #[test]

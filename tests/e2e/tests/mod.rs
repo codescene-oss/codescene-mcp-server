@@ -47,6 +47,7 @@ pub mod enabled_tools;
 pub mod error_logging;
 pub mod git_subtree;
 pub mod git_worktree;
+pub mod literal_paths;
 pub mod mcp_usage_overview;
 pub mod oauth_login;
 pub mod oauth_login_flow;
