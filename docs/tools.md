@@ -10,6 +10,10 @@ Tools marked **CodeScene Core users (cloud or on-prem)** require a CodeScene API
 
 These tools analyze source code locally using the embedded CodeScene CLI.
 
+For `code_health_score` and `code_health_review`, `file_path` identifies one literal
+file, not a glob pattern. Paths containing brackets, such as Next.js dynamic routes
+(`app/[locale]/page.tsx`), are supported without caller-side escaping.
+
 ### `code_health_score`
 
 **Availability:** All Users

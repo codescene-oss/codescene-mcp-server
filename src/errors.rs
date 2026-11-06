@@ -12,6 +12,9 @@ pub enum CliError {
     #[error("Invalid input: {0}")]
     InvalidInput(String),
 
+    #[error("Unexpected CS CLI output: {0}")]
+    InvalidOutput(String),
+
     #[error(
         "Access token is invalid or expired.\n\n\
          Please update your access token using one of these methods:\n\
@@ -31,6 +34,7 @@ impl CliError {
             Self::NotFound(_) => "not_found",
             Self::Io(_) => "io",
             Self::InvalidInput(_) => "invalid_input",
+            Self::InvalidOutput(_) => "invalid_output",
             Self::LicenseCheckFailed { .. } => "license_check_failed",
         }
     }
@@ -124,6 +128,16 @@ mod tests {
     fn cli_error_invalid_input_display() {
         let err = CliError::InvalidInput("bad value".into());
         assert_eq!(err.to_string(), "Invalid input: bad value");
+    }
+
+    #[test]
+    fn cli_error_invalid_output_display_and_kind() {
+        let err = CliError::InvalidOutput("expected one review".into());
+        assert_eq!(
+            err.to_string(),
+            "Unexpected CS CLI output: expected one review"
+        );
+        assert_eq!(err.kind(), "invalid_output");
     }
 
     #[test]

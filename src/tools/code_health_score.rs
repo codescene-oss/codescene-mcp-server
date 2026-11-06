@@ -111,7 +111,7 @@ mod tests {
     #[tokio::test]
     async fn success_returns_score() {
         let _g = set_token("tok");
-        let server = make_cli_mock_server(MockCliRunner::with_ok(r#"{"score":8.5,"review":[]}"#));
+        let server = make_cli_mock_server(MockCliRunner::with_ok(r#"[{"score":8.5,"review":[]}]"#));
         let params = FilePathParam {
             file_path: "/tmp/test.rs".to_string(),
         };

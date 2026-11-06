@@ -31,8 +31,40 @@ pub(crate) async fn run_review(
     let git_root = cli::find_git_root(Path::new(&resolved));
     let cli_path = make_cli_path(&resolved, git_root.as_deref());
     reject_flag_like(&cli_path, "file_path")?;
-    let args = vec!["review", "--output-format=json", &cli_path];
-    cli_runner.run(&args, git_root.as_deref()).await
+    let cli_path = escape_cli_glob(&cli_path);
+    let args = ["review", "--output-format=json", &cli_path];
+    let output = cli_runner.run(&args, git_root.as_deref()).await?;
+    normalize_single_file_review(output)
+}
+
+fn normalize_single_file_review(output: String) -> Result<String, errors::CliError> {
+    let review: serde_json::Value = serde_json::from_str(&output)
+        .map_err(|error| errors::CliError::InvalidOutput(error.to_string()))?;
+    match review {
+        serde_json::Value::Object(_) => Ok(output),
+        serde_json::Value::Array(mut reviews) if reviews.len() == 1 && reviews[0].is_object() => {
+            Ok(reviews.remove(0).to_string())
+        }
+        _ => Err(errors::CliError::InvalidOutput(
+            "Expected exactly one review object or a one-element array of review objects".into(),
+        )),
+    }
+}
+
+fn escape_cli_glob(path: &str) -> String {
+    // The CLI only expands paths containing a wildcard or opening bracket/brace.
+    // Escaping other paths would make the backslashes part of the file name.
+    if !path.chars().any(|ch| matches!(ch, '*' | '?' | '[' | '{')) {
+        return path.to_string();
+    }
+    let mut escaped = String::with_capacity(path.len());
+    for ch in path.chars() {
+        if matches!(ch, '\\' | '*' | '?' | '[' | ']' | '{' | '}') {
+            escaped.push('\\');
+        }
+        escaped.push(ch);
+    }
+    escaped
 }
 
 /// Run `git update-index --refresh` to fix index extensions that the
@@ -128,9 +160,6 @@ pub(crate) async fn latest_analysis_id(
 }
 
 fn make_cli_path(file_path: &str, git_root: Option<&Path>) -> String {
-    if environment::is_docker() {
-        return docker::adapt_path_for_docker(Path::new(file_path));
-    }
     match git_root {
         Some(root) => docker::get_relative_file_path_for_api(Path::new(file_path), root),
         None => file_path.to_string(),
@@ -159,6 +188,50 @@ mod tests {
     #[test]
     fn extract_score_handles_invalid_json() {
         assert_eq!(extract_score("invalid"), None);
+    }
+
+    #[test]
+    fn normalize_single_file_review_preserves_object_output() {
+        let output = "{ \"score\": 10.0, \"review\": [] }\n";
+        assert_eq!(normalize_single_file_review(output.into()).unwrap(), output);
+    }
+
+    #[test]
+    fn normalize_single_file_review_unwraps_singleton_array() {
+        let review = serde_json::json!({
+            "score": 10.0,
+            "review": [],
+            "path": "app/[locale]/page.ts",
+        });
+        let output = serde_json::json!([review]).to_string();
+        let normalized = normalize_single_file_review(output).unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&normalized).unwrap(),
+            review
+        );
+        assert_eq!(extract_score(&normalized), Some(10.0));
+    }
+
+    #[test]
+    fn normalize_single_file_review_preserves_unscorable_result() {
+        let output = r#"[{"score":null,"review":[]}]"#;
+        let normalized = normalize_single_file_review(output.into()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&normalized).unwrap(),
+            serde_json::json!({"score": null, "review": []})
+        );
+        assert_eq!(extract_score(&normalized), None);
+    }
+
+    #[test]
+    fn normalize_single_file_review_rejects_unexpected_output() {
+        for output in ["[]", "[{},{}]", "[10]", "null", "12", "invalid"] {
+            let error = normalize_single_file_review(output.into()).unwrap_err();
+            assert!(
+                matches!(error, errors::CliError::InvalidOutput(_)),
+                "{output}"
+            );
+        }
     }
 
     #[test]
@@ -193,6 +266,60 @@ mod tests {
     fn make_cli_path_non_docker_without_root() {
         let result = make_cli_path("/some/file.rs", None);
         assert_eq!(result, "/some/file.rs");
+    }
+
+    #[test]
+    fn make_cli_path_docker_with_root_is_relative() {
+        let _guard = environment::force_docker(true);
+        assert_eq!(
+            make_cli_path("/mount/app/[locale]/page.ts", Some(Path::new("/mount"))),
+            "app/[locale]/page.ts"
+        );
+    }
+
+    #[test]
+    fn escape_cli_glob_preserves_literal_paths() {
+        for (path, expected) in [
+            ("src/main.rs", "src/main.rs"),
+            ("app/right]/page.ts", "app/right]/page.ts"),
+            ("app/right}/page.ts", "app/right}/page.ts"),
+            (r"src/back\slash.rs", r"src/back\slash.rs"),
+            ("app/with spaces/page.ts", "app/with spaces/page.ts"),
+            ("app/with\nnewline/page.ts", "app/with\nnewline/page.ts"),
+            ("app/[locale]/page.ts", r"app/\[locale\]/page.ts"),
+            (
+                "app/[locale]/[slug]/page.ts",
+                r"app/\[locale\]/\[slug\]/page.ts",
+            ),
+            ("app/[...slug]/page.ts", r"app/\[...slug\]/page.ts"),
+            ("app/[[...slug]]/page.ts", r"app/\[\[...slug\]\]/page.ts"),
+            ("app/left[/page.ts", r"app/left\[/page.ts"),
+            ("app/{draft,live}/page.ts", r"app/\{draft,live\}/page.ts"),
+            ("src/*/file?.ts", r"src/\*/file\?.ts"),
+        ] {
+            assert_eq!(escape_cli_glob(path), expected, "{path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn run_review_escapes_only_glob_paths_and_normalizes_output() {
+        use crate::tests::MockCliRunner;
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("[repo]");
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        for (path, expected) in [
+            ("app/[locale]/page.ts", r"app/\[locale\]/page.ts"),
+            ("app/right]/page.ts", "app/right]/page.ts"),
+        ] {
+            let cli = MockCliRunner::with_ok(r#"[{"score":10,"review":[]}]"#);
+            let output = run_review(&root.join(path), &cli).await.unwrap();
+            assert_eq!(extract_score(&output), Some(10.0));
+            assert_eq!(
+                cli.calls().lock().unwrap().as_slice(),
+                &[vec!["review", "--output-format=json", expected]]
+            );
+        }
     }
 
     #[test]

@@ -151,7 +151,7 @@ mod tests {
         let auth_token = r#"{"status":"signed_in","access-token":"oau_test","api-url":"https://api.codescene.io/api","expires-at":9999999999}"#;
         let cli = MockCliRunner::with_responses(vec![
             Ok(auth_token.to_string()),
-            Ok(r#"{"score":9.5,"review":[]}"#.to_string()),
+            Ok(r#"[{"score":9.5,"review":[]}]"#.to_string()),
         ]);
         let calls = cli.calls();
         let server = make_cli_mock_server(cli);
