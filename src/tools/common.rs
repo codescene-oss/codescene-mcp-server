@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::path::Path;
 
 use rmcp::model::{CallToolResult, ContentBlock as Content};
@@ -31,8 +32,16 @@ pub(crate) async fn run_review(
     let git_root = cli::find_git_root(Path::new(&resolved));
     let cli_path = make_cli_path(&resolved, git_root.as_deref());
     reject_flag_like(&cli_path, "file_path")?;
-    let cli_path = escape_cli_glob(&cli_path);
-    let args = vec!["review", "--output-format=json", &cli_path];
+    let mut file_list = tempfile::NamedTempFile::new()?;
+    write!(file_list, "{cli_path}\0")?;
+    let file_list_path = file_list.path().to_string_lossy();
+    let args = [
+        "review",
+        "--output-format=json",
+        "--file-list",
+        &file_list_path,
+        "--null",
+    ];
     let output = cli_runner.run(&args, git_root.as_deref()).await?;
     normalize_single_file_review(output)
 }
@@ -49,18 +58,6 @@ fn normalize_single_file_review(output: String) -> Result<String, errors::CliErr
             "Expected exactly one review object or a one-element array of review objects".into(),
         )),
     }
-}
-
-fn escape_cli_glob(path: &str) -> String {
-    let mut escaped = String::with_capacity(path.len());
-    // CLI review expands positional arguments as globs, even for existing files.
-    for ch in path.chars() {
-        if matches!(ch, '\\' | '*' | '?' | '[' | ']' | '{' | '}') {
-            escaped.push('\\');
-        }
-        escaped.push(ch);
-    }
-    escaped
 }
 
 /// Run `git update-index --refresh` to fix index extensions that the
@@ -176,6 +173,29 @@ fn resolve_file_path(file_path: &Path) -> String {
 mod tests {
     use super::*;
 
+    struct FileListCli {
+        expected_path: String,
+    }
+
+    #[async_trait::async_trait]
+    impl CliRunner for FileListCli {
+        async fn run(
+            &self,
+            args: &[&str],
+            working_dir: Option<&Path>,
+        ) -> Result<String, errors::CliError> {
+            assert_eq!(args.len(), 5);
+            assert_eq!(&args[..3], &["review", "--output-format=json", "--file-list"]);
+            assert_eq!(args[4], "--null");
+            assert!(working_dir.unwrap().join(".git").exists());
+            assert_eq!(
+                std::fs::read(args[3])?,
+                format!("{}\0", self.expected_path).as_bytes()
+            );
+            Ok(r#"[{"score":10,"review":[]}]"#.into())
+        }
+    }
+
     #[test]
     fn extract_score_parses_number() {
         assert_eq!(extract_score(r#"{"score": 8.5}"#), Some(8.5));
@@ -273,53 +293,30 @@ mod tests {
         );
     }
 
-    #[test]
-    fn escape_cli_glob_preserves_literal_paths() {
-        let cases = [
-            ("src/main.rs", "src/main.rs"),
-            ("app/with spaces/page.ts", "app/with spaces/page.ts"),
-            (
-                "app/\u{65e5}\u{672c}\u{8a9e}/page.ts",
-                "app/\u{65e5}\u{672c}\u{8a9e}/page.ts",
-            ),
-            ("app/[locale]/page.ts", r"app/\[locale\]/page.ts"),
-            ("/repo/[app]/page.ts", r"/repo/\[app\]/page.ts"),
-            (
-                "app/[locale]/[slug]/page.ts",
-                r"app/\[locale\]/\[slug\]/page.ts",
-            ),
-            ("app/[...slug]/page.ts", r"app/\[...slug\]/page.ts"),
-            ("app/[[...slug]]/page.ts", r"app/\[\[...slug\]\]/page.ts"),
-            ("app/left[/page.ts", r"app/left\[/page.ts"),
-            ("app/right]/page.ts", r"app/right\]/page.ts"),
-            ("app/{draft,live}/page.ts", r"app/\{draft,live\}/page.ts"),
-            ("src/*/file?.ts", r"src/\*/file\?.ts"),
-            (r"src/back\slash.ts", r"src/back\\slash.ts"),
-        ];
-        for (path, expected) in cases {
-            assert_eq!(escape_cli_glob(path), expected, "{path}");
-        }
-    }
-
     #[tokio::test]
-    async fn run_review_escapes_globs_after_making_path_relative() {
-        use crate::tests::MockCliRunner;
-
+    async fn run_review_passes_literal_paths_in_null_delimited_file_list() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir(dir.path().join(".git")).unwrap();
-        let file_path = dir.path().join("app/[locale]/page.ts");
-        let output = r#"{"score":10,"review":[]}"#;
-        let cli = MockCliRunner::with_ok(output);
-
-        assert_eq!(run_review(&file_path, &cli).await.unwrap(), output);
-        assert_eq!(
-            cli.calls().lock().unwrap().as_slice(),
-            &[vec![
-                "review",
-                "--output-format=json",
-                r"app/\[locale\]/page.ts"
-            ]]
-        );
+        let root = dir.path().join("[repo]");
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        for path in [
+            "src/main.rs",
+            "app/[locale]/page.ts",
+            "app/[locale]/[slug]/page.ts",
+            "app/[...slug]/page.ts",
+            "app/[[...slug]]/page.ts",
+            "app/left[/page.ts",
+            "app/right]/page.ts",
+            "app/{draft,live}/page.ts",
+            "src/*/file?.ts",
+            "app/with spaces/page.ts",
+            "app/with\nnewline/page.ts",
+        ] {
+            let cli = FileListCli {
+                expected_path: path.into(),
+            };
+            let output = run_review(&root.join(path), &cli).await.unwrap();
+            assert_eq!(extract_score(&output), Some(10.0));
+        }
     }
 
     #[test]

@@ -19,6 +19,8 @@ const FILE_PATHS: &[&str] = &[
     "app/star*/page.ts",
     #[cfg(unix)]
     "app/question?/page.ts",
+    #[cfg(unix)]
+    "app/with\nnewline/page.ts",
 ];
 
 fn write_fixtures(repo_dir: &Path) {

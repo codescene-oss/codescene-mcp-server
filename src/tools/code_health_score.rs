@@ -111,7 +111,7 @@ mod tests {
     #[tokio::test]
     async fn success_returns_score() {
         let _g = set_token("tok");
-        let server = make_cli_mock_server(MockCliRunner::with_ok(r#"{"score":8.5,"review":[]}"#));
+        let server = make_cli_mock_server(MockCliRunner::with_ok(r#"[{"score":8.5,"review":[]}]"#));
         let params = FilePathParam {
             file_path: "/tmp/test.rs".to_string(),
         };
@@ -128,19 +128,6 @@ mod tests {
         };
         let result = server.code_health_score(Parameters(params)).await.unwrap();
         assert_success_contains(&result, "Could not determine");
-    }
-
-    #[tokio::test]
-    async fn singleton_array_returns_score() {
-        let _g = set_token("tok");
-        let server = make_cli_mock_server(MockCliRunner::with_ok(
-            r#"[{"score":10.0,"review":[],"path":"app/[locale]/page.ts"}]"#,
-        ));
-        let params = FilePathParam {
-            file_path: "/tmp/app/[locale]/page.ts".to_string(),
-        };
-        let result = server.code_health_score(Parameters(params)).await.unwrap();
-        assert_success_contains(&result, "Code Health score: 10");
     }
 
     #[tokio::test]
