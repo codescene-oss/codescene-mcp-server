@@ -146,6 +146,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn singleton_array_returns_one_review_object() {
+        let _g = set_token("tok");
+        let review = serde_json::json!({
+            "score": 10.0,
+            "review": [],
+            "path": "app/[locale]/page.ts",
+        });
+        let server = make_cli_mock_server(MockCliRunner::with_ok(
+            &serde_json::json!([review]).to_string(),
+        ));
+        let params = FilePathParam {
+            file_path: "/tmp/app/[locale]/page.ts".to_string(),
+        };
+        let result = server.code_health_review(Parameters(params)).await.unwrap();
+        assert_success_contains(&result, "10.0");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(crate::test_utils::result_text(&result))
+                .unwrap(),
+            review
+        );
+    }
+
+    #[tokio::test]
     async fn uses_stored_oauth_session_when_env_token_missing() {
         let _g = clear_token();
         let auth_token = r#"{"status":"signed_in","access-token":"oau_test","api-url":"https://api.codescene.io/api","expires-at":9999999999}"#;

@@ -33,7 +33,22 @@ pub(crate) async fn run_review(
     reject_flag_like(&cli_path, "file_path")?;
     let cli_path = escape_cli_glob(&cli_path);
     let args = vec!["review", "--output-format=json", &cli_path];
-    cli_runner.run(&args, git_root.as_deref()).await
+    let output = cli_runner.run(&args, git_root.as_deref()).await?;
+    normalize_single_file_review(output)
+}
+
+fn normalize_single_file_review(output: String) -> Result<String, errors::CliError> {
+    let review: serde_json::Value = serde_json::from_str(&output)
+        .map_err(|error| errors::CliError::InvalidOutput(error.to_string()))?;
+    match review {
+        serde_json::Value::Object(_) => Ok(output),
+        serde_json::Value::Array(mut reviews) if reviews.len() == 1 && reviews[0].is_object() => {
+            Ok(reviews.remove(0).to_string())
+        }
+        _ => Err(errors::CliError::InvalidOutput(
+            "Expected exactly one review object or a one-element array of review objects".into(),
+        )),
+    }
 }
 
 fn escape_cli_glob(path: &str) -> String {
@@ -141,9 +156,6 @@ pub(crate) async fn latest_analysis_id(
 }
 
 fn make_cli_path(file_path: &str, git_root: Option<&Path>) -> String {
-    if environment::is_docker() {
-        return docker::adapt_path_for_docker(Path::new(file_path));
-    }
     match git_root {
         Some(root) => docker::get_relative_file_path_for_api(Path::new(file_path), root),
         None => file_path.to_string(),
@@ -172,6 +184,50 @@ mod tests {
     #[test]
     fn extract_score_handles_invalid_json() {
         assert_eq!(extract_score("invalid"), None);
+    }
+
+    #[test]
+    fn normalize_single_file_review_preserves_object_output() {
+        let output = "{ \"score\": 10.0, \"review\": [] }\n";
+        assert_eq!(normalize_single_file_review(output.into()).unwrap(), output);
+    }
+
+    #[test]
+    fn normalize_single_file_review_unwraps_singleton_array() {
+        let review = serde_json::json!({
+            "score": 10.0,
+            "review": [],
+            "path": "app/[locale]/page.ts",
+        });
+        let output = serde_json::json!([review]).to_string();
+        let normalized = normalize_single_file_review(output).unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&normalized).unwrap(),
+            review
+        );
+        assert_eq!(extract_score(&normalized), Some(10.0));
+    }
+
+    #[test]
+    fn normalize_single_file_review_preserves_unscorable_result() {
+        let output = r#"[{"score":null,"review":[]}]"#;
+        let normalized = normalize_single_file_review(output.into()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&normalized).unwrap(),
+            serde_json::json!({"score": null, "review": []})
+        );
+        assert_eq!(extract_score(&normalized), None);
+    }
+
+    #[test]
+    fn normalize_single_file_review_rejects_unexpected_output() {
+        for output in ["[]", "[{},{}]", "[10]", "null", "12", "invalid"] {
+            let error = normalize_single_file_review(output.into()).unwrap_err();
+            assert!(
+                matches!(error, errors::CliError::InvalidOutput(_)),
+                "{output}"
+            );
+        }
     }
 
     #[test]
@@ -206,6 +262,15 @@ mod tests {
     fn make_cli_path_non_docker_without_root() {
         let result = make_cli_path("/some/file.rs", None);
         assert_eq!(result, "/some/file.rs");
+    }
+
+    #[test]
+    fn make_cli_path_docker_with_root_is_relative() {
+        let _guard = environment::force_docker(true);
+        assert_eq!(
+            make_cli_path("/mount/app/[locale]/page.ts", Some(Path::new("/mount"))),
+            "app/[locale]/page.ts"
+        );
     }
 
     #[test]
