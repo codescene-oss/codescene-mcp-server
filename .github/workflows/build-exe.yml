@@ -49,12 +49,12 @@ jobs:
             variant: linux-aarch64
             rust-target: aarch64-unknown-linux-musl
             artifact-name: cs-mcp-linux-aarch64
-          - os: macos-15-large
+          - os: macos-13
             arch: amd64
             variant: macos-amd64
             rust-target: x86_64-apple-darwin
             artifact-name: cs-mcp-macos-amd64
-          - os: macos-latest
+          - os: macos-15
             arch: aarch64
             variant: macos-aarch64
             rust-target: aarch64-apple-darwin
