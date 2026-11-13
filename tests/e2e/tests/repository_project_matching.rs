@@ -528,7 +528,7 @@ async fn fetch_json<T: DeserializeOwned>(client: &reqwest::Client, token: &str, 
         .header("Accept", "application/json")
         .header(
             "User-Agent",
-            format!("codescene-mcp/{}", env!("CS_MCP_VERSION")),
+            format!("codehealth-mcp/{}", env!("CS_MCP_VERSION")),
         )
         .header("X-CS-Source", "mcp")
         .bearer_auth(token)

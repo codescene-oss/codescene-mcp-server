@@ -1,6 +1,6 @@
-# Installing CodeScene MCP Server via Homebrew
+# Installing CodeHealth MCP Server via Homebrew
 
-You can install the CodeScene MCP Server using Homebrew on macOS and Linux.
+You can install the CodeHealth MCP Server using Homebrew on macOS and Linux.
 
 ## Prerequisites
 
@@ -11,12 +11,12 @@ You can install the CodeScene MCP Server using Homebrew on macOS and Linux.
 
 ```bash
 # Add the CodeScene tap
-brew tap codescene-oss/codescene-mcp-server https://github.com/codescene-oss/codescene-mcp-server
+brew tap codescene-oss/codehealth-mcp-server https://github.com/codescene-oss/codehealth-mcp-server
 
 # Trust the tap (required for Homebrew 5.1.4+)
-brew trust codescene-oss/codescene-mcp-server
+brew trust codescene-oss/codehealth-mcp-server
 
-# Install CodeScene MCP Server
+# Install CodeHealth MCP Server
 brew install cs-mcp
 ```
 
@@ -45,7 +45,7 @@ brew upgrade cs-mcp
 
 ```bash
 brew uninstall cs-mcp
-brew untap codescene-oss/codescene-mcp-server
+brew untap codescene-oss/codehealth-mcp-server
 ```
 
 ## Supported Platforms
@@ -145,7 +145,7 @@ Claude Desktop is available for macOS and Windows. Add to your configuration fil
 ### Amazon Q CLI
 
 ```bash
-q mcp add --name codescene-mcp --command cs-mcp
+q mcp add --name codehealth-mcp --command cs-mcp
 ```
 
 ## Configuration
@@ -159,19 +159,19 @@ For additional configuration — including CodeScene on-prem, custom SSL/TLS cer
 If you see an error like:
 
 ```
-Error: Refusing to load formula codescene-oss/codescene-mcp-server/cs-mcp from untrusted tap codescene-oss/codescene-mcp-server.
+Error: Refusing to load formula codescene-oss/codehealth-mcp-server/cs-mcp from untrusted tap codescene-oss/codehealth-mcp-server.
 ```
 
 Run the following to trust the tap:
 
 ```bash
-brew trust codescene-oss/codescene-mcp-server
+brew trust codescene-oss/codehealth-mcp-server
 ```
 
 This is required by Homebrew's [tap trust enforcement](https://github.com/Homebrew/brew/pull/22470), which prevents loading formulas from third-party taps that haven't been explicitly trusted. You can also trust just the formula instead of the entire tap:
 
 ```bash
-brew trust --formula codescene-oss/codescene-mcp-server/cs-mcp
+brew trust --formula codescene-oss/codehealth-mcp-server/cs-mcp
 ```
 
 ### Binary not found after installation

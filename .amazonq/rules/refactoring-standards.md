@@ -1,7 +1,7 @@
 # Refactoring Standards
 
 Refactoring must produce **measurable improvements** in maintainability.  
-Use the **CodeScene MCP** to assess whether a refactor is an objective improvement.
+Use the **CodeHealth MCP** to assess whether a refactor is an objective improvement.
 
 ## Required Behavior
 

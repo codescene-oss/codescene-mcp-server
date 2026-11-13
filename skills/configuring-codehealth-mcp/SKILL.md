@@ -1,13 +1,13 @@
 ---
-name: configuring-codescene-mcp
-description: Use when the user wants to view, set, or troubleshoot CodeScene MCP configuration such as OAuth login, access tokens, account IDs, on-prem URLs, default projects, or SSL certificates.
+name: configuring-codehealth-mcp
+description: Use when the user wants to view, set, or troubleshoot CodeHealth MCP configuration such as OAuth login, access tokens, account IDs, on-prem URLs, default projects, or SSL certificates.
 ---
 
-# Configuring CodeScene MCP
+# Configuring CodeHealth MCP
 
 ## Overview
 
-Use this skill when the task is to configure the CodeScene MCP Server after it has been installed. The MCP server exposes `get_config`, `set_config`, and `logout` tools (and, outside Docker, `login`) that let the AI assistant authenticate and manage configuration on the user's behalf. Clients that support MCP prompts also expose `login` and `logout` prompts (slash commands) — except in Docker, where OAuth login is unavailable and a Personal Access Token (`CS_ACCESS_TOKEN`) is required.
+Use this skill when the task is to configure the CodeHealth MCP Server after it has been installed. The MCP server exposes `get_config`, `set_config`, and `logout` tools (and, outside Docker, `login`) that let the AI assistant authenticate and manage configuration on the user's behalf. Clients that support MCP prompts also expose `login` and `logout` prompts (slash commands) — except in Docker, where OAuth login is unavailable and a Personal Access Token (`CS_ACCESS_TOKEN`) is required.
 
 ## When to Use
 
@@ -22,7 +22,7 @@ Use this skill when the task is to configure the CodeScene MCP Server after it h
 - The user asks what their current configuration is.
 - The user is troubleshooting a configuration issue (wrong token, missing URL, SSL errors).
 
-Do not use this skill for installing or registering the MCP server in an AI assistant. Use `installing-and-activating-codescene-mcp` for that.
+Do not use this skill for installing or registering the MCP server in an AI assistant. Use `installing-and-activating-codehealth-mcp` for that.
 
 ## Quick Reference
 

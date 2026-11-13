@@ -11,8 +11,8 @@ You can compile the MCP server from source using Rust's Cargo build system.
 1. Clone the repository:
 
 ```sh
-git clone https://github.com/codescene-oss/codescene-mcp.git
-cd codescene-mcp
+git clone https://github.com/codescene-oss/codehealth-mcp.git
+cd codehealth-mcp
 ```
 
 2. Build the release binary:
@@ -30,7 +30,7 @@ Configure your MCP client to use the executable directly instead of Docker. For 
 ```json
 {
   "servers": {
-    "codescene-mcp": {
+    "codehealth-mcp": {
       "type": "stdio",
       "command": "/path/to/cs-mcp",
       "env": {

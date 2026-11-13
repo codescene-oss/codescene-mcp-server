@@ -12,13 +12,18 @@ const INSTRUCTION_FILES: &[&str] = &[
     ".cursorrules",
 ];
 const INSTRUCTION_DIRECTORIES: &[&str] = &[".cursor/rules", ".amazonq/rules"];
-const CODESCENE_MCP_MARKERS: &[&str] =
-    &["codescene mcp", "codescene-mcp", "codehealth-mcp", "cs-mcp"];
+const CODEHEALTH_MCP_MARKERS: &[&str] = &[
+    "codescene mcp",
+    "codescene-mcp",
+    "codehealth mcp",
+    "codehealth-mcp",
+    "cs-mcp",
+];
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct AgentInstructions {
     pub(crate) file_present: bool,
-    pub(crate) codescene_mcp_instructions_present: bool,
+    pub(crate) codehealth_mcp_instructions_present: bool,
     pub(crate) preferred_file: Option<PathBuf>,
 }
 
@@ -44,8 +49,8 @@ fn detect_in_repository(repository_root: &Path) -> AgentInstructions {
     let preferred_file = files.first();
     AgentInstructions {
         file_present: preferred_file.is_some(),
-        codescene_mcp_instructions_present: preferred_file
-            .is_some_and(|path| contains_codescene_mcp(path)),
+        codehealth_mcp_instructions_present: preferred_file
+            .is_some_and(|path| contains_codehealth_mcp(path)),
         preferred_file: preferred_file
             .and_then(|path| path.strip_prefix(repository_root).ok())
             .map(Path::to_path_buf),
@@ -81,11 +86,11 @@ fn collect_regular_files(directory: &Path, files: &mut Vec<PathBuf>) {
     }
 }
 
-fn contains_codescene_mcp(path: &Path) -> bool {
+fn contains_codehealth_mcp(path: &Path) -> bool {
     fs::read_to_string(path)
         .map(|content| {
             let content = content.to_ascii_lowercase();
-            CODESCENE_MCP_MARKERS
+            CODEHEALTH_MCP_MARKERS
                 .iter()
                 .any(|marker| content.contains(marker))
         })
@@ -121,7 +126,7 @@ mod tests {
             detect(Some(repository.path())),
             AgentInstructions {
                 file_present: true,
-                codescene_mcp_instructions_present: false,
+                codehealth_mcp_instructions_present: false,
                 preferred_file: Some(PathBuf::from("AGENTS.md")),
             }
         );
@@ -144,12 +149,12 @@ mod tests {
         fs::write(repository.path().join("AGENTS.md"), "").unwrap();
         let rules = repository.path().join(".amazonq/rules");
         fs::create_dir_all(&rules).unwrap();
-        fs::write(rules.join("codescene.md"), "Use CodeScene MCP tools.").unwrap();
+        fs::write(rules.join("codescene.md"), "Use CodeHealth MCP tools.").unwrap();
 
         let result = detect(Some(repository.path()));
 
         assert_eq!(result.preferred_file, Some(PathBuf::from("AGENTS.md")));
-        assert!(!result.codescene_mcp_instructions_present);
+        assert!(!result.codehealth_mcp_instructions_present);
     }
 
     #[test]
@@ -159,7 +164,7 @@ mod tests {
         fs::create_dir_all(&nested).unwrap();
         fs::write(
             repository.path().join("CLAUDE.md"),
-            "Always use the CodeScene MCP tools.",
+            "Always use the CodeHealth MCP tools.",
         )
         .unwrap();
 
@@ -167,7 +172,7 @@ mod tests {
             detect(Some(&nested)),
             AgentInstructions {
                 file_present: true,
-                codescene_mcp_instructions_present: true,
+                codehealth_mcp_instructions_present: true,
                 preferred_file: Some(PathBuf::from("CLAUDE.md")),
             }
         );
@@ -185,7 +190,7 @@ mod tests {
         let result = detect(Some(repository.path()));
 
         assert!(result.file_present);
-        assert!(result.codescene_mcp_instructions_present);
+        assert!(result.codehealth_mcp_instructions_present);
     }
 
     #[test]
@@ -201,7 +206,7 @@ mod tests {
                 detect(Some(repository.path())),
                 AgentInstructions {
                     file_present: true,
-                    codescene_mcp_instructions_present: true,
+                    codehealth_mcp_instructions_present: true,
                     preferred_file: Some(PathBuf::from("AGENTS.md")),
                 }
             );
@@ -215,20 +220,20 @@ mod tests {
         fs::create_dir_all(&rules).unwrap();
         fs::write(
             rules.join("safeguards.mdc"),
-            "Use CodeScene MCP before commit.",
+            "Use CodeHealth MCP before commit.",
         )
         .unwrap();
 
         let result = detect(Some(repository.path()));
 
         assert!(result.file_present);
-        assert!(result.codescene_mcp_instructions_present);
+        assert!(result.codehealth_mcp_instructions_present);
     }
 
     #[test]
     fn ignores_supported_names_outside_a_git_repository() {
         let directory = tempfile::tempdir().unwrap();
-        fs::write(directory.path().join("AGENTS.md"), "CodeScene MCP").unwrap();
+        fs::write(directory.path().join("AGENTS.md"), "CodeHealth MCP").unwrap();
 
         assert_eq!(detect(Some(directory.path())), AgentInstructions::default());
     }

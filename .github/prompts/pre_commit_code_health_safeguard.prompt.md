@@ -4,7 +4,7 @@ description: Run a Code Health safeguard on modified and staged files before com
 argument-hint: Path to the Git repository to analyze
 ---
 
-Run a pre-commit Code Health safeguard on the current Git repository path using **CodeScene MCP Server** with **pre_commit_code_health_safeguard**.
+Run a pre-commit Code Health safeguard on the current Git repository path using **CodeHealth MCP Server** with **pre_commit_code_health_safeguard**.
 
 After running the tool:
 

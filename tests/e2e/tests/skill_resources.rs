@@ -10,10 +10,10 @@ use super::*;
 const TIMEOUT: Duration = Duration::from_secs(30);
 
 const EXPECTED_SKILL_NAMES: &[&str] = &[
-    "configuring-codescene-mcp",
+    "configuring-codehealth-mcp",
     "explaining-code-health",
     "guiding-refactoring-with-code-health",
-    "installing-and-activating-codescene-mcp",
+    "installing-and-activating-codehealth-mcp",
     "making-the-business-case-for-code-health",
     "prioritizing-technical-debt",
     "risk-based-testing-with-code-health",

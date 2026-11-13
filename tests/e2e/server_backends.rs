@@ -99,7 +99,7 @@ pub struct DockerBackend {
 }
 
 impl DockerBackend {
-    const DEFAULT_IMAGE: &str = "codescene-mcp-test";
+    const DEFAULT_IMAGE: &str = "codehealth-mcp-test";
     const CONTAINER_MOUNT_DEST: &str = "/mount/";
     const TEST_VERSION: &str = "MCP-0.0.0-test";
 

@@ -1,9 +1,9 @@
-# Installing CodeScene MCP Server via Docker
+# Installing CodeHealth MCP Server via Docker
 
 > [!WARNING]
 > The Docker distribution is being retired. From October 1 through December 31, 2026, Docker images will be released only for bug fixes. No Docker images will be released after December 31, 2026. Migrate to [NPM / npx](npm-installation.md), [Homebrew](homebrew-installation.md), or the [Windows installer](windows-installation.md).
 
-Docker provides a self-contained way to run the CodeScene MCP Server without installing any dependencies. The instructions below remain available during the maintenance window for existing users.
+Docker provides a self-contained way to run the CodeHealth MCP Server without installing any dependencies. The instructions below remain available during the maintenance window for existing users.
 
 ## Prerequisites
 
@@ -95,9 +95,9 @@ Add to your repository's Copilot MCP configuration (Settings → Code & automati
 
 Use the one-click install buttons or add to your `settings.json` or `.vscode/mcp.json`:
 
-[![Install CodeScene MCP for Cloud](https://img.shields.io/badge/VS_Code-Install_CodeScene_MCP_for_Cloud-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[%7B%22id%22%3A%22CS_MOUNT_PATH%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22Path%20of%20the%20directory%20that%20CodeScene%20should%20be%20able%20to%20see.%22%2C%22password%22%3Afalse%7D%2C%7B%22id%22%3A%22CS_ACCESS_TOKEN%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20Access%20Token%22%2C%22password%22%3Atrue%7D]&config={%22command%22%3A%22docker%22%2C%22args%22%3A[%22run%22%2C%22-i%22%2C%22--rm%22%2C%22-e%22%2C%22CS_ACCESS_TOKEN%22%2C%22-e%22%2C%22CS_MOUNT_PATH%3D%24%7Binput%3ACS_MOUNT_PATH%7D%22%2C%22--mount%22%2C%22type%3Dbind%2Csrc%3D%24%7Binput%3ACS_MOUNT_PATH%7D%2Cdst%3D/mount/%2Cro%22%2C%22codescene/codescene-mcp%22]%2C%22env%22%3A%7B%22CS_ACCESS_TOKEN%22%3A%22%24%7Binput%3ACS_ACCESS_TOKEN%7D%22%7D%2C%22type%22%3A%22stdio%22})
+[![Install CodeHealth MCP for Cloud](https://img.shields.io/badge/VS_Code-Install_CodeHealth_MCP_for_Cloud-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[%7B%22id%22%3A%22CS_MOUNT_PATH%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22Path%20of%20the%20directory%20that%20CodeScene%20should%20be%20able%20to%20see.%22%2C%22password%22%3Afalse%7D%2C%7B%22id%22%3A%22CS_ACCESS_TOKEN%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20Access%20Token%22%2C%22password%22%3Atrue%7D]&config={%22command%22%3A%22docker%22%2C%22args%22%3A[%22run%22%2C%22-i%22%2C%22--rm%22%2C%22-e%22%2C%22CS_ACCESS_TOKEN%22%2C%22-e%22%2C%22CS_MOUNT_PATH%3D%24%7Binput%3ACS_MOUNT_PATH%7D%22%2C%22--mount%22%2C%22type%3Dbind%2Csrc%3D%24%7Binput%3ACS_MOUNT_PATH%7D%2Cdst%3D/mount/%2Cro%22%2C%22codescene/codescene-mcp%22]%2C%22env%22%3A%7B%22CS_ACCESS_TOKEN%22%3A%22%24%7Binput%3ACS_ACCESS_TOKEN%7D%22%7D%2C%22type%22%3A%22stdio%22})
 
-[![Install CodeScene MCP for On-prem](https://img.shields.io/badge/VS_Code-Install_CodeScene_MCP_for_Onprem-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[%7B%22id%22%3A%22CS_MOUNT_PATH%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22Path%20of%20the%20directory%20that%20CodeScene%20should%20be%20able%20to%20see.%22%2C%22password%22%3Afalse%7D%2C%7B%22id%22%3A%22CS_ACCESS_TOKEN%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20Access%20Token%22%2C%22password%22%3Atrue%7D%2C%7B%22id%22%3A%22CS_ONPREM_URL%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20On-prem%20URL%22%2C%22password%22%3Afalse%7D]&config={%22command%22%3A%22docker%22%2C%22args%22%3A[%22run%22%2C%22-i%22%2C%22--rm%22%2C%22-e%22%2C%22CS_ACCESS_TOKEN%22%2C%22-e%22%2C%22CS_ONPREM_URL%22%2C%22-e%22%2C%22CS_MOUNT_PATH%3D%24%7Binput%3ACS_MOUNT_PATH%7D%22%2C%22--mount%22%2C%22type%3Dbind%2Csrc%3D%24%7Binput%3ACS_MOUNT_PATH%7D%2Cdst%3D/mount/%2Cro%22%2C%22codescene/codescene-mcp%22]%2C%22env%22%3A%7B%22CS_ACCESS_TOKEN%22%3A%22%24%7Binput%3ACS_ACCESS_TOKEN%7D%22%2C%22CS_ONPREM_URL%22%3A%22%24%7Binput%3ACS_ONPREM_URL%7D%22%7D%2C%22type%22%3A%22stdio%22})
+[![Install CodeHealth MCP for On-prem](https://img.shields.io/badge/VS_Code-Install_CodeHealth_MCP_for_Onprem-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=codescene&inputs=[%7B%22id%22%3A%22CS_MOUNT_PATH%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22Path%20of%20the%20directory%20that%20CodeScene%20should%20be%20able%20to%20see.%22%2C%22password%22%3Afalse%7D%2C%7B%22id%22%3A%22CS_ACCESS_TOKEN%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20Access%20Token%22%2C%22password%22%3Atrue%7D%2C%7B%22id%22%3A%22CS_ONPREM_URL%22%2C%22type%22%3A%22promptString%22%2C%22description%22%3A%22CodeScene%20On-prem%20URL%22%2C%22password%22%3Afalse%7D]&config={%22command%22%3A%22docker%22%2C%22args%22%3A[%22run%22%2C%22-i%22%2C%22--rm%22%2C%22-e%22%2C%22CS_ACCESS_TOKEN%22%2C%22-e%22%2C%22CS_ONPREM_URL%22%2C%22-e%22%2C%22CS_MOUNT_PATH%3D%24%7Binput%3ACS_MOUNT_PATH%7D%22%2C%22--mount%22%2C%22type%3Dbind%2Csrc%3D%24%7Binput%3ACS_MOUNT_PATH%7D%2Cdst%3D/mount/%2Cro%22%2C%22codescene/codescene-mcp%22]%2C%22env%22%3A%7B%22CS_ACCESS_TOKEN%22%3A%22%24%7Binput%3ACS_ACCESS_TOKEN%7D%22%2C%22CS_ONPREM_URL%22%3A%22%24%7Binput%3ACS_ONPREM_URL%7D%22%7D%2C%22type%22%3A%22stdio%22})
 
 Manual configuration (replace `/path/to/your/code` with your actual code directory path):
 
@@ -179,13 +179,13 @@ Create a `.kiro/settings/mcp.json` file in your workspace (replace `/path/to/you
 Replace `/path/to/your/code` with your actual code directory path:
 
 ```sh
-q mcp add --name codescene-mcp --command docker --args '["run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "-e", "CS_MOUNT_PATH=/path/to/your/code", "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro", "codescene/codescene-mcp"]'
+q mcp add --name codehealth-mcp --command docker --args '["run", "--rm", "-i", "-e", "CS_ACCESS_TOKEN", "-e", "CS_MOUNT_PATH=/path/to/your/code", "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro", "codescene/codescene-mcp"]'
 ```
 
 ### Amazon Q IDE
 
 1. Access the MCP configuration UI
-2. Add a new server with name `CodeSceneMCPServer`
+2. Add a new server with name `CodeHealthMCPServer`
 3. Select `stdio` as the transport protocol
 4. Command: `docker`
 5. Arguments: `run`, `--rm`, `-i`, `-e`, `CS_ACCESS_TOKEN`, `-e`, `CS_MOUNT_PATH=/path/to/your/code`, `--mount`, `type=bind,src=/path/to/your/code,dst=/mount/,ro`, `codescene/codescene-mcp`
@@ -230,7 +230,7 @@ For additional configuration — including CodeScene on-prem, custom SSL/TLS cer
 By default, configuration changes made through `set_config` (e.g., setting a default project) and diagnostic log files are stored inside the container and lost when it stops. If you want these to persist across restarts, add a named volume for the config directory:
 
 ```
---mount type=volume,src=codescene-mcp-config,dst=/home/mcp/.config/codehealth-mcp
+--mount type=volume,src=codehealth-mcp-config,dst=/home/mcp/.config/codehealth-mcp
 ```
 
 For example, in a JSON configuration:
@@ -241,7 +241,7 @@ For example, in a JSON configuration:
     "-e", "CS_ACCESS_TOKEN",
     "-e", "CS_MOUNT_PATH=/path/to/your/code",
     "--mount", "type=bind,src=/path/to/your/code,dst=/mount/,ro",
-    "--mount", "type=volume,src=codescene-mcp-config,dst=/home/mcp/.config/codehealth-mcp",
+    "--mount", "type=volume,src=codehealth-mcp-config,dst=/home/mcp/.config/codehealth-mcp",
     "codescene/codescene-mcp"
 ]
 ```

@@ -281,15 +281,15 @@ fn check_agent_instructions(path: &Path) -> CheckResult {
     let instructions = agent_instructions::detect(Some(path));
     let (passed, detail) = match (
         instructions.file_present,
-        instructions.codescene_mcp_instructions_present,
+        instructions.codehealth_mcp_instructions_present,
     ) {
         (true, true) => (
             true,
-            "Found an agent instructions file with CodeScene MCP guidance.",
+            "Found an agent instructions file with CodeHealth MCP guidance.",
         ),
         (true, false) => (
             false,
-            "Found an agent instructions file, but it does not contain CodeScene MCP guidance.",
+            "Found an agent instructions file, but it does not contain CodeHealth MCP guidance.",
         ),
         (false, _) => (
             false,
@@ -722,12 +722,12 @@ mod tests {
     fn agent_instructions_pass_with_codescene_guidance() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir(dir.path().join(".git")).unwrap();
-        std::fs::write(dir.path().join("AGENTS.md"), "Use CodeScene MCP tools.").unwrap();
+        std::fs::write(dir.path().join("AGENTS.md"), "Use CodeHealth MCP tools.").unwrap();
 
         let result = check_agent_instructions(dir.path());
 
         assert!(result.passed);
-        assert!(result.detail.contains("CodeScene MCP guidance"));
+        assert!(result.detail.contains("CodeHealth MCP guidance"));
     }
 
     #[test]

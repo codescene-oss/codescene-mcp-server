@@ -239,7 +239,7 @@ export async function ensureBinary(version) {
   mkdirSync(cacheDir, { recursive: true });
 
   process.stderr.write(
-    `CodeScene MCP Server v${version} - downloading for ${process.platform}/${process.arch}...\n`
+    `CodeHealth MCP Server v${version} - downloading for ${process.platform}/${process.arch}...\n`
   );
 
   await downloadAsset(url, platformInfo, cacheDir, binaryPath);

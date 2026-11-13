@@ -19,7 +19,7 @@ pub(crate) fn display_version(raw_version: &str) -> &str {
 }
 
 pub(crate) fn help_text() -> &'static str {
-    "CodeScene MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help              Show this help message and exit\n  -v, --version           Show version and exit\n  --cli-version           Show embedded CLI version and exit\n  auth                    Sign in to CodeScene via OAuth (opens browser)\n  auth logout             Sign out of CodeScene OAuth and clear the stored session\n  auth list-accounts      List Cloud OAuth accounts available to the signed-in user\n  auth switch <account>   Switch Cloud OAuth account (reuses stored session when possible)\n\nEnvironment:\n  CS_ONPREM_URL    Base URL of self-hosted CodeScene instance (for auth subcommand)\n  CS_ACCOUNT_ID    Optional Cloud account/tenant ID for OAuth credential slot selection"
+    "CodeHealth MCP Server\n\nUsage: cs-mcp [OPTIONS]\n\nOptions:\n  -h, --help              Show this help message and exit\n  -v, --version           Show version and exit\n  --cli-version           Show embedded CLI version and exit\n  auth                    Sign in to CodeScene via OAuth (opens browser)\n  auth logout             Sign out of CodeScene OAuth and clear the stored session\n  auth list-accounts      List Cloud OAuth accounts available to the signed-in user\n  auth switch <account>   Switch Cloud OAuth account (reuses stored session when possible)\n\nEnvironment:\n  CS_ONPREM_URL    Base URL of self-hosted CodeScene instance (for auth subcommand)\n  CS_ACCOUNT_ID    Optional Cloud account/tenant ID for OAuth credential slot selection"
 }
 
 pub(crate) async fn ensure_oauth_client_configured() {

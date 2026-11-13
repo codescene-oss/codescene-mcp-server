@@ -1,0 +1,55 @@
+---
+name: installing-and-activating-codehealth-mcp
+description: Use when installing the CodeHealth MCP Server binary or package, registering it in an AI assistant, or copying agent guidance files into a repository.
+---
+
+# Installing and Activating CodeHealth MCP
+
+## Overview
+
+Use this skill when the task is to get the CodeHealth MCP Server installed and registered with an AI assistant. The workflow has three parts: install the server, register it in the assistant, and copy the agent guidance files into the repository.
+
+For configuring the server after installation (OAuth login, account ID, PAT, on-prem URLs, default project, SSL), use the `configuring-codehealth-mcp` skill instead.
+
+## When to Use
+
+- The user wants to install CodeHealth MCP for the first time.
+- The user has the binary or package installed but has not registered it in an AI assistant.
+- The user wants a quick setup path for VS Code, GitHub Copilot, Claude Code, Docker, Homebrew, or Windows.
+
+Do not use this skill for configuring tokens, URLs, or other server options. Use `configuring-codehealth-mcp` for that. Do not use this skill for refactoring, safeguards, or technical debt prioritization.
+
+## Quick Reference
+
+- Install using the method that matches the environment: `npx` or `npm`, Homebrew, Windows installer script, manual download, or Docker.
+- Register the server in the AI assistant so it launches `cs-mcp`.
+- Copy the appropriate agent guidance file into the repository: `docs/AGENTS-full.md` for CodeScene Core users, or `docs/AGENTS-standalone.md` for standalone license users. For Amazon Q, copy `.amazonq/rules` instead.
+- Copy any relevant skills from the CodeHealth MCP skills catalogue at `https://github.com/codescene-oss/codehealth-mcp-server/tree/main/skills`.
+- After installation, authenticate with OAuth via the `login` MCP prompt (slash command), by asking the assistant to log in (`login` tool), or with **CodeHealth MCP: Sign In** in the VS Code extension. Sign out with `logout` / **CodeHealth MCP: Sign Out**. Use a PAT only for CI/headless environments.
+
+## Implementation
+
+1. Choose the installation method that fits the user environment:
+   - `npx @codescene/codehealth-mcp` or `npm install -g @codescene/codehealth-mcp`
+   - `brew tap codescene-oss/codehealth-mcp-server https://github.com/codescene-oss/codehealth-mcp-server && brew trust codescene-oss/codehealth-mcp-server && brew install cs-mcp`
+   - Windows PowerShell installer
+   - Manual binary download
+   - Docker image
+2. Verify that the `cs-mcp` command or container entrypoint is available.
+3. Register the server in the AI assistant:
+   - For VS Code or GitHub Copilot, install the CodeHealth MCP extension, or add a `codescene` server entry in `settings.json` / `.vscode/mcp.json`.
+   - For Claude Code, install the plugin (`/plugin install codescene@codescene`) or add the MCP with `claude mcp add`.
+4. Authenticate:
+   - **Interactive (recommended):** Use the `login` MCP prompt (slash command), ask the assistant to log in (calls `login` and opens a browser), or run **CodeHealth MCP: Sign In** in the VS Code extension. For multi-account Cloud, use `switch_account` (or **CodeHealth MCP: Switch Account**) after login when needed. For on-prem, set `onprem_url` first.
+   - **CI / headless:** Set a Personal Access Token via `set_config` or `CS_ACCESS_TOKEN`. See the `configuring-codehealth-mcp` skill.
+5. Copy the appropriate agent guidance file to the repository: `docs/AGENTS-full.md` for CodeScene Core users, or `docs/AGENTS-standalone.md` for standalone license users. Rename it to `AGENTS.md` in the target repository so the agent picks it up automatically.
+6. If the user is on Amazon Q, copy `.amazonq/rules` instead of the AGENTS file.
+7. Copy any relevant skills from `https://github.com/codescene-oss/codehealth-mcp-server/tree/main/skills` for safeguarding, refactoring, prioritization, or business-case workflows.
+
+## Common Mistakes
+
+- Installing the server but never registering it with the assistant.
+- Copying the setup files into the wrong repository.
+- Skipping authentication after installation. For interactive use, call `login`; for CI, set a PAT.
+- Pasting a PAT into client env when OAuth would work — a set `CS_ACCESS_TOKEN` blocks `login`.
+- Manually editing environment variables when `login` / `set_config` is simpler and persistent.

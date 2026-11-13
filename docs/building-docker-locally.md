@@ -1,9 +1,9 @@
 # Building the Docker Instance Locally
 
-You can build and run the dockerized CodeScene MCP server by first cloning the repo and then building the Docker image:
+You can build and run the dockerized CodeHealth MCP server by first cloning the repo and then building the Docker image:
 
 ```sh
-docker build -t codescene-mcp .
+docker build -t codehealth-mcp .
 ```
 
 And then configuring the MCP in your editor. For example, in VS Code (`.vscode/mcp.json`), replace `/path/to/your/code` with your actual code directory path:
@@ -11,7 +11,7 @@ And then configuring the MCP in your editor. For example, in VS Code (`.vscode/m
 ```json
 {
   "servers": {
-    "codescene-mcp": {
+    "codehealth-mcp": {
       "type": "stdio",
       "command": "docker",
       "args": [
@@ -24,7 +24,7 @@ And then configuring the MCP in your editor. For example, in VS Code (`.vscode/m
         "CS_MOUNT_PATH=/path/to/your/code",
         "--mount",
         "type=bind,src=/path/to/your/code,dst=/mount/,ro",
-        "codescene-mcp"
+        "codehealth-mcp"
       ]
     }
   }
@@ -36,7 +36,7 @@ This configuration will automatically pick up the `CS_ACCESS_TOKEN` environment 
 ```json
 {
   "servers": {
-    "codescene-mcp": {
+    "codehealth-mcp": {
       "type": "stdio",
       "command": "docker",
       "args": [
@@ -49,7 +49,7 @@ This configuration will automatically pick up the `CS_ACCESS_TOKEN` environment 
         "CS_MOUNT_PATH=/path/to/your/code",
         "--mount",
         "type=bind,src=/path/to/your/code,dst=/mount/,ro",
-        "codescene-mcp"
+        "codehealth-mcp"
       ],
       "env": {
         "CS_ACCESS_TOKEN": "your-token-here"
@@ -62,7 +62,7 @@ This configuration will automatically pick up the `CS_ACCESS_TOKEN` environment 
 Or when running it from the CLI, like this:
 
 ```sh
-docker run -i --rm -e CS_ACCESS_TOKEN=token-goes-here codescene-mcp
+docker run -i --rm -e CS_ACCESS_TOKEN=token-goes-here codehealth-mcp
 ```
 
 **Note:** if you want to use CodeScene On-prem, you need to additionally pass the `CS_ONPREM_URL` environment variable to it.

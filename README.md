@@ -1,19 +1,19 @@
-# CodeScene MCP Server
+# CodeHealth MCP Server
 
 [![CodeScene Hotspot Code Health](https://codescene.io/projects/72556/status-badges/hotspot-code-health)](https://codescene.io/projects/72556)
 [![CodeScene Average Code Health](https://codescene.io/projects/72556/status-badges/average-code-health)](https://codescene.io/projects/72556)
 [![CodeScene System Mastery](https://codescene.io/projects/72556/status-badges/system-mastery)](https://codescene.io/projects/72556)
 
-The **CodeScene MCP Server** exposes CodeScene's [Code Health](https://codescene.com/product/code-health) analysis as local AI-friendly tools.
+The **CodeHealth MCP Server** exposes CodeScene's [Code Health](https://codescene.com/product/code-health) analysis as local AI-friendly tools.
 
 This server is designed to run in your local environment and lets AI assistants (like GitHub Copilot, Cursor, Claude code, etc.) request meaningful Code Health insights directly from your codebase. 
 The Code Health insights augment the AI prompts with rich content around code quality issues, maintainability problems, and technical debt in general.
 
-The repository also includes a downloadable set of public agent skills in [skills/](skills) for teams that want to reuse CodeScene MCP workflows in their own agentic pipelines.
+The repository also includes a downloadable set of public agent skills in [skills/](skills) for teams that want to reuse CodeHealth MCP workflows in their own agentic pipelines.
 
-## Getting Started with CodeScene MCP
+## Getting Started with CodeHealth MCP
 
-Want AI to perform the setup? Start with [skills/installing-and-activating-codescene-mcp/SKILL.md](skills/installing-and-activating-codescene-mcp/SKILL.md).
+Want AI to perform the setup? Start with [skills/installing-and-activating-codehealth-mcp/SKILL.md](skills/installing-and-activating-codehealth-mcp/SKILL.md).
 
 1. Setting up Authentication to the MCP Server — see [Authentication](docs/authentication.md).
 2. Install the MCP Server using one of the [installation options](#installation) below.
@@ -52,7 +52,7 @@ The first run automatically downloads the correct platform-specific binary for y
 Add the CodeScene marketplace and install the plugin:
 
 ```
-/plugin marketplace add codescene-oss/codescene-mcp-server
+/plugin marketplace add codescene-oss/codehealth-mcp-server
 /plugin install codescene@codescene
 ```
 
@@ -63,7 +63,7 @@ This installs the MCP server and Code Health skills. Requires [Node.js](https://
 <details>
 <summary><b>Claude Desktop</b></summary>
 
-Download the MCP bundle from the [latest release page](https://github.com/codescene-oss/codescene-mcp-server/releases/latest):
+Download the MCP bundle from the [latest release page](https://github.com/codescene-oss/codehealth-mcp-server/releases/latest):
 
 - `codehealth-mcp-{version}.mcpb`
 
@@ -74,7 +74,7 @@ Then open the `.mcpb` file with Claude Desktop to install the MCP server.
 <details>
 <summary><b>VS Code</b></summary>
 
-The CodeScene MCP is available as a VS Code extension:
+The CodeHealth MCP is available as a VS Code extension:
 
 - [**Open VSX**](https://open-vsx.org/extension/codescene/codescene-codehealth-mcp)
 - [**VS Code Marketplace**](https://marketplace.visualstudio.com/items?itemName=codescene.codescene-codehealth-mcp)
@@ -85,8 +85,8 @@ The CodeScene MCP is available as a VS Code extension:
 <summary><b>Homebrew (macOS / Linux)</b></summary>
 
 ```bash
-brew tap codescene-oss/codescene-mcp-server https://github.com/codescene-oss/codescene-mcp-server
-brew trust codescene-oss/codescene-mcp-server
+brew tap codescene-oss/codehealth-mcp-server https://github.com/codescene-oss/codehealth-mcp-server
+brew trust codescene-oss/codehealth-mcp-server
 brew install cs-mcp
 ```
 
@@ -97,12 +97,12 @@ brew install cs-mcp
 <details>
 <summary><b>Windows</b></summary>
 
-For VS Code / GitHub Copilot, the [CodeScene MCP extension](https://marketplace.visualstudio.com/items?itemName=codescene.codescene-codehealth-mcp) bundles and automatically configures the server without a separate PowerShell installation.
+For VS Code / GitHub Copilot, the [CodeHealth MCP extension](https://marketplace.visualstudio.com/items?itemName=codescene.codescene-codehealth-mcp) bundles and automatically configures the server without a separate PowerShell installation.
 
 Run this in PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp-server/main/install.ps1 | iex
 ```
 
 After installing, fully quit and reopen your AI assistant or IDE (including all VS Code windows) so it picks up the updated PATH, then configure the MCP server using the guide below. Restarting only the MCP server or an integrated terminal does not refresh VS Code's PATH. The guide also includes a VS Code configuration that uses the executable path directly and avoids this PATH requirement.
@@ -114,7 +114,7 @@ After installing, fully quit and reopen your AI assistant or IDE (including all 
 <details>
 <summary><b>Manual Download</b></summary>
 
-Download the latest binary for your platform from the [GitHub Releases page](https://github.com/codescene-oss/codescene-mcp-server/releases):
+Download the latest binary for your platform from the [GitHub Releases page](https://github.com/codescene-oss/codehealth-mcp-server/releases):
 
 - **macOS:** `cs-mcp-macos-aarch64.zip` (Apple Silicon) or `cs-mcp-macos-amd64` (Intel)
 - **Linux:** `cs-mcp-linux-aarch64.zip` or `cs-mcp-linux-amd64`
@@ -150,12 +150,12 @@ docker pull codescene/codescene-mcp
 ## Use Cases
 
 > [!TIP]
-> Watch the [demo video of the CodeScene MCP](https://www.youtube.com/watch?v=AycLVxKmVSY).
+> Watch the [demo video of the CodeHealth MCP](https://www.youtube.com/watch?v=AycLVxKmVSY).
 
 > [!NOTE]
-> CodeScene MCP comes with a set of [example prompts](.github/prompts), agent guidance files to capture the key use cases, and a downloadable set of public [skills](skills). Copy the agent guidance that matches your license — [AGENTS-full.md](docs/AGENTS-full.md) for CodeScene Core users or [AGENTS-standalone.md](docs/AGENTS-standalone.md) for standalone users — and any relevant skills to your own repository.
+> CodeHealth MCP comes with a set of [example prompts](.github/prompts), agent guidance files to capture the key use cases, and a downloadable set of public [skills](skills). Copy the agent guidance that matches your license — [AGENTS-full.md](docs/AGENTS-full.md) for CodeScene Core users or [AGENTS-standalone.md](docs/AGENTS-standalone.md) for standalone users — and any relevant skills to your own repository.
 
-With the CodeScene MCP Server in place, your AI tools can:
+With the CodeHealth MCP Server in place, your AI tools can:
 
 ### Safeguard AI-Generated Code
 Prevent AI from introducing technical debt by flagging maintainability issues like complexity, deep nesting, low cohesion, etc.
@@ -189,7 +189,7 @@ Ask your AI assistant to show your MCP usage overview to see Code Health uplifts
 The full feature set — including hotspots, technical debt goals, and code ownership — requires a [CodeScene subscription](https://codescene.com/pricing). Authenticate by asking your AI Assistant to login to CodeScene, or use the login too. Alternatively, use your CodeScene instance to create the `CS_ACCESS_TOKEN` which activates the MCP.
 The MCP supports both CodeScene Cloud and CodeScene on-prem.
 
-For local Code Health analysis without a CodeScene subscription, you can use the standalone [CodeScene Code Health MCP](https://codescene.com/early-access-codescene-mcp-server).
+For local Code Health analysis without a CodeScene subscription, you can use the standalone [CodeHealth MCP](https://codescene.com/early-access-codescene-mcp-server).
 
 </details>
 
@@ -197,7 +197,7 @@ For local Code Health analysis without a CodeScene subscription, you can use the
 
 <summary>How does the MCP Server keep my code private and secure?</summary>
 
-The CodeScene MCP Server runs fully locally. All analysis — including Code Health scoring, delta reviews, and business-case calculations — is performed on your machine, against your local repository.
+The CodeHealth MCP Server runs fully locally. All analysis — including Code Health scoring, delta reviews, and business-case calculations — is performed on your machine, against your local repository.
 No source code or analysis data is sent to cloud providers, LLM vendors, or any external service.
 
 Analysis results (e.g. hotspots and technical debt goals) are fetched via REST from your own CodeScene account using a secure token.
@@ -208,9 +208,9 @@ For complete details, please see CodeScene's full [privacy and security document
 
 <details>
 
-<summary>Can I use any LLM as the backbone for CodeScene MCP?</summary>
+<summary>Can I use any LLM as the backbone for CodeHealth MCP?</summary>
 
-CodeScene MCP can work with any model your AI assistant supports, but we strongly recommend choosing a frontier model when your assistant offers a model selector (as in tools like GitHub Copilot). 
+CodeHealth MCP can work with any model your AI assistant supports, but we strongly recommend choosing a frontier model when your assistant offers a model selector (as in tools like GitHub Copilot). 
 
 Frontier models -- such as Claude Sonnet -- deliver far better rule adherence and refactoring quality, while legacy models like GPT-4.1 often struggle with MCP constraints. 
 For a consistent, high-quality experience, select the newest available model.
@@ -229,7 +229,7 @@ Since you have to provide a mount path for Docker, you can either have a MCP con
 
 <summary>Why does IntelliJ give a wrong path to the MCP server?</summary>
 
-In our testing we've seen that IntelliJ's AI Assistant sometimes gives a wrong path to the CodeScene MCP server. 
+In our testing we've seen that IntelliJ's AI Assistant sometimes gives a wrong path to the CodeHealth MCP server. 
 From what we can tell, it seems to have nothing to do with the MCP server itself, but rather with IntelliJ's AI Assistant, which 
 seems to hallucinate parts of the path some of the time. We're still investigating this issue and will update this section once we have more information.
 

@@ -1,6 +1,6 @@
 # Code Safety and Merge Readiness
 
-All changes must be evaluated through **CodeScene MCP safety gates**.  
+All changes must be evaluated through **CodeHealth MCP safety gates**.  
 No code is considered merge-ready unless Code Health is stable or improved.
 
 ## Merge Safety Requirements
@@ -39,6 +39,6 @@ A change is mergeable only if:
 - No technical-debt goals are violated
 - Code is structured clearly and is easy to modify
 
-The CodeScene MCP provides the authoritative determination of these conditions.
+The CodeHealth MCP provides the authoritative determination of these conditions.
 
 Code Health 10.0 is the ideal long-term target, but merge readiness is based on preventing regressions and achieving measurable improvement rather than requiring a perfect score on every change.

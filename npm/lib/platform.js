@@ -2,7 +2,7 @@
  * Platform and architecture detection for downloading the correct binary.
  *
  * Maps Node.js platform/arch identifiers to the GitHub release asset names
- * used by the codescene-mcp-server build pipeline.
+ * used by the codehealth-mcp-server build pipeline.
  */
 
 const PLATFORM_MAP = {
@@ -72,7 +72,7 @@ export function getDownloadUrl(version, asset) {
   const tag = `MCP-${version}`;
   const baseUrl =
     process.env.CS_MCP_DOWNLOAD_BASE_URL ||
-    "https://github.com/codescene-oss/codescene-mcp-server/releases/download";
+    "https://github.com/codescene-oss/codehealth-mcp-server/releases/download";
   if (!baseUrl.startsWith("https://")) {
     console.warn(
       `Warning: CS_MCP_DOWNLOAD_BASE_URL should use HTTPS (got: ${baseUrl})`

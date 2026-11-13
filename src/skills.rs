@@ -11,8 +11,8 @@ struct EmbeddedSkill {
 
 const EMBEDDED_SKILLS: &[EmbeddedSkill] = &[
     EmbeddedSkill {
-        dir_name: "configuring-codescene-mcp",
-        content: include_str!("../skills/configuring-codescene-mcp/SKILL.md"),
+        dir_name: "configuring-codehealth-mcp",
+        content: include_str!("../skills/configuring-codehealth-mcp/SKILL.md"),
     },
     EmbeddedSkill {
         dir_name: "explaining-code-health",
@@ -23,8 +23,8 @@ const EMBEDDED_SKILLS: &[EmbeddedSkill] = &[
         content: include_str!("../skills/guiding-refactoring-with-code-health/SKILL.md"),
     },
     EmbeddedSkill {
-        dir_name: "installing-and-activating-codescene-mcp",
-        content: include_str!("../skills/installing-and-activating-codescene-mcp/SKILL.md"),
+        dir_name: "installing-and-activating-codehealth-mcp",
+        content: include_str!("../skills/installing-and-activating-codehealth-mcp/SKILL.md"),
     },
     EmbeddedSkill {
         dir_name: "making-the-business-case-for-code-health",

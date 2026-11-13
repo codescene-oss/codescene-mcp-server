@@ -1,11 +1,11 @@
 ---
 name: making-a-release
-description: Use when a developer wants to cut, publish, or ship a new release of the CodeScene MCP Server, or asks how to make a release / bump the version.
+description: Use when a developer wants to cut, publish, or ship a new release of the CodeHealth MCP Server, or asks how to make a release / bump the version.
 ---
 
 # Making a Release
 
-To release the CodeScene MCP Server, create and push an annotated `MCP-<version>`
+To release the CodeHealth MCP Server, create and push an annotated `MCP-<version>`
 tag. That single push is the entire process — CI does everything else (release
 notes, binaries, npm, packaging metadata, and marking it latest). Docker images
 are published separately by manually running the Build and Publish Docker

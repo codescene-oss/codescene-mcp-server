@@ -1,6 +1,6 @@
 ---
 name: create-mcp-tool
-description: Scaffold a new MCP tool for the CodeScene MCP Server following the project's established patterns for directory structure, dependency injection, decorators, testing, and registration.
+description: Scaffold a new MCP tool for the CodeHealth MCP Server following the project's established patterns for directory structure, dependency injection, decorators, testing, and registration.
 metadata:
   audience: contributors
   language: rust
@@ -8,7 +8,7 @@ metadata:
 
 ## Purpose
 
-Use this skill when creating a new MCP tool in the CodeScene MCP Server project. It encodes the exact conventions, patterns, and file structure that all existing tools follow.
+Use this skill when creating a new MCP tool in the CodeHealth MCP Server project. It encodes the exact conventions, patterns, and file structure that all existing tools follow.
 
 ## Project Context
 

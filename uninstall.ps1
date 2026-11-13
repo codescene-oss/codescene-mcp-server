@@ -1,11 +1,11 @@
-# CodeScene MCP Server Uninstaller for Windows
-# Usage: irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/uninstall.ps1 | iex
+# CodeHealth MCP Server Uninstaller for Windows
+# Usage: irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp-server/main/uninstall.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
 $installDir = "$env:LOCALAPPDATA\Programs\cs-mcp"
 
-Write-Host "Uninstalling CodeScene MCP Server..." -ForegroundColor Cyan
+Write-Host "Uninstalling CodeHealth MCP Server..." -ForegroundColor Cyan
 
 # Remove install directory
 if (Test-Path $installDir) {
@@ -24,4 +24,4 @@ if ($userPath -like "*$installDir*") {
 }
 
 Write-Host ""
-Write-Host "Successfully uninstalled CodeScene MCP Server!" -ForegroundColor Green
+Write-Host "Successfully uninstalled CodeHealth MCP Server!" -ForegroundColor Green

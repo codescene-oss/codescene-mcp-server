@@ -30,5 +30,5 @@ pub fn test_usage_tool_and_resource() {
     assert!(resource["result"]["contents"][0]["text"]
         .as_str()
         .unwrap()
-        .contains("CodeScene MCP usage"));
+        .contains("CodeHealth MCP usage"));
 }

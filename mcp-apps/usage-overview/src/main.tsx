@@ -239,7 +239,7 @@ export function Dashboard({ data }: { data: DashboardData }) {
 export function App() {
   const [data, setData] = useState<DashboardData>({ insights: emptyInsights, outcomes: [] });
   const { app, error } = useApp({
-    appInfo: { name: "CodeScene MCP usage", version: "0.2.0" },
+    appInfo: { name: "CodeHealth MCP usage", version: "0.2.0" },
     capabilities: {},
     onAppCreated: (createdApp) => {
       createdApp.ontoolresult = async (result) => setData(dashboardData(result));

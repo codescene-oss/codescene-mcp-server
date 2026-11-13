@@ -64,7 +64,7 @@ describe('activate', () => {
         const sbi = state.statusBarItems[0];
         assert.equal(sbi.command, 'codescene.showStatus');
         assert.equal(sbi.text, '$(shield) CodeScene');
-        assert.equal(sbi.tooltip, 'CodeScene CodeHealth MCP — Active');
+        assert.equal(sbi.tooltip, 'CodeHealth MCP — Active');
     });
 
     it('pushes disposables onto context.subscriptions', () => {
@@ -172,7 +172,7 @@ describe('provideMcpServerDefinitions', () => {
         const defs = await provider.provideMcpServerDefinitions();
 
         assert.equal(defs.length, 1);
-        assert.equal(defs[0].label, 'CodeScene CodeHealth MCP');
+        assert.equal(defs[0].label, 'CodeHealth MCP');
         assert.equal(defs[0].command, join(binDir, binaryName));
         assert.deepEqual(defs[0].args, []);
         assert.equal(defs[0].env['CS_ACCESS_TOKEN'], 'tok-123');
@@ -196,7 +196,7 @@ describe('resolveMcpServerDefinition', () => {
         extension.activate(ctx);
 
         const provider = findProvider();
-        const server = { label: 'CodeScene CodeHealth MCP' };
+        const server = { label: 'CodeHealth MCP' };
         const result = await provider.resolveMcpServerDefinition(server);
 
         assert.equal(result, server);

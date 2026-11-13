@@ -7,7 +7,7 @@
 - **Safeguard all AI-touched code** before suggesting a commit.
 - If Code Health regresses or violates goals, **refactor — don’t declare done.**
 - Use Code Health to guide **incremental, high-impact refactorings.**
-- When in doubt, **call the appropriate CodeScene MCP tool — don’t guess.**
+- When in doubt, **call the appropriate CodeHealth MCP tool — don’t guess.**
 
 ---
 

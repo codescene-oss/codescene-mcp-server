@@ -133,7 +133,7 @@ describe("getDownloadUrl", () => {
     const url = getDownloadUrl("0.2.1", "cs-mcp-macos-aarch64.zip");
     assert.equal(
       url,
-      "https://github.com/codescene-oss/codescene-mcp-server/releases/download/MCP-0.2.1/cs-mcp-macos-aarch64.zip"
+      "https://github.com/codescene-oss/codehealth-mcp-server/releases/download/MCP-0.2.1/cs-mcp-macos-aarch64.zip"
     );
   });
 

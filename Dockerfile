@@ -62,6 +62,6 @@ USER mcp:mcp
 # Ensure the CodeScene CLI is on PATH
 ENV PATH="/home/mcp/.local/bin:${PATH}"
 
-LABEL io.modelcontextprotocol.server.name="com.codescene/codescene-mcp-server"
+LABEL io.modelcontextprotocol.server.name="com.codescene/codehealth-mcp-server"
 
 ENTRYPOINT ["/usr/local/bin/cs-mcp"]

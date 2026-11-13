@@ -1,6 +1,6 @@
-# Installing CodeScene MCP Server via NPM
+# Installing CodeHealth MCP Server via NPM
 
-You can install and run the CodeScene MCP Server using `npx` on macOS, Linux, and Windows. This is the quickest way to get started — no manual downloads or package managers required.
+You can install and run the CodeHealth MCP Server using `npx` on macOS, Linux, and Windows. This is the quickest way to get started — no manual downloads or package managers required.
 
 ## Prerequisites
 
@@ -120,7 +120,7 @@ Claude Desktop is available for macOS and Windows. Add to your configuration fil
 ### Amazon Q CLI
 
 ```bash
-q mcp add --name codescene-mcp --command npx --args '["@codescene/codehealth-mcp"]'
+q mcp add --name codehealth-mcp --command npx --args '["@codescene/codehealth-mcp"]'
 ```
 
 ## Configuration

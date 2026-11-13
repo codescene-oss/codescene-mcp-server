@@ -43,7 +43,7 @@ That calls `switch_account` (do not rely on `set_config(account_id=…)` alone w
 
 **CI / headless:** Use a Personal Access Token via `set_config` or `CS_ACCESS_TOKEN`. A saved PAT **blocks** OAuth until cleared.
 
-See [Authentication](https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/authentication.md) for details.
+See [Authentication](https://github.com/codescene-oss/codehealth-mcp-server/blob/main/docs/authentication.md) for details.
 
 ## Skills
 
@@ -52,10 +52,10 @@ Once installed, the following skills are available:
 <!-- SKILLS-TABLE:START -->
 | Skill | Description |
 |-------|-------------|
-| `/codescene:configuring-codescene-mcp` | Use when the user wants to view, set, or troubleshoot CodeScene MCP configuration such as OAuth login, access tokens, account IDs, on-prem URLs, default projects, or SSL certificates. |
+| `/codescene:configuring-codehealth-mcp` | Use when the user wants to view, set, or troubleshoot CodeHealth MCP configuration such as OAuth login, access tokens, account IDs, on-prem URLs, default projects, or SSL certificates. |
 | `/codescene:explaining-code-health` | Use when a user asks what Code Health means, how to interpret scores, or why Code Health matters in daily development. |
 | `/codescene:guiding-refactoring-with-code-health` | Use when refactoring unhealthy code and needing Code Health findings to choose small safe steps and verify improvement. |
-| `/codescene:installing-and-activating-codescene-mcp` | Use when installing the CodeScene MCP Server binary or package, registering it in an AI assistant, or copying agent guidance files into a repository. |
+| `/codescene:installing-and-activating-codehealth-mcp` | Use when installing the CodeHealth MCP Server binary or package, registering it in an AI assistant, or copying agent guidance files into a repository. |
 | `/codescene:making-the-business-case-for-code-health` | Use when a user asks for ROI, stakeholder justification, delivery impact, or defect-risk reduction from improving Code Health in a file. |
 | `/codescene:prioritizing-technical-debt` | Use when users with a CodeScene instance ask what to improve first across a project, which hotspots matter most, or how to rank refactoring candidates. |
 | `/codescene:risk-based-testing-with-code-health` | Use when a user asks what to test first based on CodeScene findings, especially for high-risk hotspots or pull-request change sets. |
@@ -65,7 +65,7 @@ Once installed, the following skills are available:
 
 ## MCP Tools
 
-The plugin registers the CodeScene MCP server, which provides the following tools:
+The plugin registers the CodeHealth MCP server, which provides the following tools:
 
 ### Authentication & configuration (all users)
 

@@ -85,7 +85,7 @@ where
     let Some(service) = service else {
         return Ok(());
     };
-    tracing::info!("CodeScene MCP server ready");
+    tracing::info!("CodeHealth MCP server ready");
     let cancellation = service.cancellation_token();
     let waiting = service.waiting();
     tokio::pin!(waiting);

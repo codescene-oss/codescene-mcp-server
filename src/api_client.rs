@@ -55,7 +55,7 @@ fn build_api_headers(token: &str) -> HashMap<String, String> {
         ("Accept".to_string(), "application/json".to_string()),
         (
             "User-Agent".to_string(),
-            format!("codescene-mcp/{}", env!("CS_MCP_VERSION")),
+            format!("codehealth-mcp/{}", env!("CS_MCP_VERSION")),
         ),
         ("X-CS-Source".to_string(), "mcp".to_string()),
     ]);
@@ -359,7 +359,7 @@ mod tests {
         assert!(reqs[0]
             .headers
             .get("User-Agent")
-            .is_some_and(|v| v.starts_with("codescene-mcp/")));
+            .is_some_and(|v| v.starts_with("codehealth-mcp/")));
         // Leading slash should not produce double-slash
         assert!(reqs[1].url.ends_with("/v2/test"));
         assert!(!reqs[1].url.contains("//v2"));
@@ -553,7 +553,7 @@ mod tests {
         assert_eq!(headers.get("Accept").unwrap(), "application/json");
         assert!(headers
             .get("User-Agent")
-            .is_some_and(|v| v.starts_with("codescene-mcp/")));
+            .is_some_and(|v| v.starts_with("codehealth-mcp/")));
     }
 
     #[tokio::test]
