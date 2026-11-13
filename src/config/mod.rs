@@ -129,26 +129,33 @@ fn write_env_multi_inner(entries: &[(&str, &str)]) -> Result<(), ConfigError> {
     let mut data = load().unwrap_or_default();
 
     for &(key, value) in entries {
-        let option = match find_option(key) {
-            Some(o) => o,
-            None => continue,
-        };
-
-        if value.is_empty() {
-            data.values.remove(option.key);
-            if !is_client_env_var(option.env_var) {
-                std::env::remove_var(option.env_var);
-            }
-        } else {
-            data.values
-                .insert(option.key.to_string(), value.to_string());
-            if !is_client_env_var(option.env_var) {
-                std::env::set_var(option.env_var, value);
-            }
+        if let Some(option) = find_option(key) {
+            apply_config_entry(&mut data, option, value);
         }
     }
 
     save(&data)
+}
+
+fn apply_config_entry(data: &mut ConfigData, option: &ConfigOption, value: &str) {
+    if value.is_empty() {
+        data.values.remove(option.key);
+    } else {
+        data.values
+            .insert(option.key.to_string(), value.to_string());
+    }
+    sync_process_env(option.env_var, value);
+}
+
+fn sync_process_env(env_var: &str, value: &str) {
+    if is_client_env_var(env_var) {
+        return;
+    }
+    if value.is_empty() {
+        std::env::remove_var(env_var);
+    } else {
+        std::env::set_var(env_var, value);
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
