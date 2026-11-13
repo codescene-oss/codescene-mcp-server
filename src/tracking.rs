@@ -257,7 +257,7 @@ fn merge_agent_instructions(
     );
     properties.insert(
         "agents-file-contains-codescene-mcp-instructions".to_string(),
-        json!(instructions.codescene_mcp_instructions_present),
+        json!(instructions.codehealth_mcp_instructions_present),
     );
 }
 
@@ -280,7 +280,7 @@ async fn send_event(mut te: TrackingEvent, client: &dyn HttpClient) -> Result<()
         ("Accept".to_string(), "application/json".to_string()),
         (
             "User-Agent".to_string(),
-            format!("codescene-mcp/{}", env!("CS_MCP_VERSION")),
+            format!("codehealth-mcp/{}", env!("CS_MCP_VERSION")),
         ),
         ("X-CS-Source".to_string(), "mcp".to_string()),
     ]);
@@ -835,7 +835,7 @@ mod tests {
             &mut properties,
             agent_instructions::AgentInstructions {
                 file_present: true,
-                codescene_mcp_instructions_present: false,
+                codehealth_mcp_instructions_present: false,
                 preferred_file: Some(std::path::PathBuf::from("AGENTS.md")),
             },
         );
@@ -1052,7 +1052,7 @@ mod tests {
         assert!(req
             .headers
             .get("User-Agent")
-            .is_some_and(|v| v.starts_with("codescene-mcp/")));
+            .is_some_and(|v| v.starts_with("codehealth-mcp/")));
     }
 
     fn capture_telemetry_send(client: &dyn HttpClient) -> (Result<(), String>, String) {

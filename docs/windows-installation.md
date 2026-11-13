@@ -1,8 +1,8 @@
-# Installing CodeScene MCP Server on Windows
+# Installing CodeHealth MCP Server on Windows
 
-You can install the CodeScene MCP Server on Windows using a simple PowerShell command.
+You can install the CodeHealth MCP Server on Windows using a simple PowerShell command.
 
-For VS Code / GitHub Copilot, the [CodeScene MCP extension](https://marketplace.visualstudio.com/items?itemName=codescene.codescene-codehealth-mcp) bundles the server and configures it automatically, without a separate PowerShell installation.
+For VS Code / GitHub Copilot, the [CodeHealth MCP extension](https://marketplace.visualstudio.com/items?itemName=codescene.codescene-codehealth-mcp) bundles the server and configures it automatically, without a separate PowerShell installation.
 
 ## Prerequisites
 
@@ -15,7 +15,7 @@ For VS Code / GitHub Copilot, the [CodeScene MCP extension](https://marketplace.
 Run this in PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp/main/install.ps1 | iex
 ```
 
 This downloads the latest version to `%LOCALAPPDATA%\Programs\cs-mcp` and adds it to your PATH.
@@ -35,13 +35,13 @@ Then configure your AI assistant using the instructions below. Running the execu
 Run the same installation command to update to the latest version:
 
 ```powershell
-irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp/main/install.ps1 | iex
 ```
 
 ## Uninstalling
 
 ```powershell
-irm https://raw.githubusercontent.com/codescene-oss/codescene-mcp-server/main/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp/main/uninstall.ps1 | iex
 ```
 
 ## Integration with AI Assistants
@@ -52,7 +52,7 @@ After installing, configure your AI assistant to use the `cs-mcp` binary directl
 
 ### VS Code / GitHub Copilot
 
-The simplest option is to install the [CodeScene MCP extension](https://marketplace.visualstudio.com/items?itemName=codescene.codescene-codehealth-mcp), which bundles and automatically configures the server.
+The simplest option is to install the [CodeHealth MCP extension](https://marketplace.visualstudio.com/items?itemName=codescene.codescene-codehealth-mcp), which bundles and automatically configures the server.
 
 If you installed with PowerShell, add the following to `.vscode/mcp.json`, or use **MCP: Open User Configuration** in the Command Palette for user-level configuration:
 
@@ -128,7 +128,7 @@ Create a `.kiro/settings/mcp.json` file:
 ### Amazon Q CLI
 
 ```powershell
-q mcp add --name codescene-mcp --command cs-mcp
+q mcp add --name codehealth-mcp --command cs-mcp
 ```
 
 ## Configuration
@@ -141,7 +141,7 @@ For additional configuration — including CodeScene on-prem, custom SSL/TLS cer
 
 If you installed with PowerShell while VS Code was already running, fully quit all VS Code windows and reopen VS Code. Restarting only the MCP server, reloading a window, or changing PATH in an integrated terminal does not refresh the environment inherited by VS Code.
 
-Alternatively, use the explicit executable path in the [VS Code configuration above](#vs-code--github-copilot), or install the CodeScene MCP extension. A Windows reboot should not normally be necessary.
+Alternatively, use the explicit executable path in the [VS Code configuration above](#vs-code--github-copilot), or install the CodeHealth MCP extension. A Windows reboot should not normally be necessary.
 
 ### Binary not in PATH
 
@@ -155,4 +155,4 @@ This changes only the current shell's environment, not an already-running IDE or
 
 ### Manual Download
 
-You can also download the executable directly from the [releases page](https://github.com/codescene-oss/codescene-mcp-server/releases/latest) and place it in a directory in your PATH.
+You can also download the executable directly from the [releases page](https://github.com/codescene-oss/codehealth-mcp/releases/latest) and place it in a directory in your PATH.

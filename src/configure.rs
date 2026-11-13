@@ -103,7 +103,7 @@ fn account_id_switch_warning(option: &config::ConfigOption, value: &str) -> Opti
     }
     Some(
         "Changing account_id alone does not switch the active OAuth session. \
-         Call the switch_account tool (or CodeScene CodeHealth MCP: Switch Account) to retarget Cloud OAuth."
+         Call the switch_account tool (or CodeHealth MCP: Switch Account) to retarget Cloud OAuth."
             .to_string(),
     )
 }

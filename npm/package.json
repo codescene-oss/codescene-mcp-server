@@ -1,8 +1,8 @@
 {
   "name": "@codescene/codehealth-mcp",
   "version": "0.0.0",
-  "mcpName": "com.codescene/codescene-mcp-server",
-  "description": "CodeScene MCP Server — Code Health analysis for AI coding agents",
+  "mcpName": "com.codescene/codehealth-mcp-server",
+  "description": "CodeHealth MCP Server — Code Health analysis for AI coding agents",
   "type": "module",
   "bin": {
     "cs-mcp": "./bin/cs-mcp.js"
@@ -30,7 +30,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/codescene-oss/codescene-mcp-server.git",
+    "url": "git+https://github.com/codescene-oss/codehealth-mcp.git",
     "directory": "npm"
   },
   "homepage": "https://codescene.com",

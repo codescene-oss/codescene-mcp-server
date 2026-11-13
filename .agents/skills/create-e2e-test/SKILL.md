@@ -1,6 +1,6 @@
 ---
 name: create-e2e-test
-description: Write an end-to-end integration test for the CodeScene MCP Server, covering file structure, backend abstraction, MCPClient usage, test registration, and verification.
+description: Write an end-to-end integration test for the CodeHealth MCP Server, covering file structure, backend abstraction, MCPClient usage, test registration, and verification.
 metadata:
   audience: contributors
   language: rust

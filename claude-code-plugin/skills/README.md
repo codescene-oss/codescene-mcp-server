@@ -1,6 +1,6 @@
-# CodeScene MCP Skills
+# CodeHealth MCP Skills
 
-This directory contains downloadable public skills for agents that use the CodeScene MCP Server.
+This directory contains downloadable public skills for agents that use the CodeHealth MCP Server.
 
 Each skill is organized as:
 
@@ -12,8 +12,8 @@ skills/
 
 Available skills:
 
-- `installing-and-activating-codescene-mcp`: Install the MCP server binary or package and register it in an AI assistant.
-- `configuring-codescene-mcp`: View, set, or troubleshoot CodeScene MCP configuration using the built-in `get_config` and `set_config` tools.
+- `installing-and-activating-codehealth-mcp`: Install the MCP server binary or package and register it in an AI assistant.
+- `configuring-codehealth-mcp`: View, set, or troubleshoot CodeHealth MCP configuration using the built-in `get_config` and `set_config` tools.
 - `safeguarding-ai-generated-code`: Apply Code Health safeguards before commit or pull request.
 - `guiding-refactoring-with-code-health`: Use Code Health findings to plan and validate small refactors.
 - `making-the-business-case-for-code-health`: Quantify delivery and defect impact to justify refactoring work.

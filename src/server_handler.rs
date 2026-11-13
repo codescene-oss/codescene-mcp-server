@@ -47,7 +47,7 @@ impl ServerHandler for CodeSceneServer {
         )
         .with_protocol_version(protocol_version_2025_11_25())
         .with_server_info(Implementation::new(
-            "codescene-mcp-server",
+            "codehealth-mcp-server",
             env!("CS_MCP_VERSION"),
         ))
         .with_instructions(build_instructions(
@@ -197,7 +197,7 @@ fn build_resources_list() -> ListResourcesResult {
         .collect();
     resources.push(
         Resource::new(MCP_USAGE_APP_URI, "MCP usage overview")
-            .with_description("Interactive overview of CodeScene MCP safeguard usage")
+            .with_description("Interactive overview of CodeHealth MCP safeguard usage")
             .with_mime_type(MCP_APPS_MIME_TYPE)
             .with_size(crate::resources::mcp_usage_app().len() as u64),
     );
@@ -336,7 +336,7 @@ pub(crate) fn build_instructions(
     let login_tool_line = login_tool_instruction_line(is_docker);
     let login_prompt_line = login_prompt_instruction_line(is_docker);
     let mut text = format!(
-        "CodeScene MCP Server - Code Health analysis tools for AI-assisted development.\n\n\
+        "CodeHealth MCP Server - Code Health analysis tools for AI-assisted development.\n\n\
          TOOLS (always available):\n\
          {login_tool_line}\
          - explain_code_health: Learn about the Code Health metric.\n\

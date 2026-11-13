@@ -1,6 +1,6 @@
 # Configuration Options
 
-The CodeScene MCP Server can be configured in three ways, listed from easiest to most involved:
+The CodeHealth MCP Server can be configured in three ways, listed from easiest to most involved:
 
 ### 1. Ask your AI assistant (easiest)
 
@@ -84,7 +84,7 @@ matching diagnostics are emitted. Disable debug logging again with value `false`
 | **Required**             | No for interactive OAuth; yes for CI/headless without OAuth |
 
 
-Optional static credential for the CodeScene MCP Server. Prefer the `login` tool for interactive use. This can be:
+Optional static credential for the CodeHealth MCP Server. Prefer the `login` tool for interactive use. This can be:
 
 - **Personal Access Token (PAT)** — obtained from your CodeScene instance. Suitable for CI/CD and headless environments.
 - **Standalone access token** — if you purchased MCP separately.
@@ -113,10 +113,10 @@ See [Authentication](authentication.md) for the recommended login flow and instr
 
 Optional CodeScene Cloud account/tenant ID for OAuth. Use this only if you belong to **multiple** Cloud accounts and need to pin login to a specific one.
 
-> **Note:** Prefer the `switch_account` tool (or **CodeScene CodeHealth MCP: Switch Account**) to pick an account by name. You do not need to look up the numeric ID unless you are pinning `account_id` before a first login.
+> **Note:** Prefer the `switch_account` tool (or **CodeHealth MCP: Switch Account**) to pick an account by name. You do not need to look up the numeric ID unless you are pinning `account_id` before a first login.
 
 - Must be a **positive integer**.
-- To change accounts while signed in, use the `switch_account` tool (or **CodeScene CodeHealth MCP: Switch Account**), not `set_config` alone.
+- To change accounts while signed in, use the `switch_account` tool (or **CodeHealth MCP: Switch Account**), not `set_config` alone.
 - For a first login you may set this **before** calling `login`; keep it set afterward so token refresh uses the matching credential slot.
 - Unset → the browser session’s current Cloud account is used (browser-selected credential slot).
 - Does **not** affect PAT / `CS_ACCESS_TOKEN` auth or on-prem OAuth.

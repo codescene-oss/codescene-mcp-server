@@ -4,7 +4,7 @@ description: Run a branch-level Code Health review of all changes compared to a 
 argument-hint: Base ref to compare against (e.g. main, origin/main)
 ---
 
-Run a branch-level Code Health analysis using **CodeScene MCP Server** with **analyze_change_set**. This is a PR-style safety gate for committed changes on the current branch compared to the given base ref.
+Run a branch-level Code Health analysis using **CodeHealth MCP Server** with **analyze_change_set**. This is a PR-style safety gate for committed changes on the current branch compared to the given base ref.
 
 After running the tool:
 

@@ -49,7 +49,7 @@ function getVersion() {
 function getDownloadUrl(version, asset) {
     const tag = `MCP-${version}`;
     const baseUrl = process.env.CS_MCP_DOWNLOAD_BASE_URL ||
-        'https://github.com/codescene-oss/codescene-mcp-server/releases/download';
+        'https://github.com/codescene-oss/codehealth-mcp/releases/download';
     return `${baseUrl}/${tag}/${asset}`;
 }
 

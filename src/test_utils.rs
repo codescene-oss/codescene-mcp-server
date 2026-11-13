@@ -424,7 +424,7 @@ mod tests {
     #[test]
     fn get_info_returns_server_name() {
         let server = make_server(false);
-        assert_eq!(server.get_info().server_info.name, "codescene-mcp-server");
+        assert_eq!(server.get_info().server_info.name, "codehealth-mcp-server");
     }
 
     #[test]

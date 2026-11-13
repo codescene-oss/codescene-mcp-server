@@ -1,6 +1,6 @@
 # Tools
 
-The CodeScene MCP Server tools are organized into five categories:
+The CodeHealth MCP Server tools are organized into five categories:
 **Code Health Analysis**, **Code Health Rules Configuration**, **Technical Debt & Project Insights**, **MCP Usage & Impact**, and **Server Management**.
 
 Tools marked **All Users** work with any valid license (standalone or API-connected).
@@ -129,7 +129,7 @@ This tool connects to the CodeScene API to summarize the authenticated user's MC
 
 **Availability:** CodeScene Core users (cloud or on-prem)
 
-Display an overview of your CodeScene MCP usage and its impact on Code Health. Use when you want to review safeguard activity, Code Health uplifts, prevented degradations, or the scope and quality of recent MCP-assisted work.
+Display an overview of your CodeHealth MCP usage and its impact on Code Health. Use when you want to review safeguard activity, Code Health uplifts, prevented degradations, or the scope and quality of recent MCP-assisted work.
 
 The overview combines lifetime impact metrics with details derived from the latest 250 MCP events: unique files reviewed, average Code Health, perfect-score percentage, quality-gate pass rate, common findings, environments, and most-used tools. Clients that support MCP Apps render an interactive dashboard; other clients receive the same key metrics as Markdown. Per-event user identities are removed from the tool response.
 
@@ -155,19 +155,19 @@ Sign out of CodeScene OAuth. Calls the CLI logout and clears stored OAuth config
 
 **Availability:** All Users
 
-Read current CodeScene MCP Server configuration values. Use to discover available configuration keys, inspect effective values, and understand where each value comes from. Sensitive values (tokens) are masked. This tool cannot be disabled via the `enabled_tools` configuration.
+Read current CodeHealth MCP Server configuration values. Use to discover available configuration keys, inspect effective values, and understand where each value comes from. Sensitive values (tokens) are masked. This tool cannot be disabled via the `enabled_tools` configuration.
 
 ### `set_config`
 
 **Availability:** All Users
 
-Write a CodeScene MCP Server configuration value. Persists the value to the config file and applies it to the running session immediately. To remove a value, pass an empty string. This tool cannot be disabled via the `enabled_tools` configuration.
+Write a CodeHealth MCP Server configuration value. Persists the value to the config file and applies it to the running session immediately. To remove a value, pass an empty string. This tool cannot be disabled via the `enabled_tools` configuration.
 
 ### `verify_installation`
 
 **Availability:** All Users
 
-Check if the CodeScene MCP Server is correctly installed and configured. Use to diagnose setup issues such as missing authentication, unavailable git, absent CodeScene MCP agent instructions, or environment misconfigurations. Returns PASS/FAIL status for Git Repository, Agent Instructions, Authentication (OAuth via `login` or optional PAT), CLI Connectivity, API Connectivity, and Runtime Environment checks.
+Check if the CodeHealth MCP Server is correctly installed and configured. Use to diagnose setup issues such as missing authentication, unavailable git, absent CodeHealth MCP agent instructions, or environment misconfigurations. Returns PASS/FAIL status for Git Repository, Agent Instructions, Authentication (OAuth via `login` or optional PAT), CLI Connectivity, API Connectivity, and Runtime Environment checks.
 
 ### `list_skills`
 

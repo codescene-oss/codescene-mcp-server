@@ -1,6 +1,6 @@
 ---
 name: run-e2e-tests
-description: Run the end-to-end integration test suite for the CodeScene MCP Server. Use when you need to verify that all MCP tools work correctly against the real CLI and server infrastructure.
+description: Run the end-to-end integration test suite for the CodeHealth MCP Server. Use when you need to verify that all MCP tools work correctly against the real CLI and server infrastructure.
 metadata:
   audience: contributors
   language: rust

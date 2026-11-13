@@ -1,4 +1,4 @@
-//! E2E integration tests for the CodeScene MCP Server.
+//! E2E integration tests for the CodeHealth MCP Server.
 //!
 //! These tests build the cs-mcp binary, launch it as a subprocess,
 //! and communicate via JSON-RPC over stdio -- mirroring real-world usage.
@@ -350,7 +350,7 @@ fn test_verify_installation() {
     );
     assert!(
         lower.contains("[pass] agent instructions"),
-        "CodeScene MCP agent instructions should be detected: {result_text}"
+        "CodeHealth MCP agent instructions should be detected: {result_text}"
     );
     assert!(
         result_text.contains("checks passed"),

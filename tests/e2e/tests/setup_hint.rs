@@ -57,7 +57,7 @@ fn test_setup_hint_names_existing_instructions_file() {
     std::fs::create_dir_all(&secondary_rules).expect("create secondary rules directory");
     std::fs::write(
         secondary_rules.join("codescene.md"),
-        "Use CodeScene MCP tools.",
+        "Use CodeHealth MCP tools.",
     )
     .expect("write secondary CodeScene instructions");
     let mut client = start_client(&command, &env, &repo_dir);
@@ -90,7 +90,7 @@ fn test_setup_hint_names_existing_instructions_file() {
 #[test]
 fn test_setup_hint_skipped_when_codescene_guidance_exists() {
     let (command, env, repo_dir, _tmp) = setup();
-    std::fs::write(repo_dir.join("AGENTS.md"), "Use CodeScene MCP tools.")
+    std::fs::write(repo_dir.join("AGENTS.md"), "Use CodeHealth MCP tools.")
         .expect("write CodeScene agent instructions");
     let mut client = start_client(&command, &env, &repo_dir);
 

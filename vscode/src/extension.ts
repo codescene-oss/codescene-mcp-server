@@ -33,7 +33,7 @@ export function activate(context: vscode.ExtensionContext) {
                 const binaryPath = getBinaryPath(context);
                 if (!binaryPath) {
                     vscode.window.showWarningMessage(
-                        `CodeScene CodeHealth MCP: No binary available for ${process.platform}/${process.arch}. ` +
+                        `CodeHealth MCP: No binary available for ${process.platform}/${process.arch}. ` +
                         'Please install a platform-specific version of this extension.'
                     );
                     updateStatusBar(false);
@@ -46,7 +46,7 @@ export function activate(context: vscode.ExtensionContext) {
 
                 return [
                     new vscode.McpStdioServerDefinition(
-                        'CodeScene CodeHealth MCP',
+                        'CodeHealth MCP',
                         binaryPath,
                         [],
                         env,
@@ -91,8 +91,8 @@ export function activate(context: vscode.ExtensionContext) {
                 await config.update('accessToken', token, vscode.ConfigurationTarget.Global);
                 vscode.window.showInformationMessage(
                     token
-                        ? 'CodeScene CodeHealth MCP: Access token saved. Note: a PAT blocks OAuth login until cleared.'
-                        : 'CodeScene CodeHealth MCP: Access token cleared. Use "CodeScene CodeHealth MCP: Sign In" to authenticate.',
+                        ? 'CodeHealth MCP: Access token saved. Note: a PAT blocks OAuth login until cleared.'
+                        : 'CodeHealth MCP: Access token cleared. Use "CodeHealth MCP: Sign In" to authenticate.',
                 );
                 didChangeEmitter.fire();
             }
@@ -103,7 +103,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('codescene.restart', () => {
             didChangeEmitter.fire();
-            vscode.window.showInformationMessage('CodeScene CodeHealth MCP: MCP Server restarting...');
+            vscode.window.showInformationMessage('CodeHealth MCP: MCP Server restarting...');
         })
     );
 
@@ -165,7 +165,7 @@ async function showFirstRunPrompt(
     const skip = 'Skip';
 
     const choice = await vscode.window.showInformationMessage(
-        'Welcome to CodeScene CodeHealth MCP! Sign in to enable full Code Health analysis with your CodeScene account.',
+        'Welcome to CodeHealth MCP! Sign in to enable full Code Health analysis with your CodeScene account.',
         signIn,
         skip,
     );
@@ -255,18 +255,18 @@ function handleAuthSubprocessResult(
         let message: string;
         if (options.kind === 'switch-account') {
             const accountId = result.account_id ?? 'unknown';
-            message = `CodeScene CodeHealth MCP: Switched to account ${accountId} (${result.status}).`;
+            message = `CodeHealth MCP: Switched to account ${accountId} (${result.status}).`;
         } else if (options.kind === 'sign-in') {
-            message = 'CodeScene CodeHealth MCP: Successfully signed in!';
+            message = 'CodeHealth MCP: Successfully signed in!';
         } else {
-            message = 'CodeScene CodeHealth MCP: Successfully signed out!';
+            message = 'CodeHealth MCP: Successfully signed out!';
         }
         vscode.window.showInformationMessage(message);
         didChangeEmitter.fire();
         return;
     }
     vscode.window.showWarningMessage(
-        `CodeScene CodeHealth MCP: ${authFlowLabel(options.kind)} incomplete — ${result.error || result.status}`,
+        `CodeHealth MCP: ${authFlowLabel(options.kind)} incomplete — ${result.error || result.status}`,
     );
     if (options.alwaysRefresh) {
         didChangeEmitter.fire();
@@ -289,7 +289,7 @@ async function runAuthFlow(
 
     const binaryPath = getBinaryPath(context);
     if (!binaryPath) {
-        vscode.window.showErrorMessage('CodeScene CodeHealth MCP: Binary not available for this platform.');
+        vscode.window.showErrorMessage('CodeHealth MCP: Binary not available for this platform.');
         return;
     }
 
@@ -300,11 +300,11 @@ async function runAuthFlow(
     const label = authFlowLabel(options.kind);
     const progressTitle =
         options.kind === 'sign-in'
-            ? 'CodeScene CodeHealth MCP: Signing in...'
+            ? 'CodeHealth MCP: Signing in...'
             : options.kind === 'sign-out'
-              ? 'CodeScene CodeHealth MCP: Signing out...'
-              : 'CodeScene CodeHealth MCP: Switching account...';
-    const completedMessage = `CodeScene CodeHealth MCP: ${label} completed.`;
+              ? 'CodeHealth MCP: Signing out...'
+              : 'CodeHealth MCP: Switching account...';
+    const completedMessage = `CodeHealth MCP: ${label} completed.`;
 
     await vscode.window.withProgress(
         {
@@ -320,7 +320,7 @@ async function runAuthFlow(
             );
             if (error) {
                 vscode.window.showErrorMessage(
-                    `CodeScene CodeHealth MCP: ${label} failed — ${stderr?.trim() || stdout?.trim() || error.message}`,
+                    `CodeHealth MCP: ${label} failed — ${stderr?.trim() || stdout?.trim() || error.message}`,
                 );
                 if (options.alwaysRefresh) {
                     didChangeEmitter.fire();
@@ -375,7 +375,7 @@ async function runSwitchAccountCommand(
 ): Promise<void> {
     const binaryPath = getBinaryPath(context);
     if (!binaryPath) {
-        vscode.window.showErrorMessage('CodeScene CodeHealth MCP: Binary not available for this platform.');
+        vscode.window.showErrorMessage('CodeHealth MCP: Binary not available for this platform.');
         return;
     }
 
@@ -459,14 +459,14 @@ async function listCloudAccounts(
     const result = await vscode.window.withProgress(
         {
             location: vscode.ProgressLocation.Notification,
-            title: 'CodeScene CodeHealth MCP: Loading accounts...',
+            title: 'CodeHealth MCP: Loading accounts...',
             cancellable: false,
         },
         () => execFileAsync(binaryPath, ['auth', 'list-accounts'], env),
     );
     if (result.error) {
         vscode.window.showErrorMessage(
-            `CodeScene CodeHealth MCP: Could not list accounts — ${result.stderr?.trim() || result.stdout?.trim() || result.error.message}`,
+            `CodeHealth MCP: Could not list accounts — ${result.stderr?.trim() || result.stdout?.trim() || result.error.message}`,
         );
         return undefined;
     }
@@ -474,21 +474,21 @@ async function listCloudAccounts(
         const payload = JSON.parse(result.stdout.trim());
         if (payload.status === 'error') {
             vscode.window.showErrorMessage(
-                `CodeScene CodeHealth MCP: Could not list accounts — ${payload.error || 'unknown error'}`,
+                `CodeHealth MCP: Could not list accounts — ${payload.error || 'unknown error'}`,
             );
             return undefined;
         }
         const accounts = Array.isArray(payload.accounts) ? payload.accounts : [];
         if (accounts.length === 0) {
             vscode.window.showWarningMessage(
-                'CodeScene CodeHealth MCP: No Cloud accounts are available. Sign in first.',
+                'CodeHealth MCP: No Cloud accounts are available. Sign in first.',
             );
             return undefined;
         }
         return accounts;
     } catch {
         vscode.window.showErrorMessage(
-            'CodeScene CodeHealth MCP: Could not list accounts — unexpected response from the MCP binary.',
+            'CodeHealth MCP: Could not list accounts — unexpected response from the MCP binary.',
         );
         return undefined;
     }
@@ -557,12 +557,12 @@ function updateStatusBar(active: boolean, accountId?: string) {
     if (active) {
         statusBarItem.text = '$(shield) CodeScene';
         statusBarItem.tooltip = accountId
-            ? `CodeScene CodeHealth MCP — Active (account ${accountId})`
-            : 'CodeScene CodeHealth MCP — Active';
+            ? `CodeHealth MCP — Active (account ${accountId})`
+            : 'CodeHealth MCP — Active';
         statusBarItem.show();
     } else {
         statusBarItem.text = '$(shield) CodeScene (off)';
-        statusBarItem.tooltip = 'CodeScene CodeHealth MCP — Disabled';
+        statusBarItem.tooltip = 'CodeHealth MCP — Disabled';
         statusBarItem.show();
     }
 }

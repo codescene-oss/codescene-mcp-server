@@ -1,7 +1,7 @@
 # Safeguard AI-Generated Code
 
 AI-generated code must meet the project's objective maintainability standard.  
-Use **Code Health**, retrieved via the **CodeScene MCP**, as the authoritative signal.
+Use **Code Health**, retrieved via the **CodeHealth MCP**, as the authoritative signal.
 
 ## Required Behavior
 

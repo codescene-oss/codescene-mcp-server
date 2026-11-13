@@ -7,7 +7,7 @@ MinimumOSVersion: 10.0.17763.0
 Installers:
   - Architecture: x64
     InstallerType: portable
-    InstallerUrl: https://github.com/codescene-oss/codescene-mcp-server/releases/download/MCP-0.0.26/cs-mcp-windows-amd64.exe
+    InstallerUrl: https://github.com/codescene-oss/codehealth-mcp/releases/download/MCP-0.0.26/cs-mcp-windows-amd64.exe
     InstallerSha256: BC3563259E7B83547B3E1DC1656DAE2D1FF53AA1B7F3BC08EAA07A9606FB7210
     Commands:
       - cs-mcp

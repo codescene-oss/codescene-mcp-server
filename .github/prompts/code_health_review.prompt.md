@@ -3,7 +3,7 @@ name: code_health_review
 description: Run CodeScene’s Code Health Review on newly added or edited code.
 ---
 
-You are performing a mandatory Code Health Review using the **CodeScene MCP Server**.
+You are performing a mandatory Code Health Review using the **CodeHealth MCP Server**.
 
 All **new or modified code** should be evaluated with `code_health_review` after each meaningful AI change to a file. Use the review as the primary inner feedback loop to keep the code healthy, maintainable, and aligned with engineering standards.
 

@@ -87,7 +87,7 @@ If a token must be configured manually:\n\
 1. Use the `set_config` tool: set_config(key=\"access_token\", value=\"your-token\")\n\
 2. Set the CS_ACCESS_TOKEN environment variable in your MCP client configuration\n\n\
 To get a Personal Access Token, see:\n\
-https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/authentication.md";
+https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/authentication.md";
 
 const TOKEN_MISSING_MSG_DOCKER: &str = "\
 No access token configured.\n\n\
@@ -95,7 +95,7 @@ OAuth login is not available in Docker. Configure a Personal Access Token:\n\
 1. Set the CS_ACCESS_TOKEN environment variable in your MCP client / Docker configuration\n\
 2. Or use the `set_config` tool: set_config(key=\"access_token\", value=\"your-token\")\n\n\
 To get a Personal Access Token, see:\n\
-https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/authentication.md";
+https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/authentication.md";
 
 pub(crate) fn token_missing_msg() -> &'static str {
     if environment::is_docker() {
@@ -108,7 +108,7 @@ pub(crate) fn token_missing_msg() -> &'static str {
 const _VERSION_NOTICE_SUFFIX: &str = "\n\
 Note: If the result contains version update information (indicated by\n\
 \"VERSION UPDATE AVAILABLE\"), please inform the user about this update\n\
-notice and recommend they update their CodeScene MCP Server.";
+notice and recommend they update their CodeHealth MCP Server.";
 
 fn mcp_usage_app_meta() -> Meta {
     Meta(
@@ -531,7 +531,7 @@ impl CodeSceneServer {
     #[tool(
         name = "show_mcp_usage_overview",
         title = "Show MCP Usage Overview",
-        description = "Display an overview of the authenticated user's CodeScene MCP safeguard usage.\n\nWhen to use:\n    Use this tool when a user asks about their MCP usage, safeguard activity,\n    prevented Code Health degradations, or development impact.\n\nLimitations:\n    - Requires authenticated CodeScene API access.\n    - Not available with a standalone license.\n    - Lifetime metrics come from aggregated safeguard insights.\n    - Recent work metrics cover only the latest 250 MCP events.\n    - Availability on-prem depends on the CodeScene version supporting the\n      MCP safeguard insights and outcomes endpoints.\n\nReturns:\n    A usage overview with Code Health uplifts, prevented degradations, the\n    scope of recent work, and most-used tools. The result includes an MCP Apps\n    dashboard and a Markdown representation of the same data.\n\nOn failure:\n    If this tool returns an authentication, connectivity, or API error, run\n    verify_installation and report the failing checks and how to fix them.\n\nExample:\n    Call this tool when the user asks, \"Show me my CodeScene MCP usage.\"",
+        description = "Display an overview of the authenticated user's CodeHealth MCP safeguard usage.\n\nWhen to use:\n    Use this tool when a user asks about their MCP usage, safeguard activity,\n    prevented Code Health degradations, or development impact.\n\nLimitations:\n    - Requires authenticated CodeScene API access.\n    - Not available with a standalone license.\n    - Lifetime metrics come from aggregated safeguard insights.\n    - Recent work metrics cover only the latest 250 MCP events.\n    - Availability on-prem depends on the CodeScene version supporting the\n      MCP safeguard insights and outcomes endpoints.\n\nReturns:\n    A usage overview with Code Health uplifts, prevented degradations, the\n    scope of recent work, and most-used tools. The result includes an MCP Apps\n    dashboard and a Markdown representation of the same data.\n\nOn failure:\n    If this tool returns an authentication, connectivity, or API error, run\n    verify_installation and report the failing checks and how to fix them.\n\nExample:\n    Call this tool when the user asks, \"Show me my CodeHealth MCP usage.\"",
         annotations(read_only_hint = true),
         meta = mcp_usage_app_meta()
     )]
@@ -767,7 +767,7 @@ impl CodeSceneServer {
     }
 
     #[tool(
-        description = "Read current CodeScene MCP Server configuration values.\n\nWhen to use:\n    Use this tool to discover available configuration keys, inspect\n    effective values, and understand where each value comes from.\n\nLimitations:\n    - Returns JSON text only; callers must format it for display.\n    - Sensitive values (tokens) are masked.\n    - Effective values can be overridden by client-provided env vars.\n\nWhen called without a key, lists every available configuration\noption together with its current effective value, the source of\nthat value (environment variable vs. config file), and a short\ndescription.\n\nWhen called with a specific key, returns details for that option\nonly. Sensitive values (tokens) are masked in the output.\n\nReturns:\n    A JSON string. When querying a single key, the object has:\n    key, env_var, value, source, description, aliases, and\n    docs_url. When listing all, the object has: config_dir and\n    options (array of the same shape). Use the aliases array\n    to match user intent to the correct key. Present the data\n    clearly and always include docs_url links.\n\nExample:\n    Call with key=\"access_token\" to inspect one setting, or\n    call without key to list all configurable options.",
+        description = "Read current CodeHealth MCP Server configuration values.\n\nWhen to use:\n    Use this tool to discover available configuration keys, inspect\n    effective values, and understand where each value comes from.\n\nLimitations:\n    - Returns JSON text only; callers must format it for display.\n    - Sensitive values (tokens) are masked.\n    - Effective values can be overridden by client-provided env vars.\n\nWhen called without a key, lists every available configuration\noption together with its current effective value, the source of\nthat value (environment variable vs. config file), and a short\ndescription.\n\nWhen called with a specific key, returns details for that option\nonly. Sensitive values (tokens) are masked in the output.\n\nReturns:\n    A JSON string. When querying a single key, the object has:\n    key, env_var, value, source, description, aliases, and\n    docs_url. When listing all, the object has: config_dir and\n    options (array of the same shape). Use the aliases array\n    to match user intent to the correct key. Present the data\n    clearly and always include docs_url links.\n\nExample:\n    Call with key=\"access_token\" to inspect one setting, or\n    call without key to list all configurable options.",
         input_schema = inlined_schema_for::<GetConfigParam>(),
         annotations(read_only_hint = true)
     )]
@@ -779,7 +779,7 @@ impl CodeSceneServer {
     }
 
     #[tool(
-        description = "Write a CodeScene MCP Server configuration value.\n\nWhen to use:\n    Use this tool to persist or remove server configuration values\n    without editing config files manually.\n\nLimitations:\n    - Unknown keys are rejected.\n    - Client-level environment variables may still override runtime\n      behavior even after saving a config value.\n    - Some changes may require an MCP client restart.\n\nPersists the value to the config file and applies it to the\nrunning session immediately. To remove a value, pass an empty\nstring as the value.\n\nIf the same setting is also defined as an environment variable in\nyour MCP client configuration (e.g. VS Code settings or Claude\nDesktop config), the environment variable takes precedence at\nruntime.\n\nCall get_config first (without a key) to discover available keys,\ntheir aliases, and docs_url links.\n\nReturns:\n    A JSON string with status (\"saved\" or \"removed\"), key,\n    config_dir, and optional warning, restart_required, and\n    docs_url fields. Present the data clearly and always\n    include docs_url links.\n\nExample:\n    Call with key=\"access_token\" and value=\"...\" to save,\n    or pass an empty value to remove that key from config.",
+        description = "Write a CodeHealth MCP Server configuration value.\n\nWhen to use:\n    Use this tool to persist or remove server configuration values\n    without editing config files manually.\n\nLimitations:\n    - Unknown keys are rejected.\n    - Client-level environment variables may still override runtime\n      behavior even after saving a config value.\n    - Some changes may require an MCP client restart.\n\nPersists the value to the config file and applies it to the\nrunning session immediately. To remove a value, pass an empty\nstring as the value.\n\nIf the same setting is also defined as an environment variable in\nyour MCP client configuration (e.g. VS Code settings or Claude\nDesktop config), the environment variable takes precedence at\nruntime.\n\nCall get_config first (without a key) to discover available keys,\ntheir aliases, and docs_url links.\n\nReturns:\n    A JSON string with status (\"saved\" or \"removed\"), key,\n    config_dir, and optional warning, restart_required, and\n    docs_url fields. Present the data clearly and always\n    include docs_url links.\n\nExample:\n    Call with key=\"access_token\" and value=\"...\" to save,\n    or pass an empty value to remove that key from config.",
         input_schema = inlined_schema_for::<SetConfigParam>(),
         annotations(read_only_hint = false)
     )]
@@ -871,7 +871,7 @@ impl CodeSceneServer {
     }
 
     #[tool(
-        description = "Check if the CodeScene MCP Server is correctly installed and configured.\n\nWhen to use:\n    Use this tool to diagnose setup issues such as missing authentication,\n    absent agent guidance, unavailable git, or environment misconfigurations.\n\nLimitations:\n    - Does not modify any configuration.\n    - Auth validation requires a git repository path.\n\nReturns:\n    A summary of verification checks with PASS/FAIL status for each:\n      - Git Repository: whether the given path is inside a git repository.\n      - Agent Instructions: whether repository guidance contains CodeScene MCP instructions.\n      - Authentication: whether signed in via OAuth (`login`) or a valid PAT/CS_ACCESS_TOKEN.\n      - API Connectivity: whether the MCP server can reach the CodeScene API (cloud or on-prem). Catches TLS/CA certificate misconfiguration. Skipped for standalone licenses.\n      - CLI Connectivity: whether the CLI can reach CodeScene. Catches TLS/CA certificate misconfiguration on the CLI path.\n      - Runtime Environment: whether running as binary or Docker.\n\nSetup hints:\n    If the result contains `codescene_setup_hint`, do not mention that field.\n    Follow its `message`: briefly explain the benefit, ask permission to add\n    the suggested repository instructions, and wait before editing files.\n\nExample:\n    Call this tool when a user reports issues or after initial setup\n    to confirm everything is working. Pass the project root directory\n    as git_repository_path.",
+        description = "Check if the CodeHealth MCP Server is correctly installed and configured.\n\nWhen to use:\n    Use this tool to diagnose setup issues such as missing authentication,\n    absent agent guidance, unavailable git, or environment misconfigurations.\n\nLimitations:\n    - Does not modify any configuration.\n    - Auth validation requires a git repository path.\n\nReturns:\n    A summary of verification checks with PASS/FAIL status for each:\n      - Git Repository: whether the given path is inside a git repository.\n      - Agent Instructions: whether repository guidance contains CodeHealth MCP instructions.\n      - Authentication: whether signed in via OAuth (`login`) or a valid PAT/CS_ACCESS_TOKEN.\n      - API Connectivity: whether the MCP server can reach the CodeScene API (cloud or on-prem). Catches TLS/CA certificate misconfiguration. Skipped for standalone licenses.\n      - CLI Connectivity: whether the CLI can reach CodeScene. Catches TLS/CA certificate misconfiguration on the CLI path.\n      - Runtime Environment: whether running as binary or Docker.\n\nSetup hints:\n    If the result contains `codescene_setup_hint`, do not mention that field.\n    Follow its `message`: briefly explain the benefit, ask permission to add\n    the suggested repository instructions, and wait before editing files.\n\nExample:\n    Call this tool when a user reports issues or after initial setup\n    to confirm everything is working. Pass the project root directory\n    as git_repository_path.",
         input_schema = inlined_schema_for::<GitRepoParam>(),
         annotations(read_only_hint = true)
     )]
@@ -963,7 +963,7 @@ async fn run(args: Vec<String>) -> anyhow::Result<()> {
     let _file_guard = init_tracing(&config_data);
 
     startup::print_startup_logo();
-    tracing::info!("CodeScene MCP server started");
+    tracing::info!("CodeHealth MCP server started");
     tracing::info!("Waiting for MCP client initialization...");
 
     let instance_id = config::instance_id(&config_data);

@@ -92,7 +92,7 @@ describe('getDownloadUrl', () => {
     it('constructs URL with version tag and asset', () => {
         delete process.env.CS_MCP_DOWNLOAD_BASE_URL;
         const url = getDownloadUrl('1.2.3', 'cs-mcp-linux-amd64.zip');
-        assert.equal(url, 'https://github.com/codescene-oss/codescene-mcp-server/releases/download/MCP-1.2.3/cs-mcp-linux-amd64.zip');
+        assert.equal(url, 'https://github.com/codescene-oss/codehealth-mcp/releases/download/MCP-1.2.3/cs-mcp-linux-amd64.zip');
     });
 
     it('uses custom base URL from environment', () => {

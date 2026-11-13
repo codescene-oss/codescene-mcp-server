@@ -8,7 +8,7 @@ use crate::analytics_attribution::AnalyticsContext;
 use crate::CodeSceneServer;
 
 const DOCS_URL: &str =
-    "https://github.com/codescene-oss/codescene-mcp-server/blob/main/docs/AGENTS-standalone.md";
+    "https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/AGENTS-standalone.md";
 const SUGGESTED_INSTRUCTIONS: &str = "## CodeScene\nAfter changing code, run `code_health_review` on the changed files. If Code Health drops, fix the issues, run the review again, and use `code_health_score` to confirm the result. Before finishing, run `pre_commit_code_health_safeguard` and only stop when it passes.";
 const PATH_ARGUMENTS: &[&str] = &["file_path", "git_repository_path", "config_path"];
 const ELIGIBLE_TOOLS: &[&str] = &[
@@ -65,7 +65,7 @@ pub(crate) fn maybe_add(
         return None;
     }
     let instructions = agent_instructions::detect(action_path);
-    if instructions.codescene_mcp_instructions_present {
+    if instructions.codehealth_mcp_instructions_present {
         return None;
     }
     let hint = build_hint(instructions.preferred_file.as_deref());
@@ -249,7 +249,7 @@ mod tests {
 
     #[test]
     fn maybe_add_skips_errors_and_existing_guidance() {
-        let repository = repository_with_instructions("Use CodeScene MCP tools.");
+        let repository = repository_with_instructions("Use CodeHealth MCP tools.");
         let mut error = CallToolResult::error(vec![Content::text("failed")]);
         let mut success = CallToolResult::success(vec![Content::text(r#"{"score":10.0}"#)]);
 

@@ -3,7 +3,7 @@
 This document defines how to write MCP tool descriptions in this repository based on:
 
 - Hasan et al., "Model Context Protocol (MCP) Tool Descriptions Are Smelly!" ([arXiv HTML v2](https://arxiv.org/html/2602.14878v2))
-- Existing CodeScene MCP conventions
+- Existing CodeHealth MCP conventions
 
 ## Why This Exists
 

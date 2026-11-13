@@ -68,8 +68,8 @@ fn assert_expected_headers(req: &CapturedRequest) {
     let user_agent = find_header(&req.headers, "User-Agent")
         .unwrap_or_else(|| panic!("Missing User-Agent header on {}", req.path));
     assert!(
-        user_agent.starts_with("codescene-mcp/"),
-        "User-Agent should start with 'codescene-mcp/', got: {user_agent}"
+        user_agent.starts_with("codehealth-mcp/"),
+        "User-Agent should start with 'codehealth-mcp/', got: {user_agent}"
     );
 
     let accept = find_header(&req.headers, "Accept")
