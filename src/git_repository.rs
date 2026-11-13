@@ -309,20 +309,24 @@ fn expanded_remote_urls<'a>(
 ) -> Vec<String> {
     let mut urls = BTreeSet::new();
     for remote in remotes {
-        for url in &remote.urls {
-            urls.insert(apply_rewrite(url, rewrites));
-        }
-        if remote.push_urls.is_empty() {
-            for url in &remote.urls {
-                urls.insert(apply_rewrite(url, push_rewrites));
-            }
-        } else {
-            for url in &remote.push_urls {
-                urls.insert(apply_rewrite(url, rewrites));
-            }
-        }
+        urls.extend(remote_fetch_and_push_urls(remote, rewrites, push_rewrites));
     }
     urls.into_iter().collect()
+}
+
+fn remote_fetch_and_push_urls<'a>(
+    remote: &'a RemoteConfig,
+    rewrites: &'a [(String, String)],
+    push_rewrites: &'a [(String, String)],
+) -> impl Iterator<Item = String> + 'a {
+    let fetch = remote.urls.iter().map(|url| apply_rewrite(url, rewrites));
+    let (push_sources, push_rules) = if remote.push_urls.is_empty() {
+        (&remote.urls, push_rewrites)
+    } else {
+        (&remote.push_urls, rewrites)
+    };
+    let push = push_sources.iter().map(|url| apply_rewrite(url, push_rules));
+    fetch.chain(push)
 }
 
 #[derive(Default)]

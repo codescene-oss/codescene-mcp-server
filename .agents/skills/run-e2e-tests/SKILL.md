@@ -98,7 +98,7 @@ All modules are declared in `tests/e2e/tests/mod.rs` and wrappers are in `tests/
 
 | File | Role |
 |---|---|
-| `tests/e2e/main.rs` | Entry point, `#[test]` wrappers, `setup()`, `find_or_build_executable()`, `make_client()` |
+| `tests/e2e/main.rs` | Entry point, `e2e_tests!` registrations (generate `#[test]` wrappers), `setup()`, `find_or_build_executable()`, `make_client()` |
 | `tests/e2e/tests/mod.rs` | Module declarations and infrastructure re-exports |
 | `tests/e2e/mcp_client.rs` | `MCPClient` — JSON-RPC over stdio |
 | `tests/e2e/server_backends.rs` | `ServerBackend` trait + 3 backend implementations |
