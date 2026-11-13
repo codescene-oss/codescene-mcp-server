@@ -278,10 +278,10 @@ pub(crate) fn assert_standalone_error(result: &CallToolResult) {
 }
 
 #[cfg(test)]
-mod auth_tests;
+mod auth;
 #[cfg(test)]
-mod cli_tests;
+mod cli_flows;
 #[cfg(test)]
-mod protocol_tests;
+mod protocol;
 #[cfg(test)]
-mod tool_registry_tests;
+mod tool_registry;
