@@ -20,12 +20,15 @@ mod git_repository;
 mod hashing;
 mod http;
 mod license;
+mod logging;
 mod platform;
 mod prompts;
 mod repository_url;
 mod repository_projects;
 mod resources;
+mod server_auth;
 mod server_handler;
+mod server_tracking;
 mod setup_hint;
 mod shutdown;
 mod skills;
@@ -33,6 +36,7 @@ mod ssh_config;
 mod startup;
 #[cfg(test)]
 mod test_utils;
+mod tool_filters;
 mod tools;
 mod tracking;
 mod transport;
@@ -51,20 +55,26 @@ pub(crate) use cli_commands::{
     run_list_accounts_flow_with, run_logout_flow_with, run_switch_account_flow_with, CliAction,
 };
 
+#[cfg(test)]
+pub(crate) use server_auth::{credential_source, token_missing_msg};
+#[cfg(test)]
+pub(crate) use server_tracking::{RecordedTrackingCall, TrackingProbe};
+pub(crate) use server_tracking::ContextualErrorEvent;
+#[cfg(test)]
+pub(crate) use tool_filters::API_ONLY_TOOLS;
+pub(crate) use tool_filters::remove_docker_unsupported_tools;
+
 use std::sync::Arc;
 
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, ContentBlock as Content, Meta};
+use rmcp::model::{CallToolResult, Meta};
 use rmcp::schemars::{self, JsonSchema};
 use rmcp::service::ServerInitializeError;
 use rmcp::transport::IntoTransport;
 use rmcp::{tool, tool_router, ErrorData, ServiceExt};
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
 
-use crate::auth::{AuthCredential, AuthManager};
+use crate::auth::AuthManager;
 use crate::cli::CliRunner;
 use crate::config::ConfigData;
 use crate::http::HttpClient;
@@ -79,31 +89,6 @@ use crate::tools::{
 };
 use crate::version_checker::VersionChecker;
 
-const TOKEN_MISSING_MSG: &str = "\
-No access token configured.\n\n\
-Call the `login` tool now to sign in with OAuth. Do not ask the user for a token first.\n\n\
-Use a Personal Access Token only when OAuth is not suitable, such as CI/CD or other headless environments.\n\
-If a token must be configured manually:\n\
-1. Use the `set_config` tool: set_config(key=\"access_token\", value=\"your-token\")\n\
-2. Set the CS_ACCESS_TOKEN environment variable in your MCP client configuration\n\n\
-To get a Personal Access Token, see:\n\
-https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/authentication.md";
-
-const TOKEN_MISSING_MSG_DOCKER: &str = "\
-No access token configured.\n\n\
-OAuth login is not available in Docker. Configure a Personal Access Token:\n\
-1. Set the CS_ACCESS_TOKEN environment variable in your MCP client / Docker configuration\n\
-2. Or use the `set_config` tool: set_config(key=\"access_token\", value=\"your-token\")\n\n\
-To get a Personal Access Token, see:\n\
-https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/authentication.md";
-
-pub(crate) fn token_missing_msg() -> &'static str {
-    if environment::is_docker() {
-        TOKEN_MISSING_MSG_DOCKER
-    } else {
-        TOKEN_MISSING_MSG
-    }
-}
 
 const _VERSION_NOTICE_SUFFIX: &str = "\n\
 Note: If the result contains version update information (indicated by\n\
@@ -124,19 +109,6 @@ fn mcp_usage_app_meta() -> Meta {
     )
 }
 
-pub(crate) const API_ONLY_TOOLS: &[&str] = &[
-    "show_mcp_usage_overview",
-    "select_project",
-    "list_technical_debt_goals_for_project",
-    "list_technical_debt_goals_for_project_file",
-    "list_technical_debt_hotspots_for_project",
-    "list_technical_debt_hotspots_for_project_file",
-    "code_ownership_for_path",
-];
-
-/// Tools that cannot be disabled via `enabled_tools` config.
-pub(crate) const ALWAYS_ENABLED_TOOLS: &[&str] =
-    &["get_config", "set_config", "login", "logout", "switch_account"];
 
 pub(crate) fn inlined_schema_for<T: JsonSchema + 'static>(
 ) -> Arc<serde_json::Map<String, serde_json::Value>> {
@@ -180,180 +152,8 @@ pub(crate) struct CodeSceneServer {
     pub(crate) tracking_probe: Option<TrackingProbe>,
 }
 
-#[cfg(test)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum RecordedTrackingCall {
-    Event {
-        name: String,
-        context: analytics_attribution::AnalyticsContext,
-    },
-    Error {
-        tool: String,
-        error_kind: String,
-        context: analytics_attribution::AnalyticsContext,
-    },
-}
-
-#[cfg(test)]
-#[derive(Clone, Default)]
-pub(crate) struct TrackingProbe(Arc<std::sync::Mutex<Vec<RecordedTrackingCall>>>);
-
-#[cfg(test)]
-impl TrackingProbe {
-    pub(crate) fn calls(&self) -> Vec<RecordedTrackingCall> {
-        self.0.lock().unwrap().clone()
-    }
-
-    fn record(&self, call: RecordedTrackingCall) {
-        self.0.lock().unwrap().push(call);
-    }
-
-    pub(crate) fn install(server: &mut CodeSceneServer) -> Self {
-        let probe = Self::default();
-        server.tracking_probe = Some(probe.clone());
-        probe
-    }
-
-    pub(crate) fn assert_single(&self, expected: RecordedTrackingCall) {
-        assert_eq!(self.calls(), [expected]);
-    }
-}
-
-pub(crate) struct ContextualErrorEvent<'a> {
-    pub(crate) error_kind: &'a str,
-    pub(crate) tool: &'a str,
-    pub(crate) detail: Option<&'a str>,
-    pub(crate) context: analytics_attribution::AnalyticsContext,
-}
-
-impl<'a> ContextualErrorEvent<'a> {
-    pub(crate) fn for_project(error_kind: &'a str, tool: &'a str, project_id: i64) -> Self {
-        Self {
-            error_kind,
-            tool,
-            detail: None,
-            context: analytics_attribution::AnalyticsContext::ExplicitProjectIds(vec![project_id]),
-        }
-    }
-}
 
 impl CodeSceneServer {
-    pub(crate) async fn require_token(&self) -> Option<CallToolResult> {
-        self.resolve_auth_credential().await.err()
-    }
-
-    pub(crate) async fn require_token_with_context(
-        &self,
-        tool: &str,
-        context: analytics_attribution::AnalyticsContext,
-    ) -> Option<CallToolResult> {
-        let result = self
-            .resolve_auth_credential_for_context(&context)
-            .await
-            .err()?;
-        self.track_error_with_context(ContextualErrorEvent {
-            error_kind: "authentication_unavailable",
-            tool,
-            detail: None,
-            context,
-        });
-        Some(result)
-    }
-
-    pub(crate) async fn resolve_auth_credential(&self) -> Result<AuthCredential, CallToolResult> {
-        self.resolve_auth_credential_for_context(
-            &analytics_attribution::AnalyticsContext::CurrentWorkspace,
-        )
-        .await
-    }
-
-    async fn resolve_auth_credential_for_context(
-        &self,
-        context: &analytics_attribution::AnalyticsContext,
-    ) -> Result<AuthCredential, CallToolResult> {
-        match self
-            .auth_manager
-            .resolve_credential(&*self.cli_runner)
-            .await
-        {
-            Ok(Some(credential)) => {
-                self.log_credential_resolved(&credential, "resolved auth credential for API tool");
-                self.route_oauth_account(credential, context)
-                    .await
-                    .map_err(|error| {
-                        tracing::warn!(%error, "automatic OAuth account switch failed");
-                        tools::common::tool_error(format!(
-                            "Automatic CodeScene account switching failed: {error}\n\
-                             Use login or switch_account to retry."
-                        ))
-                    })
-            }
-            Ok(None) => {
-                self.log_no_credential("failed to resolve auth credential for API tool");
-                Err(CallToolResult::success(vec![Content::text(
-                    token_missing_msg(),
-                )]))
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "auth token check failed");
-                Err(CallToolResult::success(vec![Content::text(
-                    token_missing_msg(),
-                )]))
-            }
-        }
-    }
-
-    pub(crate) async fn require_project_api(
-        &self,
-        tool: &str,
-        project_id: i64,
-    ) -> Result<AuthCredential, CallToolResult> {
-        let context = analytics_attribution::AnalyticsContext::ExplicitProjectIds(vec![project_id]);
-        let credential = self
-            .resolve_auth_credential_for_context(&context)
-            .await
-            .inspect_err(|_| {
-                self.track_error_with_context(ContextualErrorEvent::for_project(
-                    "authentication_unavailable",
-                    tool,
-                    project_id,
-                ));
-            })?;
-        if self.is_standalone {
-            self.track_error_with_context(ContextualErrorEvent::for_project(
-                "standalone_license",
-                tool,
-                project_id,
-            ));
-            return Err(tools::common::tool_error(
-                "This tool requires a CodeScene API token (not a standalone license).",
-            ));
-        }
-        Ok(credential)
-    }
-
-    fn log_credential_resolved(&self, credential: &AuthCredential, message: &'static str) {
-        let source = credential_source(credential);
-        let has_web_root = credential.web_root().is_some();
-        tracing::info!(source, has_web_root, "{}", message);
-    }
-
-    fn log_no_credential(&self, message: &'static str) {
-        let has_configured_token = crate::auth::configured_credential().is_some();
-        let has_oauth_token = self.auth_manager.try_cached_access_token().is_some();
-        let oauth_expires_at = crate::config::try_read_env("CS_OAUTH_EXPIRES_AT");
-        let signed_out_sentinel = oauth_expires_at.as_deref() == Some("0");
-        let oauth_client = crate::config::try_read_env("CS_OAUTH_CLIENT");
-        tracing::warn!(
-            has_configured_token,
-            has_oauth_token,
-            oauth_expires_at,
-            signed_out_sentinel,
-            oauth_client,
-            "{}",
-            message
-        );
-    }
 
     pub(crate) async fn maybe_version_warning(&self, text: &str) -> String {
         if let Some(info) = self.version_checker.try_read().await {
@@ -365,166 +165,9 @@ impl CodeSceneServer {
         text.to_string()
     }
 
-    pub(crate) fn track(&self, event: &str, props: serde_json::Value) {
-        self.track_with_context(
-            event,
-            props,
-            analytics_attribution::AnalyticsContext::CurrentWorkspace,
-        );
-    }
-
-    pub(crate) fn track_with_context(
-        &self,
-        event: &str,
-        props: serde_json::Value,
-        context: analytics_attribution::AnalyticsContext,
-    ) {
-        if tracking::is_disabled() {
-            return;
-        }
-        #[cfg(test)]
-        if let Some(probe) = &self.tracking_probe {
-            probe.record(RecordedTrackingCall::Event {
-                name: event.to_string(),
-                context,
-            });
-            return;
-        }
-        let (auth, credential) = self.tracking_auth();
-        tracking::track_event_with_attribution(
-            tracking::AttributedEvent {
-                event,
-                properties: props,
-                instance_id: &self.instance_id,
-                auth: &auth,
-                attribution: tracking::TrackingAttribution {
-                    context,
-                    credential,
-                    http_client: self.http_client.clone(),
-                    cache: self.repository_projects_cache.clone(),
-                },
-            },
-            &self.tracking_tasks,
-        );
-    }
-
-    pub(crate) fn track_api_err(&self, tool: &str, err: &errors::ApiError) {
-        tracing::warn!(tool, error = %err, "API error");
-        self.track_error_with_context(ContextualErrorEvent {
-            error_kind: err.kind(),
-            tool,
-            detail: None,
-            context: analytics_attribution::AnalyticsContext::CurrentWorkspace,
-        });
-    }
-
-    pub(crate) fn track_err_msg(&self, tool: &str, error_kind: &str, err: &str) {
-        self.track_contextual_err(
-            ContextualErrorEvent {
-                error_kind,
-                tool,
-                detail: None,
-                context: analytics_attribution::AnalyticsContext::CurrentWorkspace,
-            },
-            &err,
-        );
-    }
-
-    pub(crate) fn track_contextual_err(
-        &self,
-        event: ContextualErrorEvent<'_>,
-        error: &dyn std::fmt::Display,
-    ) {
-        tracing::warn!(tool = event.tool, error = %error, "tool error");
-        self.track_error_with_context(event);
-    }
-
-    pub(crate) fn track_error_with_context(&self, event: ContextualErrorEvent<'_>) {
-        if tracking::is_disabled() {
-            return;
-        }
-        #[cfg(test)]
-        if let Some(probe) = &self.tracking_probe {
-            probe.record(RecordedTrackingCall::Error {
-                tool: event.tool.to_string(),
-                error_kind: event.error_kind.to_string(),
-                context: event.context,
-            });
-            return;
-        }
-        let (auth, credential) = self.tracking_auth();
-        tracking::track_error_with_attribution(
-            &tracking::ErrorEvent {
-                error_kind: event.error_kind,
-                tool_name: event.tool,
-                instance_id: &self.instance_id,
-                detail: event.detail,
-                auth: &auth,
-            },
-            tracking::TrackingAttribution {
-                context: event.context,
-                credential,
-                http_client: self.http_client.clone(),
-                cache: self.repository_projects_cache.clone(),
-            },
-            &self.tracking_tasks,
-        );
-    }
-
-    /// Resolve the best available token and API root for tracking.
-    /// Prefers configured PAT, falls back to cached OAuth token.
-    fn tracking_auth(&self) -> (tracking::TrackingAuth, Option<AuthCredential>) {
-        let credential =
-            auth::configured_credential().or_else(|| self.auth_manager.try_cached_credential());
-        let auth = tracking::TrackingAuth {
-            access_token: credential
-                .as_ref()
-                .map(|credential| credential.access_token().to_string())
-                .unwrap_or_default(),
-            api_root: credential
-                .as_ref()
-                .and_then(|credential| credential.api_root().ok()),
-        };
-        (auth, credential)
-    }
 
 }
 
-fn credential_source(credential: &AuthCredential) -> &'static str {
-    match credential {
-        AuthCredential::Configured { .. } => "configured",
-        AuthCredential::OAuth { .. } => "oauth",
-    }
-}
-
-fn remove_standalone_tools(router: &mut ToolRouter<CodeSceneServer>) {
-    for name in API_ONLY_TOOLS {
-        router.remove_route(name);
-    }
-}
-
-/// Tools that cannot work in Docker (OAuth browser callback is unsupported).
-pub(crate) fn remove_docker_unsupported_tools(router: &mut ToolRouter<CodeSceneServer>) {
-    router.remove_route("login");
-    router.remove_route("switch_account");
-}
-
-fn apply_enabled_tools_filter(router: &mut ToolRouter<CodeSceneServer>, config_data: &ConfigData) {
-    let enabled = match config::enabled_tools(config_data) {
-        Some(set) => set,
-        None => return,
-    };
-    let all_names: Vec<String> = router
-        .list_all()
-        .iter()
-        .map(|t| t.name.to_string())
-        .collect();
-    for name in all_names {
-        if !ALWAYS_ENABLED_TOOLS.contains(&name.as_str()) && !enabled.contains(&name) {
-            router.remove_route(&name);
-        }
-    }
-}
 
 #[tool_router]
 impl CodeSceneServer {
@@ -542,12 +185,12 @@ impl CodeSceneServer {
     fn new(deps: ServerDeps) -> Self {
         let mut router = Self::tool_router();
         if deps.is_standalone {
-            remove_standalone_tools(&mut router);
+            tool_filters::remove_standalone_tools(&mut router);
         }
         if environment::is_docker() {
             remove_docker_unsupported_tools(&mut router);
         }
-        apply_enabled_tools_filter(&mut router, &deps.config_data);
+        tool_filters::apply_enabled_tools_filter(&mut router, &deps.config_data);
 
         Self {
             tool_router: router,
@@ -883,47 +526,6 @@ impl CodeSceneServer {
     }
 }
 
-/// Initialise tracing with stderr output and optional file logging.
-///
-/// Returns the non-blocking file-appender guard when file logging is
-/// active.  The guard must be held for the lifetime of the program so
-/// that buffered log entries are flushed on shutdown.
-fn init_tracing(
-    config_data: &config::ConfigData,
-) -> Option<tracing_appender::non_blocking::WorkerGuard> {
-    let env_filter = EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into());
-    let stderr_layer = tracing_subscriber::fmt::layer()
-        .with_writer(std::io::stderr)
-        .with_ansi(false);
-
-    let retention_days = config::log_retention_days(config_data);
-    if retention_days > 0 {
-        let log_dir = config::log_dir();
-        if let Ok(()) = std::fs::create_dir_all(&log_dir) {
-            cleanup_old_logs(&log_dir, retention_days);
-            let file_appender = tracing_appender::rolling::daily(&log_dir, "mcp.log");
-            let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-            let file_layer = tracing_subscriber::fmt::layer()
-                .with_writer(non_blocking)
-                .with_ansi(false);
-            tracing_subscriber::registry()
-                .with(env_filter)
-                .with(stderr_layer)
-                .with(file_layer)
-                .init();
-            return Some(guard);
-        }
-    }
-
-    // Stderr-only: file logging disabled or log directory not writable
-    // (e.g. non-root container with a read-only config path).
-    tracing_subscriber::registry()
-        .with(env_filter)
-        .with(stderr_layer)
-        .init();
-    None
-}
-
 
 fn main() -> anyhow::Result<()> {
     run_with_args(std::env::args().skip(1).collect())
@@ -960,7 +562,7 @@ async fn run(args: Vec<String>) -> anyhow::Result<()> {
     let config_data = config::load().unwrap_or_default();
     config::apply_to_env(&config_data);
 
-    let _file_guard = init_tracing(&config_data);
+    let _file_guard = logging::init_tracing(&config_data);
 
     startup::print_startup_logo();
     tracing::info!("CodeHealth MCP server started");
@@ -1032,23 +634,3 @@ pub(crate) fn handle_serve_error(err: ServerInitializeError) -> anyhow::Result<(
     Err(err.into())
 }
 
-/// Remove log files older than `retention_days` from the given directory.
-fn cleanup_old_logs(log_dir: &std::path::Path, retention_days: u32) {
-    let cutoff = std::time::SystemTime::now()
-        - std::time::Duration::from_secs(u64::from(retention_days) * 24 * 60 * 60);
-    let entries = match std::fs::read_dir(log_dir) {
-        Ok(e) => e,
-        Err(_) => return,
-    };
-    for entry in entries.flatten() {
-        let Ok(metadata) = entry.metadata() else {
-            continue;
-        };
-        let Ok(modified) = metadata.modified() else {
-            continue;
-        };
-        if modified < cutoff {
-            let _ = std::fs::remove_file(entry.path());
-        }
-    }
-}
