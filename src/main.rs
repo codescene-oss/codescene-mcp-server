@@ -87,7 +87,7 @@ If a token must be configured manually:\n\
 1. Use the `set_config` tool: set_config(key=\"access_token\", value=\"your-token\")\n\
 2. Set the CS_ACCESS_TOKEN environment variable in your MCP client configuration\n\n\
 To get a Personal Access Token, see:\n\
-https://github.com/codescene-oss/codehealth-mcp-server/blob/main/docs/authentication.md";
+https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/authentication.md";
 
 const TOKEN_MISSING_MSG_DOCKER: &str = "\
 No access token configured.\n\n\
@@ -95,7 +95,7 @@ OAuth login is not available in Docker. Configure a Personal Access Token:\n\
 1. Set the CS_ACCESS_TOKEN environment variable in your MCP client / Docker configuration\n\
 2. Or use the `set_config` tool: set_config(key=\"access_token\", value=\"your-token\")\n\n\
 To get a Personal Access Token, see:\n\
-https://github.com/codescene-oss/codehealth-mcp-server/blob/main/docs/authentication.md";
+https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/authentication.md";
 
 pub(crate) fn token_missing_msg() -> &'static str {
     if environment::is_docker() {

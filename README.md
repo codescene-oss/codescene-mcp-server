@@ -52,7 +52,7 @@ The first run automatically downloads the correct platform-specific binary for y
 Add the CodeScene marketplace and install the plugin:
 
 ```
-/plugin marketplace add codescene-oss/codehealth-mcp-server
+/plugin marketplace add codescene-oss/codehealth-mcp
 /plugin install codescene@codescene
 ```
 
@@ -63,7 +63,7 @@ This installs the MCP server and Code Health skills. Requires [Node.js](https://
 <details>
 <summary><b>Claude Desktop</b></summary>
 
-Download the MCP bundle from the [latest release page](https://github.com/codescene-oss/codehealth-mcp-server/releases/latest):
+Download the MCP bundle from the [latest release page](https://github.com/codescene-oss/codehealth-mcp/releases/latest):
 
 - `codehealth-mcp-{version}.mcpb`
 
@@ -85,8 +85,8 @@ The CodeHealth MCP is available as a VS Code extension:
 <summary><b>Homebrew (macOS / Linux)</b></summary>
 
 ```bash
-brew tap codescene-oss/codehealth-mcp-server https://github.com/codescene-oss/codehealth-mcp-server
-brew trust codescene-oss/codehealth-mcp-server
+brew tap codescene-oss/codehealth-mcp https://github.com/codescene-oss/codehealth-mcp
+brew trust codescene-oss/codehealth-mcp
 brew install cs-mcp
 ```
 
@@ -102,7 +102,7 @@ For VS Code / GitHub Copilot, the [CodeHealth MCP extension](https://marketplace
 Run this in PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp-server/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp/main/install.ps1 | iex
 ```
 
 After installing, fully quit and reopen your AI assistant or IDE (including all VS Code windows) so it picks up the updated PATH, then configure the MCP server using the guide below. Restarting only the MCP server or an integrated terminal does not refresh VS Code's PATH. The guide also includes a VS Code configuration that uses the executable path directly and avoids this PATH requirement.
@@ -114,7 +114,7 @@ After installing, fully quit and reopen your AI assistant or IDE (including all 
 <details>
 <summary><b>Manual Download</b></summary>
 
-Download the latest binary for your platform from the [GitHub Releases page](https://github.com/codescene-oss/codehealth-mcp-server/releases):
+Download the latest binary for your platform from the [GitHub Releases page](https://github.com/codescene-oss/codehealth-mcp/releases):
 
 - **macOS:** `cs-mcp-macos-aarch64.zip` (Apple Silicon) or `cs-mcp-macos-amd64` (Intel)
 - **Linux:** `cs-mcp-linux-aarch64.zip` or `cs-mcp-linux-amd64`

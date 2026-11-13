@@ -1,5 +1,5 @@
 # CodeHealth MCP Server Uninstaller for Windows
-# Usage: irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp-server/main/uninstall.ps1 | iex
+# Usage: irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp/main/uninstall.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 

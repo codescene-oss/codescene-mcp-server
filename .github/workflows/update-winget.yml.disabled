@@ -29,7 +29,7 @@ jobs:
           WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           $version = "${{ steps.version.outputs.version }}"
-          $url = "https://github.com/codescene-oss/codehealth-mcp-server/releases/download/MCP-${version}/cs-mcp-windows-amd64.exe"
+          $url = "https://github.com/codescene-oss/codehealth-mcp/releases/download/MCP-${version}/cs-mcp-windows-amd64.exe"
           
           # Download wingetcreate
           Invoke-WebRequest -Uri https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
@@ -46,7 +46,7 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.version }}"
-          $url = "https://github.com/codescene-oss/codehealth-mcp-server/releases/download/MCP-${version}/cs-mcp-windows-amd64.exe"
+          $url = "https://github.com/codescene-oss/codehealth-mcp/releases/download/MCP-${version}/cs-mcp-windows-amd64.exe"
           
           # Download the exe and compute SHA256
           $tempFile = New-TemporaryFile
@@ -69,7 +69,7 @@ jobs:
           # Update locale manifest
           $localeYaml = Get-Content winget/CodeScene.CsMcp.locale.en-US.yaml -Raw
           $localeYaml = $localeYaml -replace 'PackageVersion: .*', "PackageVersion: $version"
-          $localeYaml = $localeYaml -replace 'ReleaseNotesUrl: .*', "ReleaseNotesUrl: https://github.com/codescene-oss/codehealth-mcp-server/releases/tag/MCP-$version"
+          $localeYaml = $localeYaml -replace 'ReleaseNotesUrl: .*', "ReleaseNotesUrl: https://github.com/codescene-oss/codehealth-mcp/releases/tag/MCP-$version"
           Set-Content winget/CodeScene.CsMcp.locale.en-US.yaml $localeYaml
 
       - name: Create Pull Request

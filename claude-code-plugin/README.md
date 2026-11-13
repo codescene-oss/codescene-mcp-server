@@ -43,7 +43,7 @@ That calls `switch_account` (do not rely on `set_config(account_id=…)` alone w
 
 **CI / headless:** Use a Personal Access Token via `set_config` or `CS_ACCESS_TOKEN`. A saved PAT **blocks** OAuth until cleared.
 
-See [Authentication](https://github.com/codescene-oss/codehealth-mcp-server/blob/main/docs/authentication.md) for details.
+See [Authentication](https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/authentication.md) for details.
 
 ## Skills
 

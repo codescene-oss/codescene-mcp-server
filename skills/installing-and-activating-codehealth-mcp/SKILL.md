@@ -24,14 +24,14 @@ Do not use this skill for configuring tokens, URLs, or other server options. Use
 - Install using the method that matches the environment: `npx` or `npm`, Homebrew, Windows installer script, manual download, or Docker.
 - Register the server in the AI assistant so it launches `cs-mcp`.
 - Copy the appropriate agent guidance file into the repository: `docs/AGENTS-full.md` for CodeScene Core users, or `docs/AGENTS-standalone.md` for standalone license users. For Amazon Q, copy `.amazonq/rules` instead.
-- Copy any relevant skills from the CodeHealth MCP skills catalogue at `https://github.com/codescene-oss/codehealth-mcp-server/tree/main/skills`.
+- Copy any relevant skills from the CodeHealth MCP skills catalogue at `https://github.com/codescene-oss/codehealth-mcp/tree/main/skills`.
 - After installation, authenticate with OAuth via the `login` MCP prompt (slash command), by asking the assistant to log in (`login` tool), or with **CodeHealth MCP: Sign In** in the VS Code extension. Sign out with `logout` / **CodeHealth MCP: Sign Out**. Use a PAT only for CI/headless environments.
 
 ## Implementation
 
 1. Choose the installation method that fits the user environment:
    - `npx @codescene/codehealth-mcp` or `npm install -g @codescene/codehealth-mcp`
-   - `brew tap codescene-oss/codehealth-mcp-server https://github.com/codescene-oss/codehealth-mcp-server && brew trust codescene-oss/codehealth-mcp-server && brew install cs-mcp`
+   - `brew tap codescene-oss/codehealth-mcp https://github.com/codescene-oss/codehealth-mcp && brew trust codescene-oss/codehealth-mcp && brew install cs-mcp`
    - Windows PowerShell installer
    - Manual binary download
    - Docker image
@@ -44,7 +44,7 @@ Do not use this skill for configuring tokens, URLs, or other server options. Use
    - **CI / headless:** Set a Personal Access Token via `set_config` or `CS_ACCESS_TOKEN`. See the `configuring-codehealth-mcp` skill.
 5. Copy the appropriate agent guidance file to the repository: `docs/AGENTS-full.md` for CodeScene Core users, or `docs/AGENTS-standalone.md` for standalone license users. Rename it to `AGENTS.md` in the target repository so the agent picks it up automatically.
 6. If the user is on Amazon Q, copy `.amazonq/rules` instead of the AGENTS file.
-7. Copy any relevant skills from `https://github.com/codescene-oss/codehealth-mcp-server/tree/main/skills` for safeguarding, refactoring, prioritization, or business-case workflows.
+7. Copy any relevant skills from `https://github.com/codescene-oss/codehealth-mcp/tree/main/skills` for safeguarding, refactoring, prioritization, or business-case workflows.
 
 ## Common Mistakes
 

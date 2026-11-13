@@ -111,7 +111,7 @@ Use these tools to identify what to improve first:
 
 ## License and support
 
-This power integrates with [CodeHealth MCP Server](https://github.com/codescene-oss/codehealth-mcp-server) (MIT).
+This power integrates with [CodeHealth MCP Server](https://github.com/codescene-oss/codehealth-mcp) (MIT).
 
 - [Privacy Policy](https://codescene.com/policies)
-- [Support](https://github.com/codescene-oss/codehealth-mcp-server/issues)
+- [Support](https://github.com/codescene-oss/codehealth-mcp/issues)

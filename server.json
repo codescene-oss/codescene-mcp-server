@@ -3,7 +3,7 @@
   "name": "com.codescene/codehealth-mcp-server",
   "description": "An MCP server that provides CodeScene Code Health analysis tools.",
   "repository": {
-    "url": "https://github.com/codescene-oss/codehealth-mcp-server",
+    "url": "https://github.com/codescene-oss/codehealth-mcp",
     "source": "github"
   },
   "version": "1.1.0",

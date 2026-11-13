@@ -15,7 +15,7 @@ For VS Code / GitHub Copilot, the [CodeHealth MCP extension](https://marketplace
 Run this in PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp-server/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp/main/install.ps1 | iex
 ```
 
 This downloads the latest version to `%LOCALAPPDATA%\Programs\cs-mcp` and adds it to your PATH.
@@ -35,13 +35,13 @@ Then configure your AI assistant using the instructions below. Running the execu
 Run the same installation command to update to the latest version:
 
 ```powershell
-irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp-server/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp/main/install.ps1 | iex
 ```
 
 ## Uninstalling
 
 ```powershell
-irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp-server/main/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp/main/uninstall.ps1 | iex
 ```
 
 ## Integration with AI Assistants
@@ -155,4 +155,4 @@ This changes only the current shell's environment, not an already-running IDE or
 
 ### Manual Download
 
-You can also download the executable directly from the [releases page](https://github.com/codescene-oss/codehealth-mcp-server/releases/latest) and place it in a directory in your PATH.
+You can also download the executable directly from the [releases page](https://github.com/codescene-oss/codehealth-mcp/releases/latest) and place it in a directory in your PATH.

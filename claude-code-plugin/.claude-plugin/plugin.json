@@ -6,7 +6,7 @@
     "name": "CodeScene",
     "url": "https://codescene.com"
   },
-  "homepage": "https://github.com/codescene-oss/codehealth-mcp-server",
-  "repository": "https://github.com/codescene-oss/codehealth-mcp-server",
+  "homepage": "https://github.com/codescene-oss/codehealth-mcp",
+  "repository": "https://github.com/codescene-oss/codehealth-mcp",
   "license": "Apache-2.0"
 }

@@ -7,9 +7,9 @@
     "name": "CodeScene",
     "url": "https://codescene.com"
   },
-  "homepage": "https://github.com/codescene-oss/codehealth-mcp-server",
-  "documentation": "https://github.com/codescene-oss/codehealth-mcp-server",
-  "support": "https://github.com/codescene-oss/codehealth-mcp-server/issues",
+  "homepage": "https://github.com/codescene-oss/codehealth-mcp",
+  "documentation": "https://github.com/codescene-oss/codehealth-mcp",
+  "support": "https://github.com/codescene-oss/codehealth-mcp/issues",
   "server": {
     "type": "binary",
     "entry_point": "bin/darwin/cs-mcp",
@@ -42,6 +42,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/codescene-oss/codehealth-mcp-server/tree/main"
+    "url": "https://github.com/codescene-oss/codehealth-mcp/tree/main"
   }
 }

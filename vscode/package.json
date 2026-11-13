@@ -8,12 +8,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/codescene-oss/codehealth-mcp-server.git",
+    "url": "https://github.com/codescene-oss/codehealth-mcp.git",
     "directory": "vscode"
   },
   "homepage": "https://codescene.com",
   "bugs": {
-    "url": "https://github.com/codescene-oss/codehealth-mcp-server/issues"
+    "url": "https://github.com/codescene-oss/codehealth-mcp/issues"
   },
   "engines": {
     "vscode": "^1.96.0"
@@ -57,43 +57,43 @@
         "codescene.accountId": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional CodeScene Cloud account/tenant ID (positive integer). Only needed if you belong to multiple Cloud accounts. Prefer **CodeHealth MCP: Switch Account** to change accounts while signed in. For a first login you can also set this before **Sign In**. [Documentation](https://github.com/codescene-oss/codehealth-mcp-server/blob/main/docs/configuration-options.md#account_id)",
+          "markdownDescription": "Optional CodeScene Cloud account/tenant ID (positive integer). Only needed if you belong to multiple Cloud accounts. Prefer **CodeHealth MCP: Switch Account** to change accounts while signed in. For a first login you can also set this before **Sign In**. [Documentation](https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/configuration-options.md#account_id)",
           "order": 1
         },
         "codescene.onpremUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Base URL of your self-hosted CodeScene instance (e.g. `https://codescene.mycompany.com`). Leave empty for CodeScene Cloud. [Documentation](https://github.com/codescene-oss/codehealth-mcp-server/blob/main/docs/configuration-options.md#onprem_url)",
+          "markdownDescription": "Base URL of your self-hosted CodeScene instance (e.g. `https://codescene.mycompany.com`). Leave empty for CodeScene Cloud. [Documentation](https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/configuration-options.md#onprem_url)",
           "order": 2
         },
         "codescene.defaultProjectId": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Pre-selects a CodeScene project by its numeric ID, skipping interactive project selection. [Documentation](https://github.com/codescene-oss/codehealth-mcp-server/blob/main/docs/configuration-options.md#default_project_id)",
+          "markdownDescription": "Pre-selects a CodeScene project by its numeric ID, skipping interactive project selection. [Documentation](https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/configuration-options.md#default_project_id)",
           "order": 3
         },
         "codescene.accessToken": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional Personal Access Token or standalone license token. Prefer OAuth: use the `login` slash command, **CodeHealth MCP: Sign In**, or ask the agent to log in. A saved PAT **blocks** OAuth until cleared. [Documentation](https://github.com/codescene-oss/codehealth-mcp-server/blob/main/docs/configuration-options.md#access_token)",
+          "markdownDescription": "Optional Personal Access Token or standalone license token. Prefer OAuth: use the `login` slash command, **CodeHealth MCP: Sign In**, or ask the agent to log in. A saved PAT **blocks** OAuth until cleared. [Documentation](https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/configuration-options.md#access_token)",
           "order": 4
         },
         "codescene.enabledTools": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Comma-separated list of MCP tool names to expose. When empty, all tools are enabled. [Documentation](https://github.com/codescene-oss/codehealth-mcp-server/blob/main/docs/configuration-options.md#enabled_tools)",
+          "markdownDescription": "Comma-separated list of MCP tool names to expose. When empty, all tools are enabled. [Documentation](https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/configuration-options.md#enabled_tools)",
           "order": 5
         },
         "codescene.disableVersionCheck": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Suppress the automatic version-check request on startup. [Documentation](https://github.com/codescene-oss/codehealth-mcp-server/blob/main/docs/configuration-options.md#disable_version_check)",
+          "markdownDescription": "Suppress the automatic version-check request on startup. [Documentation](https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/configuration-options.md#disable_version_check)",
           "order": 6
         },
         "codescene.caBundlePath": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Path to a PEM-format CA certificate bundle for SSL/TLS verification. Required for corporate proxies or internal CAs. [Documentation](https://github.com/codescene-oss/codehealth-mcp-server/blob/main/docs/configuration-options.md#ca_bundle)",
+          "markdownDescription": "Path to a PEM-format CA certificate bundle for SSL/TLS verification. Required for corporate proxies or internal CAs. [Documentation](https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/configuration-options.md#ca_bundle)",
           "order": 7
         }
       }

@@ -77,7 +77,7 @@ These tools require OAuth or a CodeScene Personal Access Token and a CodeScene C
 - **OAuth / Personal Access Token** — Full tool set, including project-level features.
 - **Standalone access token** — Local Code Health analysis only (scoring, review, refactoring).
 
-See [Authentication](https://github.com/codescene-oss/codehealth-mcp-server/blob/main/docs/authentication.md) for details.
+See [Authentication](https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/authentication.md) for details.
 
 ## Settings
 
@@ -92,7 +92,7 @@ See [Authentication](https://github.com/codescene-oss/codehealth-mcp-server/blob
 | `codescene.disableVersionCheck` | Suppress automatic version-check on startup |
 | `codescene.caBundlePath` | Path to a PEM CA certificate bundle for SSL/TLS |
 
-See [Configuration Options](https://github.com/codescene-oss/codehealth-mcp-server/blob/main/docs/configuration-options.md) for full documentation.
+See [Configuration Options](https://github.com/codescene-oss/codehealth-mcp/blob/main/docs/configuration-options.md) for full documentation.
 
 ## MCP Prompts (slash commands)
 

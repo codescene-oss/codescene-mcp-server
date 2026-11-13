@@ -1,5 +1,5 @@
 # CodeHealth MCP Server Installer for Windows
-# Usage: irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp-server/main/install.ps1 | iex
+# Usage: irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp/main/install.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
@@ -11,9 +11,9 @@ Write-Host "Installing CodeHealth MCP Server..." -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 
 # Get latest release info
-$latestRelease = Invoke-RestMethod "https://api.github.com/repos/codescene-oss/codehealth-mcp-server/releases/latest"
+$latestRelease = Invoke-RestMethod "https://api.github.com/repos/codescene-oss/codehealth-mcp/releases/latest"
 $version = $latestRelease.tag_name -replace '^MCP-', ''
-$downloadUrl = "https://github.com/codescene-oss/codehealth-mcp-server/releases/download/MCP-$version/cs-mcp-windows-amd64.exe"
+$downloadUrl = "https://github.com/codescene-oss/codehealth-mcp/releases/download/MCP-$version/cs-mcp-windows-amd64.exe"
 
 Write-Host "Downloading cs-mcp v$version..." -ForegroundColor Cyan
 

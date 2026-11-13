@@ -6,13 +6,13 @@ PackageVersion: 0.0.26
 PackageLocale: en-US
 Publisher: CodeScene
 PublisherUrl: https://codescene.com
-PublisherSupportUrl: https://github.com/codescene-oss/codehealth-mcp-server/issues
+PublisherSupportUrl: https://github.com/codescene-oss/codehealth-mcp/issues
 PrivacyUrl: https://codescene.com/privacy
 Author: CodeScene
 PackageName: CodeHealth MCP Server
-PackageUrl: https://github.com/codescene-oss/codehealth-mcp-server
+PackageUrl: https://github.com/codescene-oss/codehealth-mcp
 License: MIT
-LicenseUrl: https://github.com/codescene-oss/codehealth-mcp-server/blob/main/LICENSE
+LicenseUrl: https://github.com/codescene-oss/codehealth-mcp/blob/main/LICENSE
 Copyright: Copyright (c) CodeScene
 ShortDescription: MCP Server exposing Code Health analysis as AI-friendly tools
 Description: |-
@@ -30,6 +30,6 @@ Tags:
   - mcp
   - model-context-protocol
   - technical-debt
-ReleaseNotesUrl: https://github.com/codescene-oss/codehealth-mcp-server/releases/tag/MCP-0.0.26
+ReleaseNotesUrl: https://github.com/codescene-oss/codehealth-mcp/releases/tag/MCP-0.0.26
 ManifestType: defaultLocale
 ManifestVersion: 1.10.0

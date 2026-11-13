@@ -9,7 +9,7 @@ use crate::http::{HttpClient, HttpRequest, Method, ReqwestClient};
 const CACHE_DURATION: Duration = Duration::from_secs(3600);
 
 const DEFAULT_CHECK_URL: &str =
-    "https://api.github.com/repos/codescene-oss/codehealth-mcp-server/releases/latest";
+    "https://api.github.com/repos/codescene-oss/codehealth-mcp/releases/latest";
 
 #[derive(Debug, Clone)]
 pub struct VersionInfo {
@@ -140,9 +140,9 @@ pub fn format_version_warning(info: &VersionInfo) -> String {
         - NPX: npx @codescene/codehealth-mcp\n\
         - NPM: npm update @codescene/codehealth-mcp\n\
         - Homebrew: brew update && brew upgrade cs-mcp\n\
-        - Windows: irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp-server/main/install.ps1 | iex\n\
+        - Windows: irm https://raw.githubusercontent.com/codescene-oss/codehealth-mcp/main/install.ps1 | iex\n\
         - Docker: docker pull codescene/codescene-mcp:latest\n\
-        - Manual: https://github.com/codescene-oss/codehealth-mcp-server/releases/latest\n",
+        - Manual: https://github.com/codescene-oss/codehealth-mcp/releases/latest\n",
         current = info.current,
         latest = info.latest,
     )
