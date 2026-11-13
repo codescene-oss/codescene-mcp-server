@@ -43,9 +43,11 @@ pub(crate) async fn handle(
         ("fields".to_string(), "path,goals".to_string()),
     ];
     let result = api_client::query_api_keyed_list_with_auth(
-        &endpoint,
-        &query_params,
-        "files",
+        &api_client::KeyedListRequest {
+            endpoint: &endpoint,
+            params: &query_params,
+            key: "files",
+        },
         &*server.http_client,
         Some(&credential),
     )

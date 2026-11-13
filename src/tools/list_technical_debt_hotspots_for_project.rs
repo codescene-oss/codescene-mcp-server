@@ -45,9 +45,11 @@ pub(crate) async fn handle(
         ("refactoring_targets".to_string(), "true".to_string()),
     ];
     let result = api_client::query_api_keyed_list_with_auth(
-        &endpoint,
-        &query_params,
-        "result",
+        &api_client::KeyedListRequest {
+            endpoint: &endpoint,
+            params: &query_params,
+            key: "result",
+        },
         &*server.http_client,
         Some(&credential),
     )

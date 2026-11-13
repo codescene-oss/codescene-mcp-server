@@ -120,13 +120,23 @@ pub async fn query_api_keyed_list_with_client(
     key: &str,
     client: &dyn HttpClient,
 ) -> Result<Vec<Value>, ApiError> {
-    query_api_keyed_list_with_auth(endpoint, params, key, client, None).await
+    let request = KeyedListRequest {
+        endpoint,
+        params,
+        key,
+    };
+    query_api_keyed_list_with_auth(&request, client, None).await
+}
+
+/// A paginated API request whose items live under `key` in each response page.
+pub struct KeyedListRequest<'a> {
+    pub endpoint: &'a str,
+    pub params: &'a [(String, String)],
+    pub key: &'a str,
 }
 
 pub async fn query_api_keyed_list_with_auth(
-    endpoint: &str,
-    params: &[(String, String)],
-    key: &str,
+    request: &KeyedListRequest<'_>,
     client: &dyn HttpClient,
     credential: Option<&AuthCredential>,
 ) -> Result<Vec<Value>, ApiError> {
@@ -134,14 +144,14 @@ pub async fn query_api_keyed_list_with_auth(
     let mut current_page: i64 = 1;
 
     loop {
-        let mut query_params = params.to_vec();
+        let mut query_params = request.params.to_vec();
         upsert_query_param(&mut query_params, "page", &current_page.to_string());
 
-        let url = endpoint_with_query_params(endpoint, &query_params, credential)?;
+        let url = endpoint_with_query_params(request.endpoint, &query_params, credential)?;
         let data = query_api_url_with_auth(&url, client, credential).await?;
 
         let items = data
-            .get(key)
+            .get(request.key)
             .and_then(|v| v.as_array())
             .cloned()
             .unwrap_or_default();
